@@ -313,7 +313,7 @@ void NavEKF3_core::setAidingMode()
 #if EK3_FEATURE_OPTFLOW_FUSION
                 readyToUseOptFlow() ||
 #endif
-                readyToUseBodyOdm()) {
+                readyToUseBodyOdm() || readyToUseAirData()) {
                 PV_AidingMode = AID_RELATIVE;
             }
             break;
