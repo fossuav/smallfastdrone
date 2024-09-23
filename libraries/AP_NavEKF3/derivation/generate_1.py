@@ -511,6 +511,28 @@ def yaw_estimator():
     yaw_estimator_observation_generator.write_matrix(Matrix(P_new_s), "_ekf_gsf[model_index].P", True)
     yaw_estimator_observation_generator.close()
 
+def polar_wind_error_propagation():
+    # polar and cartesian wind coordinates
+    spd, dirn, velN, velE = symbols("spd dirn velN velE", real=True)
+    # wind speed and direction observation variance
+    spdVar, dirnVar = symbols("spdVar dirnVar", real=True)
+    # cartesian wind coordinatres represent the wind vector, whereas polar coordinates represent
+    # the reciprocal vector as per measurement convention
+    velN = -spd*cos(dirn)
+    velE = -spd*sin(dirn)
+    J = Matrix([velN,velE]).jacobian(Matrix([spd,dirn]))
+    R_polar = create_symmetric_cov_matrix(2)
+    R_polar[0,0] = spdVar
+    R_polar[1,1] = dirnVar
+    R_polar[0,1] = 0
+    R_polar[1,0] = 0
+    R_cartesian =  J * R_polar * J.transpose()
+    R_simplified = cse(R_cartesian, symbols("PS0:400"), optimizations='basic')
+    code_generator = CodeGenerator("./generated/polar_wind_to_cartesian_covariance.cpp")
+    code_generator.write_subexpressions(R_simplified[0])
+    code_generator.write_matrix(Matrix(R_simplified[1]), "R_obs", False, "[", "]")
+    code_generator.close()
+
 def quaternion_error_propagation():
     # define quaternion state vector
     q0, q1, q2, q3 = symbols("q0 q1 q2 q3", real=True)
@@ -678,29 +700,31 @@ def generate_code():
 
 
     # derive autocode for other methods
-    # print('Computing tilt error covariance matrix ...')
-    # quaternion_error_propagation()
-    # print('Generating heading observation code ...')
-    # yaw_observation(P,state,R_to_earth)
-    # print('Generating gps heading observation code ...')
-    # gps_yaw_observation(P,state,R_to_body)
-    # print('Generating mag observation code ...')
-    # mag_observation_variance(P,state,R_to_body,i,ib)
-    # mag_observation(P,state,R_to_body,i,ib)
-    # print('Generating declination observation code ...')
-    # declination_observation(P,state,ix,iy)
-    # print('Generating airspeed observation code ...')
-    # tas_observation(P,state,vx,vy,vz,wx,wy)
-    # print('Generating sideslip observation code ...')
-    # beta_observation(P,state,R_to_body,vx,vy,vz,wx,wy)
-    # print('Generating optical flow observation code ...')
-    # optical_flow_observation(P,state,R_to_body,vx,vy,vz)
-    # print('Generating body frame velocity observation code ...')
-    # body_frame_velocity_observation(P,state,R_to_body,vx,vy,vz)
-    # print('Generating body frame acceleration observation code ...')
-    # body_frame_accel_observation(P,state,R_to_body,vx,vy,vz,wx,wy)
-    # print('Generating yaw estimator code ...')
-    # yaw_estimator()
+    print('Computing polar wind error covariance matrix ...')
+    polar_wind_error_propagation()
+    print('Computing tilt error covariance matrix ...')
+    quaternion_error_propagation()
+    print('Generating heading observation code ...')
+    yaw_observation(P,state,R_to_earth)
+    print('Generating gps heading observation code ...')
+    gps_yaw_observation(P,state,R_to_body)
+    print('Generating mag observation code ...')
+    mag_observation_variance(P,state,R_to_body,i,ib)
+    mag_observation(P,state,R_to_body,i,ib)
+    print('Generating declination observation code ...')
+    declination_observation(P,state,ix,iy)
+    print('Generating airspeed observation code ...')
+    tas_observation(P,state,vx,vy,vz,wx,wy)
+    print('Generating sideslip observation code ...')
+    beta_observation(P,state,R_to_body,vx,vy,vz,wx,wy)
+    print('Generating optical flow observation code ...')
+    optical_flow_observation(P,state,R_to_body,vx,vy,vz)
+    print('Generating body frame velocity observation code ...')
+    body_frame_velocity_observation(P,state,R_to_body,vx,vy,vz)
+    print('Generating body frame acceleration observation code ...')
+    body_frame_accel_observation(P,state,R_to_body,vx,vy,vz,wx,wy)
+    print('Generating yaw estimator code ...')
+    yaw_estimator()
     print('Code generation finished!')
 
 
