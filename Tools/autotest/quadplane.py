@@ -3133,6 +3133,113 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         # remove the installed module. Pretty sure Autotest will remove the script itself
         self.remove_installed_script_module("mavlink_wrappers.lua")
 
+    def TakeoffCheck(self):
+        '''Test takeoff check - auto mode'''
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 10,
+            'SIM_ESC_TELEM': 1,
+        })
+
+        self.start_subtest("Test blocking doesn't occur with in-range RPM")
+        self.context_push()
+        self.set_parameters({
+            'SIM_VIB_MOT_MAX': 150, # Hz, 9000 RPM, ensures the test fails if check occurs after takeoff starts
+            'SIM_ESC_ARM_RPM': 1000,
+            'Q_TKOFF_RPM_MIN': 900,
+            'Q_TKOFF_RPM_MAX': 1100,
+        })
+        self.upload_simple_relhome_mission([
+            (mavutil.mavlink.MAV_CMD_NAV_VTOL_TAKEOFF, 0, 0, 1),
+            (mavutil.mavlink.MAV_CMD_NAV_VTOL_LAND, 0, 0, 0),
+        ])
+        self.change_mode('AUTO')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.wait_current_waypoint(2)
+        self.wait_disarmed()
+        self.set_current_waypoint(0, check_afterwards=False)
+        self.context_pop()
+
+        self.start_subtest("Ensure blocked if motors don't spool up")
+        self.context_push()
+        self.set_parameters({
+            'SIM_ESC_ARM_RPM': 500,
+            'Q_TKOFF_RPM_MIN': 1000,
+        })
+        self.upload_simple_relhome_mission([
+            (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 30),
+            (mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0, 0, 0),
+        ])
+        self.test_takeoff_check_mode("AUTO", force_disarm=True)
+        self.context_pop()
+
+        self.start_subtest("Ensure blocked if virtual motors are missing virtual props")
+        self.context_push()
+        self.set_parameters({
+            'Q_TKOFF_RPM_MIN': 1,
+            'Q_TKOFF_RPM_MAX': 3,
+        })
+        self.test_takeoff_check_mode("AUTO", force_disarm=True)
+        self.context_pop()
+
+    def setup_RealFlight_vehicle(self, model, home):
+        '''
+        Restart the SITL for RealFlight. RealFlight must already be running and
+        the correct airport and model must be loaded.
+        '''
+        defaults_filepath = self.model_defaults_filepath(model)
+        extra_params = 'default_params/realflight-autotest-extra.parm'
+        defaults_filepath.append(os.path.join(testdir, extra_params))
+        self.customise_SITL_commandline(
+            [
+                f"--home={home}",
+            ],
+            model=f"flightaxis:{self.realflight_address}",
+            defaults_filepath=defaults_filepath
+        )
+
+    def RealFlightHover(self, model, home):
+        '''
+        Perform a simple hover test in RealFlight. Useful for generating logs
+        for comparative analysis.
+        '''
+        if not self.realflight_address:
+            self.progress("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+            return
+
+        # Log fullrate attitude for PID Review Tool
+        self.set_parameters({
+            "LOG_BITMASK": 0x10FFFF,
+        })
+        self.setup_RealFlight_vehicle(model, home)
+
+        self.wait_ready_to_arm()
+        self.change_mode("QLOITER")
+        self.arm_vehicle()
+        self.set_rc(3, 2000)
+        self.wait_altitude(8, 12, relative=True)
+        self.set_rc(3, 1500)
+        stick_deflections = [
+            (2000, 1500, "Roll right"),
+            (1500, 1500, "Center"),
+            (1000, 1500, "Roll left"),
+            (1500, 1500, "Center"),
+            (1500, 2000, "Pitch forward"),
+            (1500, 1500, "Center"),
+            (1500, 1000, "Pitch back"),
+            (1500, 1500, "Center"),
+        ]
+        n_iterations = 10
+        for i in range(n_iterations):
+            print(f"Control input cycle: {i+1}/{n_iterations}")
+            for roll, pitch, msg in stick_deflections:
+                self.progress(f"{msg}")
+                self.set_rc(1, roll)
+                self.set_rc(2, pitch)
+                self.delay_sim_time(0.5)
+        self.change_mode("QLAND")
+        self.wait_disarmed(timeout=120)
+
     def tests(self):
         '''return list of all tests'''
 
@@ -3195,5 +3302,10 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             self.CruiseRecovery,
             self.TerrainAvoidApplet,
             self.ScriptedArmingChecksApplet,
+            self.TakeoffCheck,
+            Test(self.RealFlightHover, speedup=1, kwargs={
+                'model': 'realflight-titan-cobra',
+                'home': 'EliField'
+            }),
         ])
         return ret
