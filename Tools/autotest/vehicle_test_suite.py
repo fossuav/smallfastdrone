@@ -1908,7 +1908,16 @@ class TestSuite(ABC):
                  dronecan_tests=False,
                  generate_junit=False,
                  enable_fgview=False,
-                 build_opts={}):
+                 build_opts={},
+                 move_logs_on_test_failure: bool = False,
+                 realflight_address=None,
+                 ):
+        if breakpoints is None:
+            breakpoints = []
+        if sup_binaries is None:
+            sup_binaries = []
+        if build_opts is None:
+            build_opts = {}
 
         self.start_time = time.time()
 
@@ -1975,6 +1984,7 @@ class TestSuite(ABC):
         self.in_drain_mav = False
         self.tlog = None
         self.enable_fgview = enable_fgview
+        self.realflight_address = realflight_address or os.getenv("REALFLIGHT_IPADDR")
 
         self.rc_thread = None
         self.rc_thread_should_quit = False
