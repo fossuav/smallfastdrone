@@ -13493,6 +13493,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.FenceRelativeToAMSLCliff,
              self.FenceRelativeToTerrainMaxAlt,
              self.FenceRelativeToTerrainMinAlt,
+             self.FigureOfEight,
         ])
         return ret
 
@@ -16422,6 +16423,112 @@ return update, 1000
             if pname in all_params:
                 raise ValueError(f"{pname} in fetched-all-parameters when it should have gone away")
 
+    def ScriptingFlipOnASwitch(self):
+        '''Tests the flip_on_switch.lua script'''
+        self.start_subtest("Test FlipOnSwitch functionality")
+
+        # Stage 1: Set SCR_ENABLE and reboot
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "WP_ACC": 5,
+            "WP_ACC_Z": 5,
+            "WP_JERK": 20,
+            "WP_SPD": 20,
+            "WP_SPD_DN": 10,
+            "WP_SPD_UP": 10,
+            "PSC_JERK_D": 40,
+            "PSC_JERK_NE": 40,
+            "ATC_THR_MIX_MAX": 0.9,
+        })
+
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
+        self.install_applet_script_context("flip_on_a_switch.lua")
+
+        self.reboot_sitl()
+
+        # Stage 2: Set script parameters and reboot again
+        self.set_parameters({
+            "FLIP_ENABLE": 1,
+            "FLIP_AXIS": 1,  # Roll
+            "FLIP_RATE": 720,
+            "FLIP_FLICK_TO": 0.5,
+            "FLIP_COMMIT_TO": 1.0,
+            "FLIP_THROTTLE": 0.0,
+            "FLIP_HOVER": 0.37,
+            "RC9_OPTION": 300,  # Scripting1
+        })
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        # Takeoff in Loiter mode
+        self.takeoff(75, mode="LOITER")
+
+        self.context_collect('STATUSTEXT')
+
+        # Trigger the flip
+        self.set_rc(9, 2000)
+        self.wait_statustext("Flip: Starting continuous flip", check_context=True, timeout=10)
+        self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
+
+        # Lower the switch to stop flipping
+        self.set_rc(9, 1000)
+        self.wait_statustext("Flip: Canceled by user", check_context=True, timeout=5)
+        # Land and disarm
+        self.do_RTL()
+
+        self.start_subtest("Test FlipOnSwitch functionality with sprung switch")
+        self.set_parameter("FLIP_CHAN", 9)
+        # flip spring test
+        self.send_cmd_do_set_mode('LOITER')
+        self.set_rc(3, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        # Match the altitude used above so the flip's altitude loss stays clear of the ground
+        self.takeoff(75, mode="LOITER")
+
+        self.context_collect('STATUSTEXT')
+
+        # A single flick of the sprung switch commands one flip in advanced mode
+        self.set_rc(9, 2000)
+        self.set_rc(9, 1000)
+        self.wait_statustext(r"^Flip: Starting \d+ flips$", check_context=True, timeout=10, regex=True)
+        self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
+
+        # Land and disarm
+        self.do_RTL()
+
+    def FigureOfEight(self):
+        '''Test Figure of Eight Lua script'''
+        self.start_subtest("Test Figure of Eight Lua script")
+
+        # Set up parameters for the test
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "RC7_OPTION": 300,  # Scripting1
+        })
+        self.install_applet_script_context('figure-eight.lua')
+        self.reboot_sitl()
+
+        # Takeoff in Loiter mode
+        self.takeoff(10, mode="LOITER")
+
+        # Activate the script
+        self.progress("Activating Figure of Eight script")
+        self.context_collect('STATUSTEXT')
+        self.set_rc(7, 2000)  # High position for the switch
+        self.wait_statustext("Figure Eight: Starting", check_context=True, timeout=10)
+        self.progress("Script activated successfully")
+
+        # Deactivate the script
+        self.progress("Deactivating Figure of Eight script")
+        self.set_rc(7, 1000)  # Low position for the switch
+        self.wait_statustext("Figure Eight: Deactivated by switch", check_context=True, timeout=10)
+        self.progress("Script deactivated successfully")
+
+        # Land and disarm
+        self.do_RTL()
+        self.progress("Figure of Eight test complete")
+
+    
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
         ret = ([
@@ -16576,6 +16683,7 @@ return update, 1000
             self.PLDNoParameters,
             self.PeriphMultiUARTTunnel,
             self.EKF3SRCPerCore,
+            self.ScriptingFlipOnASwitch,
         ])
         return ret
 
