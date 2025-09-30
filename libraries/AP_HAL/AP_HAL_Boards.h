@@ -331,7 +331,7 @@
 #elif defined(STM32F7)
 // Enough for a notch per motor on an octa using three IMUs and one harmonics
 // plus one static notch with one harmonics
-#define HAL_HNF_MAX_FILTERS 39
+#define HAL_HNF_MAX_FILTERS 66
 #else
 // Enough for a notch per motor on an octa quad using two IMUs and one harmonic
 // plus one static notch with one harmonic
