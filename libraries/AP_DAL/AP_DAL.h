@@ -82,7 +82,7 @@ public:
 
     void log_event3(Event event);
     void log_SetOriginLLH3(const Location &loc);
-    void log_SetLatLng(const Location &loc, float posAccuracy, uint32_t timestamp_ms);
+    void log_SetLatLng(const Location &loc, float posAccuracy, uint32_t timestamp_ms, uint32_t received_ms);
     void log_SetWind(float speed, float speed_accuracy, float direction, float direction_accuracy);
 
     void log_writeDefaultAirSpeed3(const float aspeed, const float uncertainty);
