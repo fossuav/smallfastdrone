@@ -1374,8 +1374,8 @@ void AP_CRSF_Telem::calc_parameter() {
         return;
     }
 
-    AP_OSD_ParamSetting* setting = osd->get_setting((_param_request.param_num - 1) / AP_OSD_ParamScreen::NUM_PARAMS,
-        (_param_request.param_num - 1) % AP_OSD_ParamScreen::NUM_PARAMS);
+    AP_OSD_ParamSetting* setting = osd->get_setting((_param_request.param_num - (PARAMETER_MENU_ID + 1)) / AP_OSD_ParamScreen::NUM_PARAMS,
+        (_param_request.param_num - (PARAMETER_MENU_ID + 1)) % AP_OSD_ParamScreen::NUM_PARAMS);
 
     if (setting == nullptr) {
         return;
@@ -1701,8 +1701,8 @@ void AP_CRSF_Telem::process_param_write_frame(ParameterSettingsWriteFrame* write
         return;
     }
 
-    AP_OSD_ParamSetting* param = osd->get_setting((write_frame->param_num - 1) / AP_OSD_ParamScreen::NUM_PARAMS,
-        (write_frame->param_num - 1) % AP_OSD_ParamScreen::NUM_PARAMS);
+    AP_OSD_ParamSetting* param = osd->get_setting((write_frame->param_num - (PARAMETER_MENU_ID + 1)) / AP_OSD_ParamScreen::NUM_PARAMS,
+        (write_frame->param_num - (PARAMETER_MENU_ID + 1)) % AP_OSD_ParamScreen::NUM_PARAMS);
 
     if (param == nullptr) {
         return;
