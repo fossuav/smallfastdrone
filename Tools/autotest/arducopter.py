@@ -3063,6 +3063,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 int(loc.lng * 1e7),
                 int(loc.alt * 1e3)
             )
+            self.delay_sim_time(2)
             gpi = self.assert_receive_message('GLOBAL_POSITION_INT')
             self.progress("gpi=%s" % str(gpi))
             if gpi.lat != 0:
@@ -3559,6 +3560,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                                                     old_pos.lat,
                                                     old_pos.lon,
                                                     old_pos.alt)
+            self.delay_sim_time(2)
             gpi = self.assert_receive_message('GLOBAL_POSITION_INT')
             self.progress("gpi=%s" % str(gpi))
             if gpi.lat != 0:
@@ -3629,8 +3631,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                                                     old_pos.lat,
                                                     old_pos.lon,
                                                     old_pos.alt)
-            gpi = self.mav.recv_match(type='GLOBAL_POSITION_INT',
-                                      blocking=True)
+            self.delay_sim_time(2)
+            gpi = self.assert_receive_message('GLOBAL_POSITION_INT')
             self.progress("gpi=%s" % str(gpi))
             if gpi.lat != 0:
                 break
