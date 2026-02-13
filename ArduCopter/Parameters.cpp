@@ -1079,6 +1079,21 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Bitmask: 0:Learn and Save,1:Use Saved Values,2:Inhibit Disarmed Learning
     // @User: Advanced
     AP_GROUPINFO("ACC_ZBIAS_LEARN", 23, ParametersG2, accel_zbias_learn, 0),
+    // @Param: TKOFF_GNDEFF_ALT
+    // @DisplayName: Takeoff ground effect altitude
+    // @Description: Altitude threshold for ground effect compensation. Takeoff ground effect compensation is cleared once the vehicle climbs above this altitude. Touchdown ground effect compensation is only signalled to the EKF when the vehicle descends below this altitude. Set to zero to disable the touchdown altitude gate.
+    // @Range: 0 5
+    // @Units: m
+    // @User: Advanced
+    AP_GROUPINFO("TKOFF_GNDEFF_ALT", 24, ParametersG2, tkoff_gndeff_alt, 0.5),
+
+    // @Param: TKOFF_GNDEFF_TMO
+    // @DisplayName: Ground Effect Timeout
+    // @Description: Time after throttle up before ground effect compensation can be disabled. When set, ground effect will only be disabled after BOTH this timeout has elapsed AND altitude exceeds TKOFF_GNDEFF_ALT. This prevents premature ground effect disabling when baro noise causes false altitude readings. Set to zero to disable (uses altitude threshold only). Maximum timeout is always 5 seconds regardless of this setting.
+    // @Range: 0 5
+    // @Units: s
+    // @User: Advanced
+    AP_GROUPINFO("TKOFF_GNDEFF_TMO", 25, ParametersG2, tkoff_gndeff_tmo, 0),
 
     // @Param: FS_EKF_FILT
     // @DisplayName: EKF Failsafe filter cutoff

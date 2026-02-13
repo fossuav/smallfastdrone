@@ -670,6 +670,11 @@ public:
 
     // hover Z-axis accel bias learning mode
     AP_Int8 accel_zbias_learn;
+    // ground effect compensation altitude threshold
+    AP_Float tkoff_gndeff_alt;
+
+    // ground effect compensation timeout (requires both timeout AND altitude)
+    AP_Float tkoff_gndeff_tmo;
 
     // EKF variance filter cutoff
     AP_Float fs_ekf_filt_hz;
