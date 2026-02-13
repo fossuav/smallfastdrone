@@ -48,8 +48,33 @@ void Copter::update_ground_effect_detector(void)
 
     // if we are in takeoff_expected and we meet the conditions for having taken off
     // end the takeoff_expected state
-    if (gndeffect_state.takeoff_expected && (tnow_ms-gndeffect_state.takeoff_time_ms > 5000 || inertial_nav.get_position_z_up_cm()-gndeffect_state.takeoff_alt_cm > 50.0f)) {
+    // Use configured altitude threshold, or the original 50cm default when not set
+    const float gndeff_alt_cm = is_positive(g2.tkoff_gndeff_alt) ? g2.tkoff_gndeff_alt * 100.0f : 50.0f;
+    const float height_above_takeoff_cm = inertial_nav.get_position_z_up_cm() - gndeffect_state.takeoff_alt_cm;
+    const uint32_t time_since_takeoff_ms = tnow_ms - gndeffect_state.takeoff_time_ms;
+    const bool above_gndeff_alt = height_above_takeoff_cm > gndeff_alt_cm;
+    const bool max_timeout = time_since_takeoff_ms > 5000;
+
+    // Determine if ground effect should be disabled
+    bool should_clear_gndeff;
+    if (is_positive(g2.tkoff_gndeff_tmo)) {
+        // With timeout parameter: require BOTH timeout AND altitude, but always clear after 5s max
+        const uint32_t tmo_ms = uint32_t(g2.tkoff_gndeff_tmo * 1000.0f);
+        const bool tmo_elapsed = time_since_takeoff_ms > tmo_ms;
+        should_clear_gndeff = max_timeout || (tmo_elapsed && above_gndeff_alt);
+    } else {
+        // Without timeout parameter: original behavior (altitude OR 5s timeout)
+        should_clear_gndeff = max_timeout || above_gndeff_alt;
+    }
+
+    if (gndeffect_state.takeoff_expected && should_clear_gndeff) {
         gndeffect_state.takeoff_expected = false;
+    }
+
+    // re-enable ground effect compensation when descending back below threshold
+    if (!ap.land_complete && !gndeffect_state.takeoff_expected &&
+        is_positive(g2.tkoff_gndeff_alt) && height_above_takeoff_cm < gndeff_alt_cm) {
+        gndeffect_state.takeoff_expected = true;
     }
 
     // landing logic
@@ -64,7 +89,11 @@ void Copter::update_ground_effect_detector(void)
     bool z_speed_low = fabsf(inertial_nav.get_velocity_z_up_cms()) <= 60.0f;
     bool slow_descent = (slow_descent_demanded || (z_speed_low && descent_demanded));
 
-    gndeffect_state.touchdown_expected = slow_horizontal && slow_descent;
+    // Only expect touchdown when near ground (below TKOFF_GNDEFF_ALT threshold)
+    // This allows EKF bias learning when hovering at altitude
+    const bool near_ground_for_touchdown = is_positive(g2.tkoff_gndeff_alt) ?
+                                           (height_above_takeoff_cm < gndeff_alt_cm) : true;
+    gndeffect_state.touchdown_expected = slow_horizontal && slow_descent && near_ground_for_touchdown;
 
     // Prepare the EKF for ground effect if either takeoff or touchdown is expected.
     ahrs.set_takeoff_expected(gndeffect_state.takeoff_expected);
