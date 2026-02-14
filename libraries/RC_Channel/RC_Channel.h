@@ -264,6 +264,7 @@ public:
                                   // saved for 4.7-dev feature in-flight AHRS autotrim
                                   //saved for 4.7-dev feature Fixed Wing AUTOLAND Mode
         SYSTEMID =           184,  // system ID as an aux switch
+        EKF_RESET =          187, // trigger full EKF bootstrap reset
 
         // inputs from 200 will eventually used to replace RCMAP
         ROLL =               201, // roll input
