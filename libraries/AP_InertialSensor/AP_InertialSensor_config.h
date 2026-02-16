@@ -77,3 +77,8 @@
 #ifndef AP_INERTIALSENSOR_KILL_IMU_ENABLED
 #define AP_INERTIALSENSOR_KILL_IMU_ENABLED 1
 #endif
+
+// define to control EKF low-noise bias learning
+#ifndef HAL_INS_LOW_NOISE
+#define HAL_INS_LOW_NOISE 0
+#endif
