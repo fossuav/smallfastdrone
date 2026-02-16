@@ -378,6 +378,30 @@ bool NavEKF3_core::resetHeightDatum(void)
     dal.baro().update_calibration();
     // reset the height state
     stateStruct.position.z = 0.0f;
+
+    // update output states and buffer to match the reset position
+    outputDataNew.position.z = stateStruct.position.z;
+    outputDataDelayed.position.z = stateStruct.position.z;
+    for (uint8_t i=0; i<imu_buffer_length; i++) {
+        storedOutput[i].position.z = stateStruct.position.z;
+    }
+    vertCompFiltState.pos = stateStruct.position.z;
+
+    // reset vertical velocity to zero (vehicle is on ground)
+    stateStruct.velocity.z = 0.0f;
+    for (uint8_t i=0; i<imu_buffer_length; i++) {
+        storedOutput[i].velocity.z = 0.0f;
+    }
+    outputDataNew.velocity.z = 0.0f;
+    outputDataDelayed.velocity.z = 0.0f;
+    vertCompFiltState.vel = 0.0f;
+
+    // reset baro offset tracker — old offset is invalid after recalibration
+    baroHgtOffset = 0.0f;
+
+    // flush stale pre-calibration baro samples from delay buffer
+    storedBaro.reset();
+
     // adjust the height of the EKF origin so that the origin plus baro height before and after the reset is the same
     if (validOrigin) {
         if (!gpsGoodToAlign) {
