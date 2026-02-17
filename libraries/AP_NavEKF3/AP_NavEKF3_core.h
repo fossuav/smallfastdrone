@@ -494,6 +494,9 @@ public:
     // clear the statesInitialised status which allows a reset and bootstrap alignment
     void clearStatesInitialised(void) { statesInitialised = false; }
 
+    // return true if the core believes we are stationary on the ground
+    bool isOnGroundNotMoving(void) const { return onGroundNotMoving; }
+
 private:
     EKFGSF_yaw *yawEstimator;
     AP_DAL &dal;

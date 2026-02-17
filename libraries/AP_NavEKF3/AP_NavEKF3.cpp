@@ -2169,11 +2169,21 @@ const EKFGSF_yaw *NavEKF3::get_yawEstimator(void) const
 
 // Do a reset and bootstrap alignment of all EKF cores
 // return true if successful for all cores
+// requires the vehicle to be stationary on the ground
 bool NavEKF3::InitialiseFilterBootstrap()
 {
     // ignore any data if the EKF is not started
     if (!core) {
         return false;
+    }
+
+    // refuse to reset unless all cores agree we are stationary on
+    // the ground.  Resetting while moving would produce contaminated
+    // state estimates.
+    for (uint8_t i=0; i<num_cores; i++) {
+        if (!core[i].isOnGroundNotMoving()) {
+            return false;
+        }
     }
 
     // initialise the cores. We return success only if all cores
