@@ -3483,8 +3483,9 @@ void AP_AHRS::request_yaw_reset(void)
     }
 }
 
-// request full EKF bootstrap reset
-void AP_AHRS::reset_ekf_bootstrap(void)
+// request full EKF bootstrap reset including gyro recalibration
+// returns true if the reset was performed
+bool AP_AHRS::reset_ekf_bootstrap(void)
 {
     switch (active_EKF_type()) {
 #if AP_AHRS_DCM_ENABLED
@@ -3505,10 +3506,19 @@ void AP_AHRS::reset_ekf_bootstrap(void)
 #endif
 #if HAL_NAVEKF3_AVAILABLE
     case EKFType::THREE:
-        EKF3.InitialiseFilterBootstrap();
-        break;
+        // recalibrate gyros before resetting the EKF so the filter
+        // bootstraps with clean offsets.  calibrate_gyros() is
+        // blocking (up to 30s) and requires the vehicle to be
+        // stationary.
+        AP::ins().calibrate_gyros();
+
+        if (!EKF3.InitialiseFilterBootstrap()) {
+            return false;
+        }
+        return true;
 #endif
     }
+    return false;
 }
 
 // set position, velocity and yaw sources to either 0=primary, 1=secondary, 2=tertiary
