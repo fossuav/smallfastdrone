@@ -9868,6 +9868,41 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_mode('AUTO')
         self.wait_disarmed(timeout=240)
 
+    def ThrowModeNoGPS(self):
+        '''Test throw mode works without GPS (baro-only, transitions to ALT_HOLD)'''
+        self.progress("Testing throw mode without GPS")
+        self.set_parameters({
+            "GPS1_TYPE": 0,
+            "SIM_GPS_DISABLE": 1,
+            "EK3_SRC1_POSXY": 0,
+            "EK3_SRC1_VELXY": 0,
+            "THROW_TYPE": 1,          # drop
+            "THROW_NEXTMODE": 2,      # ALT_HOLD
+            "SIM_SHOVE_Z": -11,
+            "MOT_SPOOL_TIME": 2,
+        })
+        self.reboot_sitl()
+
+        self.change_mode('THROW')
+        self.wait_prearm_sys_status_healthy(timeout=120)
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 30000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(100, 1000, timeout=100, relative=True)
+        self.wait_statustext("throw detected - spooling motors", check_context=True, timeout=10)
+        self.wait_statustext("throttle is unlimited - uprighting", check_context=True)
+        self.wait_statustext("uprighted - controlling height", check_context=True)
+        self.wait_statustext("height achieved - Loss Of Position", check_context=True)
+        self.wait_mode('ALT_HOLD')
+        self.set_rc(3, 1000)
+        self.wait_disarmed(timeout=90)
+        self.zero_throttle()
+
     def GroundEffectCompensation_takeOffExpected(self):
         '''Test EKF's handling of takeoff-expected'''
         self.change_mode('ALT_HOLD')
@@ -11037,6 +11072,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.BaroWindCorrection,
              self.SetpointGlobalPos,
              self.ThrowDoubleDrop,
+             self.ThrowModeNoGPS,
              self.SetpointGlobalVel,
              self.SetpointBadVel,
              self.SplineTerrain,
