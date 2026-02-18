@@ -302,9 +302,15 @@ bool ModeThrow::throw_detected()
     // Check that the altitude is within user defined limits
     const bool height_within_params = (g.throw_altitude_min == 0 || altitude_above_home > g.throw_altitude_min) && (g.throw_altitude_max == 0 || (altitude_above_home < g.throw_altitude_max));
 
-    // High velocity or free-fall combined with increasing height indicate a possible air-drop or throw release  
+    // High velocity or free-fall combined with increasing height indicate a possible air-drop or throw release
     bool possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
 
+    // For drops, freefall conditions (near-zero g + downward velocity + low
+    // total acceleration) are already unambiguous — skip velocity confirmation
+    // to minimise detection latency
+    if (g2.throw_type == ThrowType::Drop) {
+        return possible_throw_detected;
+    }
 
     // Record time and vertical velocity when we detect the possible throw
     if (possible_throw_detected && ((AP_HAL::millis() - free_fall_start_ms) > 500)) {
