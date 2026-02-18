@@ -1832,7 +1832,11 @@ bool RC_Channel::do_aux_function(const AUX_FUNC ch_option, const AuxSwitchPos ch
 
     case AUX_FUNC::EKF_RESET:
         if (ch_flag == AuxSwitchPos::HIGH) {
-            AP::ahrs().reset_ekf_bootstrap();
+            if (AP::ahrs().reset_ekf_bootstrap()) {
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF bootstrap reset performed");
+            } else {
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF bootstrap reset failed");
+            }
         }
         break;
 
