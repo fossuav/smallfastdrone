@@ -48,6 +48,7 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Five vehicles tes
 | [logm2_6](logs/logm2_6.md) | Feb 16 | TD-MicoAir-2 GPS-denied | Same | **FAILED** | AccZ bias -0.62 m/s² → EKF thinks 25m underground → full throttle panic |
 | [logm2_log4](logs/logm2_log4.md) | Feb 17 | TD-MicoAir-2 GPS-denied | IMU_MASK=3, PRIMARY=1, RNG_USE_HGT=10, ZBIAS=3, JERK_Z=30 | **CEILING** | Terrain lockout on Core 1 — flow lost 4s after takeoff, 38s dead reckoning, ceiling hit |
 | [logtc5_1](logs/logtc5_1.md) | Feb 17 | TrashCopter5 baro-only | AID_NONE (all sources=0), GND_EFF_DZ=-8 | **CRASH** | Total EKF fusion loss on re-ARM — innovations freeze, 48m divergence, emergency motor stop |
+| [logtc5_2](logs/logtc5_2.md) | Feb 18 | TrashCopter5 baro-only (v2) | v2 firmware (15b50447), GND_EFF_DZ=-8 | **0.04m** | v2 fixes validated: re-ARM works, 7.5m ground effect handled, 3 good flights |
 
 ## Earlier Development Logs (log1-log12)
 
