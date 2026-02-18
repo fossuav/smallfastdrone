@@ -1773,6 +1773,7 @@ private:
     bool throw_detected();
     bool throw_position_good() const;
     bool throw_height_good() const;
+    bool throw_velocity_good() const;
     bool throw_attitude_good() const;
 
     // Throw stages
@@ -1792,6 +1793,7 @@ private:
     bool xy_controller_active;      // true when XY position controller was initialised
     uint32_t free_fall_start_ms;    // system time free fall was detected
     float free_fall_start_velz;     // vertical velocity when free fall was detected
+    uint32_t hgt_stabilise_start_ms;  // system time height stabilise stage was entered
 };
 
 #if MODE_TURTLE_ENABLED

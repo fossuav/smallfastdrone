@@ -66,6 +66,7 @@ void ModeThrow::run()
     } else if (stage == Throw_Uprighting && throw_attitude_good()) {
         gcs().send_text(MAV_SEVERITY_INFO,"uprighted - controlling height");
         stage = Throw_HgtStabilise;
+        hgt_stabilise_start_ms = AP_HAL::millis();
 
         // initialise the z controller
         pos_control->init_z_controller_no_descent();
@@ -81,7 +82,8 @@ void ModeThrow::run()
         // Set the auto_arm status to true to avoid a possible automatic disarm caused by selection of an auto mode with throttle at minimum
         copter.set_auto_armed(true);
 
-    } else if (stage == Throw_HgtStabilise && throw_height_good()) {
+    } else if (stage == Throw_HgtStabilise && throw_height_good() &&
+               (throw_velocity_good() || (AP_HAL::millis() - hgt_stabilise_start_ms > 2000))) {
         // check if we have horizontal position for PosHold
         nav_filter_status filt_status = inertial_nav.get_filter_status();
         if (filt_status.flags.horiz_pos_abs) {
@@ -171,8 +173,16 @@ void ModeThrow::run()
         // demand a level roll/pitch attitude with zero yaw rate
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, 0.0f, 0.0f);
 
-        // output 50% throttle and turn off angle boost to maximise righting moment
-        attitude_control->set_throttle_out(0.5f, false, g.throttle_filt);
+        // For drops use hover throttle with angle boost so that the vertical
+        // thrust component stays at ~1g regardless of tilt angle.  This
+        // arrests the descent even while the vehicle is still uprighting and
+        // naturally transitions to hover once level, avoiding overshoot.
+        // For upward throws use 50% without boost to maximise righting moment.
+        if (g2.throw_type == ThrowType::Drop) {
+            attitude_control->set_throttle_out(motors->get_throttle_hover(), true, g.throttle_filt);
+        } else {
+            attitude_control->set_throttle_out(0.5f, false, g.throttle_filt);
+        }
 
         break;
 
@@ -336,6 +346,12 @@ bool ModeThrow::throw_height_good() const
 {
     // Check that we are within 0.5m of the demanded height
     return (pos_control->get_pos_error_z_cm() < 50.0f);
+}
+
+bool ModeThrow::throw_velocity_good() const
+{
+    // Check that vertical velocity is below 50 cm/s
+    return (fabsf(inertial_nav.get_velocity_z_up_cms()) < 50.0f);
 }
 
 bool ModeThrow::throw_position_good() const
