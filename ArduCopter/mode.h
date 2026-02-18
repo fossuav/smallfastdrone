@@ -1747,7 +1747,7 @@ public:
     bool init(bool ignore_checks) override;
     void run() override;
 
-    bool requires_position() const override { return true; }
+    bool requires_position() const override { return false; }
     bool has_manual_throttle() const override { return false; }
     bool allows_arming(AP_Arming::Method method) const override { return true; };
     bool is_autopilot() const override { return false; }
@@ -1789,6 +1789,7 @@ private:
     ThrowModeStage prev_stage = Throw_Disarmed;
     uint32_t last_log_ms;
     bool nextmode_attempted;
+    bool xy_controller_active;      // true when XY position controller was initialised
     uint32_t free_fall_start_ms;    // system time free fall was detected
     float free_fall_start_velz;     // vertical velocity when free fall was detected
 };

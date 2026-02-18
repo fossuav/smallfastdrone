@@ -18,6 +18,7 @@ bool ModeThrow::init(bool ignore_checks)
     // init state
     stage = Throw_Disarmed;
     nextmode_attempted = false;
+    xy_controller_active = false;
 
     // initialise pos controller speed and acceleration
     pos_control->set_max_speed_accel_xy(wp_nav->get_default_speed_xy(), BRAKE_MODE_DECEL_RATE);
@@ -81,15 +82,23 @@ void ModeThrow::run()
         copter.set_auto_armed(true);
 
     } else if (stage == Throw_HgtStabilise && throw_height_good()) {
-        gcs().send_text(MAV_SEVERITY_INFO,"height achieved - controlling position");
-        stage = Throw_PosHold;
+        // check if we have horizontal position for PosHold
+        nav_filter_status filt_status = inertial_nav.get_filter_status();
+        if (filt_status.flags.horiz_pos_abs) {
+            gcs().send_text(MAV_SEVERITY_INFO,"height achieved - controlling position");
+            stage = Throw_PosHold;
 
-        // initialise position controller
-        pos_control->init_xy_controller();
+            // initialise position controller
+            pos_control->init_xy_controller();
+            xy_controller_active = true;
+        } else {
+            gcs().send_text(MAV_SEVERITY_INFO,"height achieved - Loss Of Position");
+            stage = Throw_PosHold;
+        }
 
         // Set the auto_arm status to true to avoid a possible automatic disarm caused by selection of an auto mode with throttle at minimum
         copter.set_auto_armed(true);
-    } else if (stage == Throw_PosHold && throw_position_good()) {
+    } else if (stage == Throw_PosHold && (!xy_controller_active || throw_position_good())) {
         if (!nextmode_attempted) {
             switch ((Mode::Number)g2.throw_nextmode.get()) {
                 case Mode::Number::AUTO:
@@ -98,6 +107,8 @@ void ModeThrow::run()
                 case Mode::Number::LAND:
                 case Mode::Number::BRAKE:
                 case Mode::Number::LOITER:
+                case Mode::Number::STABILIZE:
+                case Mode::Number::ALT_HOLD:
                     set_mode((Mode::Number)g2.throw_nextmode.get(), ModeReason::THROW_COMPLETE);
                     break;
                 default:
@@ -184,14 +195,19 @@ void ModeThrow::run()
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-        // use position controller to stop
-        Vector2f vel;
-        Vector2f accel;
-        pos_control->input_vel_accel_xy(vel, accel);
-        pos_control->update_xy_controller();
+        if (xy_controller_active) {
+            // use position controller to stop
+            Vector2f vel;
+            Vector2f accel;
+            pos_control->input_vel_accel_xy(vel, accel);
+            pos_control->update_xy_controller();
 
-        // call attitude controller
-        attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f);
+            // call attitude controller
+            attitude_control->input_thrust_vector_rate_heading(pos_control->get_thrust_vector(), 0.0f);
+        } else {
+            // no horizontal position available, hold level attitude only
+            attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, 0.0f, 0.0f);
+        }
 
         // call height controller
         pos_control->set_pos_target_z_from_climb_rate_cm(0.0f);
@@ -253,7 +269,7 @@ bool ModeThrow::throw_detected()
 {
     // Check that we have a valid navigation solution
     nav_filter_status filt_status = inertial_nav.get_filter_status();
-    if (!filt_status.flags.attitude || !filt_status.flags.horiz_pos_abs || !filt_status.flags.vert_pos) {
+    if (!filt_status.flags.attitude || !filt_status.flags.vert_pos) {
         return false;
     }
 
