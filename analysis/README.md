@@ -1,10 +1,11 @@
 # EKF3 Altitude Hold Analysis
 
-Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Four vehicles tested:
+Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Five vehicles tested:
 - **SFD indoor** — small fast drone (MambaH743v4), indoor optical flow, logjk series
 - **TD** (TD-Matek-5) — optical flow copter (indoor/outdoor), logtd/log3-7 series
 - **SmallFastDronev1** — BF_X quad, indoor optical flow + rangefinder, log197/198/201/202/208/209 series
 - **TD-MicoAir-2** — GPS-denied quad (MicoAir743v2), optical flow + rangefinder, logm2 series
+- **TrashCopter5** — MatekH743-bdshot, QUAD/X_REV, no sensors (baro only), logtc5 series
 
 ## Master Summary Table
 
@@ -46,6 +47,7 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Four vehicles tes
 | [logm2_5](logs/logm2_5.md) | Feb 16 | TD-MicoAir-2 GPS-denied | Same | 19.1cm | IMU0 Z clipping (9,870 events); IMU1 6x better with zero clips |
 | [logm2_6](logs/logm2_6.md) | Feb 16 | TD-MicoAir-2 GPS-denied | Same | **FAILED** | AccZ bias -0.62 m/s² → EKF thinks 25m underground → full throttle panic |
 | [logm2_log4](logs/logm2_log4.md) | Feb 17 | TD-MicoAir-2 GPS-denied | IMU_MASK=3, PRIMARY=1, RNG_USE_HGT=10, ZBIAS=3, JERK_Z=30 | **CEILING** | Terrain lockout on Core 1 — flow lost 4s after takeoff, 38s dead reckoning, ceiling hit |
+| [logtc5_1](logs/logtc5_1.md) | Feb 17 | TrashCopter5 baro-only | AID_NONE (all sources=0), GND_EFF_DZ=-8 | **CRASH** | Total EKF fusion loss on re-ARM — innovations freeze, 48m divergence, emergency motor stop |
 
 ## Earlier Development Logs (log1-log12)
 
