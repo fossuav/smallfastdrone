@@ -366,10 +366,23 @@ void NavEKF3_core::ResetHeight(void)
 // Return true if the height datum reset has been performed
 bool NavEKF3_core::resetHeightDatum(void)
 {
-    if (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER || !onGround) {
-        // only allow resets when on the ground.
-        // If using using rangefinder for height then never perform a
-        // reset of the height datum
+    if (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER) {
+        // When actively using rangefinder for height, only allow the
+        // reset when stationary on the ground and the configured
+        // primary source is not rangefinder.  EK3_RNG_USE_HGT
+        // blending can set the active source to rangefinder while on
+        // the ground (below the blend transition height), which would
+        // otherwise block datum resets at arming.
+        if (!onGroundNotMoving ||
+            frontend->sources.getPosZSource() == AP_NavEKF_Source::SourceZ::RANGEFINDER) {
+            return false;
+        }
+    }
+    if (!onGround && motorsArmed) {
+        // only allow resets when on the ground.  Use motorsArmed
+        // rather than onGround alone because onGround is updated by
+        // detectFlight() which may not have run yet in this cycle
+        // when called from the arming sequence.
         return false;
     }
     // record the old height estimate
@@ -389,7 +402,16 @@ bool NavEKF3_core::resetHeightDatum(void)
     }
     outputDataNew.position.z = outputDataDelayed.position.z = stateStruct.position.z;
     outputDataNew.velocity.z = outputDataDelayed.velocity.z = stateStruct.velocity.z;
-    vertCompFiltState.vel = outputDataNew.velocity.z;
+    vertCompFiltState.pos = stateStruct.position.z;
+    vertCompFiltState.vel = stateStruct.velocity.z;
+
+    // reset baro offset tracker — old offset is invalid after recalibration
+    baroHgtOffset = 0.0f;
+
+    // reset height timeout so the empty buffer period does not
+    // immediately trigger ResetHeight() on the next baro sample
+    lastHgtPassTime_ms = imuSampleTime_ms;
+    hgtTimeout = false;
 
     // adjust the height of the EKF origin so that the origin plus baro height before and after the reset is the same
     if (validOrigin) {
@@ -406,6 +428,10 @@ bool NavEKF3_core::resetHeightDatum(void)
             EKF_origin.alt = dal.gps().location().alt;
         }
         ekfGpsRefHgt = (double)0.01 * (double)EKF_origin.alt;
+
+        // keep public_origin altitude in sync so that getPosD() does
+        // not add a stale offset from the old origin altitude
+        public_origin.alt = EKF_origin.alt;
     }
 
     // set the terrain state to zero (on ground). The adjustment for
@@ -1052,9 +1078,17 @@ void NavEKF3_core::FuseVelPosNED()
                 }
 
                 if (hgtTimeout) {
-                    ResetHeight();
+                    // Do not reset height during ground effect — baro is
+                    // known to be corrupted by prop wash and would drive
+                    // the state estimate to a fictitious altitude.
+                    const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
+                    if (!gndEffectActive) {
+                        ResetHeight();
+                    }
 
-                    // Don't fuse the same data we have used to reset states.
+                    // Don't fuse the same data we have used to reset
+                    // states, or that we have rejected due to ground
+                    // effect.
                     fuseHgtData = false;
                 }
 
@@ -1097,7 +1131,7 @@ void NavEKF3_core::FuseVelPosNED()
                     }
                 } else if (obsIndex == 5) {
                     innovVelPos[obsIndex] = stateStruct.position[obsIndex-3] - velPosObs[obsIndex];
-                    const ftype gndMaxBaroErr = MAX(frontend->_baroGndEffectDeadZone, 0.0);
+                    const ftype gndMaxBaroErr = fabsF(frontend->_baroGndEffectDeadZone);
                     const ftype gndBaroInnovFloor = -0.5;
 
                     if ((dal.get_touchdown_expected() || dal.get_takeoff_expected()) && activeHgtSource == AP_NavEKF_Source::SourceZ::BARO) {
@@ -1462,7 +1496,18 @@ void NavEKF3_core::selectHeightForFusion()
         posDownObsNoise = sq(constrain_ftype(frontend->_baroAltNoise, 0.1f, 100.0f));
         // reduce weighting (increase observation noise) on baro if we are likely to be experiencing rotor wash ground interaction
         if (dal.get_takeoff_expected() || dal.get_touchdown_expected()) {
-            posDownObsNoise *= frontend->gndEffectBaroScaler;
+            if (is_negative(frontend->_baroGndEffectDeadZone)) {
+                // Use |value| as the observation noise floor in metres.
+                // This heavily deweights baro during ground effect while
+                // maintaining a weak anchor against pure-IMU drift.
+                // E.g. -8 sets noise to 8 m (variance 64), giving K≈0.008
+                // so even -8 m of prop wash (clamped to -0.5 m by the dead
+                // zone floor) only contributes ~0.004 m per fusion cycle.
+                const ftype gnd_eff_noise_m = fabsF(frontend->_baroGndEffectDeadZone);
+                posDownObsNoise = sq(MAX(gnd_eff_noise_m, 1.0f));
+            } else {
+                posDownObsNoise *= frontend->gndEffectBaroScaler;
+            }
         }
         velPosObs[5] = -hgtMea;
     } else if ((activeHgtSource == AP_NavEKF_Source::SourceZ::NONE && imuSampleTime_ms - lastHgtPassTime_ms > 70)) {
