@@ -2195,13 +2195,19 @@ bool NavEKF3::InitialiseFilterBootstrap()
     }
 
     // initialise the cores. We return success only if all cores
-    // initialise successfully
+    // initialise successfully.  The per-core InitialiseFilterBootstrap()
+    // return value is false when the IMU delay buffer is not yet full,
+    // which is normal during a reset. Check statesInitialised directly
+    // to determine whether the bootstrap alignment succeeded.
     bool ret = true;
     for (uint8_t i=0; i<num_cores; i++) {
         // clear the statesInitialised status to allow a bootstrap alignment
         core[i].clearStatesInitialised();
         // perform a bootstrap alignment
-        ret &= core[i].InitialiseFilterBootstrap();
+        core[i].InitialiseFilterBootstrap();
+        if (!core[i].isStatesInitialised()) {
+            ret = false;
+        }
     }
     return ret;
 }

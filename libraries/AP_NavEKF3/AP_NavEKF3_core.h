@@ -494,6 +494,9 @@ public:
     // clear the statesInitialised status which allows a reset and bootstrap alignment
     void clearStatesInitialised(void) { statesInitialised = false; }
 
+    // return true if states have been initialised by a bootstrap alignment
+    bool isStatesInitialised(void) const { return statesInitialised; }
+
     // return true if the core believes we are stationary on the ground
     bool isOnGroundNotMoving(void) const { return onGroundNotMoving; }
 
