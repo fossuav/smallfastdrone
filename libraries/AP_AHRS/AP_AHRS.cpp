@@ -3487,32 +3487,14 @@ void AP_AHRS::request_yaw_reset(void)
 // returns true if the reset was performed
 bool AP_AHRS::reset_ekf_bootstrap(void)
 {
-    switch (active_EKF_type()) {
-#if AP_AHRS_DCM_ENABLED
-    case EKFType::DCM:
-        break;
-#endif
-#if AP_AHRS_SIM_ENABLED
-    case EKFType::SIM:
-        break;
-#endif
-#if AP_AHRS_EXTERNAL_ENABLED
-    case EKFType::EXTERNAL:
-        break;
-#endif
-#if HAL_NAVEKF2_AVAILABLE
-    case EKFType::TWO:
-        break;
-#endif
+    // reset EKF3 regardless of active EKF type — if we've fallen back
+    // to DCM due to EKF failure, that's exactly when a bootstrap reset
+    // is most needed to force re-convergence
 #if HAL_NAVEKF3_AVAILABLE
-    case EKFType::THREE:
-        if (!EKF3.InitialiseFilterBootstrap()) {
-            return false;
-        }
-        return true;
-#endif
-    }
+    return EKF3.InitialiseFilterBootstrap();
+#else
     return false;
+#endif
 }
 
 // set position, velocity and yaw sources to either 0=primary, 1=secondary, 2=tertiary
