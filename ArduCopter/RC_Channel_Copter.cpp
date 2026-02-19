@@ -662,10 +662,29 @@ bool RC_Channel_Copter::do_aux_function(const AuxFuncTrigger &trigger)
             }
             break;
 
+        case AUX_FUNC::ARMDISARM:
+            if (ch_flag == AuxSwitchPos::HIGH) {
+                if (!copter.arming.arm(AP_Arming::Method::AUXSWITCH)) {
+                    if (copter.arming.option_enabled(AP_Arming::Option::PENDING_ARM_ON_SWITCH)) {
+                        copter.arming.set_pending_arm(false);
+                    }
+                }
+            } else if (ch_flag == AuxSwitchPos::LOW) {
+                copter.arming.clear_pending_arm();
+                copter.arming.disarm(AP_Arming::Method::AUXSWITCH);
+            }
+            break;
+
         case AUX_FUNC::ARMDISARM_AIRMODE:
-            RC_Channel::do_aux_function_armdisarm(ch_flag);
-            if (copter.arming.is_armed()) {
-                copter.ap.armed_with_airmode_switch = true;
+            if (ch_flag == AuxSwitchPos::HIGH) {
+                if (copter.arming.arm(AP_Arming::Method::AUXSWITCH)) {
+                    copter.ap.armed_with_airmode_switch = true;
+                } else if (copter.arming.option_enabled(AP_Arming::Option::PENDING_ARM_ON_SWITCH)) {
+                    copter.arming.set_pending_arm(true);
+                }
+            } else if (ch_flag == AuxSwitchPos::LOW) {
+                copter.arming.clear_pending_arm();
+                copter.arming.disarm(AP_Arming::Method::AUXSWITCH);
             }
             break;
 
@@ -696,6 +715,28 @@ bool RC_Channel_Copter::do_aux_function(const AuxFuncTrigger &trigger)
         // do nothing, used in tuning.cpp for transmitter based tuning
         break;
 #endif  // AP_RC_TRANSMITTER_TUNING_ENABLED
+
+#if AP_AHRS_ENABLED && AP_AHRS_EKF_RESET_ENABLED
+    case AUX_FUNC::EKF_RESET:
+        if (ch_flag == AuxSwitchPos::HIGH) {
+            if (AP::ahrs().reset_configured_backend()) {
+                gcs().send_text(MAV_SEVERITY_WARNING, "EKF bootstrap reset performed");
+            } else {
+                gcs().send_text(MAV_SEVERITY_WARNING, "EKF bootstrap reset failed");
+            }
+            // reinitialise position controllers so they track the new EKF
+            // estimate instead of commanding corrections to a stale target
+            if (copter.motors->armed()) {
+                if (copter.pos_control->D_is_active()) {
+                    copter.pos_control->D_init_controller();
+                }
+                if (copter.pos_control->NE_is_active()) {
+                    copter.pos_control->NE_init_controller();
+                }
+            }
+        }
+        break;
+#endif
 
     default:
         return RC_Channel::do_aux_function(trigger);
