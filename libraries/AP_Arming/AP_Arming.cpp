@@ -166,7 +166,7 @@ const AP_Param::GroupInfo AP_Arming::var_info[] = {
     // @Param: OPTIONS
     // @DisplayName: Arming options
     // @Description: Options that can be applied to change arming behaviour
-    // @Bitmask: 0:Disable prearm display,1:Do not send status text on state change,2:Skip IMU consistency checks when ICE motor running
+    // @Bitmask: 0:Disable prearm display,1:Do not send status text on state change,2:Skip IMU consistency checks when ICE motor running,3:Pending arm on switch
     // @User: Advanced
     AP_GROUPINFO("OPTIONS", 9,   AP_Arming, _arming_options, 0),
 
@@ -202,6 +202,14 @@ const AP_Param::GroupInfo AP_Arming::var_info[] = {
     // @Range: 0 10
     // @User: Advanced
     AP_GROUPINFO("IMU_TIM", 14, AP_Arming, _imu_consistency_time_s, 10),
+
+    // @Param: PEND_TIM
+    // @DisplayName: Pending Arm EKF Reset Time
+    // @Description: When pending arm on switch is active (ARMING_OPTIONS bit 3), the EKF bootstrap will be reset after this many seconds if arming has not yet succeeded. Set to 0 to disable the EKF reset.
+    // @Units: s
+    // @Range: 0 30
+    // @User: Advanced
+    AP_GROUPINFO("PEND_TIM", 15, AP_Arming, _pending_arm_timeout_s, 5),
 
     AP_GROUPEND
 };
