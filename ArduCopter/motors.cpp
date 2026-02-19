@@ -11,6 +11,9 @@ static uint32_t auto_disarm_begin;
 // called at 10hz
 void Copter::arm_motors_check()
 {
+    // service pending arm requests (retry arming until EKF ready)
+    arming.update_pending_arm();
+
     static int16_t arming_counter;
 
     // check if arming/disarm using rudder is allowed
