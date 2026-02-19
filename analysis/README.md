@@ -50,6 +50,8 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Five vehicles tes
 | [logtc5_1](logs/logtc5_1.md) | Feb 17 | TrashCopter5 baro-only | AID_NONE (all sources=0), GND_EFF_DZ=-8 | **CRASH** | Total EKF fusion loss on re-ARM — innovations freeze, 48m divergence, emergency motor stop |
 | [logtc5_2](logs/logtc5_2.md) | Feb 18 | TrashCopter5 baro-only (v2) | v2 firmware (15b50447), GND_EFF_DZ=-8 | **0.04m** | v2 fixes validated: re-ARM works, 7.5m ground effect handled, 3 good flights |
 | [logtd_72](logs/logtd_72.md) | Feb 19 | TD-Matek-5 outdoor GPS | v2 firmware (b9467d23), RNG_USE_HGT=3, PSC_ACCZ_P=0.138 | **±0.5m** | Takeoff struggle (3.7s ARM-to-throttle, -9m baro spike); alt oscillation from rangefinder over uneven terrain + low PSC_ACCZ gains |
+| [logtd_73](logs/logtd_73.md) | Feb 19 | TD-Matek-5 Stabilize | v2 firmware (21057ce9), RC15=EKF_RESET | — | EKF reset switch tested 7x in flight; full reinit with PD jumps up to 3.2m; dangerous in position modes |
+| [logtd_74](logs/logtd_74.md) | Feb 19 | TD-Matek-5 Stabilize | v2 firmware (21057ce9), 5 ARM/DISARM cycles | — | Height datum reset validated across 5 cycles; -9.1m baro spike handled; gyro/yaw inconsistency between IMUs |
 
 ## Earlier Development Logs (log1-log12)
 
