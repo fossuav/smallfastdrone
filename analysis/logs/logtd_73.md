@@ -139,3 +139,60 @@ doesn't trigger hover Z-bias learning. MOT_THST_HOVER also unchanged at 0.157.
    or at minimum while in a position-controlled mode (AltHold, Loiter, Auto, etc.)
 2. **Fix the "failed" message** — if the EKF was reinitialized, the message should reflect
    that the reset occurred but buffer refill is pending, not that it "failed"
+
+## Analysis: Making EKF Reset Safer in AltHold
+
+If the EKF reset switch must work in flight (e.g. for recovery from a corrupted EKF state
+while in AltHold), the key issue is the altitude estimate discontinuity. Three approaches
+with increasing safety:
+
+### Approach 1: EKF reinit only (current behaviour)
+
+After `InitialiseFilterBootstrap()`, PD lands at an arbitrary value determined by the
+bootstrap sensor read. In log73 this caused jumps up to 3.2m.
+
+```
+Before: DAlt=1.5m, Alt=1.5m, error=0
+After:  DAlt=1.5m, Alt=-1.7m, error=3.2m → violent climb
+```
+
+### Approach 2: EKF reinit + height datum reset
+
+Call `resetHeightDatum()` after the reinit completes. This zeros PD and flushes the delay
+buffers (the v2 version also resets baroHgtOffset and storedBaro). The altitude estimate
+becomes 0, but the controller target is unchanged:
+
+```
+Before: DAlt=1.5m, Alt=1.5m, error=0
+After:  DAlt=1.5m, Alt=0.0m, error=1.5m → moderate climb
+```
+
+Better (1.5m vs 3.2m error), but still a step input to the controller.
+
+### Approach 3: EKF reinit + height datum reset + controller target reset (recommended)
+
+After the reinit and datum reset, also reset the altitude controller target (DAlt) to 0.
+This treats the reset as "fresh takeoff from current position":
+
+```
+Before: DAlt=1.5m, Alt=1.5m, error=0
+After:  DAlt=0.0m, Alt=0.0m, error=0 → no correction
+```
+
+The vehicle holds its current throttle output (MOT_THST_HOVER). As the EKF reconverges
+over ~1-2s, Alt gradually recovers to the true altitude and the controller smoothly
+resumes tracking. VD is zeroed so the EKF momentarily doesn't know its vertical velocity,
+causing a brief drift window, but this is far safer than a 3.2m step.
+
+### Implementation notes
+
+- The v2 `resetHeightDatum()` already handles the EKF side: zeroing PD, flushing output
+  buffers, resetting baroHgtOffset, clearing storedBaro, and updating public_origin.alt
+- The controller target reset would need to happen in the vehicle code (Copter side),
+  similar to what happens at arming when `set_alt_target_to_current_alt()` is called
+- The "failed" return from `InitialiseFilterBootstrap()` is because `storedIMU.is_filled()`
+  returns false immediately after reinit — the buffer needs ~50ms to refill. The datum
+  reset should be deferred until after the buffer fills (i.e. when the function finally
+  returns true), not called immediately
+- Conservative option: still block in position modes, offer Approach 3 only as an
+  opt-in via `EK3_OPTIONS` bitmask for experienced users
