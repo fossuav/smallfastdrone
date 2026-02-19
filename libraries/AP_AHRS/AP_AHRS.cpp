@@ -3506,12 +3506,6 @@ bool AP_AHRS::reset_ekf_bootstrap(void)
 #endif
 #if HAL_NAVEKF3_AVAILABLE
     case EKFType::THREE:
-        // recalibrate gyros before resetting the EKF so the filter
-        // bootstraps with clean offsets.  calibrate_gyros() is
-        // blocking (up to 30s) and requires the vehicle to be
-        // stationary.
-        AP::ins().calibrate_gyros();
-
         if (!EKF3.InitialiseFilterBootstrap()) {
             return false;
         }
