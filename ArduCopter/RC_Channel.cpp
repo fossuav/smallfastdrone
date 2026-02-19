@@ -686,6 +686,28 @@ bool RC_Channel_Copter::do_aux_function(const AUX_FUNC ch_option, const AuxSwitc
         // do nothing, used in tuning.cpp for transmitter based tuning
         break;
 
+#if AP_AHRS_ENABLED
+    case AUX_FUNC::EKF_RESET:
+        if (ch_flag == AuxSwitchPos::HIGH) {
+            if (AP::ahrs().reset_ekf_bootstrap()) {
+                gcs().send_text(MAV_SEVERITY_WARNING, "EKF bootstrap reset performed");
+            } else {
+                gcs().send_text(MAV_SEVERITY_WARNING, "EKF bootstrap reset failed");
+            }
+            // reinitialise position controllers so they track the new EKF
+            // estimate instead of commanding corrections to a stale target
+            if (copter.motors->armed()) {
+                if (copter.pos_control->is_active_z()) {
+                    copter.pos_control->init_z_controller();
+                }
+                if (copter.pos_control->is_active_xy()) {
+                    copter.pos_control->init_xy_controller();
+                }
+            }
+        }
+        break;
+#endif
+
     default:
         return RC_Channel::do_aux_function(ch_option, ch_flag);
     }
