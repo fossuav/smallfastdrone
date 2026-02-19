@@ -52,6 +52,8 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Five vehicles tes
 | [logtd_72](logs/logtd_72.md) | Feb 19 | TD-Matek-5 outdoor GPS | v2 firmware (b9467d23), RNG_USE_HGT=3, PSC_ACCZ_P=0.138 | **±0.5m** | Takeoff struggle (3.7s ARM-to-throttle, -9m baro spike); alt oscillation from rangefinder over uneven terrain + low PSC_ACCZ gains |
 | [logtd_73](logs/logtd_73.md) | Feb 19 | TD-Matek-5 Stabilize | v2 firmware (21057ce9), RC15=EKF_RESET | — | EKF reset switch tested 7x in flight; full reinit with PD jumps up to 3.2m; dangerous in position modes |
 | [logtd_74](logs/logtd_74.md) | Feb 19 | TD-Matek-5 Stabilize | v2 firmware (21057ce9), 5 ARM/DISARM cycles | — | Height datum reset validated across 5 cycles; -9.1m baro spike handled; gyro/yaw inconsistency between IMUs |
+| [logm2_12](logs/logm2_12.md) | Feb 19 | TD-MicoAir-2 GPS-denied | v2 firmware (21057ce9), GND_EFF_DZ=7 (deadzone), RNG_USE_HGT=-1 | **FAILED** | Extreme bidirectional baro ground effect (-8.2m to +13.1m, 21m swing); deadzone breakthrough at 24.9s causes 1.6m EKF jump; pilot abandons AltHold |
+| [logm2_13](logs/logm2_13.md) | Feb 19 | TD-MicoAir-2 GPS-denied | v2 firmware (21057ce9), VRFB carried from log12 | **FAILED** | EKF altitude fundamentally wrong (thinks descending while climbing); 3.4m core divergence; VRFB -0.199 m/s² largest single-flight change; pilot rescues via Stabilize |
 
 ## Earlier Development Logs (log1-log12)
 
