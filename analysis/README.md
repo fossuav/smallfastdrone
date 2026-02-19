@@ -54,6 +54,7 @@ Flight log analysis for the SmallFastDrone-4.6-AltHold branch. Five vehicles tes
 | [logtd_74](logs/logtd_74.md) | Feb 19 | TD-Matek-5 Stabilize | v2 firmware (21057ce9), 5 ARM/DISARM cycles | — | Height datum reset validated across 5 cycles; -9.1m baro spike handled; gyro/yaw inconsistency between IMUs |
 | [logm2_12](logs/logm2_12.md) | Feb 19 | TD-MicoAir-2 GPS-denied | v2 firmware (21057ce9), GND_EFF_DZ=7 (deadzone), RNG_USE_HGT=-1 | **FAILED** | Extreme bidirectional baro ground effect (-8.2m to +13.1m, 21m swing); deadzone breakthrough at 24.9s causes 1.6m EKF jump; pilot abandons AltHold |
 | [logm2_13](logs/logm2_13.md) | Feb 19 | TD-MicoAir-2 GPS-denied | v2 firmware (21057ce9), VRFB carried from log12 | **FAILED** | EKF altitude fundamentally wrong (thinks descending while climbing); 3.4m core divergence; VRFB -0.199 m/s² largest single-flight change; pilot rescues via Stabilize |
+| [logtc5_3](logs/logtc5_3.md) | Feb 19 | TrashCopter5 baro-only | v2 firmware (21057ce9), PSC_ACCZ_P=0.07, PILOT_TKOFF_ALT=0 | **FAILED** | Not CPU overload — PSC_ACCZ_P=0.07 (62% of recommended hover=0.113) too low for takeoff; 2s stuck on ground → 2.5m DAlt error → 2.9m overshoot; flight 1 worked due to faster takeoff technique |
 
 ## Earlier Development Logs (log1-log12)
 
