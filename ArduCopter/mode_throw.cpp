@@ -20,6 +20,7 @@ bool ModeThrow::init(bool ignore_checks)
     nextmode_attempted = false;
     xy_controller_active = false;
     drop_confirm_start_ms = 0;
+    last_stage_msg_ms = 0;
 
     // initialise pos controller speed and acceleration
     pos_control->set_max_speed_accel_xy(wp_nav->get_default_speed_xy(), BRAKE_MODE_DECEL_RATE);
@@ -65,9 +66,6 @@ void ModeThrow::run()
         // Cancel the waiting for throw tone sequence
         AP_Notify::flags.waiting_for_throw = false;
 
-        // Alert pilot on OSD that throw has been detected
-        AP::notify().set_flight_mode_str("THR!");
-
     } else if (stage == Throw_Wait_Throttle_Unlimited &&
                motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
         gcs().send_text(MAV_SEVERITY_INFO,"throttle is unlimited - uprighting");
@@ -75,7 +73,6 @@ void ModeThrow::run()
     } else if (stage == Throw_Uprighting && throw_attitude_good()) {
         gcs().send_text(MAV_SEVERITY_INFO,"uprighted - controlling height");
         stage = Throw_HgtStabilise;
-        AP::notify().set_flight_mode_str("THHT");
         hgt_stabilise_start_ms = AP_HAL::millis();
 
         // initialise the z controller
@@ -99,7 +96,6 @@ void ModeThrow::run()
         if (filt_status.flags.horiz_pos_abs) {
             gcs().send_text(MAV_SEVERITY_INFO,"height achieved - controlling position");
             stage = Throw_PosHold;
-            AP::notify().set_flight_mode_str("THPH");
 
             // initialise position controller
             pos_control->init_xy_controller();
@@ -107,7 +103,6 @@ void ModeThrow::run()
         } else {
             gcs().send_text(MAV_SEVERITY_INFO,"height achieved - Loss Of Position");
             stage = Throw_PosHold;
-            AP::notify().set_flight_mode_str("THPH");
         }
 
         // Set the auto_arm status to true to avoid a possible automatic disarm caused by selection of an auto mode with throttle at minimum
@@ -246,6 +241,44 @@ void ModeThrow::run()
         pos_control->update_z_controller();
 
         break;
+    }
+
+    // update OSD mode string and send periodic GCS stage messages at 2Hz
+    {
+        const uint32_t now_ms = AP_HAL::millis();
+        const char *mode_str = "THRW";
+        const char *stage_msg = nullptr;
+        switch (stage) {
+        case Throw_Disarmed:
+            break;
+        case Throw_Detecting:
+            // flash mode string while armed and waiting for throw
+            mode_str = ((now_ms / 500) % 2 == 0) ? "THRW" : "    ";
+            stage_msg = "Throw: waiting";
+            break;
+        case Throw_Wait_Throttle_Unlimited:
+            mode_str = ((now_ms / 250) % 2 == 0) ? "THR!" : "    ";
+            stage_msg = "Throw: spooling";
+            break;
+        case Throw_Uprighting:
+            mode_str = ((now_ms / 250) % 2 == 0) ? "THR!" : "    ";
+            stage_msg = "Throw: uprighting";
+            break;
+        case Throw_HgtStabilise:
+            mode_str = "THHT";
+            stage_msg = "Throw: height stabilise";
+            break;
+        case Throw_PosHold:
+            mode_str = "THPH";
+            stage_msg = "Throw: position hold";
+            break;
+        }
+        AP::notify().set_flight_mode_str(mode_str);
+
+        if (stage_msg != nullptr && (now_ms - last_stage_msg_ms >= 500)) {
+            last_stage_msg_ms = now_ms;
+            gcs().send_text(MAV_SEVERITY_INFO, "%s", stage_msg);
+        }
     }
 
 #if HAL_LOGGING_ENABLED
