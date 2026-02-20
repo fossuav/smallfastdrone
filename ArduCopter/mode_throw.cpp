@@ -298,8 +298,16 @@ bool ModeThrow::throw_detected()
         changing_height = inertial_nav.get_velocity_z_up_cms() > THROW_VERTICAL_SPEED;
     }
 
-    // Check the vertical acceleraton is greater than 0.25g
-    bool free_falling = ahrs.get_accel_ef().z > -0.25 * GRAVITY_MSS;
+    // Check for freefall.  For drops use the body-frame accelerometer
+    // directly — it reads near zero in freefall regardless of EKF state,
+    // and ~1g while attached to a carrier aircraft.  For upward throws
+    // keep the existing earth-frame check.
+    bool free_falling;
+    if (g2.throw_type == ThrowType::Drop) {
+        free_falling = copter.ins.get_accel().length() < 0.5f * GRAVITY_MSS;
+    } else {
+        free_falling = ahrs.get_accel_ef().z > -0.25f * GRAVITY_MSS;
+    }
 
     // Check if the accel length is < 1.0g indicating that any throw action is complete and the copter has been released
     bool no_throw_action = copter.ins.get_accel().length() < 1.0f * GRAVITY_MSS;
@@ -317,7 +325,14 @@ bool ModeThrow::throw_detected()
     const bool height_within_params = (g.throw_altitude_min == 0 || altitude_above_home > g.throw_altitude_min) && (g.throw_altitude_max == 0 || (altitude_above_home < g.throw_altitude_max));
 
     // High velocity or free-fall combined with increasing height indicate a possible air-drop or throw release
-    bool possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
+    bool possible_throw_detected;
+    if (g2.throw_type == ThrowType::Drop) {
+        // For drops, body-frame freefall is mandatory — carrier flight
+        // speed would otherwise false-trigger via high_speed alone
+        possible_throw_detected = free_falling && changing_height && no_throw_action && height_within_params;
+    } else {
+        possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
+    }
 
     // For drops, freefall conditions (near-zero g + downward velocity + low
     // total acceleration) are already unambiguous — skip velocity confirmation
