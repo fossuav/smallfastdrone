@@ -9833,10 +9833,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.wait_altitude(100, 1000, timeout=100, relative=True)
         self.context_collect('STATUSTEXT')
-        self.wait_statustext("throw detected - spooling motors", check_context=True, timeout=10)
-        self.wait_statustext("throttle is unlimited - uprighting", check_context=True)
-        self.wait_statustext("uprighted - controlling height", check_context=True)
-        self.wait_statustext("height achieved - controlling position", check_context=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=10)
+        self.wait_statustext("Stabilizing throw height", check_context=True)
+        self.wait_statustext("Throw height achieved, good position", check_context=True)
         self.progress("Waiting for still")
         self.wait_speed_vector(Vector3(0, 0, 0))
         self.change_mode('ALT_HOLD')
@@ -9861,10 +9860,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             pass
 
         self.wait_altitude(100, 1000, timeout=100, relative=True)
-        self.wait_statustext("throw detected - spooling motors", check_context=True, timeout=10)
-        self.wait_statustext("throttle is unlimited - uprighting", check_context=True)
-        self.wait_statustext("uprighted - controlling height", check_context=True)
-        self.wait_statustext("height achieved - controlling position", check_context=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=10)
+        self.wait_statustext("Stabilizing throw height", check_context=True)
+        self.wait_statustext("Throw height achieved, good position", check_context=True)
         self.wait_mode('AUTO')
         self.wait_disarmed(timeout=240)
 
@@ -9894,10 +9892,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             pass
 
         self.wait_altitude(100, 1000, timeout=100, relative=True)
-        self.wait_statustext("throw detected - spooling motors", check_context=True, timeout=10)
-        self.wait_statustext("throttle is unlimited - uprighting", check_context=True)
-        self.wait_statustext("uprighted - controlling height", check_context=True)
-        self.wait_statustext("height achieved - Loss Of Position", check_context=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=10)
+        self.wait_statustext("Stabilizing throw height", check_context=True)
+        self.wait_statustext("Throw height achieved, lost position", check_context=True)
         self.wait_mode('ALT_HOLD')
         self.set_rc(3, 1000)
         self.wait_disarmed(timeout=90)
@@ -9925,10 +9922,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             pass
 
         self.wait_altitude(100, 1000, timeout=100, relative=True)
-        self.wait_statustext("throw detected - spooling motors", check_context=True, timeout=10)
-        self.wait_statustext("throttle is unlimited - uprighting", check_context=True)
-        self.wait_statustext("uprighted - controlling height", check_context=True)
-        self.wait_statustext("height achieved - controlling position", check_context=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=10)
+        self.wait_statustext("Stabilizing throw height", check_context=True)
+        self.wait_statustext("Throw height achieved, good position", check_context=True)
         self.wait_statustext("EKF Source Set 2", check_context=True)
         self.wait_mode('LOITER')
 
