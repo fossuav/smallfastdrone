@@ -9903,6 +9903,41 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_disarmed(timeout=90)
         self.zero_throttle()
 
+    def ThrowDropSourceSwitch(self):
+        '''Test EKF source set switch on throw mode completion'''
+        self.progress("Testing throw drop with EKF source set switch")
+        self.set_parameters({
+            "SIM_SHOVE_Z": -11,
+            "THROW_TYPE": 1,           # drop
+            "THROW_NEXTMODE": 5,       # LOITER
+            "THROW_SRC_SET": 2,        # switch to SRC2 on completion
+            "MOT_SPOOL_TIME": 2,
+        })
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 30000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(100, 1000, timeout=100, relative=True)
+        self.wait_statustext("throw detected - spooling motors", check_context=True, timeout=10)
+        self.wait_statustext("throttle is unlimited - uprighting", check_context=True)
+        self.wait_statustext("uprighted - controlling height", check_context=True)
+        self.wait_statustext("height achieved - controlling position", check_context=True)
+        self.wait_statustext("EKF Source Set 2", check_context=True)
+        self.wait_mode('LOITER')
+
+        # hold LOITER briefly to confirm stability after source switch
+        self.delay_sim_time(5)
+
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=90)
+
     def GroundEffectCompensation_takeOffExpected(self):
         '''Test EKF's handling of takeoff-expected'''
         self.change_mode('ALT_HOLD')
@@ -11073,6 +11108,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.SetpointGlobalPos,
              self.ThrowDoubleDrop,
              self.ThrowModeNoGPS,
+             self.ThrowDropSourceSwitch,
              self.SetpointGlobalVel,
              self.SetpointBadVel,
              self.SplineTerrain,
