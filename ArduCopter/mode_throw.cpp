@@ -64,6 +64,9 @@ void ModeThrow::run()
         // Cancel the waiting for throw tone sequence
         AP_Notify::flags.waiting_for_throw = false;
 
+        // Alert pilot on OSD that throw has been detected
+        AP::notify().set_flight_mode_str("THR!");
+
     } else if (stage == Throw_Wait_Throttle_Unlimited &&
                motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
         gcs().send_text(MAV_SEVERITY_INFO,"throttle is unlimited - uprighting");
@@ -71,6 +74,7 @@ void ModeThrow::run()
     } else if (stage == Throw_Uprighting && throw_attitude_good()) {
         gcs().send_text(MAV_SEVERITY_INFO,"uprighted - controlling height");
         stage = Throw_HgtStabilise;
+        AP::notify().set_flight_mode_str("THHT");
         hgt_stabilise_start_ms = AP_HAL::millis();
 
         // initialise the z controller
@@ -94,6 +98,7 @@ void ModeThrow::run()
         if (filt_status.flags.horiz_pos_abs) {
             gcs().send_text(MAV_SEVERITY_INFO,"height achieved - controlling position");
             stage = Throw_PosHold;
+            AP::notify().set_flight_mode_str("THPH");
 
             // initialise position controller
             pos_control->init_xy_controller();
@@ -101,12 +106,17 @@ void ModeThrow::run()
         } else {
             gcs().send_text(MAV_SEVERITY_INFO,"height achieved - Loss Of Position");
             stage = Throw_PosHold;
+            AP::notify().set_flight_mode_str("THPH");
         }
 
         // Set the auto_arm status to true to avoid a possible automatic disarm caused by selection of an auto mode with throttle at minimum
         copter.set_auto_armed(true);
     } else if (stage == Throw_PosHold && (!xy_controller_active || throw_position_good())) {
         if (!nextmode_attempted) {
+            // Warn if throttle is low — in ALT_HOLD, below mid-stick commands descent
+            if (channel_throttle->get_control_in() < copter.get_throttle_mid() - copter.g.throttle_deadzone) {
+                gcs().send_text(MAV_SEVERITY_WARNING, "Throttle low - Loss of altitude");
+            }
             switch ((Mode::Number)g2.throw_nextmode.get()) {
                 case Mode::Number::AUTO:
                 case Mode::Number::GUIDED:
