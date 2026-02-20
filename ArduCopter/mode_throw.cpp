@@ -173,10 +173,9 @@ void ModeThrow::run()
         // demand a level roll/pitch attitude with zero yaw rate
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, 0.0f, 0.0f);
 
-        // For drops use hover throttle with angle boost so that the vertical
-        // thrust component stays at ~1g regardless of tilt angle.  This
-        // arrests the descent even while the vehicle is still uprighting and
-        // naturally transitions to hover once level, avoiding overshoot.
+        // For drops use hover throttle with angle boost.  When commanding level
+        // the boost factor is 1.0, so throttle output equals hover throttle
+        // once upright — giving a smooth 1g transition with no overshoot.
         // For upward throws use 50% without boost to maximise righting moment.
         if (g2.throw_type == ThrowType::Drop) {
             attitude_control->set_throttle_out(motors->get_throttle_hover(), true, g.throttle_filt);
