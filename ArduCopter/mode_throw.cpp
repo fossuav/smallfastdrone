@@ -55,11 +55,9 @@ void ModeThrow::run()
         stage = Throw_Disarmed;
 
     } else if (stage == Throw_Disarmed && motors->armed()) {
-        gcs().send_text(MAV_SEVERITY_INFO,"waiting for throw");
         stage = Throw_Detecting;
 
     } else if (stage == Throw_Detecting && throw_detected()){
-        gcs().send_text(MAV_SEVERITY_INFO,"throw detected - spooling motors");
         copter.set_land_complete(false);
         stage = Throw_Wait_Throttle_Unlimited;
 
@@ -68,10 +66,8 @@ void ModeThrow::run()
 
     } else if (stage == Throw_Wait_Throttle_Unlimited &&
                motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
-        gcs().send_text(MAV_SEVERITY_INFO,"throttle is unlimited - uprighting");
         stage = Throw_Uprighting;
     } else if (stage == Throw_Uprighting && throw_attitude_good()) {
-        gcs().send_text(MAV_SEVERITY_INFO,"uprighted - controlling height");
         stage = Throw_HgtStabilise;
         hgt_stabilise_start_ms = AP_HAL::millis();
 
@@ -94,14 +90,14 @@ void ModeThrow::run()
         // check if we have horizontal position for PosHold
         nav_filter_status filt_status = inertial_nav.get_filter_status();
         if (filt_status.flags.horiz_pos_abs) {
-            gcs().send_text(MAV_SEVERITY_INFO,"height achieved - controlling position");
+            gcs().send_text(MAV_SEVERITY_INFO,"Throw height achieved, good position");
             stage = Throw_PosHold;
 
             // initialise position controller
             pos_control->init_xy_controller();
             xy_controller_active = true;
         } else {
-            gcs().send_text(MAV_SEVERITY_INFO,"height achieved - Loss Of Position");
+            gcs().send_text(MAV_SEVERITY_INFO,"Throw height achieved, lost position");
             stage = Throw_PosHold;
         }
 
@@ -111,7 +107,7 @@ void ModeThrow::run()
         if (!nextmode_attempted) {
             // Warn if throttle is low — in ALT_HOLD, below mid-stick commands descent
             if (channel_throttle->get_control_in() < copter.get_throttle_mid() - copter.g.throttle_deadzone) {
-                gcs().send_text(MAV_SEVERITY_WARNING, "Throttle low - Loss of altitude");
+                gcs().send_text(MAV_SEVERITY_WARNING, "Throttle low - losing altitude");
             }
             // switch EKF source set if configured
             const int8_t srcset = g2.throw_srcset.get();
@@ -254,23 +250,23 @@ void ModeThrow::run()
         case Throw_Detecting:
             // flash mode string while armed and waiting for throw
             mode_str = ((now_ms / 500) % 2 == 0) ? "THRW" : "    ";
-            stage_msg = "Throw: waiting";
+            stage_msg = "Waiting for throw";
             break;
         case Throw_Wait_Throttle_Unlimited:
             mode_str = ((now_ms / 250) % 2 == 0) ? "THR!" : "    ";
-            stage_msg = "Throw: spooling";
+            stage_msg = "Throw detected";
             break;
         case Throw_Uprighting:
             mode_str = ((now_ms / 250) % 2 == 0) ? "THR!" : "    ";
-            stage_msg = "Throw: uprighting";
+            stage_msg = "Throw detected";
             break;
         case Throw_HgtStabilise:
             mode_str = "THHT";
-            stage_msg = "Throw: height stabilise";
+            stage_msg = "Stabilizing throw height";
             break;
         case Throw_PosHold:
             mode_str = "THPH";
-            stage_msg = "Throw: position hold";
+            stage_msg = "Throw holding position";
             break;
         }
         AP::notify().set_flight_mode_str(mode_str);
