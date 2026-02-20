@@ -1794,6 +1794,7 @@ private:
     uint32_t free_fall_start_ms;    // system time free fall was detected
     float free_fall_start_velz;     // vertical velocity when free fall was detected
     uint32_t hgt_stabilise_start_ms;  // system time height stabilise stage was entered
+    uint32_t drop_confirm_start_ms; // system time drop conditions first sustained
 };
 
 #if MODE_TURTLE_ENABLED

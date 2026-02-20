@@ -19,6 +19,7 @@ bool ModeThrow::init(bool ignore_checks)
     stage = Throw_Disarmed;
     nextmode_attempted = false;
     xy_controller_active = false;
+    drop_confirm_start_ms = 0;
 
     // initialise pos controller speed and acceleration
     pos_control->set_max_speed_accel_xy(wp_nav->get_default_speed_xy(), BRAKE_MODE_DECEL_RATE);
@@ -351,11 +352,17 @@ bool ModeThrow::throw_detected()
         possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
     }
 
-    // For drops, freefall conditions (near-zero g + downward velocity + low
-    // total acceleration) are already unambiguous — skip velocity confirmation
-    // to minimise detection latency
+    // For drops, require freefall conditions to persist for a short window
+    // to reject transient low-g events (e.g. carrier aircraft maneuvers)
     if (g2.throw_type == ThrowType::Drop) {
-        return possible_throw_detected;
+        if (possible_throw_detected) {
+            if (drop_confirm_start_ms == 0) {
+                drop_confirm_start_ms = AP_HAL::millis();
+            }
+            return (AP_HAL::millis() - drop_confirm_start_ms >= THROW_DROP_CONFIRM_MS);
+        }
+        drop_confirm_start_ms = 0;
+        return false;
     }
 
     // Record time and vertical velocity when we detect the possible throw
