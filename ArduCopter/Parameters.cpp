@@ -709,7 +709,7 @@ const AP_Param::Info Copter::var_info[] = {
 
     // @Param: THROW_ALT_DCSND
     // @DisplayName: Throw mode target altitude to descend
-    // @Description: Target altitude to descend during a drop, (must be positive). This allows for rapidly clearing surrounding obstacles.
+    // @Description: Target altitude to descend below the recovery point during a drop (must be positive). Total altitude lost in a drop is: freefall distance + uprighting distance + this value. Typical total loss is 5-10m depending on release orientation and vehicle thrust-to-weight.
     // @Units: m
     // @User: Advanced
     GSCALAR(throw_altitude_descend, "THROW_ALT_DCSND", 1.0),
