@@ -50,6 +50,9 @@ void Copter::arm_motors_check()
         if (arming_counter == ARM_DELAY && !motors->armed()) {
             // reset arming counter if arming fail
             if (!arming.arm(AP_Arming::Method::RUDDER)) {
+                if (arming.option_enabled(AP_Arming::Option::PENDING_ARM_ON_SWITCH)) {
+                    arming.set_pending_arm(false);
+                }
                 arming_counter = 0;
             }
         }
@@ -79,6 +82,8 @@ void Copter::arm_motors_check()
         if (arming_counter == DISARM_DELAY && motors->armed()) {
             arming.disarm(AP_Arming::Method::RUDDER);
         }
+        // cancel pending arm on left rudder even if already disarmed
+        arming.clear_pending_arm();
 
     // Yaw is centered so reset arming counter
     } else {
