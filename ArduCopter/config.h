@@ -459,6 +459,12 @@
 #ifndef BRAKE_MODE_DECEL_RATE
  # define BRAKE_MODE_DECEL_RATE  750 // acceleration rate in cm/s/s in Brake Mode
 #endif
+#ifndef THROW_DROP_SPEED_Z
+ # define THROW_DROP_SPEED_Z    500  // z-axis speed in cm/s for drop recovery (2x brake mode)
+#endif
+#ifndef THROW_DROP_DECEL_RATE
+ # define THROW_DROP_DECEL_RATE 1500 // acceleration in cm/s/s for drop recovery (2x brake mode)
+#endif
 
 //////////////////////////////////////////////////////////////////////////////
 // PosHold parameter defaults

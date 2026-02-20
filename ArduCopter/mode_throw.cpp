@@ -25,8 +25,13 @@ bool ModeThrow::init(bool ignore_checks)
     pos_control->set_correction_speed_accel_xy(wp_nav->get_default_speed_xy(), BRAKE_MODE_DECEL_RATE);
 
     // set vertical speed and acceleration limits
-    pos_control->set_max_speed_accel_z(BRAKE_MODE_SPEED_Z, BRAKE_MODE_SPEED_Z, BRAKE_MODE_DECEL_RATE);
-    pos_control->set_correction_speed_accel_z(BRAKE_MODE_SPEED_Z, BRAKE_MODE_SPEED_Z, BRAKE_MODE_DECEL_RATE);
+    if (g2.throw_type == ThrowType::Drop) {
+        pos_control->set_max_speed_accel_z(THROW_DROP_SPEED_Z, THROW_DROP_SPEED_Z, THROW_DROP_DECEL_RATE);
+        pos_control->set_correction_speed_accel_z(THROW_DROP_SPEED_Z, THROW_DROP_SPEED_Z, THROW_DROP_DECEL_RATE);
+    } else {
+        pos_control->set_max_speed_accel_z(BRAKE_MODE_SPEED_Z, BRAKE_MODE_SPEED_Z, BRAKE_MODE_DECEL_RATE);
+        pos_control->set_correction_speed_accel_z(BRAKE_MODE_SPEED_Z, BRAKE_MODE_SPEED_Z, BRAKE_MODE_DECEL_RATE);
+    }
 
     return true;
 }
