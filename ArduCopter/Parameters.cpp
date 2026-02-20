@@ -783,7 +783,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Description: EKF source set to activate when throw mode transitions to THROW_NEXTMODE. 0 to leave unchanged.
     // @Values: 0:No change,1:Source1,2:Source2,3:Source3
     // @User: Advanced
-    AP_GROUPINFO("THROW_SRC_SET", 59, ParametersG2, throw_srcset, 0),
+    AP_GROUPINFO("THROW_SRC_SET", 60, ParametersG2, throw_srcset, 0),
 #endif
 
     // @Param: GND_EFFECT_COMP
