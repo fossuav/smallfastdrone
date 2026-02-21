@@ -223,6 +223,7 @@ public:
     friend class ModeZigZag;
     friend class ModeAutorotate;
     friend class ModeTurtle;
+    friend class ModeVAlt;
 
     friend class _AutoTakeoff;
 
@@ -1117,6 +1118,9 @@ private:
 #endif
 #if MODE_TURTLE_ENABLED
     ModeTurtle mode_turtle;
+#endif
+#if MODE_VALT_ENABLED
+    ModeVAlt mode_valt;
 #endif
 
     // mode.cpp
