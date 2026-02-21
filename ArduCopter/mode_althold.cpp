@@ -88,29 +88,25 @@ void ModeAltHold::run()
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
 
 #if AP_RANGEFINDER_ENABLED
-        // update the vertical offset based on the surface measurement
-        copter.surface_tracking.update_surface_offset();
+        // In velocity control mode, skip surface tracking so its
+        // velocity and acceleration offsets do not fight pilot stick
+        // input.  The rangefinder still contributes to altitude via
+        // EK3_RNG_USE_HGT through the EKF.
+        if (!option_is_enabled(Option::VelocityControl)) {
+            copter.surface_tracking.update_surface_offset();
+        }
 #endif
 
         // Send the commanded climb rate to the position controller
         pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
 
-        // In velocity control mode, deweight the position P loop so that
-        // pilot stick commands dominate.  The jerk-limited shaping of
-        // vel_desired and accel_desired is retained from the call above.
-        // Setting pos_desired so that update_z_controller sees:
-        //   pos_target = pos_desired + offset + terrain
-        //            = actual + w*(offset + terrain)
-        //   vel_from_P = P * w * (offset + terrain)
-        // where w is a small weight (0.1), giving ~10% of normal position
-        // P contribution from surface tracking / terrain following while
-        // zeroing the position-hold component entirely.
+        // In velocity control mode, override pos_desired with the
+        // current position so the position P loop contributes nothing
+        // from the position-hold component.  The jerk-limited shaping
+        // of vel_desired and accel_desired is retained from the call
+        // above.
         if (option_is_enabled(Option::VelocityControl)) {
-            const float pos_p_weight = 0.1f;
-            const float actual_pos = inertial_nav.get_position_z_up_cm();
-            const float offset_plus_terrain = pos_control->get_pos_offset_z_cm() +
-                                              pos_control->get_pos_terrain_cm();
-            pos_control->set_pos_desired_z_cm(actual_pos - (1.0f - pos_p_weight) * offset_plus_terrain);
+            pos_control->set_pos_desired_z_cm(inertial_nav.get_position_z_up_cm());
         }
         break;
     }
