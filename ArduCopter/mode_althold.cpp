@@ -94,6 +94,14 @@ void ModeAltHold::run()
 
         // Send the commanded climb rate to the position controller
         pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
+
+        // In velocity control mode, override the position desired with
+        // the current position so the position P loop contributes nothing.
+        // The jerk-limited shaping of vel_desired and accel_desired is
+        // retained from the call above.
+        if (option_is_enabled(Option::VelocityControl)) {
+            pos_control->set_pos_desired_z_cm(inertial_nav.get_position_z_up_cm());
+        }
         break;
     }
 
@@ -102,4 +110,10 @@ void ModeAltHold::run()
 
     // run the vertical position controller and set output throttle
     pos_control->update_z_controller();
+}
+
+// return true if an option is enabled
+bool ModeAltHold::option_is_enabled(Option option) const
+{
+    return (copter.g2.althold_options & (uint8_t)option) != 0;
 }

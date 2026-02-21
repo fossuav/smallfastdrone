@@ -494,6 +494,11 @@ protected:
 
 private:
 
+    enum class Option : uint8_t {
+        VelocityControl = (1U << 0),
+    };
+    bool option_is_enabled(Option option) const;
+
 };
 
 class ModeAuto : public Mode {
