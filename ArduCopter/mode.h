@@ -493,13 +493,6 @@ protected:
     const char *name() const override { return "ALT_HOLD"; }
     const char *name4() const override { return "ALTH"; }
 
-private:
-
-    enum class Option : uint8_t {
-        VelocityControl = (1U << 0),
-    };
-    bool option_is_enabled(Option option) const;
-
 };
 
 class ModeAuto : public Mode {

@@ -1293,12 +1293,7 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     AP_GROUPINFO("FSTRATE_DIV", 10, ParametersG2, att_decimation, 1),
 #endif
 
-    // @Param: ALTH_OPTIONS
-    // @DisplayName: AltHold mode options
-    // @Description: Options that can be applied to change AltHold mode behaviour
-    // @Bitmask: 0:Velocity control (bypass position controller P loop)
-    // @User: Advanced
-    AP_GROUPINFO("ALTH_OPTIONS", 19, ParametersG2, althold_options, 0),
+    // ID 19 is reserved (was ALTH_OPTIONS)
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 

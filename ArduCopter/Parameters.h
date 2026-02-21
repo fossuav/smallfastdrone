@@ -656,8 +656,6 @@ public:
     AP_Int32 rtl_options;
 #endif
 
-    AP_Int8 althold_options;
-
     AP_Int32 flight_options;
 
 #if AP_RANGEFINDER_ENABLED

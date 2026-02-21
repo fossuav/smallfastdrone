@@ -88,28 +88,11 @@ void ModeAltHold::run()
         target_climb_rate = get_avoidance_adjusted_climbrate(target_climb_rate);
 
 #if AP_RANGEFINDER_ENABLED
-        // In velocity control mode, skip surface tracking so its
-        // velocity and acceleration offsets do not fight pilot stick
-        // input.  The rangefinder still contributes to altitude via
-        // EK3_RNG_USE_HGT through the EKF.
-        if (!option_is_enabled(Option::VelocityControl)) {
-            copter.surface_tracking.update_surface_offset();
-        }
+        copter.surface_tracking.update_surface_offset();
 #endif
 
         // Send the commanded climb rate to the position controller
         pos_control->set_pos_target_z_from_climb_rate_cm(target_climb_rate);
-
-        // In velocity control mode, override pos_desired with the
-        // current position so the position P loop does not fight the
-        // pilot's stick input.  When the stick returns to centre
-        // (zero climb rate command), stop overriding so that
-        // pos_desired freezes at the current altitude and position P
-        // gently holds height.
-        if (option_is_enabled(Option::VelocityControl) &&
-            !is_zero(target_climb_rate)) {
-            pos_control->set_pos_desired_z_cm(inertial_nav.get_position_z_up_cm());
-        }
         break;
     }
 
@@ -118,10 +101,4 @@ void ModeAltHold::run()
 
     // run the vertical position controller and set output throttle
     pos_control->update_z_controller();
-}
-
-// return true if an option is enabled
-bool ModeAltHold::option_is_enabled(Option option) const
-{
-    return (copter.g2.althold_options & (uint8_t)option) != 0;
 }
