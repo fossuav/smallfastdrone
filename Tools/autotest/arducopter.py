@@ -268,12 +268,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.do_RTL()
 
-    def AltHoldVelocityControl(self):
-        '''Test AltHold velocity control option (ALTH_OPTIONS bit 0)'''
-        self.context_push()
-        self.set_parameter("ALTH_OPTIONS", 1)
+    def ModeVAltHold(self):
+        '''Test VALT velocity alt-hold mode (mode 29)'''
+        # use mode number directly since pymavlink does not know VALT
+        VALT = 29
 
         self.takeoff(10, mode="ALT_HOLD")
+        self.change_mode(VALT)
 
         # verify altitude is maintained with neutral sticks
         self.progress("Checking altitude hold with velocity control")
@@ -313,8 +314,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         )
 
         self.do_RTL()
-        self.context_pop()
-        self.reboot_sitl()
 
     def fly_to_origin(self, final_alt=10):
         origin = self.poll_message("GPS_GLOBAL_ORIGIN")
@@ -11179,7 +11178,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.GPSGlitchLoiter2,
              self.GPSGlitchAuto,
              self.ModeAltHold,
-             self.AltHoldVelocityControl,
+             self.ModeVAltHold,
              self.ModeLoiter,
              self.SimpleMode,
              self.SuperSimpleCircle,
