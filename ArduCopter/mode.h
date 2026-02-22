@@ -101,6 +101,7 @@ public:
         AUTOROTATE =   26,  // Autonomous autorotation
         AUTO_RTL =     27,  // Auto RTL, this is not a true mode, AUTO will report as this mode if entered to perform a DO_LAND_START Landing sequence
         TURTLE =       28,  // Flip over after crash
+        VALT =         29,  // Velocity-controlled alt hold
 
         // Mode number 127 reserved for the "drone show mode" in the Skybrush
         // fork at https://github.com/skybrush-io/ardupilot
@@ -492,7 +493,9 @@ protected:
     const char *name() const override { return "ALT_HOLD"; }
     const char *name4() const override { return "ALTH"; }
 
-private:
+    // handle the Flying state inside run(); virtual so ModeVelAltHold
+    // can override just this piece
+    virtual void alt_hold_run_flying(float &target_roll, float &target_pitch, float target_climb_rate);
 
 };
 
@@ -1832,6 +1835,26 @@ private:
     // Semaphore to protect the motors from the arming state
     HAL_Semaphore msem;
     bool shutdown;
+};
+#endif
+
+#if MODE_VALT_ENABLED
+class ModeVelAltHold : public ModeAltHold {
+
+public:
+    // inherit constructor
+    using ModeAltHold::Mode;
+    Number mode_number() const override { return Number::VALT; }
+
+protected:
+
+    const char *name() const override { return "VALT_HOLD"; }
+    const char *name4() const override { return "VALT"; }
+
+    // velocity-controlled Flying state: no surface tracking, no
+    // avoidance roll/pitch, pos_desired override for velocity control
+    void alt_hold_run_flying(float &target_roll, float &target_pitch, float target_climb_rate) override;
+
 };
 #endif
 
