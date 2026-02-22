@@ -493,6 +493,10 @@ protected:
     const char *name() const override { return "ALT_HOLD"; }
     const char *name4() const override { return "ALTH"; }
 
+    // handle the Flying state inside run(); virtual so ModeVelAltHold
+    // can override just this piece
+    virtual void alt_hold_run_flying(float &target_roll, float &target_pitch, float target_climb_rate);
+
 };
 
 class ModeAuto : public Mode {
@@ -1842,12 +1846,14 @@ public:
     using ModeAltHold::Mode;
     Number mode_number() const override { return Number::VALT; }
 
-    void run() override;
-
 protected:
 
-    const char *name() const override { return "VALT"; }
+    const char *name() const override { return "VALT_HOLD"; }
     const char *name4() const override { return "VALT"; }
+
+    // velocity-controlled Flying state: no surface tracking, no
+    // avoidance roll/pitch, pos_desired override for velocity control
+    void alt_hold_run_flying(float &target_roll, float &target_pitch, float target_climb_rate) override;
 
 };
 #endif
