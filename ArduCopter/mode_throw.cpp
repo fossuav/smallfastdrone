@@ -125,6 +125,7 @@ void ModeThrow::run()
                 case Mode::Number::LOITER:
                 case Mode::Number::STABILIZE:
                 case Mode::Number::ALT_HOLD:
+                case Mode::Number::VALT:
                     set_mode((Mode::Number)g2.throw_nextmode.get(), ModeReason::THROW_COMPLETE);
                     break;
                 default:
