@@ -3,38 +3,19 @@
 #if MODE_VALT_ENABLED
 
 /*
- * Init and run calls for VALT (velocity alt hold) flight mode.
+ * Run call for VALT (velocity alt hold) flight mode.
  *
- * VALT is a velocity-controlled altitude hold mode.  The throttle stick
- * directly commands climb rate.  When the stick is off-centre the
- * position controller's P loop is bypassed by overriding pos_desired
- * with the current position so the pilot has pure velocity authority.
- * When the stick returns to centre, pos_desired freezes at the current
- * altitude and position P gently holds height.
- *
- * Surface tracking is skipped so its velocity and acceleration offsets
- * do not fight pilot stick input.  The rangefinder still contributes to
- * altitude via EK3_RNG_USE_HGT through the EKF.
+ * VALT inherits from AltHold but replaces the Flying state with
+ * velocity control: surface tracking is skipped so its offsets do not
+ * fight pilot stick input, and pos_desired is overridden with the
+ * current position when the stick is off-centre so the position P loop
+ * is bypassed.  When the stick returns to centre pos_desired freezes
+ * and position P gently holds height.
  */
-
-// valt_init - initialise valt controller
-bool ModeVAlt::init(bool ignore_checks)
-{
-    // initialise the vertical position controller
-    if (!pos_control->is_active_z()) {
-        pos_control->init_z_controller();
-    }
-
-    // set vertical speed and acceleration limits
-    pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
-    pos_control->set_correction_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
-
-    return true;
-}
 
 // valt_run - runs the valt controller
 // should be called at 100hz or more
-void ModeVAlt::run()
+void ModeVelAltHold::run()
 {
     // set vertical speed and acceleration limits
     pos_control->set_max_speed_accel_z(-get_pilot_speed_dn(), g.pilot_speed_up, g.pilot_accel_z);
