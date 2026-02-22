@@ -156,3 +156,10 @@ define HAL_BARO_ALLOW_INIT_NO_BARO 1
 
 include ../include/minimize_fpv_osd.inc
 AUTOBUILD_TARGETS Copter
+
+define AP_BARO_THST_COMP_ENABLED 1
+define HAL_INS_LOW_NOISE 1
+# arm delay in ticks at 10Hz
+define ARM_DELAY 2
+define AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED 1
+define HAL_INS_MAX_INSTANCES 1
