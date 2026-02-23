@@ -103,8 +103,10 @@ void ModeThrow::run()
         // Set the auto_arm status to true to avoid a possible automatic disarm caused by selection of an auto mode with throttle at minimum
         copter.set_auto_armed(true);
 
-    } else if (stage == Throw_HgtStabilise && throw_height_good() &&
-               (throw_velocity_good() || (AP_HAL::millis() - hgt_stabilise_start_ms > 2000))) {
+    } else if (stage == Throw_HgtStabilise &&
+               ((g2.throw_type == ThrowType::Drop)
+                   ? (throw_velocity_good() || (AP_HAL::millis() - hgt_stabilise_start_ms > 3000))
+                   : (throw_height_good() && (throw_velocity_good() || (AP_HAL::millis() - hgt_stabilise_start_ms > 2000))))) {
         // check if we have horizontal position for PosHold
         nav_filter_status filt_status = inertial_nav.get_filter_status();
         // determine if the next mode needs horizontal position
