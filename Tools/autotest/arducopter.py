@@ -9941,7 +9941,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_altitude(100, 1000, timeout=100, relative=True)
         self.wait_statustext("Throw detected", check_context=True, timeout=10)
         self.wait_statustext("Stabilizing throw height", check_context=True)
-        self.wait_statustext("Throw height achieved, lost position", check_context=True)
+        self.wait_statustext("Throw height achieved", check_context=True)
         self.wait_mode('ALT_HOLD')
         self.set_rc(3, 1000)
         self.wait_disarmed(timeout=90)
