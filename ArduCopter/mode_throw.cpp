@@ -20,6 +20,7 @@ bool ModeThrow::init(bool ignore_checks)
     nextmode_attempted = false;
     xy_controller_active = false;
     drop_confirm_start_ms = 0;
+    drop_start_vel_z_up_cms = 0;
     last_stage_msg_ms = 0;
 
     // initialise pos controller speed and acceleration
@@ -77,7 +78,24 @@ void ModeThrow::run()
         // initialise the demanded height below/above the throw height from user parameters
         // this allows for rapidly clearing surrounding obstacles
         if (g2.throw_type == ThrowType::Drop) {
-            pos_control->set_pos_desired_z_cm(inertial_nav.get_position_z_up_cm() - g.throw_altitude_descend * 100.0f);
+            const Mode::Number nextmode = (Mode::Number)g2.throw_nextmode.get();
+            const bool nextmode_needs_pos = (nextmode != Mode::Number::STABILIZE &&
+                                             nextmode != Mode::Number::ALT_HOLD &&
+                                             nextmode != Mode::Number::VALT);
+            if (nextmode_needs_pos) {
+                // position-controlled next mode — EKF has GPS aiding so
+                // the baro/EKF altitude estimate is reliable
+                pos_control->set_pos_desired_z_cm(inertial_nav.get_position_z_up_cm() - g.throw_altitude_descend * 100.0f);
+            } else {
+                // non-position next mode (no GPS) — calculate drop distance
+                // from freefall kinematics rather than baro altitude which
+                // can be unreliable without velocity aiding.
+                // d = v0*t + 0.5*g*t² (both terms negative in z-up frame)
+                const float freefall_s = (AP_HAL::millis() - drop_confirm_start_ms) * 0.001f;
+                const float drop_cm = drop_start_vel_z_up_cms * freefall_s
+                                    - 0.5f * GRAVITY_MSS * 100.0f * sq(freefall_s);
+                pos_control->set_pos_desired_z_cm(drop_cm - g.throw_altitude_descend * 100.0f);
+            }
         } else {
             pos_control->set_pos_desired_z_cm(inertial_nav.get_position_z_up_cm() + g.throw_altitude_ascend * 100.0f);
         }
@@ -89,6 +107,11 @@ void ModeThrow::run()
                (throw_velocity_good() || (AP_HAL::millis() - hgt_stabilise_start_ms > 2000))) {
         // check if we have horizontal position for PosHold
         nav_filter_status filt_status = inertial_nav.get_filter_status();
+        // determine if the next mode needs horizontal position
+        const Mode::Number nextmode = (Mode::Number)g2.throw_nextmode.get();
+        const bool nextmode_needs_pos = (nextmode != Mode::Number::STABILIZE &&
+                                         nextmode != Mode::Number::ALT_HOLD &&
+                                         nextmode != Mode::Number::VALT);
         if (filt_status.flags.horiz_pos_abs) {
             gcs().send_text(MAV_SEVERITY_INFO,"Throw height achieved, good position");
             stage = Throw_PosHold;
@@ -96,8 +119,11 @@ void ModeThrow::run()
             // initialise position controller
             pos_control->init_xy_controller();
             xy_controller_active = true;
+        } else if (nextmode_needs_pos) {
+            gcs().send_text(MAV_SEVERITY_WARNING,"Throw height achieved, lost position");
+            stage = Throw_PosHold;
         } else {
-            gcs().send_text(MAV_SEVERITY_INFO,"Throw height achieved, lost position");
+            gcs().send_text(MAV_SEVERITY_INFO,"Throw height achieved");
             stage = Throw_PosHold;
         }
 
@@ -388,6 +414,7 @@ bool ModeThrow::throw_detected()
         if (possible_throw_detected) {
             if (drop_confirm_start_ms == 0) {
                 drop_confirm_start_ms = AP_HAL::millis();
+                drop_start_vel_z_up_cms = inertial_nav.get_velocity_z_up_cms();
             }
             return (AP_HAL::millis() - drop_confirm_start_ms >= THROW_DROP_CONFIRM_MS);
         }
