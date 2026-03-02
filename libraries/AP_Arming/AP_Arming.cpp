@@ -505,14 +505,16 @@ bool AP_Arming::ins_checks(bool report)
 #endif
 
         if (run_imu_consistency_check) {
-            // check all accelerometers point in roughly same direction
-            if (!ins_accels_consistent(ins)) {
+            // evaluate both checks so their timers run in parallel
+            const bool accels_ok = ins_accels_consistent(ins);
+            const bool gyros_ok = ins_gyros_consistent(ins);
+
+            if (!accels_ok) {
                 check_failed(ARMING_CHECK_INS, report, "Accels inconsistent");
                 return false;
             }
 
-            // check all gyros are giving consistent readings
-            if (!ins_gyros_consistent(ins)) {
+            if (!gyros_ok) {
                 check_failed(ARMING_CHECK_INS, report, "Gyros inconsistent");
                 return false;
             }
