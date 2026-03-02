@@ -1929,6 +1929,67 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             timeout=120,
         )
 
+    def GPSDeniedVTOL(self):
+        '''test GPS denial with recorded origin for VTOL takeoff and transition'''
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+
+        # Phase 1: Boot with GPS, record the origin
+        # AHRS_OPTIONS bits: 0=DISABLE_DCM_FALLBACK_FW, 1=DISABLE_DCM_FALLBACK_VTOL,
+        #                    3=RECORD_ORIGIN, 4=USE_RECORDED_ORIGIN_FOR_NONGPS
+        self.set_parameters({
+            "AHRS_OPTIONS": 27,      # 1+2+8+16
+            "EK3_OPTIONS": 1,        # JammingExpected
+            "FLTMODE1": 19,          # QLOITER - so reboot enters VTOL mode
+            "ARMING_CHECK": 2093030, # all except GPS,INS,GPS_CONFIG (clear bits 0,3,4,12)
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+
+        # Phase 2: Disable GPS and reboot - origin should be loaded from params
+        self.set_parameters({
+            "SIM_GPS_DISABLE": 1,
+            "SIM_GPS2_DISABLE": 1,
+        })
+        self.reboot_sitl()
+
+        # Switch to QLOITER so fly_forward=false, allowing EKF3 to init
+        # without GPS (assume_zero_sideslip becomes false). Once EKF3 is
+        # active, the recorded origin is loaded from saved parameters.
+        self.change_mode('QLOITER')
+        self.wait_statustext('EKF3 IMU0 initialised', check_context=True, timeout=30)
+        self.wait_statustext('using recorded origin', check_context=True, timeout=30)
+
+        # Phase 3: Arm and takeoff in QLOITER without GPS
+        self.change_mode('QLOITER')
+        self.delay_sim_time(15)  # 10s required for accel consistency check
+        self.arm_vehicle()
+        self.set_rc(3, 2000)
+        self.wait_altitude(15, 30, relative=True, timeout=60)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(2)
+
+        # Phase 4: Transition to FBWA - dead reckoning via airspeed
+        # Start a fresh statustext collection for the flight phase
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+
+        self.change_mode('FBWA')
+        self.set_rc(3, 1500)
+        self.wait_statustext('Transition done', check_context=True, timeout=60)
+        self.delay_sim_time(5)
+
+        # Verify EKF3 stayed active (did not fall back to DCM) during flight
+        if self.statustext_in_collections('DCM active'):
+            raise NotAchievedException("EKF3 fell back to DCM during GPS-denied flight")
+
+        self.disarm_vehicle(force=True)
+        self.context_pop()
+
+        # Cleanup
+        self.context_pop()
+        self.reboot_sitl()
+
     def AHRSFlyForwardFlag(self):
         '''ensure FlyForward flag is set appropriately'''
         self.set_parameters({
@@ -2923,6 +2984,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             self.RTL_AUTOLAND_1,  # as in fly-home then go to landing sequence
             self.RTL_AUTOLAND_1_FROM_GUIDED,  # as in fly-home then go to landing sequence
             self.AHRSFlyForwardFlag,
+            self.GPSDeniedVTOL,
             self.DoRepositionTerrain,
             self.DoRepositionTerrain2,
             self.QLoiterRecovery,
