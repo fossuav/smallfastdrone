@@ -1941,17 +1941,18 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             "AHRS_OPTIONS": 27,      # 1+2+8+16
             "EK3_OPTIONS": 1,        # JammingExpected
             "FLTMODE1": 19,          # QLOITER - so reboot enters VTOL mode
-            "ARMING_CHECK": 2093046, # all except GPS,GPS_CONFIG (clear bits 0,3,12)
+            "ARMING_CHECK": 1830902, # all except GPS,GPS_CONFIG,VISION (clear bits 0,3,12,18)
         })
         self.reboot_sitl()
         self.wait_ready_to_arm()
 
-        # Phase 2: Disable GPS, remove GPS from EKF sources, and reboot
+        # Phase 2: Disable GPS, configure for EXTNAV + dead reckoning, reboot
         self.set_parameters({
             "SIM_GPS_DISABLE": 1,
             "SIM_GPS2_DISABLE": 1,
-            "EK3_SRC1_POSXY": 0,     # None (was GPS=3)
-            "EK3_SRC1_VELXY": 0,     # None (was GPS=3)
+            "EK3_SRC1_POSXY": 6,     # EXTNAV (visual odometry)
+            "EK3_SRC1_VELXY": 6,     # EXTNAV (visual odometry)
+            "VISO_TYPE": 1,          # MAVLink visual odometry (driver enabled)
         })
         self.reboot_sitl()
 
