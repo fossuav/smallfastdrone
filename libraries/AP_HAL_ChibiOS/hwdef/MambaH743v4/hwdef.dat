@@ -193,3 +193,6 @@ ROMFS_WILDCARD libraries/AP_OSD/fonts/font*.bin
 
 define DEFAULT_NTF_LED_TYPES 257
 define AP_BARO_THST_COMP_ENABLED 1
+define HAL_INS_LOW_NOISE 1
+# arm delay in ticks at 10Hz
+define ARM_DELAY 2
