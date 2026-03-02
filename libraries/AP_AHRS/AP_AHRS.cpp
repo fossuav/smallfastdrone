@@ -1590,8 +1590,8 @@ void AP_AHRS::use_recorded_origin_maybe()
         return;
     }
 
-    // only set if not using GPS
-    if (using_gps()) {
+    // only set if GPS does not have a 3D fix
+    if (AP::gps().status() >= AP_GPS::GPS_OK_FIX_3D) {
         return;
     }
 
@@ -1602,7 +1602,13 @@ void AP_AHRS::use_recorded_origin_maybe()
         int32_t(_origin_alt.get() * 100),
         Location::AltFrame::ABSOLUTE
     };
-    if (set_origin(loc)) {
+    bool origin_set = set_origin(loc);
+
+    // set_origin() returns false when DCM is active but the origin
+    // may still have been set in the configured EKF. Check via
+    // _get_origin() which checks the configured EKF type first.
+    Location check;
+    if (origin_set || _get_origin(check)) {
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AHRS: using recorded origin:%.7f,%.7f,%.1f",
                       (double)_origin_lat.get(), (double)_origin_lon.get(), (double)_origin_alt.get());
     }
