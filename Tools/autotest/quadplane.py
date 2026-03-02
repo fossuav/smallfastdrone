@@ -1946,10 +1946,12 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.reboot_sitl()
         self.wait_ready_to_arm()
 
-        # Phase 2: Disable GPS and reboot - origin should be loaded from params
+        # Phase 2: Disable GPS, remove GPS from EKF sources, and reboot
         self.set_parameters({
             "SIM_GPS_DISABLE": 1,
             "SIM_GPS2_DISABLE": 1,
+            "EK3_SRC1_POSXY": 0,     # None (was GPS=3)
+            "EK3_SRC1_VELXY": 0,     # None (was GPS=3)
         })
         self.reboot_sitl()
 
