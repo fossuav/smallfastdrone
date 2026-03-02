@@ -526,7 +526,7 @@ void Plane::update_fly_forward(void)
             return;
         }
 
-        if (quadplane.in_transition()) {
+        if (quadplane.in_frwd_transition()) {
             ahrs.set_fly_forward(true);
             return;
         }
