@@ -1941,7 +1941,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             "AHRS_OPTIONS": 27,      # 1+2+8+16
             "EK3_OPTIONS": 1,        # JammingExpected
             "FLTMODE1": 19,          # QLOITER - so reboot enters VTOL mode
-            "ARMING_CHECK": 2093030, # all except GPS,INS,GPS_CONFIG (clear bits 0,3,4,12)
+            "ARMING_CHECK": 2093046, # all except GPS,GPS_CONFIG (clear bits 0,3,12)
         })
         self.reboot_sitl()
         self.wait_ready_to_arm()
@@ -1962,7 +1962,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
 
         # Phase 3: Arm and takeoff in QLOITER without GPS
         self.change_mode('QLOITER')
-        self.delay_sim_time(15)  # 10s required for accel consistency check
+        self.delay_sim_time(15)  # 10s required for IMU consistency checks
         self.arm_vehicle()
         self.set_rc(3, 2000)
         self.wait_altitude(15, 30, relative=True, timeout=60)
