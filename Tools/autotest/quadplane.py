@@ -2124,6 +2124,73 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
                 f"Expected 0 ATSC during forward transition, got {atsc_during_transition}"
             )
 
+    def GPSDeniedFBWBAltitude(self):
+        '''test that FBWB altitude target is correct after GPS loss'''
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+
+        # Boot with GPS, disable DCM fallback so EKF3 continues after GPS loss
+        self.set_parameters({
+            "AHRS_OPTIONS": 3,       # DISABLE_DCM_FALLBACK_FW + DISABLE_DCM_FALLBACK_VTOL
+            "EK3_OPTIONS": 1,        # JammingExpected
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+
+        # Arm and takeoff in QLOITER with GPS active (home.alt = real AMSL)
+        self.change_mode('QLOITER')
+        self.arm_vehicle()
+        self.set_rc(3, 2000)
+        self.wait_altitude(25, 40, relative=True, timeout=60)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(2)
+
+        # Disable GPS inflight — home.alt remains at real AMSL (~343m)
+        self.set_parameter("SIM_GPS_DISABLE", 1)
+        self.delay_sim_time(5)
+
+        # Switch to FBWB — set_target_altitude_current() runs on entry.
+        # With the bug, it stores origin-relative altitude (~30m) as AMSL,
+        # then relative_target_altitude_cm() subtracts home.alt (~343m AMSL)
+        # giving ~-313m target — a massive dive command to TECS.
+        self.change_mode('FBWB')
+        self.set_rc(2, 1500)  # neutral pitch
+        self.set_rc(3, 1500)  # neutral throttle
+        self.delay_sim_time(5)
+
+        # Check TECS height demand (hin) in the dataflash log.
+        # hin = relative_target_altitude_cm() * 0.01 (meters, relative to home)
+        mlog_path = self.current_onboard_log_filepath()
+        self.disarm_vehicle(force=True)
+
+        mlog = self.dfreader_for_path(mlog_path)
+        in_fbwb = False
+        fbwb_mode_num = self.get_mode_from_mode_mapping('FBWB')
+        worst_hin = None
+        while True:
+            m = mlog.recv_match(type=['MODE', 'TECS'])
+            if m is None:
+                break
+            if m.get_type() == 'MODE':
+                in_fbwb = (m.ModeNum == fbwb_mode_num)
+                continue
+            if in_fbwb and m.get_type() == 'TECS':
+                if worst_hin is None or m.hin < worst_hin:
+                    worst_hin = m.hin
+
+        if worst_hin is None:
+            raise NotAchievedException("No TECS log messages found while in FBWB mode")
+
+        self.progress(f"TECS height demand (hin) in FBWB: worst={worst_hin:.1f}m")
+        if worst_hin < -50:
+            raise NotAchievedException(
+                f"TECS height demand in FBWB was {worst_hin:.1f}m "
+                "(expected ~30m, got large negative = wrong altitude target after GPS loss)"
+            )
+
+        self.context_pop()
+        self.reboot_sitl()
+
     def AHRSFlyForwardFlag(self):
         '''ensure FlyForward flag is set appropriately'''
         self.set_parameters({
@@ -3120,6 +3187,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             self.RTL_AUTOLAND_1_FROM_GUIDED,  # as in fly-home then go to landing sequence
             self.AHRSFlyForwardFlag,
             self.GPSDeniedVTOL,
+            self.GPSDeniedFBWBAltitude,
             self.DoRepositionTerrain,
             self.DoRepositionTerrain2,
             self.QLoiterRecovery,
