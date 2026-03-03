@@ -1993,6 +1993,137 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
+    def TransitionAnglePScaling(self):
+        '''verify ATSC (angle P scaling) behavior during forward transition'''
+        self.set_parameters({
+            "Q_OPTIONS": 4325376,       # bits 17+22 (EnableLandResposition + SCALE_FF_ANGLE_P)
+            "Q_TRANSITION_MS": 5000,    # 5s TIMER phase
+            "Q_TRAN_PIT_MAX": 3,        # 3 deg pitch limit during transition
+            "Q_ASSIST_SPEED": 14,       # assist speed threshold
+            "Q_A_ANG_PIT_P": 4.5,       # copter angle pitch P
+            "Q_A_RAT_PIT_P": 0.183,     # copter pitch rate P
+            "Q_A_RAT_PIT_I": 0.183,     # copter pitch rate I
+            "Q_A_RAT_PIT_IMAX": 0.5,    # copter pitch rate I max
+            "Q_A_ANG_LIM_TC": 1.0,      # angle input shaping TC
+            "Q_M_THST_HOVER": 0.33,     # hover throttle
+            "FBWB_CLIMB_RATE": 3,       # matching flight log
+        })
+        self.reboot_sitl()
+
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.set_rc(3, 2000)
+        self.change_mode('QLOITER')
+        self.wait_altitude(25, 40, relative=True, timeout=60)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(2)
+
+        mlog_path = self.current_onboard_log_filepath()
+
+        # transition to FBWB
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+        self.change_mode('FBWB')
+        self.set_rc(3, 1500)
+        self.wait_statustext('Transition done', check_context=True, timeout=60)
+        self.delay_sim_time(5)
+        self.context_pop()
+
+        # return home
+        self.change_mode('QLOITER')
+        self.delay_sim_time(2)
+        self.fly_home_land_and_disarm(timeout=600)
+
+        # analyze log for datapoints during forward transition
+        mlog = self.dfreader_for_path(mlog_path)
+
+        fbwb_num = self.get_mode_from_mode_mapping('FBWB')
+        in_fbwb = False
+        transition_active = False
+        atsc_during_transition = 0
+        trn_values = []
+        tmix_values = []
+        qtun_tho_values = []
+        ctun_as_values = []
+        ctun_pitch_values = []
+        ctun_tho_values = []
+        transition_start_us = None
+        transition_end_us = None
+
+        while True:
+            m = mlog.recv_match(type=['MODE', 'QTUN', 'ATSC', 'CTUN'])
+            if m is None:
+                break
+            m_type = m.get_type()
+
+            if m_type == 'MODE':
+                in_fbwb = (m.ModeNum == fbwb_num)
+                if not in_fbwb:
+                    transition_active = False
+                continue
+
+            if m_type == 'QTUN' and in_fbwb:
+                trn = m.Trn
+                if trn > 0:
+                    if not transition_active:
+                        transition_start_us = m.TimeUS
+                    transition_active = True
+                    trn_values.append(trn)
+                    tmix_values.append(m.TMix)
+                    qtun_tho_values.append(m.ThO)
+                if trn == 0 and transition_active:
+                    transition_end_us = m.TimeUS
+                    transition_active = False
+                continue
+
+            if m_type == 'CTUN' and in_fbwb and transition_active:
+                ctun_as_values.append(m.As)
+                ctun_pitch_values.append(m.Pitch * 0.01)  # cdeg to deg
+                ctun_tho_values.append(m.ThO)
+                continue
+
+            if m_type == 'ATSC' and in_fbwb and transition_active:
+                atsc_during_transition += 1
+
+        # compute summary statistics
+        def stats(values, name):
+            if not values:
+                return f"{name}: no data"
+            mn = min(values)
+            mx = max(values)
+            avg = sum(values) / len(values)
+            return f"{name}: n={len(values)} min={mn:.3f} max={mx:.3f} avg={avg:.3f}"
+
+        duration_s = 0
+        if transition_start_us and transition_end_us:
+            duration_s = (transition_end_us - transition_start_us) * 1e-6
+
+        self.progress("=== Forward Transition Log Summary ===")
+        self.progress(f"Transition duration: {duration_s:.1f}s")
+        self.progress(f"ATSC messages during transition: {atsc_during_transition}")
+        self.progress(f"QTUN.Trn progression: {trn_values}")
+        self.progress(stats(tmix_values, "QTUN.TMix"))
+        self.progress(stats(qtun_tho_values, "QTUN.ThO"))
+        self.progress(stats(ctun_as_values, "CTUN.As (airspeed)"))
+        self.progress(stats(ctun_pitch_values, "CTUN.Pitch (deg)"))
+        self.progress(stats(ctun_tho_values, "CTUN.ThO (fw throttle)"))
+
+        # print first/last few TMix values to show step-down pattern
+        if len(tmix_values) >= 4:
+            self.progress(
+                f"TMix first4={[round(v, 3) for v in tmix_values[:4]]} "
+                f"last4={[round(v, 3) for v in tmix_values[-4:]]}"
+            )
+
+        if len(trn_values) == 0:
+            raise NotAchievedException("No QTUN.Trn values seen during FBWB transition")
+
+        # verify ATSC count is 0 during forward transition
+        if atsc_during_transition != 0:
+            raise NotAchievedException(
+                f"Expected 0 ATSC during forward transition, got {atsc_during_transition}"
+            )
+
     def AHRSFlyForwardFlag(self):
         '''ensure FlyForward flag is set appropriately'''
         self.set_parameters({
@@ -2981,6 +3112,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             self.mavlink_MAV_CMD_DO_VTOL_TRANSITION,
             self.TransitionMinThrottle,
             self.BackTransitionMinThrottle,
+            self.TransitionAnglePScaling,
             self.MAV_CMD_NAV_TAKEOFF,
             self.Q_GUIDED_MODE,
             self.DCMClimbRate,
