@@ -209,12 +209,16 @@ void ModeThrow::run()
         // demand a level roll/pitch attitude with zero yaw rate
         attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, 0.0f, 0.0f);
 
-        // For drops use hover throttle with angle boost.  When commanding level
-        // the boost factor is 1.0, so throttle output equals hover throttle
-        // once upright — giving a smooth 1g transition with no overshoot.
+        // For drops, scale throttle by how upright the copter is to minimise
+        // lateral displacement during the flip.  A floor of 15% keeps enough
+        // motor speed differential for attitude control torque.  Angle boost
+        // is disabled since we manage the throttle curve directly.
         // For upward throws use 50% without boost to maximise righting moment.
         if (g2.throw_type == ThrowType::Drop) {
-            attitude_control->set_throttle_out(motors->get_throttle_hover(), true, g.throttle_filt);
+            const float cos_tilt = MAX(ahrs.get_rotation_body_to_ned().c.z, 0.0f);
+            const float thr_min = 0.15f;
+            const float throttle = thr_min + (motors->get_throttle_hover() - thr_min) * cos_tilt;
+            attitude_control->set_throttle_out(throttle, false, g.throttle_filt);
         } else {
             attitude_control->set_throttle_out(0.5f, false, g.throttle_filt);
         }
