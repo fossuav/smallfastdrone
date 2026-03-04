@@ -21,6 +21,7 @@ bool ModeThrow::init(bool ignore_checks)
     xy_controller_active = false;
     drop_confirm_start_ms = 0;
     drop_start_vel_z_up_cms = 0;
+    drop_release_alt_cm = 0;
     last_stage_msg_ms = 0;
 
     // initialise pos controller speed and acceleration
@@ -78,24 +79,16 @@ void ModeThrow::run()
         // initialise the demanded height below/above the throw height from user parameters
         // this allows for rapidly clearing surrounding obstacles
         if (g2.throw_type == ThrowType::Drop) {
-            const Mode::Number nextmode = (Mode::Number)g2.throw_nextmode.get();
-            const bool nextmode_needs_pos = (nextmode != Mode::Number::STABILIZE &&
-                                             nextmode != Mode::Number::ALT_HOLD &&
-                                             nextmode != Mode::Number::VALT);
-            if (nextmode_needs_pos) {
-                // position-controlled next mode — EKF has GPS aiding so
-                // the baro/EKF altitude estimate is reliable
-                pos_control->set_pos_desired_z_cm(inertial_nav.get_position_z_up_cm() - g.throw_altitude_descend * 100.0f);
-            } else {
-                // non-position next mode (no GPS) — calculate drop distance
-                // from freefall kinematics rather than baro altitude which
-                // can be unreliable without velocity aiding.
-                // d = v0*t + 0.5*g*t² (both terms negative in z-up frame)
-                const float freefall_s = (AP_HAL::millis() - drop_confirm_start_ms) * 0.001f;
-                const float drop_cm = drop_start_vel_z_up_cms * freefall_s
-                                    - 0.5f * GRAVITY_MSS * 100.0f * sq(freefall_s);
-                pos_control->set_pos_desired_z_cm(drop_cm - g.throw_altitude_descend * 100.0f);
-            }
+            // Calculate target altitude from release point using freefall
+            // kinematics.  This accounts for the distance fallen during
+            // detection, spool-up, and uprighting — making THROW_ALT_DCSND
+            // mean "total descent below release point".
+            // d = v0*t + 0.5*g*t² (both terms negative in z-up frame)
+            const float freefall_s = (AP_HAL::millis() - drop_confirm_start_ms) * 0.001f;
+            const float kinematic_drop_cm = drop_start_vel_z_up_cms * freefall_s
+                                          - 0.5f * GRAVITY_MSS * 100.0f * sq(freefall_s);
+            pos_control->set_pos_desired_z_cm(drop_release_alt_cm + kinematic_drop_cm
+                                              - g.throw_altitude_descend * 100.0f);
         } else {
             pos_control->set_pos_desired_z_cm(inertial_nav.get_position_z_up_cm() + g.throw_altitude_ascend * 100.0f);
         }
@@ -405,7 +398,7 @@ bool ModeThrow::throw_detected()
     if (g2.throw_type == ThrowType::Drop) {
         // For drops, body-frame freefall is mandatory — carrier flight
         // speed would otherwise false-trigger via high_speed alone
-        possible_throw_detected = free_falling && changing_height && no_throw_action && height_within_params;
+        possible_throw_detected = free_falling && no_throw_action && height_within_params;
     } else {
         possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
     }
@@ -417,6 +410,7 @@ bool ModeThrow::throw_detected()
             if (drop_confirm_start_ms == 0) {
                 drop_confirm_start_ms = AP_HAL::millis();
                 drop_start_vel_z_up_cms = inertial_nav.get_velocity_z_up_cms();
+                drop_release_alt_cm = inertial_nav.get_position_z_up_cm();
             }
             return (AP_HAL::millis() - drop_confirm_start_ms >= THROW_DROP_CONFIRM_MS);
         }
