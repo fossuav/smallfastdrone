@@ -448,6 +448,11 @@ public:
     // always returns true for External and SIM EKF types
     bool using_gps(void) const;
 
+    // check if GPS is configured as the horizontal position source
+    // for the configured EKF type. Used to decide whether GPS will
+    // set the EKF origin (which is immutable once set).
+    bool using_gps_for_posxy(void) const;
+
     // set and save the ALT_M_NSE parameter value
     void set_alt_measurement_noise(float noise);
 
