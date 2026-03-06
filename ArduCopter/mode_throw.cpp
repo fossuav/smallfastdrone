@@ -20,7 +20,6 @@ bool ModeThrow::init(bool ignore_checks)
     nextmode_attempted = false;
     xy_controller_active = false;
     drop_confirm_start_ms = 0;
-    drop_start_vel_z_up_cms = 0;
     drop_release_alt_cm = 0;
     last_stage_msg_ms = 0;
 
@@ -79,15 +78,11 @@ void ModeThrow::run()
         // initialise the demanded height below/above the throw height from user parameters
         // this allows for rapidly clearing surrounding obstacles
         if (g2.throw_type == ThrowType::Drop) {
-            // Calculate target altitude from release point using freefall
-            // kinematics.  This accounts for the distance fallen during
-            // detection, spool-up, and uprighting — making THROW_ALT_DCSND
-            // mean "total descent below release point".
-            // d = v0*t + 0.5*g*t² (both terms negative in z-up frame)
-            const float freefall_s = (AP_HAL::millis() - drop_confirm_start_ms) * 0.001f;
-            const float kinematic_drop_cm = drop_start_vel_z_up_cms * freefall_s
-                                          - 0.5f * GRAVITY_MSS * 100.0f * sq(freefall_s);
-            pos_control->set_pos_desired_z_cm(drop_release_alt_cm + kinematic_drop_cm
+            // Target altitude is THROW_ALT_DCSND below the release point.
+            // The freefall confirmation period already ensures the vehicle
+            // has fallen approximately this distance before motors start,
+            // so the controller mostly just needs to arrest the descent.
+            pos_control->set_pos_desired_z_cm(drop_release_alt_cm
                                               - g.throw_altitude_descend * 100.0f);
         } else {
             pos_control->set_pos_desired_z_cm(inertial_nav.get_position_z_up_cm() + g.throw_altitude_ascend * 100.0f);
@@ -371,13 +366,21 @@ bool ModeThrow::throw_detected()
         changing_height = inertial_nav.get_velocity_z_up_cms() > THROW_VERTICAL_SPEED;
     }
 
-    // Check for freefall.  For drops use the body-frame accelerometer
-    // directly — it reads near zero in freefall regardless of EKF state,
-    // and ~1g while attached to a carrier aircraft.  For upward throws
-    // keep the existing earth-frame check.
+    // Check for freefall.  For drops use body-frame accelerometer as the
+    // primary check — it reads near zero in freefall regardless of EKF
+    // state, and ~1g while attached to a carrier.  As a secondary path,
+    // check earth-frame Z acceleration when the vehicle is spinning fast
+    // (>10 rad/s).  Centripetal acceleration from yaw spin inflates
+    // body-frame magnitude but is entirely in the horizontal plane, so
+    // earth-frame Z remains ~0 in freefall.  The gyro rate gate prevents
+    // false triggers on a carrier with bad EKF attitude (low gyro rate).
+    // For upward throws keep the existing earth-frame check.
     bool free_falling;
     if (g2.throw_type == ThrowType::Drop) {
-        free_falling = copter.ins.get_accel().length() < 0.5f * GRAVITY_MSS;
+        const bool body_freefall = copter.ins.get_accel().length() < 0.5f * GRAVITY_MSS;
+        const bool spin_freefall = fabsf(ahrs.get_accel_ef().z) < 0.5f * GRAVITY_MSS
+                                && copter.ins.get_gyro().length() > 10.0f;
+        free_falling = body_freefall || spin_freefall;
     } else {
         free_falling = ahrs.get_accel_ef().z > -0.25f * GRAVITY_MSS;
     }
@@ -400,23 +403,31 @@ bool ModeThrow::throw_detected()
     // High velocity or free-fall combined with increasing height indicate a possible air-drop or throw release
     bool possible_throw_detected;
     if (g2.throw_type == ThrowType::Drop) {
-        // For drops, body-frame freefall is mandatory — carrier flight
-        // speed would otherwise false-trigger via high_speed alone
-        possible_throw_detected = free_falling && no_throw_action && height_within_params;
+        // For drops, freefall detection is sufficient.  The no_throw_action
+        // check (body accel < 1g) is redundant for body_freefall and would
+        // falsely block spin_freefall where centripetal acceleration
+        // inflates body-frame magnitude above 1g.
+        possible_throw_detected = free_falling && height_within_params;
     } else {
         possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
     }
 
-    // For drops, require freefall conditions to persist for a short window
-    // to reject transient low-g events (e.g. carrier aircraft maneuvers)
+    // For drops, require freefall conditions to persist long enough to
+    // reject transient low-g events (e.g. carrier aircraft turbulence).
+    // When THROW_ALT_DCSND > 0, require freefall for the time it takes
+    // to fall that distance from rest: t = sqrt(2*d/g).  This ensures
+    // the vehicle has truly separated from the carrier.
     if (g2.throw_type == ThrowType::Drop) {
         if (possible_throw_detected) {
             if (drop_confirm_start_ms == 0) {
                 drop_confirm_start_ms = AP_HAL::millis();
-                drop_start_vel_z_up_cms = inertial_nav.get_velocity_z_up_cms();
                 drop_release_alt_cm = inertial_nav.get_position_z_up_cm();
             }
-            return (AP_HAL::millis() - drop_confirm_start_ms >= THROW_DROP_CONFIRM_MS);
+            const float dcsnd_m = g.throw_altitude_descend;
+            const uint32_t confirm_ms = is_positive(dcsnd_m)
+                ? MAX((uint32_t)THROW_DROP_CONFIRM_MS, (uint32_t)(sqrtf(2.0f * dcsnd_m / GRAVITY_MSS) * 1000.0f))
+                : THROW_DROP_CONFIRM_MS;
+            return (AP_HAL::millis() - drop_confirm_start_ms >= confirm_ms);
         }
         drop_confirm_start_ms = 0;
         return false;
