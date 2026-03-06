@@ -68,7 +68,8 @@ void ModeThrow::run()
     } else if (stage == Throw_Wait_Throttle_Unlimited &&
                motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
         stage = Throw_Uprighting;
-    } else if (stage == Throw_Uprighting && throw_attitude_good()) {
+        uprighting_start_ms = AP_HAL::millis();
+    } else if (stage == Throw_Uprighting && throw_uprighting_complete()) {
         stage = Throw_HgtStabilise;
         hgt_stabilise_start_ms = AP_HAL::millis();
 
@@ -194,15 +195,30 @@ void ModeThrow::run()
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
+        // Keep the attitude controller's internal target tracking the
+        // vehicle's actual attitude through the spool-up.  Without this,
+        // _attitude_target is stale from Detecting and input_quaternion
+        // in Uprighting computes the wrong error, producing a slow mushy
+        // recovery instead of a crisp shortest-path rotation.
+        attitude_control->relax_attitude_controllers();
+        attitude_control->set_throttle_out(0, true, g.throttle_filt);
+
         break;
 
-    case Throw_Uprighting:
+    case Throw_Uprighting: {
 
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-        // demand a level roll/pitch attitude with zero yaw rate
-        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(0.0f, 0.0f, 0.0f);
+        // Use quaternion attitude controller to find the shortest rotation
+        // path to level from any starting orientation — including inverted.
+        // The Euler method (input_euler_angle_roll_pitch_euler_rate_yaw) has
+        // singularities near ±90° pitch that produce suboptimal paths.
+        // Target a level attitude preserving current yaw.
+        Quaternion level_quat;
+        level_quat.from_euler(0.0f, 0.0f, ahrs.get_yaw());
+        Vector3f zero_ang_vel;
+        attitude_control->input_quaternion(level_quat, zero_ang_vel);
 
         // For drops, scale throttle by how upright the copter is to minimise
         // lateral displacement during the flip.  A floor of 15% keeps enough
@@ -219,6 +235,7 @@ void ModeThrow::run()
         }
 
         break;
+    }
 
     case Throw_HgtStabilise:
 
@@ -444,6 +461,23 @@ bool ModeThrow::throw_detected()
 
     // start motors and enter the control mode if we are in continuous freefall
     return throw_condition_confirmed;
+}
+
+bool ModeThrow::throw_uprighting_complete() const
+{
+    // Three-tier exit from the uprighting stage:
+    // 1. Within ~5° of level — attitude is excellent, proceed immediately
+    // 2. Within 30° of level and 2s elapsed — gave it time, good enough
+    // 3. 3s elapsed — safety timeout, proceed regardless
+    const float cos_tilt = ahrs.get_rotation_body_to_ned().c.z;
+    const uint32_t elapsed_ms = AP_HAL::millis() - uprighting_start_ms;
+    if (cos_tilt > 0.996f) {            // ~5°
+        return true;
+    }
+    if (cos_tilt > 0.866f && elapsed_ms > 2000) {  // ~30°
+        return true;
+    }
+    return (elapsed_ms > 3000);
 }
 
 bool ModeThrow::throw_attitude_good() const
