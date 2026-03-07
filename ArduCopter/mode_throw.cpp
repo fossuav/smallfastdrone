@@ -221,16 +221,30 @@ void ModeThrow::run()
         Vector3f zero_ang_vel;
         attitude_control->input_quaternion(level_quat, zero_ang_vel);
 
-        // For drops, scale throttle by how upright the copter is to minimise
-        // lateral displacement during the flip.  A floor of 15% keeps enough
-        // motor speed differential for attitude control torque.  Angle boost
-        // is disabled since we manage the throttle curve directly.
+        // For drops, scale throttle by cos_tilt so thrust is zero when
+        // inverted and ramps to arrest level as the vehicle rights itself.
+        // The throttle mix mechanism (ATC_THR_MIX_MAX, auto-enabled at
+        // >30° attitude error) gives the motor mixer full authority for
+        // attitude control even at zero average throttle.  Angle boost
+        // is disabled since we manage the throttle directly.
         // For upward throws use 50% without boost to maximise righting moment.
         if (g2.throw_type == ThrowType::Drop) {
             const float cos_tilt = MAX(ahrs.get_rotation_body_to_ned().c.z, 0.0f);
-            const float thr_min = 0.15f;
-            const float arrest_thr = constrain_float(motors->get_throttle_hover() * MAX(g2.throw_drop_ag, 1.0f), 0.0f, 1.0f);
-            const float throttle = thr_min + (arrest_thr - thr_min) * cos_tilt;
+            const float hover_thr = motors->get_throttle_hover();
+            // Scale arrest aggressiveness by descent rate.  When going
+            // up or barely descending, use hover throttle only — extra
+            // thrust would overshoot and launch the vehicle upward.
+            // Ramp linearly to full THROW_DROP_AG at THROW_DROP_SPEED_Z
+            // descent rate.
+            const float ag = MAX(g2.throw_drop_ag, 1.0f);
+            const float vel_z_up = inertial_nav.get_velocity_z_up_cms();
+            float thr_scale;
+            if (vel_z_up >= 0.0f) {
+                thr_scale = 1.0f;
+            } else {
+                thr_scale = constrain_float(1.0f + (ag - 1.0f) * (-vel_z_up) * (1.0f / THROW_DROP_SPEED_Z), 1.0f, ag);
+            }
+            const float throttle = constrain_float(hover_thr * thr_scale, 0.0f, 1.0f) * cos_tilt;
             attitude_control->set_throttle_out(throttle, false, g.throttle_filt);
         } else {
             attitude_control->set_throttle_out(0.5f, false, g.throttle_filt);
