@@ -784,6 +784,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Values: 0:No change,1:Source1,2:Source2,3:Source3
     // @User: Advanced
     AP_GROUPINFO("THROW_SRC_SET", 60, ParametersG2, throw_srcset, 0),
+
 #endif
 
     // @Param: GND_EFFECT_COMP
@@ -1294,6 +1295,16 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
 #endif
 
     // ID 19 is reserved (was ALTH_OPTIONS)
+
+#if MODE_THROW_ENABLED
+    // @Param: THROW_DROP_AG
+    // @DisplayName: Drop arrest aggressiveness
+    // @Description: Multiplier on hover throttle for drop arrest. Controls how aggressively the vehicle brakes during drop recovery. At 1.0, maximum arrest thrust equals hover (1g). At 2.0, arrest thrust is 2x hover (2g) giving 1g of net upward deceleration. Higher values arrest descent faster but require more thrust headroom.
+    // @Range: 1.0 4.0
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("THROW_DROP_AG", 20, ParametersG2, throw_drop_ag, 1.0),
+#endif
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 

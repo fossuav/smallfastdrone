@@ -29,8 +29,9 @@ bool ModeThrow::init(bool ignore_checks)
 
     // set vertical speed and acceleration limits
     if (g2.throw_type == ThrowType::Drop) {
-        pos_control->set_max_speed_accel_z(THROW_DROP_SPEED_Z, THROW_DROP_SPEED_Z, THROW_DROP_DECEL_RATE);
-        pos_control->set_correction_speed_accel_z(THROW_DROP_SPEED_Z, THROW_DROP_SPEED_Z, THROW_DROP_DECEL_RATE);
+        const float ag = MAX(g2.throw_drop_ag, 1.0f);
+        pos_control->set_max_speed_accel_z(THROW_DROP_SPEED_Z * ag, THROW_DROP_SPEED_Z * ag, THROW_DROP_DECEL_RATE * ag);
+        pos_control->set_correction_speed_accel_z(THROW_DROP_SPEED_Z * ag, THROW_DROP_SPEED_Z * ag, THROW_DROP_DECEL_RATE * ag);
     } else {
         pos_control->set_max_speed_accel_z(BRAKE_MODE_SPEED_Z, BRAKE_MODE_SPEED_Z, BRAKE_MODE_DECEL_RATE);
         pos_control->set_correction_speed_accel_z(BRAKE_MODE_SPEED_Z, BRAKE_MODE_SPEED_Z, BRAKE_MODE_DECEL_RATE);
@@ -228,7 +229,8 @@ void ModeThrow::run()
         if (g2.throw_type == ThrowType::Drop) {
             const float cos_tilt = MAX(ahrs.get_rotation_body_to_ned().c.z, 0.0f);
             const float thr_min = 0.15f;
-            const float throttle = thr_min + (motors->get_throttle_hover() - thr_min) * cos_tilt;
+            const float arrest_thr = constrain_float(motors->get_throttle_hover() * MAX(g2.throw_drop_ag, 1.0f), 0.0f, 1.0f);
+            const float throttle = thr_min + (arrest_thr - thr_min) * cos_tilt;
             attitude_control->set_throttle_out(throttle, false, g.throttle_filt);
         } else {
             attitude_control->set_throttle_out(0.5f, false, g.throttle_filt);
