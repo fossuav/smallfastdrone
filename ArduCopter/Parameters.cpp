@@ -551,7 +551,7 @@ const AP_Param::Info Copter::var_info[] = {
 
     // @Param: THROW_ALT_DCSND
     // @DisplayName: Throw mode target altitude to descend
-    // @Description: Target altitude to descend during a drop, (must be positive). This allows for rapidly clearing surrounding obstacles.
+    // @Description: Target altitude to descend below the recovery point during a drop (must be positive). Total altitude lost in a drop is: freefall distance + uprighting distance + this value. Typical total loss is 5-10m depending on release orientation and vehicle thrust-to-weight.
     // @Units: m
     // @User: Advanced
     GSCALAR(throw_altitude_descend, "THROW_ALT_DCSND", 1.0),
@@ -616,7 +616,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Param: THROW_NEXTMODE
     // @DisplayName: Throw mode's follow up mode
     // @Description: Vehicle will switch to this mode after the throw is successfully completed.  Default is to stay in throw mode (18)
-    // @Values: 3:Auto,4:Guided,5:LOITER,6:RTL,9:Land,17:Brake,18:Throw
+    // @Values: 0:Stabilize,2:AltHold,3:Auto,4:Guided,5:LOITER,6:RTL,9:Land,17:Brake,18:Throw
     // @User: Standard
     AP_GROUPINFO("THROW_NEXTMODE", 3, ParametersG2, throw_nextmode, 18),
 
@@ -626,6 +626,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Values: 0:Upward Throw,1:Drop
     // @User: Standard
     AP_GROUPINFO("THROW_TYPE", 4, ParametersG2, throw_type, (float)ModeThrow::ThrowType::Upward),
+
 #endif
 
     // @Param: GND_EFFECT_COMP
@@ -1168,6 +1169,40 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Range: 0.0 10.0
     // @Increment: 0.1
     AP_GROUPINFO("PILOT_TKO_ALT_M", 20, ParametersG2, pilot_takeoff_alt_m, PILOT_TKO_ALT_M_DEFAULT),
+
+#if MODE_THROW_ENABLED
+    // @Param: THROW_DROP_AG
+    // @DisplayName: Drop arrest aggressiveness
+    // @Description: Multiplier on hover throttle for drop arrest. Controls how aggressively the vehicle brakes during drop recovery. At 1.0, maximum arrest thrust equals hover (1g). At 2.0, arrest thrust is 2x hover (2g) giving 1g of net upward deceleration. Higher values arrest descent faster but require more thrust headroom.
+    // @Range: 1.0 4.0
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("THROW_DROP_AG", 24, ParametersG2, throw_drop_ag, 1.0),
+
+    // @Param: THROW_DROP_CNF
+    // @DisplayName: Drop confirmation time
+    // @Description: Minimum freefall time (seconds) before drop detection triggers. Props remain off during this period. At 0, a 100ms minimum applies. For carrier drops use 0.5-1.0s to ensure separation before motors start. For hand drops 0 is normally sufficient as the spool-up freefall check provides additional verification. Independent of THROW_ALT_DCSND (altitude target). Only used when THROW_TYPE=1.
+    // @Range: 0 5
+    // @Units: s
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("THROW_DROP_CNF", 25, ParametersG2, throw_drop_confirm_time, 0),
+
+    // @Param: THROW_SRC_SET
+    // @DisplayName: Throw mode EKF source set on completion
+    // @Description: EKF source set to activate when throw mode transitions to THROW_NEXTMODE. 0 to leave unchanged.
+    // @Values: 0:No change,1:Source1,2:Source2,3:Source3
+    // @User: Advanced
+    AP_GROUPINFO("THROW_SRC_SET", 26, ParametersG2, throw_srcset, 0),
+
+    // @Param: THROW_SRC_INI
+    // @DisplayName: Throw mode EKF source set on entry
+    // @Description: EKF source set to activate when throw mode is entered. Use a source set with no horizontal aiding to prevent EKF variance growth and nuisance failsafes during the tumble/freefall phase. THROW_SRC_SET restores the operating source set at completion. 0 to leave unchanged.
+    // @Values: 0:No change,1:Source1,2:Source2,3:Source3
+    // @User: Advanced
+    AP_GROUPINFO("THROW_SRC_INI", 27, ParametersG2, throw_src_init, 0),
+
+#endif
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 

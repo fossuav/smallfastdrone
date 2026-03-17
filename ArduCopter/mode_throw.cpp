@@ -18,14 +18,36 @@ bool ModeThrow::init(bool ignore_checks)
     // init state
     stage = Throw_Disarmed;
     nextmode_attempted = false;
+    xy_controller_active = false;
+    drop_confirm_start_ms = 0;
+    drop_release_alt_m = 0;
+    last_stage_msg_ms = 0;
+
+    // Switch EKF source set for the throw phase if configured.
+    // During throw/drop the vehicle is tumbling — position and velocity
+    // sources (optical flow, GPS) produce garbage.  Switching to a
+    // source set with no horizontal aiding prevents EKF variance growth
+    // and nuisance EKF failsafes.  THROW_SRC_SET restores the operating
+    // source set at THROW_COMPLETE.
+    const int8_t src_init = g2.throw_src_init.get();
+    if (src_init >= 1 && src_init <= 3) {
+        AP::ahrs().set_posvelyaw_source_set(AP_NavEKF_Source::SourceSetSelection(src_init - 1));
+        gcs().send_text(MAV_SEVERITY_INFO, "Throw: EKF Source Set %d", src_init);
+    }
 
     // initialise pos controller speed and acceleration
     pos_control->NE_set_max_speed_accel_m(wp_nav->get_default_speed_NE_ms(), BRAKE_MODE_DECEL_RATE_MSS);
     pos_control->NE_set_correction_speed_accel_m(wp_nav->get_default_speed_NE_ms(), BRAKE_MODE_DECEL_RATE_MSS);
 
     // set vertical speed and acceleration limits
-    pos_control->D_set_max_speed_accel_m(BRAKE_MODE_SPEED_Z_MS, BRAKE_MODE_SPEED_Z_MS, BRAKE_MODE_DECEL_RATE_MSS);
-    pos_control->D_set_correction_speed_accel_m(BRAKE_MODE_SPEED_Z_MS, BRAKE_MODE_SPEED_Z_MS, BRAKE_MODE_DECEL_RATE_MSS);
+    if (g2.throw_type == ThrowType::Drop) {
+        const float ag = MAX(g2.throw_drop_ag, 1.0f);
+        pos_control->D_set_max_speed_accel_m(THROW_DROP_SPEED_Z_MS * ag, THROW_DROP_SPEED_Z_MS * ag, THROW_DROP_DECEL_RATE_MSS * ag);
+        pos_control->D_set_correction_speed_accel_m(THROW_DROP_SPEED_Z_MS * ag, THROW_DROP_SPEED_Z_MS * ag, THROW_DROP_DECEL_RATE_MSS * ag);
+    } else {
+        pos_control->D_set_max_speed_accel_m(BRAKE_MODE_SPEED_Z_MS, BRAKE_MODE_SPEED_Z_MS, BRAKE_MODE_DECEL_RATE_MSS);
+        pos_control->D_set_correction_speed_accel_m(BRAKE_MODE_SPEED_Z_MS, BRAKE_MODE_SPEED_Z_MS, BRAKE_MODE_DECEL_RATE_MSS);
+    }
 
     return true;
 }
@@ -47,11 +69,9 @@ void ModeThrow::run()
         stage = Throw_Disarmed;
 
     } else if (stage == Throw_Disarmed && motors->armed()) {
-        gcs().send_text(MAV_SEVERITY_INFO,"waiting for throw");
         stage = Throw_Detecting;
 
     } else if (stage == Throw_Detecting && throw_detected()){
-        gcs().send_text(MAV_SEVERITY_INFO,"throw detected - spooling motors");
         copter.set_land_complete(false);
         stage = Throw_Wait_Throttle_Unlimited;
 
@@ -59,12 +79,25 @@ void ModeThrow::run()
         AP_Notify::flags.waiting_for_throw = false;
 
     } else if (stage == Throw_Wait_Throttle_Unlimited &&
+               copter.ins.get_accel().length() > 0.5f * GRAVITY_MSS) {
+        // Freefall lost during spool-up — the vehicle is no longer in
+        // freefall (e.g. carrier bounce settled, or false trigger from
+        // turbulence).  Throttle is zero during this stage so body-frame
+        // accel is a clean indicator.  Abort back to Detecting and
+        // spool down.
+        gcs().send_text(MAV_SEVERITY_WARNING, "Throw: freefall lost, resetting");
+        stage = Throw_Detecting;
+        drop_confirm_start_ms = 0;
+        free_fall_start_ms = 0;
+        AP_Notify::flags.waiting_for_throw = true;
+
+    } else if (stage == Throw_Wait_Throttle_Unlimited &&
                motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
-        gcs().send_text(MAV_SEVERITY_INFO,"throttle is unlimited - uprighting");
         stage = Throw_Uprighting;
-    } else if (stage == Throw_Uprighting && throw_attitude_good()) {
-        gcs().send_text(MAV_SEVERITY_INFO,"uprighted - controlling height");
+        uprighting_start_ms = AP_HAL::millis();
+    } else if (stage == Throw_Uprighting && throw_uprighting_complete() && throw_drop_distance_reached()) {
         stage = Throw_HgtStabilise;
+        hgt_stabilise_start_ms = AP_HAL::millis();
 
         // initialise the z controller
         pos_control->D_init_controller_no_descent();
@@ -72,7 +105,8 @@ void ModeThrow::run()
         // initialise the demanded height below/above the throw height from user parameters
         // this allows for rapidly clearing surrounding obstacles
         if (g2.throw_type == ThrowType::Drop) {
-            pos_control->set_pos_desired_U_m(pos_control->get_pos_estimate_U_m() - g.throw_altitude_descend);
+            // Target altitude is THROW_ALT_DCSND below the release point.
+            pos_control->set_pos_desired_U_m(drop_release_alt_m - g.throw_altitude_descend);
         } else {
             pos_control->set_pos_desired_U_m(pos_control->get_pos_estimate_U_m() + g.throw_altitude_ascend);
         }
@@ -80,17 +114,46 @@ void ModeThrow::run()
         // Set the auto_arm status to true to avoid a possible automatic disarm caused by selection of an auto mode with throttle at minimum
         copter.set_auto_armed(true);
 
-    } else if (stage == Throw_HgtStabilise && throw_height_good()) {
-        gcs().send_text(MAV_SEVERITY_INFO,"height achieved - controlling position");
-        stage = Throw_PosHold;
+    } else if (stage == Throw_HgtStabilise &&
+               ((g2.throw_type == ThrowType::Drop)
+                   ? (throw_velocity_good() || (AP_HAL::millis() - hgt_stabilise_start_ms > 3000))
+                   : (throw_height_good() && (throw_velocity_good() || (AP_HAL::millis() - hgt_stabilise_start_ms > 2000))))) {
+        // check if we have horizontal position for PosHold
+        const bool have_horiz_pos = ahrs.has_status(AP_AHRS::Status::HORIZ_POS_ABS);
+        // determine if the next mode needs horizontal position
+        const Mode::Number nextmode = (Mode::Number)g2.throw_nextmode.get();
+        const bool nextmode_needs_pos = (nextmode != Mode::Number::STABILIZE &&
+                                         nextmode != Mode::Number::ALT_HOLD);
+        if (have_horiz_pos) {
+            gcs().send_text(MAV_SEVERITY_INFO,"Throw height achieved, good position");
+            stage = Throw_PosHold;
 
-        // initialise position controller
-        pos_control->NE_init_controller();
+            // initialise position controller
+            pos_control->NE_init_controller();
+            xy_controller_active = true;
+        } else if (nextmode_needs_pos) {
+            gcs().send_text(MAV_SEVERITY_WARNING,"Throw height achieved, lost position");
+            stage = Throw_PosHold;
+        } else {
+            gcs().send_text(MAV_SEVERITY_INFO,"Throw height achieved");
+            stage = Throw_PosHold;
+        }
 
         // Set the auto_arm status to true to avoid a possible automatic disarm caused by selection of an auto mode with throttle at minimum
         copter.set_auto_armed(true);
-    } else if (stage == Throw_PosHold && throw_position_good()) {
+    } else if (stage == Throw_PosHold && (!xy_controller_active || throw_position_good())) {
         if (!nextmode_attempted) {
+            // Warn if throttle is low — in ALT_HOLD, below mid-stick commands descent
+            if (channel_throttle->get_control_in() < copter.get_throttle_mid() - copter.g.throttle_deadzone) {
+                gcs().send_text(MAV_SEVERITY_WARNING, "Throttle low - losing altitude");
+            }
+            // switch EKF source set if configured
+            const int8_t srcset = g2.throw_srcset.get();
+            if (srcset >= 1 && srcset <= 3) {
+                AP::ahrs().set_posvelyaw_source_set(AP_NavEKF_Source::SourceSetSelection(srcset - 1));
+                gcs().send_text(MAV_SEVERITY_INFO, "EKF Source Set %d", srcset);
+            }
+
             switch ((Mode::Number)g2.throw_nextmode.get()) {
                 case Mode::Number::AUTO:
                 case Mode::Number::GUIDED:
@@ -98,6 +161,11 @@ void ModeThrow::run()
                 case Mode::Number::LAND:
                 case Mode::Number::BRAKE:
                 case Mode::Number::LOITER:
+                case Mode::Number::STABILIZE:
+                case Mode::Number::ALT_HOLD:
+#if MODE_VALT_ENABLED
+                case Mode::Number::VALT:
+#endif
                     set_mode((Mode::Number)g2.throw_nextmode.get(), ModeReason::THROW_COMPLETE);
                     break;
                 default:
@@ -150,20 +218,45 @@ void ModeThrow::run()
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
+        // Keep the attitude controller's internal target tracking the
+        // vehicle's actual attitude through the spool-up.  Without this,
+        // _attitude_target is stale from Detecting and input_quaternion
+        // in Uprighting computes the wrong error, producing a slow mushy
+        // recovery instead of a crisp shortest-path rotation.
+        attitude_control->relax_attitude_controllers();
+        attitude_control->set_throttle_out(0, true, g.throttle_filt);
+
         break;
 
-    case Throw_Uprighting:
+    case Throw_Uprighting: {
 
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-        // demand a level roll/pitch attitude with zero yaw rate
-        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_rad(0.0f, 0.0f, 0.0f);
+        // Use quaternion attitude controller to find the shortest rotation
+        // path to level from any starting orientation — including inverted.
+        // The Euler method has singularities near ±90° pitch that produce
+        // suboptimal paths.  Target a level attitude preserving current yaw.
+        Quaternion level_quat;
+        level_quat.from_euler(0.0f, 0.0f, ahrs.get_yaw());
+        Vector3f zero_ang_vel;
+        attitude_control->input_quaternion(level_quat, zero_ang_vel);
 
-        // output 50% throttle and turn off angle boost to maximise righting moment
-        attitude_control->set_throttle_out(0.5f, false, g.throttle_filt);
+        // For drops, command zero throttle and let ATC_THR_MIX_MAX
+        // (auto-enabled at >30° attitude error) provide differential
+        // thrust for attitude control only.  This prevents the vehicle
+        // from climbing back toward the carrier after arrest — the
+        // aggressive descent arrest is handled later by the position
+        // controller in HgtStabilise using THROW_DROP_AG.
+        // For upward throws use 50% without boost to maximise righting moment.
+        if (g2.throw_type == ThrowType::Drop) {
+            attitude_control->set_throttle_out(0, false, g.throttle_filt);
+        } else {
+            attitude_control->set_throttle_out(0.5f, false, g.throttle_filt);
+        }
 
         break;
+    }
 
     case Throw_HgtStabilise:
 
@@ -184,20 +277,63 @@ void ModeThrow::run()
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-        // use position controller to stop
-        Vector2f vel_zero;
-        Vector2f accel_zero;
-        pos_control->input_vel_accel_NE_m(vel_zero, accel_zero);
-        pos_control->NE_update_controller();
+        if (xy_controller_active) {
+            // use position controller to stop
+            Vector2f vel_zero;
+            Vector2f accel_zero;
+            pos_control->input_vel_accel_NE_m(vel_zero, accel_zero);
+            pos_control->NE_update_controller();
 
-        // call attitude controller
-        attitude_control->input_thrust_vector_rate_heading_rads(pos_control->get_thrust_vector(), 0.0f);
+            // call attitude controller
+            attitude_control->input_thrust_vector_rate_heading_rads(pos_control->get_thrust_vector(), 0.0f);
+        } else {
+            // no horizontal position available, hold level attitude only
+            attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_rad(0.0f, 0.0f, 0.0f);
+        }
 
         // call height controller
         pos_control->D_set_pos_target_from_climb_rate_ms(0.0f);
         pos_control->D_update_controller();
 
         break;
+    }
+
+    // update OSD mode string and send periodic GCS stage messages at 2Hz
+    {
+        const uint32_t now_ms = AP_HAL::millis();
+        const char *mode_str = "THRW";
+        const char *stage_msg = nullptr;
+        switch (stage) {
+        case Throw_Disarmed:
+            break;
+        case Throw_Detecting:
+            // flash mode string while armed and waiting for throw
+            mode_str = ((now_ms / 500) % 2 == 0) ? "THRW" : "    ";
+            stage_msg = "Waiting for throw";
+            break;
+        case Throw_Wait_Throttle_Unlimited:
+            mode_str = ((now_ms / 250) % 2 == 0) ? "THR!" : "    ";
+            stage_msg = "Throw detected";
+            break;
+        case Throw_Uprighting:
+            mode_str = ((now_ms / 250) % 2 == 0) ? "THR!" : "    ";
+            stage_msg = "Throw detected";
+            break;
+        case Throw_HgtStabilise:
+            mode_str = "THHT";
+            stage_msg = "Stabilizing throw height";
+            break;
+        case Throw_PosHold:
+            mode_str = "THPH";
+            stage_msg = "Throw holding position";
+            break;
+        }
+        AP::notify().set_flight_mode_str(mode_str);
+
+        if (stage_msg != nullptr && (now_ms - last_stage_msg_ms >= 500)) {
+            last_stage_msg_ms = now_ms;
+            gcs().send_text(MAV_SEVERITY_INFO, "%s", stage_msg);
+        }
     }
 
 #if HAL_LOGGING_ENABLED
@@ -251,11 +387,8 @@ void ModeThrow::run()
 
 bool ModeThrow::throw_detected()
 {
-    // Check that the AHRS is healthy enough for us to be doing detection:
+    // Check that we have a valid navigation solution
     if (!ahrs.has_status(AP_AHRS::Status::ATTITUDE_VALID)) {
-        return false;
-    }
-    if (!ahrs.has_status(AP_AHRS::Status::HORIZ_POS_ABS)) {
         return false;
     }
     if (!ahrs.has_status(AP_AHRS::Status::VERT_POS)) {
@@ -273,8 +406,24 @@ bool ModeThrow::throw_detected()
         changing_height = pos_control->get_vel_estimate_U_ms() > THROW_VERTICAL_SPEED_MS;
     }
 
-    // Check the vertical acceleration is greater than 0.25g
-    bool free_falling = ahrs.get_accel_ef().z > -0.25 * GRAVITY_MSS;
+    // Check for freefall.  For drops use body-frame accelerometer as the
+    // primary check — it reads near zero in freefall regardless of EKF
+    // state, and ~1g while attached to a carrier.  As a secondary path,
+    // check earth-frame Z acceleration when the vehicle is spinning fast
+    // (>10 rad/s).  Centripetal acceleration from yaw spin inflates
+    // body-frame magnitude but is entirely in the horizontal plane, so
+    // earth-frame Z remains ~0 in freefall.  The gyro rate gate prevents
+    // false triggers on a carrier with bad EKF attitude (low gyro rate).
+    // For upward throws keep the existing earth-frame check.
+    bool free_falling;
+    if (g2.throw_type == ThrowType::Drop) {
+        const bool body_freefall = copter.ins.get_accel().length() < 0.5f * GRAVITY_MSS;
+        const bool spin_freefall = fabsf(ahrs.get_accel_ef().z) < 0.5f * GRAVITY_MSS
+                                && copter.ins.get_gyro().length() > 10.0f;
+        free_falling = body_freefall || spin_freefall;
+    } else {
+        free_falling = ahrs.get_accel_ef().z > -0.25f * GRAVITY_MSS;
+    }
 
     // Check if the accel length is < 1.0g indicating that any throw action is complete and the copter has been released
     bool no_throw_action = copter.ins.get_accel().length() < 1.0f * GRAVITY_MSS;
@@ -291,9 +440,48 @@ bool ModeThrow::throw_detected()
     // Check that the altitude is within user defined limits
     const bool height_within_params = (g.throw_altitude_min == 0 || altitude_above_home_m > g.throw_altitude_min) && (g.throw_altitude_max == 0 || (altitude_above_home_m < g.throw_altitude_max));
 
-    // High velocity or free-fall combined with increasing height indicate a possible air-drop or throw release  
-    bool possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
+    // High velocity or free-fall combined with increasing height indicate a possible air-drop or throw release
+    bool possible_throw_detected;
+    if (g2.throw_type == ThrowType::Drop) {
+        // For drops, freefall detection is sufficient.  The no_throw_action
+        // check (body accel < 1g) is redundant for body_freefall and would
+        // falsely block spin_freefall where centripetal acceleration
+        // inflates body-frame magnitude above 1g.
+        possible_throw_detected = free_falling && height_within_params;
+    } else {
+        possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
+    }
 
+    // For drops, require BOTH time and freefall distance to confirm.
+    // The time check (THROW_DROP_CNF) rejects transient low-g events.
+    // The distance check (0.5*g*t^2 for the confirmation time) cross-
+    // validates that the vehicle actually fell the expected distance,
+    // not just sustained low-g on a smooth-flying carrier.
+    // THROW_ALT_DCSND is checked separately at the Uprighting to
+    // HgtStabilise transition, allowing the vehicle to spool up and
+    // hold level attitude in a controlled descent before arresting.
+    // Additional false-trigger protection is provided by the spool-up
+    // freefall verification in Wait_Throttle_Unlimited.
+    if (g2.throw_type == ThrowType::Drop) {
+        if (possible_throw_detected) {
+            if (drop_confirm_start_ms == 0) {
+                drop_confirm_start_ms = AP_HAL::millis();
+                drop_release_alt_m = pos_control->get_pos_estimate_U_m();
+            }
+            const uint32_t confirm_ms = MAX((uint32_t)THROW_DROP_CONFIRM_MS,
+                                            (uint32_t)(g2.throw_drop_confirm_time * 1000.0f));
+            const bool time_confirmed = (AP_HAL::millis() - drop_confirm_start_ms >= confirm_ms);
+            // Cross-check: vehicle should have fallen the expected
+            // freefall distance for the confirmation time.
+            const float confirm_s = confirm_ms * 0.001f;
+            const float confirm_dist = 0.5f * GRAVITY_MSS * confirm_s * confirm_s;
+            const float t = (AP_HAL::millis() - drop_confirm_start_ms) * 0.001f;
+            const bool fall_confirmed = (0.5f * GRAVITY_MSS * t * t >= confirm_dist);
+            return time_confirmed && fall_confirmed;
+        }
+        drop_confirm_start_ms = 0;
+        return false;
+    }
 
     // Record time and vertical velocity when we detect the possible throw
     if (possible_throw_detected && ((AP_HAL::millis() - free_fall_start_ms) > 500)) {
@@ -308,6 +496,51 @@ bool ModeThrow::throw_detected()
     return throw_condition_confirmed;
 }
 
+bool ModeThrow::throw_uprighting_complete() const
+{
+    // Three-tier exit from the uprighting stage:
+    // 1. Within ~5° of level — attitude is excellent, proceed immediately
+    // 2. Within 30° of level and 2s elapsed — gave it time, good enough
+    // 3. 3s elapsed — safety timeout, proceed regardless
+    const float cos_tilt = ahrs.get_rotation_body_to_ned().c.z;
+    const uint32_t elapsed_ms = AP_HAL::millis() - uprighting_start_ms;
+    if (cos_tilt > 0.996f) {            // ~5°
+        return true;
+    }
+    if (cos_tilt > 0.866f && elapsed_ms > 2000) {  // ~30°
+        return true;
+    }
+    return (elapsed_ms > 3000);
+}
+
+bool ModeThrow::throw_drop_distance_reached() const
+{
+    // For drops, check if vehicle has fallen THROW_ALT_DCSND below the
+    // release point.  When DCSND is zero, no distance gate applies.
+    if (g2.throw_type != ThrowType::Drop) {
+        return true;
+    }
+    const float dcsnd_m = g.throw_altitude_descend;
+    if (!is_positive(dcsnd_m)) {
+        return true;
+    }
+    // Use EKF altitude if the filter has a vertical position estimate
+    // AND velocity aiding.  Without velocity aiding (const_pos_mode)
+    // the EKF velocity drifts from accelerometer integration, making
+    // the altitude estimate unreliable during dynamic maneuvers — on a
+    // carrier the velocity can drift to 70+ m/s while stationary,
+    // causing the altitude to overshoot the release point and the
+    // distance check to fail permanently.
+    if (ahrs.has_status(AP_AHRS::Status::VERT_POS) && !ahrs.has_status(AP_AHRS::Status::CONST_POS_MODE)) {
+        return (drop_release_alt_m - pos_control->get_pos_estimate_U_m() >= dcsnd_m);
+    }
+    // Fallback: estimate distance from freefall physics.  This
+    // overestimates after motors start (thrust slows the fall) so the
+    // gate opens conservatively early.
+    const float t = (AP_HAL::millis() - drop_confirm_start_ms) * 0.001f;
+    return (0.5f * GRAVITY_MSS * t * t >= dcsnd_m);
+}
+
 bool ModeThrow::throw_attitude_good() const
 {
     // Check that we have uprighted the copter
@@ -319,6 +552,12 @@ bool ModeThrow::throw_height_good() const
 {
     // Check that we are within 0.5m of the demanded height
     return (fabsf(pos_control->get_pos_error_D_m()) < 0.5);
+}
+
+bool ModeThrow::throw_velocity_good() const
+{
+    // Check that vertical velocity is below 0.5 m/s
+    return (fabsf(pos_control->get_vel_estimate_U_ms()) < 0.5f);
 }
 
 bool ModeThrow::throw_position_good() const
