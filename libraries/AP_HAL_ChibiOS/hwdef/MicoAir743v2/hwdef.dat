@@ -171,3 +171,6 @@ ROMFS_WILDCARD libraries/AP_OSD/fonts/font*.bin
 
 # setup for BF migration
 define HAL_FRAME_TYPE 12
+define AP_BARO_THST_COMP_ENABLED 1
+define AP_INERTIALSENSOR_LOW_NOISE 1
+define ARMING_DELAY_MSEC 0
