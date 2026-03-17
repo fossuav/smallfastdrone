@@ -127,7 +127,7 @@ PD15 LED0 OUTPUT LOW GPIO(90)
 define AP_NOTIFY_GPIO_LED_1_PIN 90
 
 # Dataflash setup
-SPIDEV dataflash SPI3 DEVID1 FLASH1_CS     MODE3 45*MHZ 45*MHZ
+SPIDEV dataflash SPI3 DEVID1 FLASH1_CS     MODE3 32*MHZ 32*MHZ
 
 DATAFLASH littlefs:jedec_nor
 
@@ -158,8 +158,10 @@ define AP_COMPASS_PROBING_ENABLED 1
 define HAL_I2C_INTERNAL_MASK 0
 define HAL_COMPASS_AUTO_ROT_DEFAULT 2
 define HAL_DEFAULT_INS_FAST_SAMPLE 3
+define HAL_INS_TEMPERATURE_CAL_ENABLE 1
 # Motor order implies Betaflight/X for standard ESCs
 define HAL_FRAME_TYPE_DEFAULT 12
 
 # save some flash
 include ../include/minimize_fpv_osd.inc
+define ARMING_DELAY_MSEC 0
