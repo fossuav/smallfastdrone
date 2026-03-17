@@ -505,6 +505,7 @@ public:
     // Throw mode parameters
     AP_Int8 throw_nextmode;
     AP_Enum<ModeThrow::ThrowType> throw_type;
+    AP_Float throw_drop_ag;
 #endif
 
 #if AP_GROUNDEFFECT_ENABLED
