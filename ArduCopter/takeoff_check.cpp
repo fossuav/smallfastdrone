@@ -19,8 +19,9 @@ void Copter::takeoff_check()
 
     // Motors Library has enabled the spool up block.
 
-    // Immediately clear the spool up block if not landed
-    if (!ap.land_complete) {
+    // Immediately clear the spool up block if not landed, or in throw mode
+    // (where motors must spool before land_complete is cleared)
+    if (!ap.land_complete || flightmode->mode_number() == Mode::Number::THROW) {
         motors->set_spoolup_block(false);
         return;
     }
