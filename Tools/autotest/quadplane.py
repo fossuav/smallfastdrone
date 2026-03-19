@@ -3240,6 +3240,126 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.change_mode("QLAND")
         self.wait_disarmed(timeout=120)
 
+    def RealFlightGPSDeniedVTOL(self, model, home):
+        '''
+        Test GPS-denied VTOL takeoff and transition in RealFlight.
+        Mirrors GPSDeniedVTOL but runs against a real RealFlight sim.
+        '''
+        if not self.realflight_address:
+            self.progress("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+            return
+
+        self.setup_RealFlight_vehicle(model, home)
+        self.context_collect('STATUSTEXT')
+
+        # Phase 1: Boot with GPS, record the origin
+        # AHRS_OPTIONS bits: 0=DISABLE_DCM_FALLBACK_FW, 1=DISABLE_DCM_FALLBACK_VTOL,
+        #                    3=RECORD_ORIGIN, 4=USE_RECORDED_ORIGIN_FOR_NONGPS
+        self.set_parameters({
+            "LOG_BITMASK": 0x10FFFF,
+            "AHRS_EKF_TYPE": 3,      # EKF3 (SITL defaults to 10=SIM)
+            "AHRS_OPTIONS": 27,      # 1+2+8+16
+            "EK3_OPTIONS": 1,        # JammingExpected
+            "FLTMODE1": 18,          # QHOVER - so reboot enters VTOL mode
+            "ARMING_CHECK": 1830902, # all except GPS,GPS_CONFIG,VISION (clear bits 0,3,12,18)
+            "Q_TRAN_PIT_MAX": 10,    # allow more pitch-down during transition
+            "RTL_ALTITUDE": 20,      # match hover altitude to avoid large climb
+        })
+        self.reboot_sitl(check_position=False, mark_context=False)
+        self.wait_ready_to_arm()
+
+        # Wait for EKF origin to be set and recorded — RealFlight GPS lock
+        # may take longer than normal SITL. Poll until AHRS_ORIGIN params
+        # are non-zero, meaning record_origin() has saved the EKF origin.
+        tstart = self.get_sim_time()
+        while True:
+            if self.get_sim_time() - tstart > 60:
+                raise NotAchievedException("Origin was not recorded in Phase 1 (AHRS_ORIGIN_LAT still zero after 60s)")
+            origin_lat = self.get_parameter("AHRS_ORIGIN_LAT")
+            origin_lon = self.get_parameter("AHRS_ORIGIN_LON")
+            if origin_lat != 0 or origin_lon != 0:
+                break
+            self.delay_sim_time(2)
+        self.progress(f"Origin recorded: lat={origin_lat} lon={origin_lon}")
+
+        # Phase 2: Disable GPS, configure for EXTNAV + dead reckoning, reboot
+        self.set_parameters({
+            "SIM_GPS_DISABLE": 1,
+            "SIM_GPS2_DISABLE": 1,
+            "EK3_SRC1_POSXY": 6,     # EXTNAV (visual odometry)
+            "EK3_SRC1_VELXY": 6,     # EXTNAV (visual odometry)
+            "VISO_TYPE": 1,          # MAVLink visual odometry (driver enabled)
+        })
+        self.reboot_sitl(check_position=False, mark_context=False)
+
+        # Switch to QHOVER so fly_forward=false, allowing EKF3 to init
+        # without GPS (assume_zero_sideslip becomes false). Once EKF3 is
+        # active, the recorded origin is loaded from saved parameters.
+        self.change_mode('QHOVER')
+        self.wait_statustext('EKF3 IMU0 initialised', check_context=True, timeout=60)
+        self.wait_statustext('using recorded origin', check_context=True, timeout=60)
+
+        # Phase 3: Arm and takeoff in QHOVER without GPS
+        self.change_mode('QHOVER')
+        self.delay_sim_time(15)  # 10s required for IMU consistency checks
+        self.arm_vehicle()
+        self.set_rc(3, 2000)
+        self.wait_altitude(15, 30, relative=True, timeout=120)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(5)
+
+        # Phase 4: Transition to FBWB - dead reckoning via airspeed
+        self.change_mode('FBWB')
+        self.set_rc(3, 1500)
+        self.set_rc(2, 1500)  # neutral pitch (FBWB pitch controls altitude)
+        self.wait_statustext('Transition done', check_context=True, timeout=120)
+
+        # Clear boot/transition messages so DCM check only covers flight
+        self.context_clear_collection('STATUSTEXT')
+        self.delay_sim_time(5)
+
+        # Phase 5: Simulate Mission Planner "fly here" commands via
+        # GUIDED mode. Use AMSL altitude frame since home is not set.
+        # EKF wind states are zero in GPS-denied (wind unobservable
+        # without groundspeed reference), so DR position drifts at
+        # wind speed. Use time-based segments rather than distance
+        # checks to avoid chasing a diverging EKF position.
+        origin_alt = self.get_parameter("AHRS_ORIGIN_ALT")
+        origin_loc = mavutil.location(origin_lat, origin_lon, 0, 0)
+        guided_alt = origin_alt + 25  # 25m above ground, AMSL
+
+        wp1 = self.offset_location_ne(origin_loc, 100, 50)
+        wp1.alt = guided_alt
+        wp2 = self.offset_location_ne(origin_loc, -50, 100)
+        wp2.alt = guided_alt
+
+        self.progress("GUIDED: flying to waypoint 1")
+        self.change_mode('GUIDED')
+        self.send_do_reposition(wp1, frame=mavutil.mavlink.MAV_FRAME_GLOBAL)
+        self.delay_sim_time(15)
+
+        self.progress("GUIDED: flying to waypoint 2")
+        self.send_do_reposition(wp2, frame=mavutil.mavlink.MAV_FRAME_GLOBAL)
+        self.delay_sim_time(15)
+
+        # Phase 6: RTL back to launch point, loiter to stabilise,
+        # then transition to QHOVER and land. QRTL can't be used
+        # because the copter position controller has no airspeed-based
+        # dead reckoning (no zero-sideslip assumption).
+        # Verify EKF3 stayed active (did not fall back to DCM) during flight
+        if self.statustext_in_collections('DCM active'):
+            raise NotAchievedException("EKF3 fell back to DCM during GPS-denied flight")
+
+        self.progress("Returning to launch via RTL")
+        self.change_mode('RTL')
+        self.wait_distance_to_home(0, 150, timeout=120)
+        self.delay_sim_time(30)  # loiter near home to tighten position
+        self.change_mode('QHOVER')
+        self.set_rc(3, 1500)
+        self.delay_sim_time(10)
+        self.change_mode('QLAND')
+        self.wait_disarmed(timeout=120)
+
     def tests(self):
         '''return list of all tests'''
 
@@ -3304,6 +3424,10 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             self.ScriptedArmingChecksApplet,
             self.TakeoffCheck,
             Test(self.RealFlightHover, speedup=1, kwargs={
+                'model': 'realflight-titan-cobra',
+                'home': 'EliField'
+            }),
+            Test(self.RealFlightGPSDeniedVTOL, speedup=1, kwargs={
                 'model': 'realflight-titan-cobra',
                 'home': 'EliField'
             }),
