@@ -252,7 +252,17 @@ void Plane::set_target_altitude_location(const Location &loc)
 {
     target_altitude.amsl_cm = loc.alt;
     if (loc.relative_alt) {
-        target_altitude.amsl_cm += home.alt;
+        // convert relative-to-home altitude to AMSL. Use origin
+        // altitude when home is not set (GPS-denied with recorded
+        // origin) since home.alt is zero in that case.
+        if (ahrs.home_is_set()) {
+            target_altitude.amsl_cm += home.alt;
+        } else {
+            Location origin;
+            if (ahrs.get_origin(origin)) {
+                target_altitude.amsl_cm += origin.alt;
+            }
+        }
     }
 #if AP_TERRAIN_AVAILABLE
     if (target_altitude.terrain_following_pending) {
@@ -553,13 +563,23 @@ void Plane::set_offset_altitude_location(const Location &start_loc, const Locati
  */
 bool Plane::above_location_current(const Location &loc)
 {
+    // reference altitude for home-relative conversions: use origin
+    // when home is not set (GPS-denied with recorded origin)
+    int32_t ref_alt = home.alt;
+    if (!ahrs.home_is_set()) {
+        Location origin;
+        if (ahrs.get_origin(origin)) {
+            ref_alt = origin.alt;
+        }
+    }
+
 #if AP_TERRAIN_AVAILABLE
     float terrain_alt;
-    if (loc.terrain_alt && 
+    if (loc.terrain_alt &&
         terrain.height_above_terrain(terrain_alt, true)) {
         float loc_alt = loc.alt*0.01f;
         if (!loc.relative_alt) {
-            loc_alt -= home.alt*0.01f;
+            loc_alt -= ref_alt*0.01f;
         }
         return terrain_alt > loc_alt;
     }
@@ -567,7 +587,7 @@ bool Plane::above_location_current(const Location &loc)
 
     float loc_alt_cm = loc.alt;
     if (loc.relative_alt) {
-        loc_alt_cm += home.alt;
+        loc_alt_cm += ref_alt;
     }
     return current_loc.alt > loc_alt_cm;
 }
