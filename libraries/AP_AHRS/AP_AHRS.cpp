@@ -415,6 +415,10 @@ void AP_AHRS::update_state(void)
 
         // save origin to parameters
         record_origin();
+    } else if (!origin_ok && state.origin_ok) {
+        // backend lost origin (e.g. EKF re-initialised after origin
+        // was set). Clear so use_recorded_origin_maybe() can re-apply.
+        state.origin_ok = false;
     }
 
     // if no origin, attempt to use recorded origin
