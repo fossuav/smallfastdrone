@@ -23,6 +23,18 @@ bool ModeThrow::init(bool ignore_checks)
     drop_release_alt_cm = 0;
     last_stage_msg_ms = 0;
 
+    // Switch EKF source set for the throw phase if configured.
+    // During throw/drop the vehicle is tumbling — position and velocity
+    // sources (optical flow, GPS) produce garbage.  Switching to a
+    // source set with no horizontal aiding prevents EKF variance growth
+    // and nuisance EKF failsafes.  THROW_SRC_SET restores the operating
+    // source set at THROW_COMPLETE.
+    const int8_t src_init = g2.throw_src_init.get();
+    if (src_init >= 1 && src_init <= 3) {
+        AP::ahrs().set_posvelyaw_source_set(AP_NavEKF_Source::SourceSetSelection(src_init - 1));
+        gcs().send_text(MAV_SEVERITY_INFO, "Throw: EKF Source Set %d", src_init);
+    }
+
     // initialise pos controller speed and acceleration
     pos_control->set_max_speed_accel_xy(wp_nav->get_default_speed_xy(), BRAKE_MODE_DECEL_RATE);
     pos_control->set_correction_speed_accel_xy(wp_nav->get_default_speed_xy(), BRAKE_MODE_DECEL_RATE);
@@ -473,10 +485,17 @@ bool ModeThrow::throw_detected()
             const uint32_t confirm_ms = MAX((uint32_t)THROW_DROP_CONFIRM_MS,
                                             (uint32_t)(g2.throw_drop_confirm_time * 1000.0f));
             const bool time_confirmed = (AP_HAL::millis() - drop_confirm_start_ms >= confirm_ms);
+            // Distance check uses freefall physics (d = 0.5*g*t^2)
+            // rather than EKF altitude, which may be unreliable during
+            // a tumble with attitude errors or source switching.
+            // When DCSND is zero, no distance requirement applies.
             const float dcsnd_m = g.throw_altitude_descend;
             const float t = (AP_HAL::millis() - drop_confirm_start_ms) * 0.001f;
             const bool dist_confirmed = !is_positive(dcsnd_m)
                 || (0.5f * GRAVITY_MSS * t * t >= dcsnd_m);
+            // Require BOTH time and distance — the greater of the two
+            // governs.  Time rejects transients, distance ensures
+            // actual separation from the carrier.
             return time_confirmed && dist_confirmed;
         }
         drop_confirm_start_ms = 0;
