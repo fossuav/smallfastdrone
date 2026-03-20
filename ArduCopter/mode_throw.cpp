@@ -81,9 +81,6 @@ void ModeThrow::run()
         // this allows for rapidly clearing surrounding obstacles
         if (g2.throw_type == ThrowType::Drop) {
             // Target altitude is THROW_ALT_DCSND below the release point.
-            // The freefall confirmation period already ensures the vehicle
-            // has fallen approximately this distance before motors start,
-            // so the controller mostly just needs to arrest the descent.
             pos_control->set_pos_desired_z_cm(drop_release_alt_cm
                                               - g.throw_altitude_descend * 100.0f);
         } else {
@@ -446,21 +443,28 @@ bool ModeThrow::throw_detected()
     }
 
     // For drops, require freefall conditions to persist long enough to
-    // reject transient low-g events (e.g. carrier aircraft turbulence).
-    // When THROW_ALT_DCSND > 0, require freefall for the time it takes
-    // to fall that distance from rest: t = sqrt(2*d/g).  This ensures
-    // the vehicle has truly separated from the carrier.
+    // reject transient low-g events.  Confirm when BOTH:
+    //  - THROW_DROP_CNF time has elapsed (minimum THROW_DROP_CONFIRM_MS)
+    //  - vehicle has fallen THROW_ALT_DCSND (if set), checked via
+    //    freefall physics (d = 0.5*g*t^2) rather than EKF altitude
+    // The greater of the two governs.  Time rejects transients,
+    // distance ensures actual separation from the carrier.  Additional
+    // false-trigger protection is provided by the spool-up freefall
+    // verification in Wait_Throttle_Unlimited.
     if (g2.throw_type == ThrowType::Drop) {
         if (possible_throw_detected) {
             if (drop_confirm_start_ms == 0) {
                 drop_confirm_start_ms = AP_HAL::millis();
                 drop_release_alt_cm = inertial_nav.get_position_z_up_cm();
             }
+            const uint32_t confirm_ms = MAX((uint32_t)THROW_DROP_CONFIRM_MS,
+                                            (uint32_t)(g2.throw_drop_confirm_time * 1000.0f));
+            const bool time_confirmed = (AP_HAL::millis() - drop_confirm_start_ms >= confirm_ms);
             const float dcsnd_m = g.throw_altitude_descend;
-            const uint32_t confirm_ms = is_positive(dcsnd_m)
-                ? MAX((uint32_t)THROW_DROP_CONFIRM_MS, (uint32_t)(sqrtf(2.0f * dcsnd_m / GRAVITY_MSS) * 1000.0f))
-                : THROW_DROP_CONFIRM_MS;
-            return (AP_HAL::millis() - drop_confirm_start_ms >= confirm_ms);
+            const float t = (AP_HAL::millis() - drop_confirm_start_ms) * 0.001f;
+            const bool dist_confirmed = !is_positive(dcsnd_m)
+                || (0.5f * GRAVITY_MSS * t * t >= dcsnd_m);
+            return time_confirmed && dist_confirmed;
         }
         drop_confirm_start_ms = 0;
         return false;

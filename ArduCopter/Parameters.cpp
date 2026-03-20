@@ -1304,6 +1304,15 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Increment: 0.1
     // @User: Advanced
     AP_GROUPINFO("THROW_DROP_AG", 20, ParametersG2, throw_drop_ag, 1.0),
+
+    // @Param: THROW_DROP_CNF
+    // @DisplayName: Drop confirmation time
+    // @Description: Minimum freefall time (seconds) before drop detection triggers. Props remain off during this period. At 0, a 100ms minimum applies. For carrier drops use 0.5-1.0s to ensure separation before motors start. For hand drops 0 is normally sufficient as the spool-up freefall check provides additional verification. Independent of THROW_ALT_DCSND (altitude target). Only used when THROW_TYPE=1.
+    // @Range: 0 5
+    // @Units: s
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("THROW_DROP_CNF", 21, ParametersG2, throw_drop_confirm_time, 0),
 #endif
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
