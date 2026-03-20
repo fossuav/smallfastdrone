@@ -106,7 +106,16 @@ int32_t Plane::get_RTL_altitude_cm() const
     if (g.RTL_altitude < 0) {
         return current_loc.alt;
     }
-    return g.RTL_altitude*100 + home.alt;
+    // RTL_altitude is relative to home. Convert to AMSL using home
+    // altitude, or origin altitude when home is not set (GPS-denied).
+    int32_t reference_alt = home.alt;
+    if (!ahrs.home_is_set()) {
+        Location origin;
+        if (ahrs.get_origin(origin)) {
+            reference_alt = origin.alt;
+        }
+    }
+    return g.RTL_altitude*100 + reference_alt;
 }
 
 /*
@@ -202,17 +211,7 @@ void Plane::set_target_altitude_current(void)
     Location origin;
     if (ahrs.get_relative_position_D_origin(posD) && ahrs.get_origin(origin)) {
         const int32_t height_above_origin_cm = static_cast<int32_t>(-posD * 100.0f);
-        if (ahrs.home_is_set()) {
-            // use true AMSL altitude — relative_target_altitude_cm()
-            // will subtract home.alt to get the relative value
-            target_altitude.amsl_cm = origin.alt + height_above_origin_cm;
-        } else {
-            // home is not set (GPS-denied with recorded origin). Use
-            // height above origin directly so that the frame matches
-            // tecs_hgt_afe() which falls back to baro altitude when
-            // home is not set. Both are relative to the same point.
-            target_altitude.amsl_cm = height_above_origin_cm;
-        }
+        target_altitude.amsl_cm = origin.alt + height_above_origin_cm;
     } else {
         target_altitude.amsl_cm = current_loc.alt;
     }
@@ -302,7 +301,19 @@ int32_t Plane::relative_target_altitude_cm(void)
         return relative_home_height*100;
     }
 #endif
-    int32_t relative_alt = target_altitude.amsl_cm - home.alt;
+    int32_t reference_alt = home.alt;
+    if (!ahrs.home_is_set()) {
+        // home is not set (GPS-denied with recorded EKF origin).
+        // tecs_hgt_afe() falls back to baro-relative altitude in this
+        // case, so we must convert amsl_cm to the same frame by
+        // subtracting origin altitude instead of home altitude (which
+        // is zero and would leave the origin offset in the target).
+        Location origin;
+        if (ahrs.get_origin(origin)) {
+            reference_alt = origin.alt;
+        }
+    }
+    int32_t relative_alt = target_altitude.amsl_cm - reference_alt;
     relative_alt += mission_alt_offset()*100;
 #if AP_RANGEFINDER_ENABLED
     relative_alt += rangefinder_correction() * 100;
