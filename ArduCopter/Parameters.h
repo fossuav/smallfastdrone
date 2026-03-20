@@ -506,6 +506,7 @@ public:
     AP_Enum<ModeThrow::ThrowType> throw_type;
     AP_Int8 throw_srcset;
     AP_Float throw_drop_ag;
+    AP_Float throw_drop_confirm_time;
 #endif
 
     // ground effect compensation enable/disable
