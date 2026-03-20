@@ -67,6 +67,19 @@ void ModeThrow::run()
         AP_Notify::flags.waiting_for_throw = false;
 
     } else if (stage == Throw_Wait_Throttle_Unlimited &&
+               copter.ins.get_accel().length() > 0.5f * GRAVITY_MSS) {
+        // Freefall lost during spool-up — the vehicle is no longer in
+        // freefall (e.g. carrier bounce settled, or false trigger from
+        // turbulence).  Throttle is zero during this stage so body-frame
+        // accel is a clean indicator.  Abort back to Detecting and
+        // spool down.
+        gcs().send_text(MAV_SEVERITY_WARNING, "Throw: freefall lost, resetting");
+        stage = Throw_Detecting;
+        drop_confirm_start_ms = 0;
+        free_fall_start_ms = 0;
+        AP_Notify::flags.waiting_for_throw = true;
+
+    } else if (stage == Throw_Wait_Throttle_Unlimited &&
                motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
         stage = Throw_Uprighting;
         uprighting_start_ms = AP_HAL::millis();
