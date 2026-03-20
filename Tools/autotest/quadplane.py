@@ -3360,6 +3360,125 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.change_mode('QLAND')
         self.wait_disarmed(timeout=120)
 
+    def RealFlightGPSDeniedHomeSet(self, model, home):
+        '''
+        Test GPS-denied flight with home set manually via MAVLink before
+        takeoff. This exercises the home_is_set()=true code paths in
+        altitude targeting, which differ from the home-not-set paths
+        tested by RealFlightGPSDeniedVTOL. Simulates a real operator
+        setting home in Mission Planner before a GPS-denied flight.
+        '''
+        if not self.realflight_address:
+            self.progress("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+            return
+
+        self.setup_RealFlight_vehicle(model, home)
+        self.context_collect('STATUSTEXT')
+
+        # Phase 1: Boot with GPS, record the origin
+        self.set_parameters({
+            "LOG_BITMASK": 0x10FFFF,
+            "AHRS_EKF_TYPE": 3,
+            "AHRS_OPTIONS": 27,      # disable DCM fallback, record+use origin
+            "EK3_OPTIONS": 1,        # JammingExpected
+            "FLTMODE1": 18,          # QHOVER
+            "ARMING_CHECK": 1830902, # all except GPS,GPS_CONFIG,VISION
+            "Q_TRAN_PIT_MAX": 10,
+            "RTL_ALTITUDE": 20,
+        })
+        self.reboot_sitl(check_position=False, mark_context=False)
+        self.wait_ready_to_arm()
+
+        # Wait for EKF origin to be recorded
+        tstart = self.get_sim_time()
+        while True:
+            if self.get_sim_time() - tstart > 60:
+                raise NotAchievedException("Origin was not recorded in Phase 1")
+            origin_lat = self.get_parameter("AHRS_ORIGIN_LAT")
+            origin_lon = self.get_parameter("AHRS_ORIGIN_LON")
+            if origin_lat != 0 or origin_lon != 0:
+                break
+            self.delay_sim_time(2)
+        origin_alt = self.get_parameter("AHRS_ORIGIN_ALT")
+        self.progress(f"Origin recorded: lat={origin_lat} lon={origin_lon} alt={origin_alt}")
+
+        # Phase 2: Disable GPS, configure for dead reckoning, reboot
+        self.set_parameters({
+            "SIM_GPS_DISABLE": 1,
+            "SIM_GPS2_DISABLE": 1,
+            "EK3_SRC1_POSXY": 6,     # EXTNAV
+            "EK3_SRC1_VELXY": 6,     # EXTNAV
+            "VISO_TYPE": 1,          # MAVLink VISO driver
+        })
+        self.reboot_sitl(check_position=False, mark_context=False)
+
+        self.change_mode('QHOVER')
+        self.wait_statustext('EKF3 IMU0 initialised', check_context=True, timeout=60)
+        self.wait_statustext('using recorded origin', check_context=True, timeout=60)
+
+        # Phase 3: Set home manually via MAVLink — this is what a real
+        # operator would do via Mission Planner before a GPS-denied flight.
+        # Use the recorded origin as home location.
+        home_loc = mavutil.location(origin_lat, origin_lon, origin_alt, 0)
+        self.progress(f"Setting home via MAVLink: lat={origin_lat} lon={origin_lon} alt={origin_alt}")
+        self.set_home(home_loc)
+        self.delay_sim_time(2)
+
+        # Verify home is set
+        home_msg = self.poll_home_position()
+        if home_msg is None:
+            raise NotAchievedException("Home position not set after MAV_CMD_DO_SET_HOME")
+        self.progress(f"Home confirmed: lat={home_msg.latitude*1e-7:.7f} alt={home_msg.altitude*1e-3:.1f}")
+
+        # Phase 4: Arm and takeoff in QHOVER
+        self.change_mode('QHOVER')
+        self.delay_sim_time(15)
+        self.arm_vehicle()
+        self.set_rc(3, 2000)
+        self.wait_altitude(15, 30, relative=True, timeout=120)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(5)
+
+        # Phase 5: Transition to FBWB
+        self.change_mode('FBWB')
+        self.set_rc(3, 1500)
+        self.set_rc(2, 1500)
+        self.wait_statustext('Transition done', check_context=True, timeout=120)
+
+        self.context_clear_collection('STATUSTEXT')
+        self.delay_sim_time(10)
+
+        # Phase 6: GUIDED waypoints using relative-to-home frame,
+        # which is what Mission Planner sends by default
+        wp1 = self.offset_location_ne(home_loc, 100, 50)
+        wp1.alt = 25  # 25m above home
+        wp2 = self.offset_location_ne(home_loc, -50, 100)
+        wp2.alt = 25
+
+        self.progress("GUIDED: flying to waypoint 1 (relative-to-home)")
+        self.change_mode('GUIDED')
+        self.send_do_reposition(wp1, frame=mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT)
+        self.delay_sim_time(15)
+
+        self.progress("GUIDED: flying to waypoint 2 (relative-to-home)")
+        self.send_do_reposition(wp2, frame=mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT)
+        self.delay_sim_time(15)
+
+        # Verify no DCM fallback
+        if self.statustext_in_collections('DCM active'):
+            raise NotAchievedException("EKF3 fell back to DCM during GPS-denied flight")
+
+        # Phase 7: RTL and land
+        self.progress("Returning to launch via RTL")
+        self.change_mode('RTL')
+        self.wait_distance_to_home(0, 150, timeout=120)
+        self.delay_sim_time(30)
+        self.change_mode('QHOVER')
+        self.set_rc(3, 1500)
+        self.delay_sim_time(10)
+        self.change_mode('QLAND')
+        self.wait_disarmed(timeout=120)
+
     def RealFlightGPSSpoofing(self, model, home):
         '''
         Test GPS spoofing resilience in RealFlight. Simulates an A4005-type
@@ -3535,6 +3654,10 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
                 'home': 'EliField'
             }),
             Test(self.RealFlightGPSDeniedVTOL, speedup=1, kwargs={
+                'model': 'realflight-titan-cobra',
+                'home': 'EliField'
+            }),
+            Test(self.RealFlightGPSDeniedHomeSet, speedup=1, kwargs={
                 'model': 'realflight-titan-cobra',
                 'home': 'EliField'
             }),
