@@ -32,12 +32,18 @@ void Plane::check_home_alt_change(void)
 {
     int32_t home_alt_cm = ahrs.get_home().alt;
     if (home_alt_cm != auto_state.last_home_alt_cm && hal.util->get_soft_armed()) {
-        // cope with home altitude changing
-        const int32_t alt_change_cm = home_alt_cm - auto_state.last_home_alt_cm;
-        fix_terrain_WP(next_WP_loc, __LINE__);
+        if (auto_state.last_home_alt_cm != 0) {
+            // cope with home altitude changing. Only apply offset when
+            // home was previously set (last_home_alt_cm != 0) — setting
+            // home for the first time (e.g. GPS-denied manual set_home)
+            // is not an altitude change, and applying the full AMSL
+            // offset would corrupt TECS internal state.
+            const int32_t alt_change_cm = home_alt_cm - auto_state.last_home_alt_cm;
+            fix_terrain_WP(next_WP_loc, __LINE__);
 
-        // reset TECS to force the field elevation estimate to reset
-        TECS_controller.offset_altitude(alt_change_cm * 0.01f);
+            // reset TECS to force the field elevation estimate to reset
+            TECS_controller.offset_altitude(alt_change_cm * 0.01f);
+        }
     }
     auto_state.last_home_alt_cm = home_alt_cm;
 }
