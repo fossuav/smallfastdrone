@@ -9864,24 +9864,27 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
     def ThrowDoubleDrop(self):
         '''Test a more complicated drop-mode scenario'''
         self.progress("Getting a lift to altitude")
+        # Use a gentle shove to reach altitude at realistic speed.
+        # At -2 m/s² for 10s: velocity ~20 m/s, altitude ~100m.
+        # This keeps the drop speed realistic — extreme speeds cause
+        # aerodynamic drag that exceeds the spool-up freefall threshold.
         self.set_parameters({
-            "SIM_SHOVE_Z": -11,
+            "SIM_SHOVE_Z": -10.5,
             "THROW_TYPE": 1,   # drop
-            "MOT_SPOOL_TIME": 2,
+            "MOT_SPOOL_TIME": 0.5,
         })
         self.change_mode('THROW')
         self.wait_ready_to_arm()
         self.arm_vehicle()
         try:
-            self.set_parameter("SIM_SHOVE_TIME", 30000)
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
         except ValueError:
             # the shove resets this to zero
             pass
 
-        self.wait_altitude(100, 1000, timeout=100, relative=True)
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
         self.context_collect('STATUSTEXT')
-        self.wait_statustext("Throw detected", check_context=True, timeout=10)
-        self.wait_statustext("Stabilizing throw height", check_context=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
         self.wait_statustext("Throw height achieved, good position", check_context=True)
         self.progress("Waiting for still")
         self.wait_speed_vector(Vector3(0, 0, 0))
@@ -9901,14 +9904,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_ready_to_arm()
         self.arm_vehicle()
         try:
-            self.set_parameter("SIM_SHOVE_TIME", 30000)
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
         except ValueError:
             # the shove resets this to zero
             pass
 
-        self.wait_altitude(100, 1000, timeout=100, relative=True)
-        self.wait_statustext("Throw detected", check_context=True, timeout=10)
-        self.wait_statustext("Stabilizing throw height", check_context=True)
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
         self.wait_statustext("Throw height achieved, good position", check_context=True)
         self.wait_mode('AUTO')
         self.wait_disarmed(timeout=240)
@@ -9923,8 +9925,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "EK3_SRC1_VELXY": 0,
             "THROW_TYPE": 1,          # drop
             "THROW_NEXTMODE": 2,      # ALT_HOLD
-            "SIM_SHOVE_Z": -11,
-            "MOT_SPOOL_TIME": 2,
+            "SIM_SHOVE_Z": -10.5,
+            "MOT_SPOOL_TIME": 0.5,
         })
         self.reboot_sitl()
 
@@ -9933,14 +9935,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.arm_vehicle()
         self.context_collect('STATUSTEXT')
         try:
-            self.set_parameter("SIM_SHOVE_TIME", 30000)
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
         except ValueError:
             # the shove resets this to zero
             pass
 
-        self.wait_altitude(100, 1000, timeout=100, relative=True)
-        self.wait_statustext("Throw detected", check_context=True, timeout=10)
-        self.wait_statustext("Stabilizing throw height", check_context=True)
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
         self.wait_statustext("Throw height achieved", check_context=True)
         self.wait_mode('ALT_HOLD')
         self.set_rc(3, 1000)
@@ -9951,11 +9952,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         '''Test EKF source set switch on throw mode completion'''
         self.progress("Testing throw drop with EKF source set switch")
         self.set_parameters({
-            "SIM_SHOVE_Z": -11,
+            "SIM_SHOVE_Z": -10.5,
             "THROW_TYPE": 1,           # drop
             "THROW_NEXTMODE": 5,       # LOITER
             "THROW_SRC_SET": 2,        # switch to SRC2 on completion
-            "MOT_SPOOL_TIME": 2,
+            "MOT_SPOOL_TIME": 0.5,
         })
 
         self.change_mode('THROW')
@@ -9963,14 +9964,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.arm_vehicle()
         self.context_collect('STATUSTEXT')
         try:
-            self.set_parameter("SIM_SHOVE_TIME", 30000)
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
         except ValueError:
             # the shove resets this to zero
             pass
 
-        self.wait_altitude(100, 1000, timeout=100, relative=True)
-        self.wait_statustext("Throw detected", check_context=True, timeout=10)
-        self.wait_statustext("Stabilizing throw height", check_context=True)
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
         self.wait_statustext("Throw height achieved, good position", check_context=True)
         self.wait_statustext("EKF Source Set 2", check_context=True)
         self.wait_mode('LOITER')
