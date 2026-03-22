@@ -1884,6 +1884,7 @@ private:
 
     bool throw_detected();
     bool throw_uprighting_complete() const;
+    bool throw_drop_distance_reached() const;
     bool throw_position_good() const;
     bool throw_height_good() const;
     bool throw_velocity_good() const;
