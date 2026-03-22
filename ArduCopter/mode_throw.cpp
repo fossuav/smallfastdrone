@@ -95,7 +95,7 @@ void ModeThrow::run()
                motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED) {
         stage = Throw_Uprighting;
         uprighting_start_ms = AP_HAL::millis();
-    } else if (stage == Throw_Uprighting && throw_uprighting_complete()) {
+    } else if (stage == Throw_Uprighting && throw_uprighting_complete() && throw_drop_distance_reached()) {
         stage = Throw_HgtStabilise;
         hgt_stabilise_start_ms = AP_HAL::millis();
 
@@ -462,15 +462,16 @@ bool ModeThrow::throw_detected()
         possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
     }
 
-    // For drops, require freefall conditions to persist long enough to
-    // reject transient low-g events.  Confirm when BOTH:
-    //  - THROW_DROP_CNF time has elapsed (minimum THROW_DROP_CONFIRM_MS)
-    //  - vehicle has fallen THROW_ALT_DCSND (if set), checked via
-    //    freefall physics (d = 0.5*g*t^2) rather than EKF altitude
-    // The greater of the two governs.  Time rejects transients,
-    // distance ensures actual separation from the carrier.  Additional
-    // false-trigger protection is provided by the spool-up freefall
-    // verification in Wait_Throttle_Unlimited.
+    // For drops, require BOTH time and freefall distance to confirm.
+    // The time check (THROW_DROP_CNF) rejects transient low-g events.
+    // The distance check (0.5*g*t^2 for the confirmation time) cross-
+    // validates that the vehicle actually fell the expected distance,
+    // not just sustained low-g on a smooth-flying carrier.
+    // THROW_ALT_DCSND is checked separately at the Uprighting to
+    // HgtStabilise transition, allowing the vehicle to spool up and
+    // hold level attitude in a controlled descent before arresting.
+    // Additional false-trigger protection is provided by the spool-up
+    // freefall verification in Wait_Throttle_Unlimited.
     if (g2.throw_type == ThrowType::Drop) {
         if (possible_throw_detected) {
             if (drop_confirm_start_ms == 0) {
@@ -480,18 +481,13 @@ bool ModeThrow::throw_detected()
             const uint32_t confirm_ms = MAX((uint32_t)THROW_DROP_CONFIRM_MS,
                                             (uint32_t)(g2.throw_drop_confirm_time * 1000.0f));
             const bool time_confirmed = (AP_HAL::millis() - drop_confirm_start_ms >= confirm_ms);
-            // Distance check uses freefall physics (d = 0.5*g*t^2)
-            // rather than EKF altitude, which may be unreliable during
-            // a tumble with attitude errors or source switching.
-            // When DCSND is zero, no distance requirement applies.
-            const float dcsnd_m = g.throw_altitude_descend;
+            // Cross-check: vehicle should have fallen the expected
+            // freefall distance for the confirmation time.
+            const float confirm_s = confirm_ms * 0.001f;
+            const float confirm_dist = 0.5f * GRAVITY_MSS * confirm_s * confirm_s;
             const float t = (AP_HAL::millis() - drop_confirm_start_ms) * 0.001f;
-            const bool dist_confirmed = !is_positive(dcsnd_m)
-                || (0.5f * GRAVITY_MSS * t * t >= dcsnd_m);
-            // Require BOTH time and distance — the greater of the two
-            // governs.  Time rejects transients, distance ensures
-            // actual separation from the carrier.
-            return time_confirmed && dist_confirmed;
+            const bool fall_confirmed = (0.5f * GRAVITY_MSS * t * t >= confirm_dist);
+            return time_confirmed && fall_confirmed;
         }
         drop_confirm_start_ms = 0;
         return false;
@@ -525,6 +521,31 @@ bool ModeThrow::throw_uprighting_complete() const
         return true;
     }
     return (elapsed_ms > 3000);
+}
+
+bool ModeThrow::throw_drop_distance_reached() const
+{
+    // For drops, check if vehicle has fallen THROW_ALT_DCSND below the
+    // release point.  When DCSND is zero, no distance gate applies.
+    if (g2.throw_type != ThrowType::Drop) {
+        return true;
+    }
+    const float dcsnd_m = g.throw_altitude_descend;
+    if (!is_positive(dcsnd_m)) {
+        return true;
+    }
+    // Use EKF altitude if the filter has a vertical position estimate
+    // (i.e. the active source set has a Z source like baro or GPS).
+    // If not (e.g. THROW_SRC_INI switched to a set with no Z source),
+    // fall back to freefall physics from the confirmation start time.
+    if (ahrs.has_status(AP_AHRS::Status::VERT_POS)) {
+        return (drop_release_alt_m - pos_control->get_pos_estimate_U_m() >= dcsnd_m);
+    }
+    // Fallback: estimate distance from freefall physics.  This
+    // overestimates after motors start (thrust slows the fall) so the
+    // gate opens conservatively early.
+    const float t = (AP_HAL::millis() - drop_confirm_start_ms) * 0.001f;
+    return (0.5f * GRAVITY_MSS * t * t >= dcsnd_m);
 }
 
 bool ModeThrow::throw_attitude_good() const
