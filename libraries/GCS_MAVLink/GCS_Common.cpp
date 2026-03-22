@@ -4521,6 +4521,11 @@ void GCS_MAVLINK::handle_message(const mavlink_message_t &msg)
         break;
     }
 #endif
+    case MAVLINK_MSG_ID_GLOBAL_POSITION_SENSOR:
+    {
+        handle_global_position_sensor(msg);
+        break;
+    }
     }
 
 }
