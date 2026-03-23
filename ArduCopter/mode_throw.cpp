@@ -540,11 +540,14 @@ bool ModeThrow::throw_drop_distance_reached() const
         return true;
     }
     // Use EKF altitude if the filter has a vertical position estimate
-    // (i.e. the active source set has a Z source like baro or GPS).
-    // If not (e.g. THROW_SRC_INI switched to a set with no Z source),
-    // fall back to freefall physics from the confirmation start time.
+    // AND velocity aiding.  Without velocity aiding (const_pos_mode)
+    // the EKF velocity drifts from accelerometer integration, making
+    // the altitude estimate unreliable during dynamic maneuvers — on a
+    // carrier the velocity can drift to 70+ m/s while stationary,
+    // causing the altitude to overshoot the release point and the
+    // distance check to fail permanently.
     nav_filter_status filt_status = inertial_nav.get_filter_status();
-    if (filt_status.flags.vert_pos) {
+    if (filt_status.flags.vert_pos && !filt_status.flags.const_pos_mode) {
         return (drop_release_alt_cm - inertial_nav.get_position_z_up_cm() >= dcsnd_m * 100.0f);
     }
     // Fallback: estimate distance from freefall physics.  This
