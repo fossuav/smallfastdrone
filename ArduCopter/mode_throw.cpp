@@ -242,26 +242,15 @@ void ModeThrow::run()
         Vector3f zero_ang_vel;
         attitude_control->input_quaternion(level_quat, zero_ang_vel);
 
-        // For drops, scale throttle by cos_tilt so thrust is zero when
-        // inverted and ramps to arrest level as the vehicle rights itself.
-        // Angle boost is disabled since we manage the throttle directly.
+        // For drops, command zero throttle and let ATC_THR_MIX_MAX
+        // (auto-enabled at >30° attitude error) provide differential
+        // thrust for attitude control only.  This prevents the vehicle
+        // from climbing back toward the carrier after arrest — the
+        // aggressive descent arrest is handled later by the position
+        // controller in HgtStabilise using THROW_DROP_AG.
         // For upward throws use 50% without boost to maximise righting moment.
         if (g2.throw_type == ThrowType::Drop) {
-            const float cos_tilt = MAX(ahrs.get_rotation_body_to_ned().c.z, 0.0f);
-            const float hover_thr = motors->get_throttle_hover();
-            // Scale arrest aggressiveness by descent rate.  When going
-            // up or barely descending, use hover throttle only.
-            // Ramp linearly to full THROW_DROP_AG at THROW_DROP_SPEED_Z_MS.
-            const float ag = MAX(g2.throw_drop_ag, 1.0f);
-            const float vel_z_up = pos_control->get_vel_estimate_U_ms();
-            float thr_scale;
-            if (vel_z_up >= 0.0f) {
-                thr_scale = 1.0f;
-            } else {
-                thr_scale = constrain_float(1.0f + (ag - 1.0f) * (-vel_z_up) * (1.0f / THROW_DROP_SPEED_Z_MS), 1.0f, ag);
-            }
-            const float throttle = constrain_float(hover_thr * thr_scale, 0.0f, 1.0f) * cos_tilt;
-            attitude_control->set_throttle_out(throttle, false, g.throttle_filt);
+            attitude_control->set_throttle_out(0, false, g.throttle_filt);
         } else {
             attitude_control->set_throttle_out(0.5f, false, g.throttle_filt);
         }
