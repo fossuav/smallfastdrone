@@ -114,6 +114,11 @@ bool AP_Arming_Plane::pre_arm_checks(bool display_failure)
     ret &= quadplane_checks(display_failure);
 #endif
 
+    if (!plane.ahrs.home_is_set()) {
+        check_failed(display_failure, "Home not set");
+        ret = false;
+    }
+
     // check adsb avoidance failsafe
     if (plane.failsafe.adsb) {
         check_failed(display_failure, "ADSB threat detected");
