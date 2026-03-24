@@ -2260,7 +2260,7 @@ bool NavEKF3::InitialiseFilterBootstrap()
         }
     }
     if (on_ground_stationary) {
-        AP::ins().init_gyro();
+        AP::ins().calibrate_gyros();
     }
 
     // initialise the cores. We return success only if all cores
