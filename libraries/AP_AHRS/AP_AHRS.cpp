@@ -1614,6 +1614,16 @@ void AP_AHRS::use_recorded_origin_maybe()
     if (origin_set || _get_origin(check)) {
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AHRS: using recorded origin:%.7f,%.7f,%.1f",
                       (double)_origin_lat.get(), (double)_origin_lon.get(), (double)_origin_alt.get());
+
+        // On Plane, set home from the recorded origin if not already
+        // set. Plane's altitude system assumes home is set and uses
+        // home.alt as the AMSL reference throughout. Without home,
+        // many code paths produce wrong altitude targets.
+#if APM_BUILD_TYPE(APM_BUILD_ArduPlane)
+        if (!_home_is_set) {
+            UNUSED_RESULT(set_home(loc));
+        }
+#endif
     }
 }
 
