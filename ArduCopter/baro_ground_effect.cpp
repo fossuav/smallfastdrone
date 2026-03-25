@@ -40,6 +40,16 @@ void Copter::update_ground_effect_detector(void)
     float pos_d_m = 0;
     UNUSED_RESULT(AP::ahrs().get_relative_position_D_origin_float(pos_d_m));
 
+    // Use HAGL from the AGL Kalman filter when available.  The default
+    // height-above-takeoff uses the EKF vertical position which can be
+    // corrupted by baro ground effect.  A wrong altitude prevents GE
+    // from clearing (the re-enable immediately fires) and keeps the
+    // noise floor active, making recovery impossible.  The AGL KF fuses
+    // IMU and rangefinder only, so it gives a reliable height for these
+    // decisions.
+    float hagl_m;
+    const bool have_hagl = ahrs.get_hagl(hagl_m);
+
     // Reset the takeoff timer while still on the ground so the timeout
     // counts from actual liftoff, not from when throttle was raised.
     // This ensures the ground effect window covers the entire spool-up
@@ -53,7 +63,7 @@ void Copter::update_ground_effect_detector(void)
     // end the takeoff_expected state
     // Use configured altitude threshold, or the original 0.50m default when not set
     const float gndeff_alt_m = is_positive(g2.tkoff_gndeff_alt) ? g2.tkoff_gndeff_alt : 0.50f;
-    const float height_above_takeoff_m = -pos_d_m - gndeffect_state.takeoff_alt_m;
+    const float height_above_takeoff_m = have_hagl ? hagl_m : (-pos_d_m - gndeffect_state.takeoff_alt_m);
     const uint32_t time_since_takeoff_ms = tnow_ms - gndeffect_state.takeoff_time_ms;
     const bool above_gndeff_alt = height_above_takeoff_m > gndeff_alt_m;
     const bool max_timeout = time_since_takeoff_ms > 5000;
