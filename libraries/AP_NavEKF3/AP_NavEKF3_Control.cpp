@@ -611,8 +611,19 @@ bool NavEKF3_core::readyToUseBodyOdm(void) const
 }
 
 // return true if the filter to be ready to use gps
+bool NavEKF3_core::is_dead_reckoning_lane(void) const
+{
+    return (frontend->_affinity & EKF_AFFINITY_DR) &&
+           (core_index == frontend->num_cores - 1);
+}
+
 bool NavEKF3_core::readyToUseGPS(void) const
 {
+    // DR lane never uses GPS — it relies on airspeed dead reckoning
+    if (is_dead_reckoning_lane()) {
+        return false;
+    }
+
     if (frontend->sources.getPosXYSource() != AP_NavEKF_Source::SourceXY::GPS) {
         return false;
     }
@@ -623,6 +634,9 @@ bool NavEKF3_core::readyToUseGPS(void) const
 // return true if the filter to be ready to use the beacon range measurements
 bool NavEKF3_core::readyToUseRangeBeacon(void) const
 {
+    if (is_dead_reckoning_lane()) {
+        return false;
+    }
 #if EK3_FEATURE_BEACON_FUSION
     if (frontend->sources.getPosXYSource() != AP_NavEKF_Source::SourceXY::BEACON) {
         return false;
@@ -637,6 +651,9 @@ bool NavEKF3_core::readyToUseRangeBeacon(void) const
 // return true if the filter is ready to use external nav data
 bool NavEKF3_core::readyToUseExtNav(void) const
 {
+    if (is_dead_reckoning_lane()) {
+        return false;
+    }
 #if EK3_FEATURE_EXTERNAL_NAV
     if (frontend->sources.getPosXYSource() != AP_NavEKF_Source::SourceXY::EXTNAV) {
         return false;

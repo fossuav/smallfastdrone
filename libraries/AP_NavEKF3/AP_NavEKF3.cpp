@@ -644,7 +644,7 @@ const AP_Param::GroupInfo NavEKF3::var_info[] = {
     // @DisplayName: EKF3 Sensor Affinity Options
     // @Description: These options control the affinity between sensor instances and EKF cores
     // @User: Advanced
-    // @Bitmask: 0:EnableGPSAffinity,1:EnableBaroAffinity,2:EnableCompassAffinity,3:EnableAirspeedAffinity
+    // @Bitmask: 0:EnableGPSAffinity,1:EnableBaroAffinity,2:EnableCompassAffinity,3:EnableAirspeedAffinity,4:EnableDRLane
     // @RebootRequired: True
 
     AP_GROUPINFO("AFFINITY", 62, NavEKF3, _affinity, 0),

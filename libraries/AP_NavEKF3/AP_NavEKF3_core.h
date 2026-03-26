@@ -1632,7 +1632,11 @@ private:
         EKF_AFFINITY_BARO = (1U<<1),
         EKF_AFFINITY_MAG  = (1U<<2),
         EKF_AFFINITY_ARSP = (1U<<3),
+        EKF_AFFINITY_DR   = (1U<<4),  // last lane uses dead reckoning (no GPS)
     };
+
+    // return true if this core is the dead reckoning lane
+    bool is_dead_reckoning_lane(void) const;
 
     // update selected_sensors for this core
     void update_sensor_selection(void);
