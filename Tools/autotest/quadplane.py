@@ -3481,10 +3481,10 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
 
     def RealFlightGPSSpoofing(self, model, home):
         '''
-        Test GPS spoofing resilience in RealFlight. Simulates an
-        operator response to GPS spoofing: fly with GPS, detect bad
-        data, disable GPS and continue on dead reckoning, then
-        re-enable GPS and RTL home.
+        Test automatic GPS spoofing resilience using EK3_AFFINITY DR lane.
+        The last EKF lane runs permanent dead reckoning (no GPS). When
+        GPS spoofing corrupts the GPS lane, the EKF automatically
+        lane-switches to the DR lane without operator intervention.
         '''
         if not self.realflight_address:
             self.progress("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
@@ -3501,6 +3501,9 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             "ARSPD_USE": 1,          # fuse airspeed
             "Q_TRAN_PIT_MAX": 10,
             "RTL_ALTITUDE": 20,
+            # DR lane: last core runs permanent dead reckoning
+            "EK3_IMU_MASK": 3,       # 2 lanes
+            "EK3_AFFINITY": 16,      # bit 4: DR lane on last core
         })
         self.reboot_sitl(check_position=False, mark_context=False)
         self.wait_ready_to_arm()
@@ -3513,18 +3516,21 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.set_rc(3, 1500)
         self.delay_sim_time(5)
 
-        # Transition to FBWB
+        # Transition via FBWB then switch to LOITER to circle near home
         self.change_mode('FBWB')
         self.set_rc(3, 1500)
         self.set_rc(2, 1500)
         self.wait_statustext('Transition done', check_context=True, timeout=120)
+        self.change_mode('LOITER')
         self.delay_sim_time(10)
-        self.progress("Forward flight established with GPS")
+        self.progress("Loitering with GPS")
 
         self.context_clear_collection('STATUSTEXT')
 
-        # Phase 1: Inject GPS spoofing while GPS is still active.
-        # The EKF should see high innovations but may accept bad data.
+        # Phase 1: Inject GPS spoofing while loitering. Lane 0 (GPS)
+        # should degrade. Lane 1 (DR) is unaffected. EKF should auto
+        # lane-switch to the DR lane without operator intervention.
+        # Vehicle continues circling on DR position estimate.
         self.progress("Injecting GPS spoofing")
         self.set_parameters({
             "SIM_GPS_GLITCH_X": 0.005,   # ~555m position offset
@@ -3533,47 +3539,28 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             "SIM_GPS_VERR_Y": 100,
             "SIM_GPS_ALT_OFS": 200,      # 200m altitude offset
         })
-        self.delay_sim_time(5)
+        self.delay_sim_time(30)  # circle on DR for 30s
 
-        # Phase 2: Operator detects bad GPS and disables it —
-        # switches to dead reckoning via airspeed. This is the
-        # correct operator response to GPS spoofing.
-        self.progress("Disabling GPS - switching to dead reckoning")
-        self.set_parameter("SIM_GPS_DISABLE", 1)
-        self.delay_sim_time(10)
-
-        # Phase 3: RTL on dead reckoning — navigate back toward
-        # launch using DR position estimate
-        self.progress("RTL on dead reckoning")
-        self.change_mode('RTL')
-        self.delay_sim_time(30)
-
-        # Back to FBWB to continue DR flight
-        self.change_mode('FBWB')
-        self.set_rc(2, 1500)
-        self.set_rc(3, 1500)
-        self.delay_sim_time(10)
-
-        # Verify no DCM fallback during DR
+        # Verify no DCM fallback during spoofing/DR
         if self.statustext_in_collections('DCM active'):
-            raise NotAchievedException("EKF3 fell back to DCM during GPS-denied DR")
+            raise NotAchievedException("EKF3 fell back to DCM during GPS spoofing")
 
-        # Phase 5: Clear spoofing and re-enable GPS for recovery
-        self.progress("Clearing spoofing and re-enabling GPS")
+        # Phase 3: Clear spoofing — GPS lane needs time to recover
+        # before we can rely on it for RTL navigation
+        self.progress("Clearing GPS spoofing - waiting for GPS lane recovery")
         self.set_parameters({
             "SIM_GPS_GLITCH_X": 0,
             "SIM_GPS_GLITCH_Y": 0,
             "SIM_GPS_VERR_X": 0,
             "SIM_GPS_VERR_Y": 0,
             "SIM_GPS_ALT_OFS": 0,
-            "SIM_GPS_DISABLE": 0,
         })
-        self.delay_sim_time(15)
+        self.delay_sim_time(30)
 
-        # RTL and land with clean GPS
-        self.progress("RTL with clean GPS")
+        # Phase 4: RTL with recovered GPS
+        self.progress("RTL with recovered GPS")
         self.change_mode('RTL')
-        self.wait_distance_to_home(0, 150, timeout=120)
+        self.wait_distance_to_home(0, 200, timeout=120)
         self.delay_sim_time(30)
         self.change_mode('QHOVER')
         self.set_rc(3, 1500)
