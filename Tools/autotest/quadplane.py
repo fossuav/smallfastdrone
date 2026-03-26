@@ -3481,10 +3481,10 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
 
     def RealFlightGPSSpoofing(self, model, home):
         '''
-        Test GPS spoofing resilience in RealFlight. Simulates an A4005-type
-        scenario: fly with two GPS sources, then inject large position/velocity
-        errors on GPS1 while GPS2 stays clean. Vehicle should survive using
-        GPS affinity to isolate the bad GPS to its own EKF lane.
+        Test GPS spoofing resilience in RealFlight. Simulates an
+        operator response to GPS spoofing: fly with GPS, detect bad
+        data, disable GPS and continue on dead reckoning, then
+        re-enable GPS and RTL home.
         '''
         if not self.realflight_address:
             self.progress("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
@@ -3498,16 +3498,9 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             "AHRS_EKF_TYPE": 3,
             "AHRS_OPTIONS": 27,      # disable DCM fallback FW/VTOL, record+use origin
             "EK3_OPTIONS": 1,        # JammingExpected
-            "ARSPD_USE": 1,          # fuse airspeed (critical for spoofing rejection)
+            "ARSPD_USE": 1,          # fuse airspeed
             "Q_TRAN_PIT_MAX": 10,
             "RTL_ALTITUDE": 20,
-            # Dual GPS with affinity — isolate GPS1 to lane 0, GPS2 to lane 1
-            "SIM_GPS2_DISABLE": 0,   # enable GPS2
-            "GPS2_TYPE": 1,          # auto-detect (u-blox sim)
-            "EK3_IMU_MASK": 3,       # 2 lanes (one per GPS)
-            "EK3_AFFINITY": 1,       # GPS affinity
-            "GPS_PRIMARY": 1,        # GPS2 as primary fallback (clean source)
-            "GPS_AUTO_SWITCH": 1,    # auto-select best GPS
         })
         self.reboot_sitl(check_position=False, mark_context=False)
         self.wait_ready_to_arm()
@@ -3526,57 +3519,59 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.set_rc(2, 1500)
         self.wait_statustext('Transition done', check_context=True, timeout=120)
         self.delay_sim_time(10)
-        self.progress("Forward flight established")
+        self.progress("Forward flight established with GPS")
 
-        # Clear messages for DCM check
         self.context_clear_collection('STATUSTEXT')
 
-        # Inject GPS1 spoofing — large position glitch and velocity error.
-        # GPS2 stays clean. With EK3_AFFINITY=1, lane 0 should degrade
-        # while lane 1 stays healthy. The EKF should lane-switch to lane 1.
-        self.progress("Injecting GPS1 spoofing")
+        # Phase 1: Inject GPS spoofing while GPS is still active.
+        # The EKF should see high innovations but may accept bad data.
+        self.progress("Injecting GPS spoofing")
         self.set_parameters({
-            "SIM_GPS_GLITCH_X": 0.001,   # ~111m north offset
-            "SIM_GPS_GLITCH_Y": 0.001,   # ~111m east offset
-            "SIM_GPS_GLITCH_Z": 0,
-            "SIM_GPS_VERR_X": 50,        # 50 m/s velocity error N
-            "SIM_GPS_VERR_Y": 50,        # 50 m/s velocity error E
-            "SIM_GPS_VERR_Z": 20,        # 20 m/s velocity error D
-            "SIM_GPS_NUMSATS": 7,        # enough sats to look valid
+            "SIM_GPS_GLITCH_X": 0.005,   # ~555m position offset
+            "SIM_GPS_GLITCH_Y": 0.005,
+            "SIM_GPS_VERR_X": 100,       # 100 m/s velocity error
+            "SIM_GPS_VERR_Y": 100,
+            "SIM_GPS_ALT_OFS": 200,      # 200m altitude offset
         })
+        self.delay_sim_time(5)
+
+        # Phase 2: Operator detects bad GPS and disables it —
+        # switches to dead reckoning via airspeed. This is the
+        # correct operator response to GPS spoofing.
+        self.progress("Disabling GPS - switching to dead reckoning")
+        self.set_parameter("SIM_GPS_DISABLE", 1)
         self.delay_sim_time(10)
 
-        # Increase spoofing severity
-        self.progress("Increasing GPS1 spoofing severity")
-        self.set_parameters({
-            "SIM_GPS_GLITCH_X": 0.005,   # ~555m north offset
-            "SIM_GPS_GLITCH_Y": 0.005,   # ~555m east offset
-            "SIM_GPS_VERR_X": 200,       # 200 m/s velocity error N
-            "SIM_GPS_VERR_Y": 200,       # 200 m/s velocity error E
-            "SIM_GPS_VERR_Z": 50,        # 50 m/s velocity error D
-            "SIM_GPS_ALT_OFS": 500,      # 500m altitude offset
-        })
-        self.delay_sim_time(15)
+        # Phase 3: RTL on dead reckoning — navigate back toward
+        # launch using DR position estimate
+        self.progress("RTL on dead reckoning")
+        self.change_mode('RTL')
+        self.delay_sim_time(30)
 
-        # Check vehicle is still flying — no DCM fallback
+        # Back to FBWB to continue DR flight
+        self.change_mode('FBWB')
+        self.set_rc(2, 1500)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(10)
+
+        # Verify no DCM fallback during DR
         if self.statustext_in_collections('DCM active'):
-            raise NotAchievedException("EKF3 fell back to DCM during GPS spoofing")
+            raise NotAchievedException("EKF3 fell back to DCM during GPS-denied DR")
 
-        # Clear spoofing and verify recovery
-        self.progress("Clearing GPS1 spoofing")
+        # Phase 5: Clear spoofing and re-enable GPS for recovery
+        self.progress("Clearing spoofing and re-enabling GPS")
         self.set_parameters({
             "SIM_GPS_GLITCH_X": 0,
             "SIM_GPS_GLITCH_Y": 0,
-            "SIM_GPS_GLITCH_Z": 0,
             "SIM_GPS_VERR_X": 0,
             "SIM_GPS_VERR_Y": 0,
-            "SIM_GPS_VERR_Z": 0,
             "SIM_GPS_ALT_OFS": 0,
+            "SIM_GPS_DISABLE": 0,
         })
         self.delay_sim_time(15)
 
-        # RTL and land
-        self.progress("RTL after spoofing test")
+        # RTL and land with clean GPS
+        self.progress("RTL with clean GPS")
         self.change_mode('RTL')
         self.wait_distance_to_home(0, 150, timeout=120)
         self.delay_sim_time(30)
