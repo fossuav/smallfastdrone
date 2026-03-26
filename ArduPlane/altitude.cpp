@@ -196,10 +196,17 @@ float Plane::relative_ground_altitude(enum RangeFinderUse use_rangefinder)
 void Plane::set_target_altitude_current(void)
 {
     // record altitude above sea level at the current time as our
-    // target altitude
+    // target altitude. Use EKF origin + relative position when
+    // available as current_loc.alt may be stale in GPS-denied flight
     float posD;
-    if (ahrs.get_relative_position_D_origin(posD)) {
-        target_altitude.amsl_cm = - (int32_t)(100.0 * (double)posD);
+    Location origin;
+    if (ahrs.get_relative_position_D_origin(posD) && ahrs.get_origin(origin)) {
+        const int32_t height_above_origin_cm = static_cast<int32_t>(-posD * 100.0f);
+        // use true AMSL altitude — relative_target_altitude_cm()
+        // will subtract home.alt to get the relative value
+        target_altitude.amsl_cm = origin.alt + height_above_origin_cm;
+    } else {
+        target_altitude.amsl_cm = current_loc.alt;
     }
 
     // reset any glide slope offset
