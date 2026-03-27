@@ -3877,23 +3877,27 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         while src_idx < len(source_changes) and source_changes[src_idx][0] <= first_fw_time:
             src_idx += 1
 
-        # Replay loop
-        replay_start = self.get_sim_time()
+        # Feed RC values through the existing RC queue (which the RC
+        # thread sends via UDP at 20Hz). Use rc_queue.put() without
+        # the blocking MAVLink confirmation that set_rc_from_map does.
+        # Use wallclock timing for real-time replay.
+        import time
+        replay_start_wall = time.time()
         last_progress = 0
 
         while rc_idx < len(rc_inputs):
             log_time = rc_inputs[rc_idx][0] - first_fw_time
-            sim_time = self.get_sim_time() - replay_start
+            wall_elapsed = time.time() - replay_start_wall
 
             if disarm_time and rc_inputs[rc_idx][0] > disarm_time:
                 break
 
-            # Wait for timing
-            if sim_time < log_time:
-                self.delay_sim_time(min(log_time - sim_time, 0.1))
+            # Wait for timing using wallclock
+            if wall_elapsed < log_time:
+                time.sleep(min(log_time - wall_elapsed, 0.01))
                 continue
 
-            # Apply mode changes
+            # Apply mode changes (rare, MAVLink is fine)
             while mode_idx < len(mode_changes) and mode_changes[mode_idx][0] <= rc_inputs[rc_idx][0]:
                 mn = mode_changes[mode_idx][1]
                 if mn in PLANE_MODES:
@@ -3901,21 +3905,22 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
                     self.change_mode(PLANE_MODES[mn])
                 mode_idx += 1
 
-            # Apply source set changes
+            # Apply source set changes (rare)
             while src_idx < len(source_changes) and source_changes[src_idx][0] <= rc_inputs[rc_idx][0]:
                 src = source_changes[src_idx][1]
                 self.progress(f"Replay +{source_changes[src_idx][0] - first_fw_time:.0f}s: source set {src}")
                 self.set_parameter("SIM_GPS_DISABLE", 1 if src >= 2 else 0)
                 src_idx += 1
 
-            # Apply stick inputs only (ch 1-4) in one call.
-            # Skip ahead to latest sample at current sim time to
-            # avoid falling behind (set_rc blocks for confirmation).
+            # Skip to latest RC sample at current time
             while (rc_idx + 1 < len(rc_inputs) and
-                   rc_inputs[rc_idx + 1][0] - first_fw_time <= sim_time):
+                   rc_inputs[rc_idx + 1][0] - first_fw_time <= wall_elapsed):
                 rc_idx += 1
+
+            # Put stick values on the RC queue — the RC thread
+            # will send them via UDP on its next 20Hz cycle
             _, c1, c2, c3, c4 = rc_inputs[rc_idx]
-            self.set_rc_from_map({1: c1, 2: c2, 3: c3, 4: c4})
+            self.rc_queue.put({1: c1, 2: c2, 3: c3, 4: c4})
             rc_idx += 1
 
             if log_time - last_progress > 10:
