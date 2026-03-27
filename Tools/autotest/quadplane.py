@@ -3850,44 +3850,97 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.reboot_sitl(check_position=False, mark_context=False)
         self.wait_ready_to_arm()
 
-        # Standard takeoff
+        # Find how long the source took from arm to transition done,
+        # so we can match the timeline for video sync.
+        src_transition_done = None
+        for t, _, _ in [(tc, None, None) for tc in []]:
+            pass
+        # Search the parsed messages for transition done time
+        log_td = replay_mavutil.mavlink_connection(logfile)
+        log_td_start = None
+        src_arm = None
+        src_tdone = None
+        while True:
+            m = log_td.recv_match(type='MSG', blocking=False)
+            if m is None:
+                break
+            t = m._timestamp
+            if log_td_start is None:
+                log_td_start = t
+            t_s = t - log_td_start
+            if 'Throttle armed' in m.Message and src_arm is None:
+                src_arm = t_s
+            elif ('Transition done' in m.Message or 'Transition FW done' in m.Message) and src_arm:
+                src_tdone = t_s
+                break
+        src_arm_to_tdone = (src_tdone - src_arm) if (src_arm and src_tdone) else 45.0
+        self.progress(f"Source arm-to-transition: {src_arm_to_tdone:.1f}s")
+
+        # Video sync. The video runs ~0.8% slower than the log
+        # (measured from GPS coordinate matching). The base offset
+        # between video arm and log arm is ~1.1s (video is ahead).
+        # Cue the video to 1s before the THROTTLE ARMED frame and
+        # press play at PLAY!. The time warp factor corrects for
+        # the video's slightly slower playback rate.
+        import time
+        video_time_warp = 1.008  # video is 0.8% slower than log
+        video_arm_lead = 1.1    # video arm is 1.1s ahead of log
+
+        self.progress("=== VIDEO SYNC ===")
+        self.progress("Cue video to 1s BEFORE the THROTTLE ARMED frame.")
+        self.progress("Press play when countdown reaches PLAY!")
+        time.sleep(5)
+        for i in range(5, 0, -1):
+            self.progress(f"  {i}...")
+            time.sleep(1)
+        self.progress("  PLAY!")
+
+        # Start wallclock timer — video is now playing from 1s before arm
+        arm_wall = time.time() + video_arm_lead
+
+        # Arm and takeoff
         self.change_mode('QHOVER')
         self.arm_vehicle()
         self.set_rc(3, 2000)
         self.wait_altitude(15, 30, relative=True, timeout=120)
         self.set_rc(3, 1500)
-        self.delay_sim_time(2)
+
+        # Wait until the right wallclock moment to start transition
+        titan_transition_time = 10.0
+        target_transition_start = src_arm_to_tdone - titan_transition_time
+        arm_elapsed = time.time() - arm_wall
+        if arm_elapsed < target_transition_start:
+            wait = target_transition_start - arm_elapsed
+            self.progress(f"Waiting {wait:.0f}s to sync transition timing")
+            time.sleep(wait)
 
         # Transition to first FW mode
         self.change_mode(PLANE_MODES[first_fw_mode])
         self.set_rc(3, 1500)
         self.set_rc(2, 1500)
         if first_fw_mode in (5, 6):
-            self.wait_statustext('Transition', timeout=120)
-            self.delay_sim_time(5)
+            self.wait_statustext('Transition done', timeout=120)
 
-        # Skip RC/mode/source data before first FW time
+        # Start RC replay from arm time in the source log, not from
+        # first_fw_time. Skip to current wallclock position so we
+        # pick up from where we are in the timeline.
         rc_idx = 0
-        while rc_idx < len(rc_inputs) and rc_inputs[rc_idx][0] < first_fw_time:
+        while rc_idx < len(rc_inputs) and rc_inputs[rc_idx][0] < arm_time:
             rc_idx += 1
         mode_idx = 0
-        while mode_idx < len(mode_changes) and mode_changes[mode_idx][0] <= first_fw_time:
+        while mode_idx < len(mode_changes) and mode_changes[mode_idx][0] <= arm_time:
             mode_idx += 1
         src_idx = 0
-        while src_idx < len(source_changes) and source_changes[src_idx][0] <= first_fw_time:
+        while src_idx < len(source_changes) and source_changes[src_idx][0] <= arm_time:
             src_idx += 1
 
-        # Feed RC values through the existing RC queue (which the RC
-        # thread sends via UDP at 20Hz). Use rc_queue.put() without
-        # the blocking MAVLink confirmation that set_rc_from_map does.
-        # Use wallclock timing for real-time replay.
-        import time
-        replay_start_wall = time.time()
+        # Replay loop — all timing relative to arm in both source and wall
         last_progress = 0
 
         while rc_idx < len(rc_inputs):
-            log_time = rc_inputs[rc_idx][0] - first_fw_time
-            wall_elapsed = time.time() - replay_start_wall
+            log_time = rc_inputs[rc_idx][0] - arm_time  # time since arm in source
+            # Apply time warp: video runs slightly slower than log
+            wall_elapsed = (time.time() - arm_wall) / video_time_warp
 
             if disarm_time and rc_inputs[rc_idx][0] > disarm_time:
                 break
@@ -3901,20 +3954,20 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             while mode_idx < len(mode_changes) and mode_changes[mode_idx][0] <= rc_inputs[rc_idx][0]:
                 mn = mode_changes[mode_idx][1]
                 if mn in PLANE_MODES:
-                    self.progress(f"Replay +{mode_changes[mode_idx][0] - first_fw_time:.0f}s: mode {PLANE_MODES[mn]}")
+                    self.progress(f"Replay +{mode_changes[mode_idx][0] - arm_time:.0f}s: mode {PLANE_MODES[mn]}")
                     self.change_mode(PLANE_MODES[mn])
                 mode_idx += 1
 
             # Apply source set changes (rare)
             while src_idx < len(source_changes) and source_changes[src_idx][0] <= rc_inputs[rc_idx][0]:
                 src = source_changes[src_idx][1]
-                self.progress(f"Replay +{source_changes[src_idx][0] - first_fw_time:.0f}s: source set {src}")
+                self.progress(f"Replay +{source_changes[src_idx][0] - arm_time:.0f}s: source set {src}")
                 self.set_parameter("SIM_GPS_DISABLE", 1 if src >= 2 else 0)
                 src_idx += 1
 
-            # Skip to latest RC sample at current time
+            # Skip to latest RC sample at current wallclock time
             while (rc_idx + 1 < len(rc_inputs) and
-                   rc_inputs[rc_idx + 1][0] - first_fw_time <= wall_elapsed):
+                   rc_inputs[rc_idx + 1][0] - arm_time <= wall_elapsed):
                 rc_idx += 1
 
             # Put stick values on the RC queue — the RC thread
@@ -3924,7 +3977,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             rc_idx += 1
 
             if log_time - last_progress > 10:
-                self.progress(f"Replay: {log_time:.0f}s / {(disarm_time or rc_inputs[-1][0]) - first_fw_time:.0f}s")
+                self.progress(f"Replay: {log_time:.0f}s / {(disarm_time or rc_inputs[-1][0]) - arm_time:.0f}s")
                 last_progress = log_time
 
         self.progress("Replay complete")
