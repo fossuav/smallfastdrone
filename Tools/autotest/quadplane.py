@@ -3822,10 +3822,23 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             replay_params[m.Name] = m.Value
 
         params_to_set = {}
+        # Copy EKF/nav configuration
         for p in ['AHRS_EKF_TYPE', 'AHRS_OPTIONS', 'EK3_OPTIONS',
                    'EK3_SRC1_POSXY', 'EK3_SRC1_VELXY', 'EK3_SRC2_POSXY',
                    'EK3_SRC2_VELXY', 'ARSPD_USE', 'Q_TRAN_PIT_MAX',
                    'RTL_ALTITUDE']:
+            if p in replay_params:
+                params_to_set[p] = replay_params[p]
+        # Copy flight dynamics params so the replay vehicle
+        # responds similarly to the same stick inputs
+        for p in ['FBWB_CLIMB_RATE', 'AIRSPEED_CRUISE', 'AIRSPEED_MIN',
+                   'AIRSPEED_MAX', 'TRIM_THROTTLE', 'THROTTLE_NUDGE',
+                   'TECS_CLMB_MAX', 'TECS_SINK_MAX', 'TECS_SINK_MIN',
+                   'TECS_PITCH_MAX', 'TECS_RLL2THR',
+                   'PTCH_LIM_MIN_DEG', 'PTCH_TRIM_DEG',
+                   'NAVL1_PERIOD', 'WP_LOITER_RAD', 'WP_RADIUS',
+                   'RC1_MIN', 'RC1_MAX', 'RC1_TRIM',
+                   'RC2_MIN', 'RC2_MAX', 'RC2_TRIM']:
             if p in replay_params:
                 params_to_set[p] = replay_params[p]
 
