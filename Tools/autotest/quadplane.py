@@ -3709,6 +3709,210 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.change_mode('QLAND')
         self.wait_disarmed(timeout=120)
 
+    def RealFlightReplay(self, model, home):
+        '''
+        Replay a flight log in RealFlight. Extracts RC stick inputs,
+        mode changes, source set switches, and wind from the log,
+        then replays them to visualise the flight in 3D.
+
+        Takeoff is handled independently (different vehicle dynamics).
+        RC channels 1-4 (sticks) are replayed; channels 5+ (mode
+        switches) are not. Mode changes come from the log MODE
+        messages and source switches from statustext messages.
+
+        Specify log file with --replay-log <path>
+        '''
+        if not self.realflight_address:
+            self.progress("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+            return
+
+        logfile = self.replay_log
+        if logfile is None:
+            self.progress("Specify a log file with --replay-log to run this test")
+            return
+
+        if not os.path.exists(logfile):
+            raise NotAchievedException(f"Log file not found: {logfile}")
+
+        from pymavlink import mavutil as replay_mavutil
+        import math
+
+        PLANE_MODES = {
+            0: 'MANUAL', 5: 'FBWA', 6: 'FBWB', 11: 'RTL', 12: 'LOITER',
+            15: 'GUIDED', 17: 'QSTABILIZE', 18: 'QHOVER', 19: 'QLOITER',
+            20: 'QLAND', 21: 'QRTL',
+        }
+
+        # Parse the log file
+        self.progress(f"Parsing log: {logfile}")
+        log = replay_mavutil.mavlink_connection(logfile)
+        log_start = None
+
+        rc_inputs = []     # (time_s, c1, c2, c3, c4)
+        mode_changes = []  # (time_s, mode_num)
+        source_changes = []  # (time_s, source_set)
+        wind_vn = 0.0
+        wind_ve = 0.0
+        arm_time = None
+        disarm_time = None
+
+        while True:
+            m = log.recv_match(type=['RCIN', 'MODE', 'XKF2', 'MSG'], blocking=False)
+            if m is None:
+                break
+            t = m._timestamp
+            if log_start is None:
+                log_start = t
+            t_s = t - log_start
+
+            if m.get_type() == 'RCIN':
+                rc_inputs.append((t_s, m.C1, m.C2, m.C3, m.C4))
+            elif m.get_type() == 'MODE':
+                mode_changes.append((t_s, m.ModeNum))
+            elif m.get_type() == 'XKF2' and m.C == 0:
+                wspd = math.sqrt(m.VWN**2 + m.VWE**2)
+                if wspd > 0.5:
+                    wind_vn = m.VWN
+                    wind_ve = m.VWE
+            elif m.get_type() == 'MSG':
+                if 'Throttle armed' in m.Message:
+                    arm_time = t_s
+                elif 'Throttle disarmed' in m.Message:
+                    disarm_time = t_s
+                elif 'Using EKF Source Set' in m.Message:
+                    try:
+                        src_set = int(m.Message.split()[-1])
+                        source_changes.append((t_s, src_set))
+                    except ValueError:
+                        pass
+
+        if arm_time is None or not rc_inputs:
+            raise NotAchievedException("Log has no arm event or RC inputs")
+
+        wind_spd = math.sqrt(wind_vn**2 + wind_ve**2)
+        wind_dir = math.degrees(math.atan2(-wind_ve, -wind_vn))
+        if wind_dir < 0:
+            wind_dir += 360
+
+        # Find first FW mode after arm
+        first_fw_time = None
+        first_fw_mode = None
+        for t, mn in mode_changes:
+            if t > arm_time and mn in (5, 6, 11, 12, 15):
+                first_fw_time = t
+                first_fw_mode = mn
+                break
+
+        if first_fw_time is None:
+            raise NotAchievedException("No forward flight mode found after arm in log")
+
+        self.progress(f"Log: {len(rc_inputs)} RC, {len(mode_changes)} modes, {len(source_changes)} source switches")
+        self.progress(f"Arm={arm_time:.0f}s, FW={first_fw_time:.0f}s, disarm={disarm_time:.0f}s")
+        self.progress(f"Wind: {wind_spd:.1f} m/s from {wind_dir:.0f} deg")
+
+        # Set up RealFlight with params from the log
+        self.setup_RealFlight_vehicle(model, home)
+
+        log2 = replay_mavutil.mavlink_connection(logfile)
+        replay_params = {}
+        while True:
+            m = log2.recv_match(type='PARM', blocking=False)
+            if m is None:
+                break
+            replay_params[m.Name] = m.Value
+
+        params_to_set = {}
+        for p in ['AHRS_EKF_TYPE', 'AHRS_OPTIONS', 'EK3_OPTIONS',
+                   'EK3_SRC1_POSXY', 'EK3_SRC1_VELXY', 'EK3_SRC2_POSXY',
+                   'EK3_SRC2_VELXY', 'ARSPD_USE', 'Q_TRAN_PIT_MAX',
+                   'RTL_ALTITUDE']:
+            if p in replay_params:
+                params_to_set[p] = replay_params[p]
+
+        params_to_set["LOG_BITMASK"] = 0x10FFFF
+        params_to_set["SIM_WIND_SPD"] = wind_spd
+        params_to_set["SIM_WIND_DIR"] = wind_dir
+
+        self.set_parameters(params_to_set)
+        self.reboot_sitl(check_position=False, mark_context=False)
+        self.wait_ready_to_arm()
+
+        # Standard takeoff
+        self.change_mode('QHOVER')
+        self.arm_vehicle()
+        self.set_rc(3, 2000)
+        self.wait_altitude(15, 30, relative=True, timeout=120)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(2)
+
+        # Transition to first FW mode
+        self.change_mode(PLANE_MODES[first_fw_mode])
+        self.set_rc(3, 1500)
+        self.set_rc(2, 1500)
+        if first_fw_mode in (5, 6):
+            self.wait_statustext('Transition', timeout=120)
+            self.delay_sim_time(5)
+
+        # Skip RC/mode/source data before first FW time
+        rc_idx = 0
+        while rc_idx < len(rc_inputs) and rc_inputs[rc_idx][0] < first_fw_time:
+            rc_idx += 1
+        mode_idx = 0
+        while mode_idx < len(mode_changes) and mode_changes[mode_idx][0] <= first_fw_time:
+            mode_idx += 1
+        src_idx = 0
+        while src_idx < len(source_changes) and source_changes[src_idx][0] <= first_fw_time:
+            src_idx += 1
+
+        # Replay loop
+        replay_start = self.get_sim_time()
+        last_progress = 0
+
+        while rc_idx < len(rc_inputs):
+            log_time = rc_inputs[rc_idx][0] - first_fw_time
+            sim_time = self.get_sim_time() - replay_start
+
+            if disarm_time and rc_inputs[rc_idx][0] > disarm_time:
+                break
+
+            # Wait for timing
+            if sim_time < log_time:
+                self.delay_sim_time(min(log_time - sim_time, 0.1))
+                continue
+
+            # Apply mode changes
+            while mode_idx < len(mode_changes) and mode_changes[mode_idx][0] <= rc_inputs[rc_idx][0]:
+                mn = mode_changes[mode_idx][1]
+                if mn in PLANE_MODES:
+                    self.progress(f"Replay +{mode_changes[mode_idx][0] - first_fw_time:.0f}s: mode {PLANE_MODES[mn]}")
+                    self.change_mode(PLANE_MODES[mn])
+                mode_idx += 1
+
+            # Apply source set changes
+            while src_idx < len(source_changes) and source_changes[src_idx][0] <= rc_inputs[rc_idx][0]:
+                src = source_changes[src_idx][1]
+                self.progress(f"Replay +{source_changes[src_idx][0] - first_fw_time:.0f}s: source set {src}")
+                self.set_parameter("SIM_GPS_DISABLE", 1 if src >= 2 else 0)
+                src_idx += 1
+
+            # Apply stick inputs only (ch 1-4) in one call.
+            # Skip ahead to latest sample at current sim time to
+            # avoid falling behind (set_rc blocks for confirmation).
+            while (rc_idx + 1 < len(rc_inputs) and
+                   rc_inputs[rc_idx + 1][0] - first_fw_time <= sim_time):
+                rc_idx += 1
+            _, c1, c2, c3, c4 = rc_inputs[rc_idx]
+            self.set_rc_from_map({1: c1, 2: c2, 3: c3, 4: c4})
+            rc_idx += 1
+
+            if log_time - last_progress > 10:
+                self.progress(f"Replay: {log_time:.0f}s / {(disarm_time or rc_inputs[-1][0]) - first_fw_time:.0f}s")
+                last_progress = log_time
+
+        self.progress("Replay complete")
+        if self.armed():
+            self.disarm_vehicle(force=True)
+
     def tests(self):
         '''return list of all tests'''
 
@@ -3788,6 +3992,10 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             Test(self.RealFlightGPSSpoofing, speedup=1, kwargs={
                 'model': 'realflight-titan-cobra',
                 'home': 'EliField'
+            }),
+            Test(self.RealFlightReplay, speedup=1, kwargs={
+                'model': 'realflight-titan-cobra',
+                'home': 'EliField',
             }),
         ])
         return ret

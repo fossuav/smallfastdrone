@@ -1911,6 +1911,7 @@ class TestSuite(ABC):
                  build_opts={},
                  move_logs_on_test_failure: bool = False,
                  realflight_address=None,
+                 replay_log=None,
                  ):
         if breakpoints is None:
             breakpoints = []
@@ -1985,6 +1986,7 @@ class TestSuite(ABC):
         self.tlog = None
         self.enable_fgview = enable_fgview
         self.realflight_address = realflight_address or os.getenv("REALFLIGHT_IPADDR")
+        self.replay_log = replay_log
 
         self.rc_thread = None
         self.rc_thread_should_quit = False
