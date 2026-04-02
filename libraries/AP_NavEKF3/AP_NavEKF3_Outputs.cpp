@@ -156,16 +156,6 @@ void NavEKF3_core::getRotationBodyToNED(Matrix3f &mat) const
     mat = mat * dal.get_rotation_vehicle_body_to_autopilot_body();
 }
 
-// set Z-axis accelerometer bias in m/s/s (for hover bias learning)
-void NavEKF3_core::setAccelBiasZ(float bias)
-{
-    if (!statesInitialised) {
-        return;
-    }
-    // Convert from m/s/s to delta-velocity units (state uses m/s per dt)
-    stateStruct.accel_bias.z = bias * dtEkfAvg;
-}
-
 // check if accel bias learning should be inhibited
 // combines internal state inhibition with vehicle-requested inhibition
 bool NavEKF3_core::accelBiasLearningInhibited() const
