@@ -73,6 +73,7 @@ void AP_DAL::start_frame(AP_DAL::FrameType frametype)
     _RFRN.takeoff_expected = ahrs.get_takeoff_expected();
     _RFRN.touchdown_expected = ahrs.get_touchdown_expected();
     _RFRN.ahrs_airspeed_sensor_enabled = ahrs.airspeed_sensor_enabled(ahrs.get_active_airspeed_index());
+    _RFRN.hover_z_bias_enabled = ahrs.get_hover_z_bias_enabled();
     _RFRN.available_memory = hal.util->available_memory();
     _RFRN.ahrs_trim = ahrs.get_trim();
 #if AP_OPTICALFLOW_ENABLED
