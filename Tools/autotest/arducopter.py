@@ -11689,6 +11689,74 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_altitude(0.5, 100, relative=True, timeout=10)
         self.do_RTL()
 
+    def TakeoffAttitudeOnly(self):
+        '''takeoff in GUIDED_NOGPS using SET_ATTITUDE_TARGET with a thrust ramp'''
+        max_thrust = 0.75
+        ramp_time = 10.0
+        hold_time = 5.0
+        dt = 0.1
+        max_tilt_deg = 20.0
+        min_alt_m = 5.0
+        level_q = mavextra.euler_to_quat([0, 0, 0])
+
+        def send_level_thrust(thrust):
+            self.mav.mav.set_attitude_target_send(
+                0, # time_boot_ms
+                1, # target sysid
+                1, # target compid
+                0, # bitmask of things to ignore
+                level_q, # attitude (level)
+                0, # roll rate  (rad/s)
+                0, # pitch rate (rad/s)
+                0, # yaw rate   (rad/s)
+                thrust, # thrust, 0 to 1
+            )
+
+        def assert_not_tumbling():
+            m = self.assert_receive_message('ATTITUDE', timeout=5)
+            roll_deg = math.degrees(m.roll)
+            pitch_deg = math.degrees(m.pitch)
+            if abs(roll_deg) > max_tilt_deg or abs(pitch_deg) > max_tilt_deg:
+                raise NotAchievedException(
+                    "Vehicle tumbling: roll=%.1f pitch=%.1f (limit=%.1f)" %
+                    (roll_deg, pitch_deg, max_tilt_deg))
+
+        self.context_push()
+        # disable on-ground auto-disarm so the slow thrust ramp does not trip it
+        self.set_parameter('DISARM_DELAY', 0)
+
+        self.change_mode('GUIDED_NOGPS')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+
+        self.progress("Ramping thrust to %f over %fs" % (max_thrust, ramp_time))
+        tstart = self.get_sim_time()
+        while True:
+            elapsed = self.get_sim_time_cached() - tstart
+            if elapsed >= ramp_time:
+                break
+            send_level_thrust(max_thrust * (elapsed / ramp_time))
+            assert_not_tumbling()
+            self.delay_sim_time(dt)
+
+        self.progress("Holding max thrust for %fs" % hold_time)
+        hold_start = self.get_sim_time()
+        while self.get_sim_time_cached() - hold_start < hold_time:
+            send_level_thrust(max_thrust)
+            assert_not_tumbling()
+            self.delay_sim_time(dt)
+
+        m = self.assert_receive_message('GLOBAL_POSITION_INT')
+        alt_m = m.relative_alt * 0.001
+        self.progress("Reached altitude %.2fm" % alt_m)
+        if alt_m < min_alt_m:
+            raise NotAchievedException(
+                "Did not reach min altitude: got=%.2fm want>=%.2fm" %
+                (alt_m, min_alt_m))
+
+        self.land_and_disarm()
+        self.context_pop()
+
     def AutoRTL(self):
         '''Test Auto RTL mode using do land start and return path start mission items'''
         alt = 50
@@ -12469,6 +12537,7 @@ return update, 1000
             self.CameraLogMessages,
             self.LoiterToGuidedHomeVSOrigin,
             self.GuidedModeThrust,
+            self.TakeoffAttitudeOnly,
             self.CompassMot,
             self.AutoRTL,
             self.EK3_OGN_HGT_MASK_climbing,
