@@ -11576,6 +11576,108 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException("Changed to ALT_HOLD with no altitude estimate")
         self.disarm_vehicle(force=True)
 
+    def BaroDriftClearedAtArm(self):
+        '''Test that arm-time datum reset clears accumulated baro drift'''
+        # Baro drifts from temperature while sitting on the ground.
+        # AP_Arming_Copter::arm() calls ahrs.resetHeightDatum() on
+        # the re-arm path (home set but not locked), which
+        # recalibrates the baro and zeroes the EKF vertical
+        # position state.  This test verifies:
+        #   1. Reported altitude returns near zero post-arm
+        #      (drift cleared by the reset)
+        #   2. The post-reset altitude has no buffer-flush
+        #      transient (Paul's fix in resetHeightDatum)
+        # Two scenarios:
+        #   a. GPS sets home, then GPS is lost (indoor flight)
+        #   b. No GPS ever, origin from AHRS_ORIGIN parameters
+        self.start_subtest("GPS sets home, then GPS lost")
+        self.wait_ready_to_arm()
+
+        # home is now set from GPS. Disable GPS to simulate indoors.
+        self.set_parameters({
+            "SIM_GPS1_ENABLE": 0,
+            "ARMING_SKIPCHK": -1,
+        })
+
+        # wait for EKF to notice GPS is gone
+        self.delay_sim_time(5)
+
+        # simulate temperature baro drift at 0.3 m/s while sitting
+        # on the ground for 30 s (~9 m of drift accumulated)
+        self.set_parameter("SIM_BARO_DRIFT", 0.3)
+        self.delay_sim_time(30)
+        self.set_parameter("SIM_BARO_DRIFT", 0)
+
+        self.change_mode("STABILIZE")
+        self.arm_vehicle()
+
+        # Sample altitude for 2s post-arm.  arm() calls
+        # resetHeightDatum which both zeroes the accumulated drift
+        # and (with Paul's fix) flushes the storedBaro and output
+        # observer buffers so no stale samples are fused as
+        # delayed observations after the reset.
+        arm_tstart = self.get_sim_time()
+        peak_excursion = 0.0
+        while self.get_sim_time() - arm_tstart < 2.0:
+            m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=1)
+            if m is None:
+                continue
+            peak_excursion = max(peak_excursion, abs(m.relative_alt * 0.001))
+        self.progress("Peak altitude excursion over 2s post-arm: %.3f m" % peak_excursion)
+        if peak_excursion > 0.1:
+            raise NotAchievedException(
+                "Post-arm altitude transient exceeds 0.1 m: %.3f m "
+                "(arm-time reset did not clear drift or stale baro "
+                "buffer not flushed)" % peak_excursion)
+
+        self.disarm_vehicle(force=True)
+
+        # Subtest 2: pure indoor scenario with AHRS origin params,
+        # never had GPS. Tests that the fix also works when origin
+        # is set from saved parameters.
+        self.start_subtest("AHRS origin params, no GPS")
+        self.set_parameters({
+            "SIM_GPS1_ENABLE": 0,
+            "AHRS_OPTIONS": 16,     # USE_RECORDED_ORIGIN_FOR_NONGPS
+            "AHRS_ORIGIN_LAT": -35.363261,
+            "AHRS_ORIGIN_LON": 149.165230,
+            "AHRS_ORIGIN_ALT": 584,
+            "ARMING_SKIPCHK": -1,
+        })
+        self.reboot_sitl()
+
+        # wait for the EKF to read AHRS_ORIGIN_* and start fusing baro.
+        # wait_ready_to_arm() needs GPS-derived EKF flags that the
+        # no-GPS / saved-origin path never reaches (even with
+        # ARMING_SKIPCHK=-1), and the EKF emits no statustext for the
+        # saved-origin path on subsequent reboots, so a fixed delay
+        # is the only available wait here.
+        self.delay_sim_time(15)
+
+        # simulate temperature baro drift
+        self.set_parameter("SIM_BARO_DRIFT", 0.3)
+        self.delay_sim_time(30)
+        self.set_parameter("SIM_BARO_DRIFT", 0)
+
+        self.change_mode("STABILIZE")
+        self.arm_vehicle()
+
+        arm_tstart = self.get_sim_time()
+        peak_excursion = 0.0
+        while self.get_sim_time() - arm_tstart < 2.0:
+            m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=1)
+            if m is None:
+                continue
+            peak_excursion = max(peak_excursion, abs(m.relative_alt * 0.001))
+        self.progress("Peak altitude excursion over 2s post-arm: %.3f m" % peak_excursion)
+        if peak_excursion > 0.1:
+            raise NotAchievedException(
+                "Post-arm altitude transient exceeds 0.1 m: %.3f m "
+                "(arm-time reset did not clear drift or stale baro "
+                "buffer not flushed)" % peak_excursion)
+
+        self.disarm_vehicle(force=True)
+
     def EKFSource(self):
         '''Check EKF Source Prearms work'''
         self.wait_ready_to_arm()
@@ -16862,6 +16964,7 @@ return update, 1000
             self.CRSF,
             self.MotorTest,
             self.AltEstimation,
+            self.BaroDriftClearedAtArm,
             self.EKFSource,
             self.EKFSourceSetFailsafe,
             self.GSF,
@@ -16988,8 +17091,186 @@ return update, 1000
             self.PLDNoParameters,
             self.PeriphMultiUARTTunnel,
             self.EKF3SRCPerCore,
+            self.HomeAltResetTest,
+            self.AmslAltPreservedOnRearmAtDifferentElevation,
         ])
         return ret
+
+    def HomeAltResetTest(self):
+        '''fly mission from cliff top to water, land, then RTL to cliff top'''
+        # terrain handler must be running before customise_SITL_commandline so that
+        # TERRAIN_REQUESTs from firmware at KalaupapaCliffs are answered immediately.
+        self.install_terrain_handlers_context()
+        try:
+            # wipe=True clears any stale EEPROM state from a previous failed run;
+            # a prior failure may leave TERRAIN_ENABLE=1, which causes the firmware to
+            # fetch terrain data at boot and block WPNAV parameter responses.
+            self.customise_SITL_commandline(["--home", "KalaupapaCliffs"], wipe=True)
+            # non-terrain params first; TERRAIN_ENABLE last because enabling it causes a
+            # brief firmware pause that drops subsequent PARAM_REQUEST_READ responses
+            self.set_parameters({
+                "AUTO_OPTIONS": 3,
+                "WP_SPD": 10,           # m/s; keeps test duration manageable
+                "WP_SPD_DN": 5,         # m/s
+                "WP_SPD_UP": 5,         # m/s; RTL initial climb from sea level
+                "RTL_ALT_M": 40,        # m above home (cliff top), clears cliff face on return
+                "TERRAIN_ENABLE": 1,
+                "SIM_TERRAIN": 1,
+            })
+            self.wait_ready_to_arm()
+
+            # Explicitly fix home to the current position/altitude before arming so
+            # that waypoints relative to home are computed from the correct location.
+            self.run_cmd(
+                mavutil.mavlink.MAV_CMD_DO_SET_HOME,
+            )
+
+            # read descent rate parameters so checks below are not hard-coded
+            wp_spd_dn = self.get_parameter("WP_SPD_DN")   # high-speed descent (m/s)
+            land_spd_ms = self.get_parameter("LAND_SPD_MS")  # final-approach descent (m/s)
+
+            cruise_alt = 40  # m relative to home (cliff top)
+
+            # Phase 1: take off from cliff top, fly north off the cliff edge, land near sea level.
+            # All waypoint altitudes are relative to home (cliff top).
+            self.start_flying_simple_relhome_mission([
+                (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, cruise_alt),
+                # fly north clear of the cliff edge; still at cruise_alt above cliff top
+                (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 200, 0, cruise_alt),
+                # land on the water; NAV_LAND descends to terrain (~640m below home)
+                (mavutil.mavlink.MAV_CMD_NAV_LAND, 0, 0, 0),
+            ])
+
+            # verify vehicle reaches cruise speed on the outbound leg
+            self.wait_groundspeed(7, 13, timeout=120)
+            # verify high-speed descent phase (above LAND_ALT_LOW_M) at WP_SPD_DN
+            self.wait_climbrate(
+                -wp_spd_dn - 1,
+                -wp_spd_dn + 1,
+                minimum_duration=5,
+                timeout=300,
+            )
+            # verify final low-speed approach (below LAND_ALT_LOW_M) at LAND_SPD_MS
+            self.wait_climbrate(
+                -land_spd_ms - 0.1,
+                -land_spd_ms + 0.1,
+                minimum_duration=5,
+                timeout=120,
+            )
+            # verify vehicle decelerates before landing
+            self.wait_groundspeed(0, 2, minimum_duration=5, timeout=300)
+            self.wait_disarmed(timeout=600)
+
+            # Phase 2: re-arm near sea level and climb to cruise_alt above home (a ~640m
+            # vertical climb at WP_SPD_UP); then switch to RTL to return to cliff top.
+            self.start_flying_simple_relhome_mission([
+                (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, cruise_alt),
+            ])
+
+            # wait for vehicle to reach cruise_alt above home (cliff top + cruise_alt ASL)
+            self.wait_altitude(cruise_alt - 1, cruise_alt + 5, relative=True, timeout=200)
+
+            # RTL_ALT equals cruise_alt, so the vehicle flies directly to the home position
+            self.change_mode("RTL")
+            # verify vehicle reaches cruise speed on the inbound horizontal leg
+            self.wait_groundspeed(7, 13, timeout=120)
+            # verify high-speed descent phase (RTL_ALT_M - LAND_ALT_LOW_M) at WP_SPD_DN
+            # duration is shorter here (~30 m at WP_SPD_DN) so minimum_duration is smaller
+            self.wait_climbrate(
+                -wp_spd_dn - 1,
+                -wp_spd_dn + 1,
+                minimum_duration=2,
+                timeout=300,
+            )
+            # verify final low-speed approach (below LAND_ALT_LOW_M) at LAND_SPD_MS
+            self.wait_climbrate(
+                -land_spd_ms - 0.1,
+                -land_spd_ms + 0.1,
+                minimum_duration=5,
+                timeout=120,
+            )
+            # verify vehicle decelerates on arrival at home
+            self.wait_groundspeed(0, 2, minimum_duration=5, timeout=300)
+            self.wait_rtl_complete(timeout=300)
+        finally:
+            # reset SITL home back to the default location so the framework's
+            # post-test reboot_sitl() location check passes
+            self.customise_SITL_commandline([])
+
+    def AmslAltPreservedOnRearmAtDifferentElevation(self):
+        '''re-arm at different elevation without corrupting AMSL altitude'''
+        # From PR review (rmackay9): pilot arms at base, home auto-set
+        # (not locked); vehicle flies to a higher/lower elevation and
+        # lands there; user creates an AMSL mission; rearm should not
+        # zero the EKF altitude-above-origin, otherwise AMSL-targeted
+        # mission waypoints are flown at the wrong altitude.
+        self.install_terrain_handlers_context()
+        try:
+            # KalaupapaCliffs is a ~500 m tall cliff; a flight off the
+            # top and a landing at sea level gives a large unambiguous
+            # elevation change for the rearm check.
+            self.customise_SITL_commandline(["--home", "KalaupapaCliffs"], wipe=True)
+            self.set_parameters({
+                "AUTO_OPTIONS": 3,
+                "WP_SPD": 10,
+                "WP_SPD_DN": 5,
+                "WP_SPD_UP": 5,
+                "TERRAIN_ENABLE": 1,
+                "SIM_TERRAIN": 1,
+            })
+            self.wait_ready_to_arm()
+
+            # Deliberately do NOT call MAV_CMD_DO_SET_HOME so home
+            # stays auto-set from first arm but unlocked.  That is
+            # the scenario the PR review flagged.
+
+            cliff_alt_amsl_mm = self.assert_receive_message('GLOBAL_POSITION_INT').alt
+            self.progress("Cliff-top AMSL: %.1f m" % (cliff_alt_amsl_mm * 0.001))
+
+            # Phase 1: fly off the cliff edge and land at sea level
+            self.start_flying_simple_relhome_mission([
+                (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 40),
+                (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 200, 0, 40),
+                (mavutil.mavlink.MAV_CMD_NAV_LAND, 0, 0, 0),
+            ])
+            self.wait_disarmed(timeout=600)
+
+            # Capture AMSL altitude reported while disarmed at sea
+            # level.  EKF altitude tracking should already reflect
+            # the elevation drop from the cliff top.
+            pre_rearm_amsl_mm = self.assert_receive_message('GLOBAL_POSITION_INT').alt
+            self.progress("Pre-rearm AMSL: %.1f m" % (pre_rearm_amsl_mm * 0.001))
+            drop_m = (cliff_alt_amsl_mm - pre_rearm_amsl_mm) * 0.001
+            if drop_m < 50.0:
+                raise NotAchievedException(
+                    "Expected >50 m altitude drop cliff-top -> landing, got %.1f m" %
+                    drop_m)
+
+            # Rearm at sea level.  Home is still auto-set at cliff
+            # top and NOT locked, so this goes through the
+            # !home_is_locked() branch of the arming code.  Without
+            # the elevation-change guard the EKF datum gets reset,
+            # zeroing position.z while origin.alt is unchanged, and
+            # the reported AMSL altitude jumps up by the full cliff
+            # height (O(500 m)) -- wrecking AMSL mission targeting.
+            self.arm_vehicle()
+            self.delay_sim_time(2)
+            post_rearm_amsl_mm = self.assert_receive_message('GLOBAL_POSITION_INT').alt
+            self.progress("Post-rearm AMSL: %.1f m" % (post_rearm_amsl_mm * 0.001))
+
+            self.disarm_vehicle(force=True)
+
+            delta_m = abs(post_rearm_amsl_mm - pre_rearm_amsl_mm) * 0.001
+            if delta_m > 10.0:
+                raise NotAchievedException(
+                    "AMSL altitude changed by %.1f m between disarm and rearm "
+                    "(pre=%.1f m, post=%.1f m); EKF datum reset corrupted "
+                    "altitude tracking" %
+                    (delta_m,
+                     pre_rearm_amsl_mm * 0.001,
+                     post_rearm_amsl_mm * 0.001))
+        finally:
+            self.customise_SITL_commandline([])
 
     def testcan(self):
         ret = ([
