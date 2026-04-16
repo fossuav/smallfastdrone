@@ -10971,6 +10971,19 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_statustext("EKF reset ignored: vehicle armed", check_context=True, timeout=10)
         self.set_rc(8, 1000)
 
+        # check vehicle is still near the pre-reset position - if the
+        # EKF origin shifted, the GUIDED position controller would have
+        # commanded a correction and the vehicle would have drifted
+        post_reset_loc = self.mav.location()
+        drift_m = self.get_distance(pre_reset_loc, post_reset_loc)
+        self.progress("Horizontal drift after EKF reset: %.2fm" % drift_m)
+        max_drift_m = 5.0
+        if drift_m > max_drift_m:
+            raise NotAchievedException(
+                "Vehicle drifted %.1fm after EKF reset (max %.1fm) - origin may not be preserved"
+                % (drift_m, max_drift_m)
+            )
+
         self.do_RTL()
 
     def FlyRangeFinderMAVlink(self):
