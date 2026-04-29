@@ -3583,6 +3583,16 @@ ahrs = {}
 ---@return boolean -- true if call was handled successfully
 function ahrs:handle_external_position_estimate(location, accuracy, timestamp_ms) end
 
+-- supply an external wind estimate to the EKF (supported by EKF3). Resets the
+-- wind state and, if dead reckoning, the NE velocity state. Used to seed the
+-- estimator when entering or operating in GPS-denied flight.
+---@param speed number -- horizontal wind speed in m/s (>= 0)
+---@param speed_accuracy number -- 1-sigma wind speed uncertainty in m/s (NaN or <=0 to use internal default)
+---@param direction number -- azimuth in deg from true north that the wind is coming from (0..360)
+---@param direction_accuracy number -- 1-sigma direction uncertainty in deg (NaN or <=0 to use internal default)
+---@return boolean -- true if the wind state was set
+function ahrs:handle_external_wind_estimate(speed, speed_accuracy, direction, direction_accuracy) end
+
 -- desc
 ---@return Quaternion_ud|nil
 function ahrs:get_quaternion() end
