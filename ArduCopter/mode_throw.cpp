@@ -217,6 +217,8 @@ void ModeThrow::run()
 
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+        // ignore motor checks
+        motors->set_spoolup_block(false);
 
         // Keep the attitude controller's internal target tracking the
         // vehicle's actual attitude through the spool-up.  Without this,
