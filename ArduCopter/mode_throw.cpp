@@ -79,12 +79,11 @@ void ModeThrow::run()
         AP_Notify::flags.waiting_for_throw = false;
 
     } else if (stage == Throw_Wait_Throttle_Unlimited &&
-               copter.ins.get_accel().length() > 0.5f * GRAVITY_MSS) {
+               !throw_in_freefall()) {
         // Freefall lost during spool-up — the vehicle is no longer in
         // freefall (e.g. carrier bounce settled, or false trigger from
-        // turbulence).  Throttle is zero during this stage so body-frame
-        // accel is a clean indicator.  Abort back to Detecting and
-        // spool down.
+        // turbulence).  Throttle is zero during this stage so accel is
+        // a clean indicator.  Abort back to Detecting and spool down.
         gcs().send_text(MAV_SEVERITY_WARNING, "Throw: freefall lost, resetting");
         stage = Throw_Detecting;
         drop_confirm_start_ms = 0;
@@ -494,6 +493,30 @@ bool ModeThrow::throw_detected()
 
     // start motors and enter the control mode if we are in continuous freefall
     return throw_condition_confirmed;
+}
+
+bool ModeThrow::throw_in_freefall() const
+{
+    // Spool-up freefall verification.  Body-frame accel is the primary
+    // check: it is EKF/AHRS-independent and reads near zero in genuine
+    // freefall regardless of filter health.  This is the only check
+    // for upward throws and the trustworthy default for drops.
+    const bool body_in_freefall = copter.ins.get_accel().length() < 0.5f * GRAVITY_MSS;
+    if (g2.throw_type != ThrowType::Drop || body_in_freefall) {
+        return body_in_freefall;
+    }
+    // Drop fallback: a fast yaw spin inflates body-frame magnitude
+    // above 0.5g via centripetal force even in genuine freefall, so
+    // the body-only check rejects valid spinning drops (Marmotte5
+    // log4/log6, 2026-05-02).  Earth-frame Z accel reads ~0 in
+    // freefall regardless of spin, but it depends on the AHRS attitude
+    // estimate — if the AHRS is unhealthy we cannot trust it, and fall
+    // back to "not in freefall" (the conservative answer).
+    if (!ahrs.has_status(AP_AHRS::Status::ATTITUDE_VALID)) {
+        return false;
+    }
+    return fabsf(ahrs.get_accel_ef().z) < 0.5f * GRAVITY_MSS
+        && copter.ins.get_gyro().length() > 10.0f;
 }
 
 bool ModeThrow::throw_uprighting_complete() const
