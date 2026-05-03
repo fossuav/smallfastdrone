@@ -17,6 +17,14 @@ void Copter::takeoff_check()
         return;
     }
 
+    // Motors Libary has enabled the spool up block.
+
+    // Immediately clear the spool up block if not landed
+    if (!ap.land_complete) {
+        motors->set_spoolup_block(false);
+        return;
+    }
+
     // Run the common motor checks (called early so it can clear its warning timer when disarmed)
     const bool motor_check_passed = motors_takeoff_check(g2.takeoff_rpm_min, g2.takeoff_rpm_max);
 
