@@ -279,9 +279,14 @@ void ModeThrow::run()
         // Use quaternion attitude controller to find the shortest rotation
         // path to level from any starting orientation — including inverted.
         // The Euler method has singularities near ±90° pitch that produce
-        // suboptimal paths.  Target a level attitude preserving current yaw.
+        // suboptimal paths.  Target a level attitude with yaw set by
+        // THROW_YAW_TYPE (computed once at the freefall transition); when
+        // disabled or unresolvable, hold the vehicle's current yaw.
+        const float target_yaw_rad = throw_target_yaw_valid
+                                     ? throw_target_yaw_rad
+                                     : ahrs.get_yaw_rad();
         Quaternion level_quat;
-        level_quat.from_euler(0.0f, 0.0f, ahrs.get_yaw());
+        level_quat.from_euler(0.0f, 0.0f, target_yaw_rad);
         Vector3f zero_ang_vel;
         attitude_control->input_quaternion(level_quat, zero_ang_vel);
 
@@ -301,19 +306,33 @@ void ModeThrow::run()
         break;
     }
 
-    case Throw_HgtStabilise:
+    case Throw_HgtStabilise: {
 
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-        // call attitude controller
-        attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_rad(0.0f, 0.0f, 0.0f);
+        // Continue commanding the level + target-yaw quaternion so the
+        // attitude controller keeps slewing yaw toward the THROW_YAW_TYPE
+        // target after Uprighting exits.  Uprighting completes as soon
+        // as the vehicle is within ~5° of level, which is immediate on
+        // an upright drop — yaw needs the additional time HgtStabilise
+        // provides to converge.  When no target is configured the
+        // controller holds whatever yaw was current at HgtStabilise
+        // entry, identical to the previous yaw-rate-zero behaviour.
+        const float hs_target_yaw_rad = throw_target_yaw_valid
+                                        ? throw_target_yaw_rad
+                                        : ahrs.get_yaw_rad();
+        Quaternion hs_level_quat;
+        hs_level_quat.from_euler(0.0f, 0.0f, hs_target_yaw_rad);
+        Vector3f hs_zero_ang_vel;
+        attitude_control->input_quaternion(hs_level_quat, hs_zero_ang_vel);
 
         // call height controller
         pos_control->D_set_pos_target_from_climb_rate_ms(0.0f);
         pos_control->D_update_controller();
 
         break;
+    }
 
     case Throw_PosHold:
 
