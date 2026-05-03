@@ -23,6 +23,27 @@ bool ModeThrow::init(bool ignore_checks)
     drop_release_alt_m = 0;
     last_stage_msg_ms = 0;
 
+    // Capture EKF NED velocity for the throw-direction fallback before
+    // SRC_INI switches the source set.  On a carrier the IMU integrator
+    // can't see the inherited carrier velocity (it built up over seconds
+    // of steady flight that the held-still reset zeroes out), so this
+    // sample is the only horizontal-direction signal available for that
+    // case.  Captured here regardless of THROW_YAW_TYPE so the value is
+    // always available; cheap, only consulted later.
+    Vector3f vel_ned_ms;
+    if (ahrs.get_velocity_NED(vel_ned_ms)) {
+        throw_entry_vel_ne_ms = vel_ned_ms.xy();
+        throw_entry_vel_valid = true;
+    } else {
+        throw_entry_vel_ne_ms.zero();
+        throw_entry_vel_valid = false;
+    }
+
+    // Reset the IMU throw-direction integrator state.
+    throw_dir_reset();
+    throw_target_yaw_valid = false;
+    throw_target_yaw_rad = 0.0f;
+
     // Switch EKF source set for the throw phase if configured.
     // During throw/drop the vehicle is tumbling — position and velocity
     // sources (optical flow, GPS) produce garbage.  Switching to a
@@ -64,6 +85,11 @@ void ModeThrow::run()
     Throw_PosHold - the copter is kept at a constant position and height
     */
 
+    // Track throw direction whenever the state machine is in Detecting
+    // (motors off, body accel uncontaminated by thrust).  No-op
+    // otherwise.  Cheap; just integration.
+    throw_dir_update();
+
     if (!motors->armed()) {
         // state machine entry is always from a disarmed state
         stage = Throw_Disarmed;
@@ -77,6 +103,11 @@ void ModeThrow::run()
 
         // Cancel the waiting for throw tone sequence
         AP_Notify::flags.waiting_for_throw = false;
+
+        // Lock in the Uprighting yaw target now, while the IMU
+        // integrator state still reflects the throw motion.  Stashed
+        // for use when Uprighting begins.
+        (void)throw_dir_finalise_target_yaw();
 
     } else if (stage == Throw_Wait_Throttle_Unlimited &&
                !throw_in_freefall()) {
@@ -519,6 +550,170 @@ bool ModeThrow::throw_in_freefall() const
     }
     return fabsf(ahrs.get_accel_ef().z) < 0.5f * GRAVITY_MSS
         && copter.ins.get_gyro().length() > 10.0f;
+}
+
+void ModeThrow::throw_dir_reset()
+{
+    // Reset the IMU throw-direction integrator.  Called from init()
+    // and whenever the vehicle is "held still" during Detecting (body
+    // accel close to gravity, gyro low) — the integration that follows
+    // captures motion since this reset, so the most recent reset is
+    // the one that anchors the velocity vector at release.
+    throw_dir_q.initialise();
+    throw_dir_q_valid = false;
+    throw_dir_vel_ne_ms.zero();
+    throw_dir_last_us = 0;
+}
+
+void ModeThrow::throw_dir_update()
+{
+    // EKF-independent throw-direction integration.  Maintains a body-
+    // to-pseudo-earth quaternion using gyro integration only, starting
+    // from the gravity vector at the most recent stationary sample.
+    // Pseudo-earth is NED-aligned (Z-down) but with arbitrary yaw —
+    // good enough to extract a horizontal velocity vector whose heading
+    // can be anchored to true NED via a single EKF yaw read at release.
+    //
+    // Only runs in Throw_Detecting, so motors are off and body accel
+    // is uncontaminated by motor thrust.
+    if (stage != Throw_Detecting) {
+        return;
+    }
+
+    const Vector3f accel_body_mss = copter.ins.get_accel();
+    const Vector3f gyro_rads = copter.ins.get_gyro();
+    const uint32_t now_us = AP_HAL::micros();
+
+    // Held-still detection: body |accel| close to gravity AND gyro
+    // small.  Both required — a free-falling vehicle has |accel|≈0,
+    // and a centripetal-loaded spinning vehicle has |accel|≈g but
+    // large gyro, neither of which is "stationary".
+    const float accel_err_mss = fabsf(accel_body_mss.length() - GRAVITY_MSS);
+    const bool held_still = (accel_err_mss < 0.2f * GRAVITY_MSS) &&
+                            (gyro_rads.length() < 1.0f);
+
+    if (held_still) {
+        // Reset and re-anchor attitude from current gravity reading.
+        // Pseudo-earth Z is the gravity direction (down); X/Y are
+        // arbitrary — we'll anchor to NED via the EKF yaw at the
+        // freefall transition.  Body specific force at rest is
+        // approximately -gravity_body, so the gravity unit vector in
+        // body frame is -accel/|accel|; roll and pitch are extracted
+        // from it (yaw left at zero).
+        Vector3f gravity_dir_body = -accel_body_mss;
+        if (!gravity_dir_body.is_zero()) {
+            gravity_dir_body.normalize();
+            const float pitch_rad = asinf(constrain_float(-gravity_dir_body.x, -1.0f, 1.0f));
+            const float roll_rad = atan2f(gravity_dir_body.y, gravity_dir_body.z);
+            throw_dir_q.from_euler(roll_rad, pitch_rad, 0.0f);
+            throw_dir_q_valid = true;
+        }
+        throw_dir_vel_ne_ms.zero();
+        throw_dir_last_us = now_us;
+        return;
+    }
+
+    if (!throw_dir_q_valid || throw_dir_last_us == 0) {
+        // Haven't yet seen a stationary sample to anchor from — nothing
+        // meaningful to integrate.  Wait for the operator to hold the
+        // vehicle still briefly before throwing.
+        throw_dir_last_us = now_us;
+        return;
+    }
+
+    // Propagate attitude from gyro and integrate horizontal velocity.
+    const float dt_s = constrain_float((now_us - throw_dir_last_us) * 1.0e-6f, 0.0f, 0.05f);
+    throw_dir_last_us = now_us;
+    if (dt_s <= 0.0f) {
+        return;
+    }
+
+    // Integrate the body-to-pseudo-earth quaternion.
+    throw_dir_q.rotate(gyro_rads * dt_s);
+    throw_dir_q.normalize();
+
+    // Rotate body specific force into pseudo-earth, then add gravity
+    // (NED Z-down: gravity vector is +g in Z) to recover the vehicle's
+    // actual acceleration in pseudo-earth.  Specific force at rest is
+    // (0,0,-g), so a + g = 0 → vehicle isn't accelerating.  In freefall
+    // a = (0,0,+g) → vehicle accelerates downward at g.
+    Matrix3f rot_b_to_pe;
+    throw_dir_q.rotation_matrix(rot_b_to_pe);
+    Vector3f accel_pe_mss = rot_b_to_pe * accel_body_mss;
+    accel_pe_mss.z += GRAVITY_MSS;
+    throw_dir_vel_ne_ms.x += accel_pe_mss.x * dt_s;
+    throw_dir_vel_ne_ms.y += accel_pe_mss.y * dt_s;
+}
+
+bool ModeThrow::throw_dir_finalise_target_yaw()
+{
+    // Called once at the Detecting → Wait_Throttle_Unlimited transition
+    // to lock in the heading the Uprighting stage will target.  Returns
+    // true and sets throw_target_yaw_rad on success; returns false (no
+    // target, hold current yaw) when the operator's THROW_YAW_TYPE is
+    // disabled or no source has a confident horizontal vector.
+    throw_target_yaw_valid = false;
+    throw_target_yaw_rad = 0.0f;
+
+    const ThrowYawType yaw_type = (ThrowYawType)g2.throw_yaw_type.get();
+    if (yaw_type == ThrowYawType::None) {
+        return false;
+    }
+
+    if (yaw_type == ThrowYawType::Absolute) {
+        throw_target_yaw_rad = wrap_PI(radians(g2.throw_yaw_deg.get()));
+        throw_target_yaw_valid = true;
+        return true;
+    }
+
+    // Confidence threshold: below ~1.5 m/s horizontal the heading is
+    // dominated by noise and a yaw target would be a coin flip.  Same
+    // threshold for both sources — the gating purpose is identical.
+    const float min_speed_ms = 1.5f;
+
+    // Source 1: IMU-integrated pseudo-earth velocity.  Anchored to true
+    // NED by adding the EKF yaw at this moment — pseudo-earth was set
+    // up with yaw=0 when last held-still, so body-pe yaw equals the
+    // delta in heading between now and that moment.  EKF body-to-NED
+    // yaw at the held-still moment is effectively (current_ekf_yaw -
+    // pseudo_yaw_drift_since), but we approximate by reading EKF yaw
+    // at finalise time and assume the carrier hasn't yawed wildly
+    // during the brief throw window.
+    float pseudo_heading_rad = 0.0f;
+    bool have_pseudo = false;
+    if (throw_dir_q_valid && throw_dir_vel_ne_ms.length() >= min_speed_ms) {
+        pseudo_heading_rad = atan2f(throw_dir_vel_ne_ms.y, throw_dir_vel_ne_ms.x);
+        have_pseudo = true;
+    }
+
+    // Source 2: EKF NED velocity captured at mode entry.
+    float entry_heading_rad = 0.0f;
+    bool have_entry = false;
+    if (throw_entry_vel_valid && throw_entry_vel_ne_ms.length() >= min_speed_ms) {
+        entry_heading_rad = atan2f(throw_entry_vel_ne_ms.y, throw_entry_vel_ne_ms.x);
+        have_entry = true;
+    }
+
+    float heading_rad = 0.0f;
+    if (have_pseudo) {
+        // Pseudo-earth yaw=0 anchors to the body's NED yaw at the last
+        // held-still sample.  Best available proxy is the current EKF
+        // yaw — close enough across a few hundred ms of throw motion.
+        heading_rad = wrap_PI(ahrs.get_yaw_rad() + pseudo_heading_rad);
+    } else if (have_entry) {
+        heading_rad = entry_heading_rad;
+    } else {
+        // No confident source — silently hold current yaw.
+        return false;
+    }
+
+    if (yaw_type == ThrowYawType::ReverseThrowDirection) {
+        heading_rad = wrap_PI(heading_rad + M_PI);
+    }
+
+    throw_target_yaw_rad = heading_rad;
+    throw_target_yaw_valid = true;
+    return true;
 }
 
 bool ModeThrow::throw_uprighting_complete() const
