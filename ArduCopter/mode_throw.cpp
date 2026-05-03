@@ -23,13 +23,17 @@ bool ModeThrow::init(bool ignore_checks)
     drop_release_alt_m = 0;
     last_stage_msg_ms = 0;
 
-    // Capture EKF NED velocity for the throw-direction fallback before
-    // SRC_INI switches the source set.  On a carrier the IMU integrator
-    // can't see the inherited carrier velocity (it built up over seconds
-    // of steady flight that the held-still reset zeroes out), so this
-    // sample is the only horizontal-direction signal available for that
-    // case.  Captured here regardless of THROW_YAW_TYPE so the value is
-    // always available; cheap, only consulted later.
+    // Capture EKF state for the throw-direction fallback chain before
+    // SRC_INI switches the source set.  On a moving carrier the IMU
+    // integrator can't see the inherited velocity (built up over
+    // seconds of steady flight that the held-still reset zeroes out),
+    // so the entry velocity is the only horizontal-direction signal
+    // available for that case.  When the vehicle is stationary at
+    // entry (hand-held, hovering carrier) entry velocity is also
+    // unhelpful, so we additionally capture entry yaw — that's the
+    // operator/mount-aligned "forward" direction and is always a
+    // reasonable target if no motion signal arrives.  Captured
+    // regardless of THROW_YAW_TYPE; cheap, only consulted later.
     Vector3f vel_ned_ms;
     if (ahrs.get_velocity_NED(vel_ned_ms)) {
         throw_entry_vel_ne_ms = vel_ned_ms.xy();
@@ -37,6 +41,13 @@ bool ModeThrow::init(bool ignore_checks)
     } else {
         throw_entry_vel_ne_ms.zero();
         throw_entry_vel_valid = false;
+    }
+    if (ahrs.has_status(AP_AHRS::Status::ATTITUDE_VALID)) {
+        throw_entry_yaw_rad = ahrs.get_yaw_rad();
+        throw_entry_yaw_valid = true;
+    } else {
+        throw_entry_yaw_rad = 0.0f;
+        throw_entry_yaw_valid = false;
     }
 
     // Reset the IMU throw-direction integrator state.
@@ -561,6 +572,8 @@ void ModeThrow::throw_dir_reset()
     throw_dir_q_valid = false;
     throw_dir_vel_ne_ms.zero();
     throw_dir_last_us = 0;
+    throw_dir_anchor_yaw_valid = false;
+    throw_dir_anchor_yaw_rad = 0.0f;
 }
 
 void ModeThrow::throw_dir_update()
@@ -593,7 +606,9 @@ void ModeThrow::throw_dir_update()
     if (held_still) {
         // Reset and re-anchor attitude from current gravity reading.
         // Pseudo-earth Z is the gravity direction (down); X/Y are
-        // arbitrary — we'll anchor to NED via the EKF yaw at the
+        // arbitrary — body-yaw at this moment maps to pseudo-yaw=0,
+        // so we capture the EKF yaw here and use it as the anchor when
+        // converting the pseudo-earth heading back to NED at the
         // freefall transition.  Body specific force at rest is
         // approximately -gravity_body, so the gravity unit vector in
         // body frame is -accel/|accel|; roll and pitch are extracted
@@ -605,6 +620,12 @@ void ModeThrow::throw_dir_update()
             const float roll_rad = atan2f(gravity_dir_body.y, gravity_dir_body.z);
             throw_dir_q.from_euler(roll_rad, pitch_rad, 0.0f);
             throw_dir_q_valid = true;
+        }
+        if (ahrs.has_status(AP_AHRS::Status::ATTITUDE_VALID)) {
+            throw_dir_anchor_yaw_rad = ahrs.get_yaw_rad();
+            throw_dir_anchor_yaw_valid = true;
+        } else {
+            throw_dir_anchor_yaw_valid = false;
         }
         throw_dir_vel_ne_ms.zero();
         throw_dir_last_us = now_us;
@@ -665,43 +686,46 @@ bool ModeThrow::throw_dir_finalise_target_yaw()
     }
 
     // Confidence threshold: below ~1.5 m/s horizontal the heading is
-    // dominated by noise and a yaw target would be a coin flip.  Same
-    // threshold for both sources — the gating purpose is identical.
+    // dominated by noise and a yaw target would be a coin flip.
     const float min_speed_ms = 1.5f;
 
-    // Source 1: IMU-integrated pseudo-earth velocity.  Anchored to true
-    // NED by adding the EKF yaw at this moment — pseudo-earth was set
-    // up with yaw=0 when last held-still, so body-pe yaw equals the
-    // delta in heading between now and that moment.  EKF body-to-NED
-    // yaw at the held-still moment is effectively (current_ekf_yaw -
-    // pseudo_yaw_drift_since), but we approximate by reading EKF yaw
-    // at finalise time and assume the carrier hasn't yawed wildly
-    // during the brief throw window.
-    float pseudo_heading_rad = 0.0f;
-    bool have_pseudo = false;
-    if (throw_dir_q_valid && throw_dir_vel_ne_ms.length() >= min_speed_ms) {
-        pseudo_heading_rad = atan2f(throw_dir_vel_ne_ms.y, throw_dir_vel_ne_ms.x);
-        have_pseudo = true;
-    }
-
-    // Source 2: EKF NED velocity captured at mode entry.
-    float entry_heading_rad = 0.0f;
-    bool have_entry = false;
-    if (throw_entry_vel_valid && throw_entry_vel_ne_ms.length() >= min_speed_ms) {
-        entry_heading_rad = atan2f(throw_entry_vel_ne_ms.y, throw_entry_vel_ne_ms.x);
-        have_entry = true;
-    }
-
     float heading_rad = 0.0f;
-    if (have_pseudo) {
-        // Pseudo-earth yaw=0 anchors to the body's NED yaw at the last
-        // held-still sample.  Best available proxy is the current EKF
-        // yaw — close enough across a few hundred ms of throw motion.
-        heading_rad = wrap_PI(ahrs.get_yaw_rad() + pseudo_heading_rad);
-    } else if (have_entry) {
-        heading_rad = entry_heading_rad;
-    } else {
-        // No confident source — silently hold current yaw.
+    bool have_heading = false;
+
+    // Source 1: IMU-integrated pseudo-earth velocity.  Pseudo-earth
+    // yaw=0 was anchored to the body's NED yaw at the most recent
+    // held-still sample, captured then as throw_dir_anchor_yaw_rad.
+    // Heading in NED = anchor yaw + pseudo-frame heading.
+    if (throw_dir_q_valid && throw_dir_anchor_yaw_valid &&
+        throw_dir_vel_ne_ms.length() >= min_speed_ms) {
+        const float pseudo_heading_rad = atan2f(throw_dir_vel_ne_ms.y,
+                                                throw_dir_vel_ne_ms.x);
+        heading_rad = wrap_PI(throw_dir_anchor_yaw_rad + pseudo_heading_rad);
+        have_heading = true;
+    }
+
+    // Source 2: EKF NED velocity captured at mode entry.  Useful for
+    // moving-carrier drops where the IMU integrator doesn't see the
+    // inherited carrier velocity.
+    if (!have_heading && throw_entry_vel_valid &&
+        throw_entry_vel_ne_ms.length() >= min_speed_ms) {
+        heading_rad = atan2f(throw_entry_vel_ne_ms.y, throw_entry_vel_ne_ms.x);
+        have_heading = true;
+    }
+
+    // Source 3: EKF yaw captured at mode entry.  Useful for stationary
+    // cases (operator pointing a held vehicle, hovering carrier with
+    // mount-aligned forward direction) where neither motion source
+    // produced a confident vector.  Always preferable to "current yaw"
+    // because the vehicle has been thrown/tumbled since entry.
+    if (!have_heading && throw_entry_yaw_valid) {
+        heading_rad = throw_entry_yaw_rad;
+        have_heading = true;
+    }
+
+    if (!have_heading) {
+        // No source available at all (e.g., AHRS unhealthy at entry
+        // and no motion since).  Silently hold current yaw.
         return false;
     }
 
