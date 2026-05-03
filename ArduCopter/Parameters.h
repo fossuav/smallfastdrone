@@ -508,6 +508,8 @@ public:
     AP_Int8 throw_src_init;
     AP_Float throw_drop_ag;
     AP_Float throw_drop_confirm_time;
+    AP_Enum<ModeThrow::ThrowYawType> throw_yaw_type;
+    AP_Float throw_yaw_deg;
 #endif
 
     // ground effect compensation enable/disable
