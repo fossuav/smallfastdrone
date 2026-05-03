@@ -12875,6 +12875,45 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.disarm_vehicle(force=True)
         self.zero_throttle()
 
+    def ThrowYawAbsolute(self):
+        '''Test that THROW_YAW_TYPE=3 (Absolute) drives the vehicle to face the configured heading after uprighting'''
+        # Pick a target heading well clear of the SITL spawn heading
+        # (270°) and outside the wait_heading default 5° tolerance.
+        target_heading_deg = 90
+        self.set_parameters({
+            "SIM_SHOVE_Z": -10.5,
+            "THROW_TYPE": 1,                         # drop
+            "THROW_NEXTMODE": 5,                     # LOITER
+            "MOT_SPOOL_TIME": 0.5,
+            "THROW_YAW_TYPE": 3,                     # Absolute
+            "THROW_YAW_DEG": target_heading_deg,
+        })
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True, timeout=30)
+        self.wait_mode('LOITER')
+
+        # The Uprighting stage commands a quaternion target with the
+        # absolute heading.  Allow a few seconds for the attitude
+        # controller to converge, then assert the heading is close.
+        self.wait_heading(target_heading_deg, accuracy=10, timeout=15)
+
+        self.set_rc(3, 1000)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=90)
+        self.zero_throttle()
+
     def ThrowDropSourceSwitch(self):
         '''Test EKF source set switch on throw mode completion'''
         self.progress("Testing throw drop with EKF source set switch")
@@ -14057,6 +14096,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.ThrowModeNoGPS,
              self.ThrowDropSourceSwitch,
              self.ThrowSpinDrop,
+             self.ThrowYawAbsolute,
              self.SetpointGlobalVel,
              self.SetpointBadVel,
              self.SplineTerrain,
