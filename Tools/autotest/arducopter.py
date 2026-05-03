@@ -12914,6 +12914,46 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_disarmed(timeout=90)
         self.zero_throttle()
 
+    def ThrowNextModeAcro(self):
+        '''Test that throw mode transitions to ACRO after recovery (regression for nextmode whitelist)'''
+        # ACRO needs no horizontal position and is a manual rate-control
+        # mode, so it's a natural target for hand-throws into pilot
+        # control.  The switch at the bottom of the ModeThrow state
+        # machine has historically only allowed a fixed set of nextmodes;
+        # an unlisted mode falls through to "default: do nothing" and
+        # the vehicle gets stuck in throw PosHold (cf. marmotte/log1
+        # for the same bug class with VALT).
+        self.set_parameters({
+            "SIM_SHOVE_Z": -10.5,
+            "THROW_TYPE": 1,                         # drop
+            "THROW_NEXTMODE": 1,                     # ACRO
+            "MOT_SPOOL_TIME": 0.5,
+        })
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True, timeout=30)
+
+        # Without the whitelist fix the switch falls through and the
+        # vehicle stays in THROW PosHold; with the fix it should be in
+        # ACRO promptly after height stabilisation.
+        self.wait_mode('ACRO', timeout=20)
+
+        self.set_rc(3, 1000)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=90)
+        self.zero_throttle()
+
     def ThrowDropSourceSwitch(self):
         '''Test EKF source set switch on throw mode completion'''
         self.progress("Testing throw drop with EKF source set switch")
@@ -14097,6 +14137,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.ThrowDropSourceSwitch,
              self.ThrowSpinDrop,
              self.ThrowYawAbsolute,
+             self.ThrowNextModeAcro,
              self.SetpointGlobalVel,
              self.SetpointBadVel,
              self.SplineTerrain,
