@@ -1928,16 +1928,25 @@ private:
     uint32_t drop_confirm_start_ms; // system time drop conditions first sustained
     float drop_release_alt_m;       // EKF altitude (z-up, m) when freefall conditions first met
 
-    // Throw direction tracking (THROW_YAW_TYPE).  EKF-independent IMU
-    // integration of body accel through the throw window; the EKF NED
-    // velocity captured at mode entry is the fallback source for
-    // carrier drops where the integrator's "held still" reset zeroes
-    // out the inherited carrier velocity.
-    bool throw_entry_vel_valid;        // true if entry_vel_ne_ms holds a valid sample
-    Vector2f throw_entry_vel_ne_ms;    // NED horizontal velocity at ModeThrow::init()
+    // Throw direction tracking (THROW_YAW_TYPE).  Source hierarchy at
+    // the freefall transition:
+    //   1. IMU integration of body accel through the throw window
+    //      (EKF-independent, captures actual throw motion).
+    //   2. EKF NED velocity at mode entry (covers steady carrier drops
+    //      where the IMU integrator's held-still reset zeroes out the
+    //      inherited carrier velocity).
+    //   3. EKF yaw at mode entry (covers stationary cases — operator
+    //      pointing the vehicle, or hovering carrier with mount-aligned
+    //      forward direction).
+    bool throw_entry_vel_valid;        // EKF NED velocity captured at init()
+    Vector2f throw_entry_vel_ne_ms;
+    bool throw_entry_yaw_valid;        // EKF yaw captured at init()
+    float throw_entry_yaw_rad;
     Quaternion throw_dir_q;            // body-to-pseudo-earth, gyro-propagated
     Vector2f throw_dir_vel_ne_ms;      // pseudo-earth horizontal velocity
     bool throw_dir_q_valid;            // true if q has been initialised from gravity
+    bool throw_dir_anchor_yaw_valid;   // EKF yaw at most recent held-still reset
+    float throw_dir_anchor_yaw_rad;
     uint32_t throw_dir_last_us;        // timestamp of last integration step
     bool throw_target_yaw_valid;       // true if target_yaw_rad is set
     float throw_target_yaw_rad;        // captured at freefall transition for Uprighting
