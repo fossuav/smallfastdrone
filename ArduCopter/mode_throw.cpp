@@ -164,7 +164,8 @@ void ModeThrow::run()
         // determine if the next mode needs horizontal position
         const Mode::Number nextmode = (Mode::Number)g2.throw_nextmode.get();
         const bool nextmode_needs_pos = (nextmode != Mode::Number::STABILIZE &&
-                                         nextmode != Mode::Number::ALT_HOLD);
+                                         nextmode != Mode::Number::ALT_HOLD &&
+                                         nextmode != Mode::Number::ACRO);
         if (have_horiz_pos) {
             gcs().send_text(MAV_SEVERITY_INFO,"Throw height achieved, good position");
             stage = Throw_PosHold;
@@ -204,6 +205,7 @@ void ModeThrow::run()
                 case Mode::Number::LOITER:
                 case Mode::Number::STABILIZE:
                 case Mode::Number::ALT_HOLD:
+                case Mode::Number::ACRO:
 #if MODE_VALT_ENABLED
                 case Mode::Number::VALT:
 #endif
