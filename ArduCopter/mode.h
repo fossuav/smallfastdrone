@@ -1904,6 +1904,9 @@ private:
     bool throw_height_good() const;
     bool throw_velocity_good() const;
     bool throw_attitude_good() const;
+    void throw_do_nextmode_handoff();
+    void throw_apply_yaw_align(const Vector3f& thrust_vector);
+    bool throw_yaw_align_done() const;
 
     // Throw stages
     enum ThrowModeStage {
@@ -1912,7 +1915,7 @@ private:
         Throw_Wait_Throttle_Unlimited,
         Throw_Uprighting,
         Throw_HgtStabilise,
-        Throw_PosHold
+        Throw_PosHold,
     };
 
     ThrowModeStage stage = Throw_Disarmed;
@@ -1927,6 +1930,8 @@ private:
     uint32_t last_stage_msg_ms;       // last time a stage message was sent
     uint32_t drop_confirm_start_ms; // system time drop conditions first sustained
     float drop_release_alt_m;       // EKF altitude (z-up, m) when freefall conditions first met
+    uint32_t yaw_align_start_ms;    // system time YawAlign stage was entered
+    bool yaw_align_locked;          // true once current yaw entered the catch window and absolute target was engaged
 
     // Throw direction tracking (THROW_YAW_TYPE).  Source hierarchy at
     // the freefall transition:
