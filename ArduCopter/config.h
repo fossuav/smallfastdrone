@@ -552,6 +552,18 @@
 #ifndef THROW_VERTICAL_SPEED_MS
 # define THROW_VERTICAL_SPEED_MS  0.5   // minimum vertical speed in m/s for throw/drop detection
 #endif
+#ifndef THROW_YAW_CATCH_WINDOW_DEG
+# define THROW_YAW_CATCH_WINDOW_DEG  30.0f  // yaw error window (deg) within which the absolute heading is engaged
+#endif
+#ifndef THROW_YAW_ALIGN_TIMEOUT_MS
+# define THROW_YAW_ALIGN_TIMEOUT_MS  2500   // ms before yaw alignment hands off regardless of error
+#endif
+#ifndef THROW_YAW_RIDE_THRESH_DEG
+# define THROW_YAW_RIDE_THRESH_DEG  120.0f  // gyro Z threshold (deg/s) above which the spin is ridden (no torque)
+#endif
+#ifndef THROW_YAW_SLEW_GAIN
+# define THROW_YAW_SLEW_GAIN          3.0f  // proportional gain (rad/s per rad of error) in the active slew branch
+#endif
 
 //////////////////////////////////////////////////////////////////////////////
 // Logging control
