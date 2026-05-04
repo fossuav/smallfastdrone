@@ -22,6 +22,8 @@ bool ModeThrow::init(bool ignore_checks)
     drop_confirm_start_ms = 0;
     drop_release_alt_m = 0;
     last_stage_msg_ms = 0;
+    yaw_align_start_ms = 0;
+    yaw_align_locked = false;
 
     // Capture EKF state for the throw-direction fallback chain before
     // SRC_INI switches the source set.  On a moving carrier the IMU
@@ -139,6 +141,8 @@ void ModeThrow::run()
     } else if (stage == Throw_Uprighting && throw_uprighting_complete() && throw_drop_distance_reached()) {
         stage = Throw_HgtStabilise;
         hgt_stabilise_start_ms = AP_HAL::millis();
+        yaw_align_start_ms = hgt_stabilise_start_ms;
+        yaw_align_locked = false;
 
         // initialise the z controller
         pos_control->D_init_controller_no_descent();
@@ -183,39 +187,21 @@ void ModeThrow::run()
 
         // Set the auto_arm status to true to avoid a possible automatic disarm caused by selection of an auto mode with throttle at minimum
         copter.set_auto_armed(true);
-    } else if (stage == Throw_PosHold && (!xy_controller_active || throw_position_good())) {
+    } else if (stage == Throw_PosHold &&
+               (!xy_controller_active || throw_position_good()) &&
+               throw_yaw_align_done()) {
+        // PosHold has settled and yaw alignment is either complete or
+        // has timed out.  Hand off to THROW_NEXTMODE.  Yaw alignment
+        // runs concurrently with HgtStabilise and PosHold (driven by
+        // throw_apply_yaw_align) so we don't pay extra wall-clock time
+        // for it on top of the height/position settle.
         if (!nextmode_attempted) {
-            // Warn if throttle is low — in ALT_HOLD, below mid-stick commands descent
-            if (channel_throttle->get_control_in() < copter.get_throttle_mid() - copter.g.throttle_deadzone) {
-                gcs().send_text(MAV_SEVERITY_WARNING, "Throttle low - losing altitude");
+            const bool yaw_target_active = throw_target_yaw_valid &&
+                                           (ThrowYawType)g2.throw_yaw_type.get() != ThrowYawType::None;
+            if (yaw_target_active && !yaw_align_locked) {
+                gcs().send_text(MAV_SEVERITY_WARNING, "Throw yaw align timeout");
             }
-            // switch EKF source set if configured
-            const int8_t srcset = g2.throw_srcset.get();
-            if (srcset >= 1 && srcset <= 3) {
-                AP::ahrs().set_posvelyaw_source_set(AP_NavEKF_Source::SourceSetSelection(srcset - 1));
-                gcs().send_text(MAV_SEVERITY_INFO, "EKF Source Set %d", srcset);
-            }
-
-            switch ((Mode::Number)g2.throw_nextmode.get()) {
-                case Mode::Number::AUTO:
-                case Mode::Number::GUIDED:
-                case Mode::Number::RTL:
-                case Mode::Number::LAND:
-                case Mode::Number::BRAKE:
-                case Mode::Number::LOITER:
-                case Mode::Number::STABILIZE:
-                case Mode::Number::ALT_HOLD:
-                case Mode::Number::ACRO:
-#if MODE_VALT_ENABLED
-                case Mode::Number::VALT:
-#endif
-                    set_mode((Mode::Number)g2.throw_nextmode.get(), ModeReason::THROW_COMPLETE);
-                    break;
-                default:
-                    // do nothing
-                    break;
-            }
-            nextmode_attempted = true;
+            throw_do_nextmode_handoff();
         }
     }
 
@@ -278,19 +264,17 @@ void ModeThrow::run()
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-        // Use quaternion attitude controller to find the shortest rotation
-        // path to level from any starting orientation — including inverted.
-        // The Euler method has singularities near ±90° pitch that produce
-        // suboptimal paths.  Target a level attitude with yaw set by
-        // THROW_YAW_TYPE (computed once at the freefall transition); when
-        // disabled or unresolvable, hold the vehicle's current yaw.
-        const float target_yaw_rad = throw_target_yaw_valid
-                                     ? throw_target_yaw_rad
-                                     : ahrs.get_yaw_rad();
-        Quaternion level_quat;
-        level_quat.from_euler(0.0f, 0.0f, target_yaw_rad);
-        Vector3f zero_ang_vel;
-        attitude_control->input_quaternion(level_quat, zero_ang_vel);
+        // Level roll/pitch via thrust vector + zero yaw rate target.
+        // Thrust-vector control gives the same shortest-path levelling
+        // from any starting orientation (including inverted) as a
+        // quaternion call.  Holding only yaw rate=0 lets the rate
+        // controller damp residual spin without an absolute yaw target
+        // piling on attitude-error torque — that fight was aggressive
+        // on heavy-spin drops.  THROW_YAW_TYPE is applied during
+        // HgtStabilise and PosHold by throw_apply_yaw_align(), where it
+        // runs concurrently with the height/position settle.
+        const Vector3f thrust_vec_up{0.0f, 0.0f, -1.0f};
+        attitude_control->input_thrust_vector_rate_heading_rads(thrust_vec_up, 0.0f);
 
         // For drops, command zero throttle and let ATC_THR_MIX_MAX
         // (auto-enabled at >30° attitude error) provide differential
@@ -313,21 +297,12 @@ void ModeThrow::run()
         // set motors to full range
         motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
 
-        // Continue commanding the level + target-yaw quaternion so the
-        // attitude controller keeps slewing yaw toward the THROW_YAW_TYPE
-        // target after Uprighting exits.  Uprighting completes as soon
-        // as the vehicle is within ~5° of level, which is immediate on
-        // an upright drop — yaw needs the additional time HgtStabilise
-        // provides to converge.  When no target is configured the
-        // controller holds whatever yaw was current at HgtStabilise
-        // entry, identical to the previous yaw-rate-zero behaviour.
-        const float hs_target_yaw_rad = throw_target_yaw_valid
-                                        ? throw_target_yaw_rad
-                                        : ahrs.get_yaw_rad();
-        Quaternion hs_level_quat;
-        hs_level_quat.from_euler(0.0f, 0.0f, hs_target_yaw_rad);
-        Vector3f hs_zero_ang_vel;
-        attitude_control->input_quaternion(hs_level_quat, hs_zero_ang_vel);
+        // Run yaw alignment concurrently with the height arrest.  Level
+        // is provided via thrust vector; yaw is ridden, slewed, or
+        // locked depending on residual rate and error to target.  When
+        // THROW_YAW_TYPE is None the helper falls back to yaw rate=0.
+        const Vector3f hs_thrust_vec_up{0.0f, 0.0f, -1.0f};
+        throw_apply_yaw_align(hs_thrust_vec_up);
 
         // call height controller
         pos_control->D_set_pos_target_from_climb_rate_ms(0.0f);
@@ -348,11 +323,14 @@ void ModeThrow::run()
             pos_control->input_vel_accel_NE_m(vel_zero, accel_zero);
             pos_control->NE_update_controller();
 
-            // call attitude controller
-            attitude_control->input_thrust_vector_rate_heading_rads(pos_control->get_thrust_vector(), 0.0f);
+            // Yaw alignment continues during PosHold.  Pass the
+            // position controller's thrust vector so position-keeping
+            // tilt is preserved when we lock to absolute yaw.
+            throw_apply_yaw_align(pos_control->get_thrust_vector());
         } else {
             // no horizontal position available, hold level attitude only
-            attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw_rad(0.0f, 0.0f, 0.0f);
+            const Vector3f ph_thrust_vec_up{0.0f, 0.0f, -1.0f};
+            throw_apply_yaw_align(ph_thrust_vec_up);
         }
 
         // call height controller
@@ -842,6 +820,127 @@ bool ModeThrow::throw_position_good() const
 {
     // check that our horizontal position error is within 0.5 m
     return (pos_control->get_pos_error_NE_m() < 0.50);
+}
+
+void ModeThrow::throw_apply_yaw_align(const Vector3f& thrust_vector)
+{
+    // Yaw alignment runs in HgtStabilise and PosHold concurrently with
+    // the height/position settle, so it adds no wall-clock time on the
+    // common path.  Three regimes:
+    //  - No target configured: command yaw rate=0 (legacy damping).
+    //  - Outside the catch window:
+    //      * heavy residual spin (>slew cap): track current gyro_z so
+    //        no torque is applied — natural drag and the rate
+    //        controller's small damping carry yaw toward target.
+    //      * low rate: rate-limited proportional slew toward target.
+    //  - Inside the catch window AND rate manageable: lock to absolute
+    //    target via input_thrust_vector_heading_rad so position-keeping
+    //    tilt (when caller supplies it) is preserved.
+    if (!throw_target_yaw_valid ||
+        (ThrowYawType)g2.throw_yaw_type.get() == ThrowYawType::None) {
+        attitude_control->input_thrust_vector_rate_heading_rads(thrust_vector, 0.0f);
+        return;
+    }
+
+    const float yaw_err_rad = wrap_PI(throw_target_yaw_rad - ahrs.get_yaw_rad());
+    const float gyro_z_rads = ahrs.get_gyro().z;
+    const float catch_window_rad = radians(THROW_YAW_CATCH_WINDOW_DEG);
+    // Slew cap comes from the attitude controller's own slew yaw max
+    // (ATC_RATE_WPY_MAX, optionally further limited by ATC_RATE_Y_MAX),
+    // so a single parameter governs both our commanded rate and the
+    // controller's internal rate limiter.  Bumping ATC_RATE_WPY_MAX
+    // makes the entire approach + lock phase faster.
+    const float slew_cap_rads = attitude_control->get_slew_yaw_max_rads();
+    const float ride_threshold_rads = radians(THROW_YAW_RIDE_THRESH_DEG);
+
+    // Lock the moment yaw enters the catch window.  The lock command
+    // (input_thrust_vector_heading_rad) is rate-limited by the same
+    // get_slew_yaw_max_rads() so the post-lock convergence runs at the
+    // same cap the slew was using.
+    if (!yaw_align_locked && fabsf(yaw_err_rad) <= catch_window_rad) {
+        yaw_align_locked = true;
+        gcs().send_text(MAV_SEVERITY_INFO, "Throw yaw aligned");
+    }
+
+    if (yaw_align_locked) {
+        attitude_control->input_thrust_vector_heading_rad(thrust_vector, throw_target_yaw_rad);
+        return;
+    }
+
+    // Outside the catch window — keep approaching target.  Ride mode is
+    // reserved for genuinely heavy spin where drag decay is meaningful;
+    // a moderate steady spin (below the ride threshold) gets active
+    // decel via the slew path so we don't sit idle waiting for natural
+    // rotation.  The gain keeps the slew cap saturated until the error
+    // drops below slew_cap/gain, so the approach maintains max rate up
+    // to the lock window and decelerates just before lock.
+    float ya_yaw_rate_rads;
+    if (fabsf(gyro_z_rads) > ride_threshold_rads) {
+        ya_yaw_rate_rads = gyro_z_rads;
+    } else {
+        ya_yaw_rate_rads = constrain_float(yaw_err_rad * THROW_YAW_SLEW_GAIN, -slew_cap_rads, slew_cap_rads);
+    }
+    attitude_control->input_thrust_vector_rate_heading_rads(thrust_vector, ya_yaw_rate_rads);
+}
+
+bool ModeThrow::throw_yaw_align_done() const
+{
+    // Permit the PosHold→NEXTMODE handoff as soon as yaw is locked onto
+    // the absolute target.  We do NOT wait for the residual error to
+    // settle below a tight band — once locked, the controller has an
+    // absolute target and the last few degrees converge fine in the
+    // following mode (ACRO: pilot owns it; LOITER: yaw frozen at
+    // current heading; etc.).  Waiting for tight settle adds ~400ms
+    // (log1-5/log2-1 2026-05-04: lock→handoff was 380ms before this
+    // change) without improving alignment quality.  Timeout still
+    // applies as a safety net when we never enter the catch window.
+    if (!throw_target_yaw_valid ||
+        (ThrowYawType)g2.throw_yaw_type.get() == ThrowYawType::None) {
+        return true;
+    }
+    if (yaw_align_locked) {
+        return true;
+    }
+    if (yaw_align_start_ms != 0 &&
+        (AP_HAL::millis() - yaw_align_start_ms) > THROW_YAW_ALIGN_TIMEOUT_MS) {
+        return true;
+    }
+    return false;
+}
+
+void ModeThrow::throw_do_nextmode_handoff()
+{
+    // Final transition to THROW_NEXTMODE shared by the PosHold (no-yaw)
+    // and YawAlign exit paths.  Issues throttle warning, applies the
+    // optional EKF source-set switch, and attempts the mode change.
+    if (channel_throttle->get_control_in() < copter.get_throttle_mid() - copter.g.throttle_deadzone) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "Throttle low - losing altitude");
+    }
+    const int8_t srcset = g2.throw_srcset.get();
+    if (srcset >= 1 && srcset <= 3) {
+        AP::ahrs().set_posvelyaw_source_set(AP_NavEKF_Source::SourceSetSelection(srcset - 1));
+        gcs().send_text(MAV_SEVERITY_INFO, "EKF Source Set %d", srcset);
+    }
+    switch ((Mode::Number)g2.throw_nextmode.get()) {
+        case Mode::Number::AUTO:
+        case Mode::Number::GUIDED:
+        case Mode::Number::RTL:
+        case Mode::Number::LAND:
+        case Mode::Number::BRAKE:
+        case Mode::Number::LOITER:
+        case Mode::Number::STABILIZE:
+        case Mode::Number::ALT_HOLD:
+        case Mode::Number::ACRO:
+#if MODE_VALT_ENABLED
+        case Mode::Number::VALT:
+#endif
+            set_mode((Mode::Number)g2.throw_nextmode.get(), ModeReason::THROW_COMPLETE);
+            break;
+        default:
+            // do nothing
+            break;
+    }
+    nextmode_attempted = true;
 }
 
 #endif
