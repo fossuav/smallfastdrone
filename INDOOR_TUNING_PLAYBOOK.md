@@ -1,6 +1,6 @@
 # Indoor Copter Tuning Playbook
 
-**Version:** 1.0.0
+**Version:** 1.5.0
 **Applies to branch:** `SmallFastDrone-4.7-beta` (verified at `41c83011e2`)
 **Upstream base:** ArduCopter 4.7-beta
 
@@ -47,14 +47,14 @@ both work.
 | `EK3_SRC1_POSXY` | `0` | No absolute horizontal aiding indoors |
 | `EK3_SRC1_VELZ`  | `0` | EKF derives Z-velocity from baro+IMU |
 | `EK3_SRC1_POSZ`  | `1` (Baro) | Baro is the EKF height observation; rangefinder anchors via blending or HAGL |
-| `EK3_RNG_USE_HGT`| `-1` **or** `70` | See §4.1 — `-1` disables blend, `70` keeps rangefinder primary across full indoor envelope |
+| `EK3_RNG_USE_HGT`| typically `8–15` (target: transition altitude near 1 m) | See §4.1. Pick the value that puts `RNG_USE_HGT × RNGFND1_MAX_CM / 100` ≈ 1 m, so the rangefinder anchors through the propwash band (< ~1 m) and baro handles altitudes above. Use `-1` only as a fallback if the rangefinder is unreliable. |
 | `EK3_GND_EFF_DZ` | `-8` (negative mode) | Use \|value\| as baro noise floor variance during ground effect. Strong deweighting (R=64 m², K≈0.008). Documented `@Range: -10 .. 10` |
 | `BARO1_THST_SCALE` | calibrate (§4.3) | Throttle-to-baro pressure compensation, Pa per unit throttle. Documented `@Range: -300 .. 300` but firmware does not clamp; values down to −800 are in use on ducted airframes |
 | `BARO_THST_FILT` | `1.0` Hz | Low-pass on throttle before correction; reduces transients during rapid throttle changes. **Note:** the parameter has no per-instance number — it is `BARO_THST_FILT`, not `BARO1_THST_FILT` |
 | `TKOFF_GNDEFF_ALT` | `5` m | Ground-effect protection altitude (uses HAGL when available). `@Range: 0 .. 5` |
 | `TKOFF_GNDEFF_TMO` | `3.0` s | Minimum ground-effect window post-arm. `@Range: 0 .. 5`; firmware caps at 5 s regardless of stored value |
-| `INS_ACC_VRFB_Z` | `0` initially | Vibration rectification bias on IMU 0 Z axis; let it learn. Per-IMU: `INS_ACC_VRFB_Z`, `INS_ACC2_VRFB_Z`, `INS_ACC3_VRFB_Z`. `@Range: -0.5 .. 0.5` m/s² |
-| `ACC_ZBIAS_LEARN`| `3` (Learn+Use) or `7` (Learn+Use+InhibitOnGround) | Bitmask: bit0=Learn and save on disarm, bit1=Use saved values, bit2=Disable EKF zero-velocity ground learning while disarmed |
+| `INS_ACC_VRFB_Z` | calibrate once, then freeze | Vibration rectification bias on IMU 0 Z axis. Per-IMU: `INS_ACC_VRFB_Z`, `INS_ACC2_VRFB_Z`, `INS_ACC3_VRFB_Z`. `@Range: -0.5 .. 0.5` m/s². See §4.8 for the calibrate-then-freeze workflow |
+| `ACC_ZBIAS_LEARN`| `2` (Use only — steady state) for a calibrated airframe; `3` (Learn+Use) only during the one-time calibration | Bitmask: bit0=Learn and save on disarm, bit1=Use saved values, bit2=Disable EKF zero-velocity ground learning while disarmed. After VRFB has converged, turn learning OFF — VRFB is a hardware property of the airframe, not a per-flight measurement |
 | `EK3_MAG_CAL`    | `7` (GROUND_AND_INFLIGHT) | Learn on ground, freeze through takeoff/climb, resume after yaw alignment |
 | `COMPASS_MOTCT`  | `2` (current) | Motor-current compensation; calibrate per airframe |
 | `RNGFND1_MIN_CM` | as low as the sensor permits (2–3 cm for ToF lasers) | Avoid OutOfRangeLow during low hovers |
@@ -174,11 +174,15 @@ briskly, or use `EK3_RNG_USE_HGT > 0` so the rangefinder anchors PD via the
 HAGL Kalman filter.
 
 **D. Thermal drift during hover** — plot `BARO.Temp` and `BARO.Alt` together.
-A 5–20 °C drop during hover is normal (prop airflow cools the FC) and produces
-0.5–1.5 m of altitude drift over a 1–3 minute hover that **is not** correctable
-by `THST_SCALE` (it is not throttle-correlated). Mitigations: physical
-insulation of the FC, recalibrate `INS_TCAL` properly (§4.8), or fly with
-rangefinder-anchored height.
+A 5–20 °C swing during hover is normal (FC self-heating indoors,
+prop-airflow cooling outdoors) and produces 0.5–1.5 m of altitude drift
+over a 1–3 minute hover that **is not** correctable by `THST_SCALE` (it is
+not throttle-correlated). Confirm via the **bench thermal-drift test
+(§4.11)** — a stationary disarmed warmup will reproduce the drift without
+flight effects, and the same data fits `TCAL_BARO_EXP`. Mitigations:
+fit `TCAL_BARO_EXP` (§4.11), physical insulation of the FC, recalibrate
+`INS_TCAL` properly (§4.7), or fly with rangefinder-anchored height in
+the propwash band (§4.1).
 
 **E. Prop-wash steady-state offset** — at hover, plot `BARO.Alt − RFND.Dist1`
 vs `CTUN.ThO`. A linear, throttle-correlated offset is what `THST_SCALE`
@@ -191,10 +195,11 @@ EKF altitude is itself baro-contaminated, the rangefinder gets locked out
 above the threshold, producing a positive feedback loop. Symptoms: terrain
 offset (`XKF6.HAgl` minus measured RFND) wanders ±1 to ±2 m; flow velocity
 appears 2–4× larger than reality; vehicle leans backward in LOITER as if
-chasing phantom motion. Fix: `EK3_RNG_USE_HGT = -1` (disables blend) or `70`
-(rangefinder is primary across the full indoor envelope). The current
-firmware also routes the GE altitude check through HAGL when available, which
-breaks the secondary feedback loop.
+chasing phantom motion. Fix: a low positive `EK3_RNG_USE_HGT` (~`8–15`,
+giving a transition altitude near 1 m — see §4.1) so the rangefinder
+anchors PD through the propwash band; the AGL-KF-gated switching on
+current firmware makes this safe. `EK3_RNG_USE_HGT = -1` is the
+fallback if the rangefinder is unreliable.
 
 ### 2.3 Attitude oscillation check
 
@@ -253,9 +258,17 @@ Fixes:
   resumes after the first in-flight yaw alignment.
 - `COMPASS_MOTCT = 2` — current-based motor compensation. Calibrate it per
   airframe (Mission Planner: Compass-Mot wizard, current-based).
-- `ATC_ANG_YAW_P` should usually be 4.5–6.0. Defaults near 17 chase compass
-  noise aggressively and produce visible yaw twitchiness. An autotuned value
-  much higher than that is a warning sign on a noisy compass.
+- `ATC_ANG_YAW_P` — typical tuned values for indoor copters sit around
+  10–12, with the firmware's documented `@Range` being 3.0–12.0 for all
+  three axes. Autotune commonly produces values above the documented range
+  (15–25 is not unusual on small indoor airframes). High `ANG_YAW_P` is
+  only a problem **if** there is evidence it's chasing compass noise:
+  visible yaw twitchiness during stick-centred hover, repeated small
+  in-flight yaw realignments, or strong correlation between commanded yaw
+  rate and `MAG` noise. In that specific case — typically `EK3_MAG_CAL=4`
+  with `COMPASS_MOTCT=0` on a magnetically dirty airframe — reducing
+  `ATC_ANG_YAW_P` toward 4.5–6.0 trades yaw stiffness for clean hover
+  feel. Without that evidence, leave it where autotune put it.
 
 ### 2.5 Position / flow check (where present)
 
@@ -341,8 +354,10 @@ so flow velocity computed from rangefinder × angular rate is amplified or
 inverted. The position controller fights phantom velocity by leaning the
 vehicle, which produces real motion in the opposite direction.
 
-Fix: `EK3_RNG_USE_HGT = -1` or `70`. Re-fly and verify XKF6.HAgl ≈ measured
-RFND.
+Fix: set `EK3_RNG_USE_HGT` to a low positive value (~`8–15`, transition
+altitude near 1 m — see §4.1) so the rangefinder anchors the EKF through
+the propwash band. `-1` is the fallback if the rangefinder is unreliable.
+Re-fly and verify `XKF5.HAGL` ≈ measured RFND.
 
 ### 3.4 Vehicle "ground-sucks" near the floor
 
@@ -406,17 +421,49 @@ Recovery procedure:
 
 ### 4.1 `EK3_RNG_USE_HGT` selection
 
+The parameter is a percentage of `RNGFND1_MAX_CM`. The rangefinder is the
+EKF height observation when AGL is below `RNG_USE_HGT/100 × RNGFND1_MAX_CM`,
+and baro is the height observation above. Pick the percentage to put the
+**transition altitude where baro becomes trustworthy**, not to use the
+rangefinder at all altitudes.
+
+```
+transition_altitude_m = RNG_USE_HGT × RNGFND1_MAX_CM / 10000
+```
+
+For most small indoor copters, baro propwash is severe below ~1 m AGL and
+manageable above that. So pick `RNG_USE_HGT` to give a transition near
+**0.8–1.5 m**:
+
+| `RNGFND1_MAX_CM` | Sensor max | `RNG_USE_HGT` for ~1 m transition |
+|---|---|---|
+| 700 (e.g. VL53L1X 7 m) | 7 m | **15** (1.05 m) |
+| 1200 (Benewake-class) | 12 m | **8–10** (0.96–1.20 m) |
+| 4000 (long-range ToF) | 40 m | **3** (1.20 m) |
+
 | Value | Behaviour | Use when |
 |-------|-----------|----------|
-| `-1` | Disable rangefinder height-source blending. Rangefinder still feeds the EKF; switching is suppressed. | Default for indoor with significant baro propwash. Eliminates terrain-offset feedback at the cost of leaving baro as the EKF height observation when above the (now-disabled) blend threshold. |
-| `0–2` | Blend off / very low. Rangefinder anchors only at the lowest altitudes. | Outdoor with rangefinder for terrain-following only |
-| `3–10` | Standard blending. Rangefinder primary below `(value/100) × RNGFND1_MAX_CM`. | Outdoor mixed |
-| `70` | Rangefinder primary across (almost) full sensor range. Best indoor option when the rangefinder is reliable to the ceiling. | Indoor, where the entire flight envelope is below the rangefinder's max range |
+| `-1` | Disable rangefinder height-source blending entirely. Rangefinder still feeds the EKF (flow scaling, AGL KF) but is never the height observation. | Fallback if the rangefinder is unreliable, or if you have already verified that the terrain-offset feedback loop is biting on this airframe. Leaves the EKF height observation on baro at all altitudes — does **not** solve baro thermal drift during sustained hover above the (would-be) transition altitude. |
+| `0–2` | Transition altitude < 0.3 m. Rangefinder anchors only at the very lowest altitudes. | Outdoor terrain-following, where you want pure baro for almost everything. |
+| **`3–15`** | **Transition altitude ~0.5–1.5 m on typical indoor sensors. Rangefinder anchors through the propwash-affected band; baro takes over above.** | **Default indoor recommendation.** Pick the value from the table above that puts the transition near 1 m for your specific `RNGFND1_MAX_CM`. |
+| `>20` | Transition altitude well above the propwash band. Rangefinder doing height-anchor work it doesn't need to do. | Only if you have a specific reason — e.g. you've established that baro thermal drift during long indoor hover is the dominant error source and you have validated the AGL-KF-gated switching is stable on this airframe through repeated touchdowns. Not a general recommendation. |
 
 The HAGL Kalman filter (compile-time enabled in current firmware) makes the
 height-source switching baro-independent, which removes the original feedback
-loop that motivated `-1`. On firmware with that fix, prefer `70` over `-1`
-when the rangefinder is dependable indoors.
+loop that motivated `-1`. With that fix in place, a low positive value
+(e.g. `8–10` on a 12 m sensor) is preferable to `-1` because it keeps the
+rangefinder anchoring the EKF through the propwash-affected band where it
+actually matters, without burdening the EKF with rangefinder dependence at
+altitudes where baro is fine.
+
+**Note on baro thermal drift during sustained hover:** if you find the EKF
+altitude drifting with baro temperature during a long hover *above* the
+transition altitude, the proper fixes are physical (foam-shroud the baro,
+isolate it from prop-wash airflow, recalibrate `INS_TCAL` properly per §4.7)
+and operational (set HOME just before arming so baro hasn't drifted in the
+boot-to-arm window). Raising `RNG_USE_HGT` to mask the drift by anchoring on
+the rangefinder at all altitudes is a workaround, not a fix, and it makes
+the EKF more sensitive to rangefinder dropouts at higher altitudes.
 
 ### 4.2 `EK3_GND_EFF_DZ` selection
 
@@ -548,9 +595,26 @@ Vibration moves the accelerometer asymmetrically; the rectified component
 appears as a DC bias on AccZ. Without correction the EKF interprets it as
 specific force, drifts altitude, and the controller follows.
 
-Estimation: compare ground (motors at idle) and hover AccZ on the same IMU,
-controlled for temperature. The hover-minus-ground delta (after temperature
-regression) is the VRF.
+**`INS_ACC*_VRFB_Z` is a frozen prior fed into the IMU input, not the
+runtime correction the EKF actually uses.** The value is subtracted from
+the IMU AccZ before fusion. The EKF's own accelerometer-Z bias state
+(`XKF2.AZ`) still runs on top, tracking residual dynamic drift (thermal,
+ageing, mass change) that the static prior doesn't capture. So the prior
+just needs to be in the right ballpark — it doesn't have to be exact.
+What it *does* need to be is **stable** flight-to-flight, because
+flight-to-flight prior drift forces the EKF's AZ state to keep relearning
+the same offset.
+
+The static component (the prior) is a hardware property of the airframe:
+motor mount stiffness, prop balance, frame rigidity, IMU position
+relative to vibration sources, IMU asymmetry under acceleration. Once
+measured cleanly it should be roughly constant across flights at the
+same hover throttle. The right workflow is **calibrate once, then
+freeze** — leaving learning on indefinitely exposes the persisted prior
+to per-flight noise (atypical hover, baro drift coupling into Z-bias,
+pre-takeoff handling).
+
+Typical magnitudes:
 
 | Class | Typical VRF on Z |
 |-------|------------------|
@@ -558,14 +622,89 @@ regression) is the VRF.
 | Larger frame, more vibration | up to +0.30 m/s² |
 | Pathological | approaches the parameter cap |
 
-Initial setting: `INS_ACC_VRFB_Z = 0` (per-IMU also: `INS_ACC2_VRFB_Z`,
-`INS_ACC3_VRFB_Z`) and `ACC_ZBIAS_LEARN = 3` (Learn-and-save + Use). Let the
-EKF learn, then read back and persist. Use `ACC_ZBIAS_LEARN = 7` to
-additionally suppress the EKF's on-ground zero-velocity learning while
-disarmed (bit 2). The parameter `@Range` is ±0.5 m/s²; the internal
-hover-bias correction clamp is ±0.6 m/s². If the learned value saturates
-the parameter range you almost certainly have a different problem
-(miscalibrated TCAL, tight motor mounts, broken vibration isolation).
+Sign can be either direction depending on the IMU mounting and which way
+the rectification asymmetry falls; what matters is that it converges to a
+stable value across multiple hovers.
+
+**Calibration procedure** (one-time per airframe build):
+
+1. Set `INS_ACC_VRFB_Z = 0`, plus per-IMU `INS_ACC2_VRFB_Z` and
+   `INS_ACC3_VRFB_Z` if those IMUs are in use.
+2. Set `ACC_ZBIAS_LEARN = 3` (bit 0 + bit 1: learn-and-save + use).
+3. Fly **2–3 stable hover flights** of at least 30–60 s each, in
+   conditions representative of your normal indoor envelope (no extreme
+   manoeuvres, no ground-effect-dominated low hover, baro behaving).
+4. After each flight, read back `INS_ACC*_VRFB_Z`. The values should
+   converge — flight-to-flight delta dropping to ≤ 0.01 m/s².
+5. **Once converged, set `ACC_ZBIAS_LEARN = 2`** (bit 1 only — Use saved
+   values, learning OFF). The persisted VRFB values are now frozen at
+   their converged state.
+6. Use `ACC_ZBIAS_LEARN = 6` (bit 1 + bit 2) if you also want the EKF
+   to skip its on-ground zero-velocity learning while disarmed. This is
+   independent of VRFB and is useful on airframes with handling-induced
+   pre-arm motion.
+
+**Re-calibrate (return to step 1) only when something physical changes:**
+re-mount, prop change, motor change, frame mod, IMU swap, significant
+mass change.
+
+**Steady-state runtime config** for a calibrated airframe:
+
+```
+ACC_ZBIAS_LEARN     = 2          # Use only — frozen, not learning
+INS_ACC_VRFB_Z      = <converged value>
+INS_ACC2_VRFB_Z     = <converged value>
+INS_ACC3_VRFB_Z     = <converged value>
+```
+
+The parameter `@Range` is ±0.5 m/s²; the internal hover-bias correction
+clamp is ±0.6 m/s². If the learned value saturates the parameter range
+you almost certainly have a different problem (miscalibrated TCAL, tight
+motor mounts, broken vibration isolation) and the VRFB correction is
+masking it rather than fixing it.
+
+### 4.8a EKF accel-bias process noise (`EK3_ABIAS_P_NSE`)
+
+This is the EKF's process-noise gain on the vertical accelerometer bias
+state — i.e. how fast the EKF lets `XKF2.AZ` adapt. Default is **0.02
+m/s³**, which sits at the top of the documented `@Range` of 0.00001–0.02.
+The default is tuned for outdoor GPS-aided flight where the bias state
+has lots of independent observations to absorb noise.
+
+For an indoor flow + rangefinder vehicle with a calibrated, frozen VRFB
+prior (§4.8), the surplus learning rate at the default is more than the
+filter needs. The cost is that **baro propwash contamination during low
+hovers can be absorbed into the AZ bias state** as the EKF tries to
+explain the apparent specific-force mismatch — and that contamination
+then takes time to bleed off afterwards. You can see it in the log as a
+slow `XKF2.AZ` drift correlated with throttle/altitude rather than with
+genuine sensor drift.
+
+**Recommended value once VRFB is calibrated and stable:** `EK3_ABIAS_P_NSE
+= 0.005` (1/4 of default). This makes the EKF trust the static prior
+more and tracks dynamic drift more slowly. Genuine drift (thermal,
+ageing) still gets absorbed; transient propwash and ground-effect
+excursions don't.
+
+Trade-offs:
+
+| Setting | Behaviour | Suits |
+|---------|-----------|-------|
+| `0.02` (default, top of range) | Fast adaptation, more noise. Soaks up everything — good drift, bad drift, propwash contamination | Outdoor GPS-aided default |
+| `0.005` | Moderate. Balances residual-drift tracking with prior-trust | **Recommended for indoor flow + RFND with calibrated VRFB** |
+| `0.001–0.0005` | Slow. EKF treats VRFB prior as nearly gospel. Cleanest `XKF2.AZ` but slow to absorb genuine sensor drift (e.g. thermal warmup) | Only if VRFB is rock-solid AND you're seeing baro contamination of `XKF2.AZ` in logs |
+| `<0.0001` | Effectively frozen | Diagnostic only — exposes how well the static prior alone can carry the flight |
+
+**Order of operations:** complete §4.8 (VRFB calibrate + freeze, value
+converged across multiple flights) **before** reducing `EK3_ABIAS_P_NSE`.
+Reducing the process noise while VRFB is still off forces the filter to
+carry an unnecessary persistent error — you would be tightening the
+filter onto a wrong prior.
+
+**Diagnostic to confirm the change is helping:** after reducing
+`EK3_ABIAS_P_NSE`, plot `XKF2.AZ` during a stable hover. It should sit
+near zero with std < ~0.05 m/s², without the slow ±0.1 m/s² wander that
+appears at the default value when baro is being contaminated.
 
 ### 4.9 Compass motor compensation (`COMPASS_MOTCT`)
 
@@ -578,12 +717,165 @@ change. After a re-cal, verify that mag/current correlation drops below
 `COMPASS_OFFS_MAX` default 1800 mG is loose. Reduce to 600 mG to reject
 future bad calibrations at pre-arm.
 
-### 4.10 `ATC_ANG_YAW_P`
+### 4.10 `ATC_ANG_*_P` typical values
 
-Default for new airframes is often 4.5. Autotune sometimes pushes this much
-higher (15–20). On a noisy compass, high `ANG_YAW_P` produces visible yaw
-twitchiness at hover and amplifies in-flight yaw realignment shocks.
-Reduce to 4.5–6.0 unless there is a measured yaw-tracking deficiency.
+Firmware default is 4.5 on all three axes. The documented `@Range` for
+`ATC_ANG_RLL_P`, `ATC_ANG_PIT_P`, and `ATC_ANG_YAW_P` is **3.0 to 12.0**.
+
+Real-world values across tuned indoor copters:
+
+| Axis | Documented `@Range` | Typical tuned indoor | Autotune output (small indoor) |
+|------|---------------------|----------------------|---------------------------------|
+| `ATC_ANG_RLL_P` | 3.0–12.0 | 12–18 | 14–25 (often above doc range) |
+| `ATC_ANG_PIT_P` | 3.0–12.0 | 12–18 | 14–25 |
+| `ATC_ANG_YAW_P` | 3.0–12.0 | 8–12 | 10–18 |
+
+**Default behaviour:** keep autotune's output. The documented range is what
+the firmware was originally validated against; modern airframes with
+working notch filters and ESC bidir feedback routinely tune above it
+without issue.
+
+**Reduce only on evidence:**
+
+- **Limit-cycle on roll/pitch** (§2.3 overshoot ratio > 1.3 with coherent
+  5–15 Hz peak): reduce `ATC_ANG_RLL_P` and/or `ATC_ANG_PIT_P` by 25–30 %
+  on the oscillating axis. This is a tuning fix, not a "lower because it's
+  high" reflex.
+- **Yaw twitchiness from compass noise** (§2.4): with `EK3_MAG_CAL=4` plus
+  `COMPASS_MOTCT=0` on a magnetically dirty airframe, high `ATC_ANG_YAW_P`
+  amplifies compass-noise-driven yaw rate demands. Reducing toward 4.5–6.0
+  trades yaw stiffness for clean hover feel. The right fix is usually to
+  address the compass first (`COMPASS_MOTCT=2`, `EK3_MAG_CAL=7`) and only
+  reduce `ATC_ANG_YAW_P` if the noise-driven twitchiness persists.
+
+Do **not** reduce `ATC_ANG_*_P` because "the value looks high" — autotune
+output represents real airframe dynamics. Drop it only when log evidence
+shows it's actively hurting flight.
+
+### 4.11 Baro thermal drift — bench test and `TCAL_BARO_EXP`
+
+Baro thermal drift is the dominant non-propwash altitude error during long
+indoor hovers (§2.2 branch D). It's not flight-correlated — the FC and
+baro warm up under power regardless of whether the vehicle is moving — so
+you can quantify it on the bench without leaving the ground.
+
+#### 4.11.1 Bench thermal-drift test
+
+A 3–4 minute disarmed bench session is enough to characterise the drift.
+
+**Procedure:**
+
+1. Vehicle stationary on a flat surface, "perched" attitude (level on its
+   landing gear or similar), well away from heat sources.
+2. Full vehicle powered up, **VTX on**, **camera on** — anything that
+   normally runs in flight needs to be drawing its operating current
+   so the FC sees the same heat load as during a real flight. Motors
+   off. Disarmed.
+3. Start logging immediately at power-up so the baro is at room
+   temperature.
+4. Leave it for at least 3 minutes — long enough to span the full warmup
+   range (typically room temp → 50–65 °C on the baro).
+
+**Pull from the log:**
+
+| Field | What it shows |
+|---|---|
+| `BARO.Temp` | Baro internal temperature — the drift driver |
+| `BARO.Alt` | Apparent altitude — should be ~0 m and constant for a stationary vehicle |
+| `BARO.Press` | Raw pressure — direct view of the drift, no atmospheric model in the way |
+| `IMU.T` | IMU temperature — companion thermal trace |
+
+**Diagnostic readings:**
+
+- Compute `BARO.Alt` start vs end. Anything > ~0.1 m on a stationary
+  vehicle is significant thermal drift.
+- Plot `BARO.Press` against `BARO.Temp`. A monotonic relationship — pressure
+  rising or falling smoothly with temperature — confirms thermal drift as
+  the dominant error. A noisy scatter without trend means thermal isn't
+  the issue, look elsewhere.
+- Drift coefficient: `Δ(BARO.Alt) / Δ(BARO.Temp)`. Typical small-FC
+  airframes show 0.02–0.05 m/°C. The product
+  `coefficient × in-flight ΔT` predicts the baro-altitude drift you'll
+  see in a long hover.
+
+#### 4.11.2 Fitting `TCAL_BARO_EXP`
+
+ArduPilot's baro temperature compensation model
+(`libraries/AP_TempCalibration/`) is single-parameter:
+
+```
+P_corrected = P_measured + max(T - 25 °C, 0)^TCAL_BARO_EXP    [Pa]
+```
+
+`Tzero = 25 °C` is hardcoded; the correction is zero below 25 °C and grows
+as the baro warms above it. The exponent has `@Range: 0.0 .. 2.0`. The
+model was originally tuned for the ICM-20789 baro but fits DPS-class
+sensors well enough in practice.
+
+Two ways to set it:
+
+**Option A — let the firmware learn it (preferred).**
+
+1. Set `TCAL_ENABLED = 2` (Enable + Learn).
+2. Run the bench session above. The library learns whenever the vehicle
+   is `is_still()` and disarmed; it requires at least 7 °C of observed
+   range to converge. The 3-minute warmup easily clears that.
+3. After landing / power cycle, read back `TCAL_BARO_EXP`,
+   `TCAL_TEMP_MIN`, `TCAL_TEMP_MAX`. Confirm `EXP` is in [0, 2] and
+   the temperature range matches the warmup span.
+4. Set `TCAL_ENABLED = 1` (Enable only — no further learning) so future
+   sessions don't overwrite the learned value with whatever transient
+   they happen to see.
+
+**Option B — fit the exponent from the bench log offline.**
+
+If you already have the bench log, you can solve for the best exponent
+directly:
+
+```python
+# minimise variance of (P_meas + (T - 25)^E) over the bench session
+# scan E in [0, 2] in 0.01 steps; pick the E that gives lowest residual std
+```
+
+A good fit on small indoor airframes lands in the 0.5–1.0 range. Verify
+the corrected pressure has residual std at or near the per-sample baro
+noise floor (~0.5–1 Pa) — if the residual is much larger, the airframe's
+drift isn't well-described by a single exponent and the offline fit is
+the wrong tool (consider better baro mounting or thermal isolation
+instead).
+
+Then write the value:
+
+```
+TCAL_BARO_EXP = <fitted value>
+TCAL_ENABLED  = 1
+```
+
+#### 4.11.3 What it does and doesn't help
+
+**Helps:**
+
+- Long-hover altitude drift driven by FC self-heating
+- Cold-boot flights where the baro warms from ambient through the
+  flight (the bench-test temperature span covers the in-flight span)
+- Repeated takeoff/land cycles where each landing exposes the baro to
+  a new thermal regime briefly
+
+**Does not help:**
+
+- Propwash baro errors at low altitude — that's `BARO1_THST_SCALE`
+  territory (§4.3), uncorrelated with temperature
+- Ground-effect baro spikes during takeoff/landing — handled by
+  `EK3_GND_EFF_DZ` (§4.2)
+- Rapid baro swings during aggressive manoeuvres — those are mechanical
+  (airflow over the baro port), not thermal
+- Drift at low temperature (< 25 °C) — model correction is zero below
+  `Tzero`. If your operating range starts cold, this model only
+  partially helps; thermal isolation of the baro is the real fix.
+
+**Re-run the bench test** when anything thermal in the airframe
+changes: VTX swap, antenna routing change near the FC, baro shroud /
+foam change, FC swap. The fitted exponent is hardware-specific.
 
 ---
 
@@ -598,21 +890,39 @@ that you will have to redo.
 2. **Calibrate gyro / accel level / accel full** (right-side up).
 3. **Compass cal** (pass §2.6 diagnostic first if it has been failing).
 4. **`MOT_THST_HOVER`** correct to within ~10 % of measured hover ThO.
-5. **`BARO1_THST_SCALE`** calibrated against rangefinder at steady hover.
-6. **`BARO_THST_FILT = 1.0`** (or lower for slow controllers).
-7. **`EK3_GND_EFF_DZ`** to match observed peak prop-wash (negative mode for
+5. **Bench thermal-drift test (§4.11.1)** — quantifies non-propwash baro
+   drift before any flight. If `BARO.Alt` end-to-start is > 0.1 m on a
+   stationary, disarmed, fully-powered vehicle, fit `TCAL_BARO_EXP`
+   per §4.11.2 (set `TCAL_ENABLED = 2` to learn, then `1` to lock).
+6. **`BARO1_THST_SCALE`** calibrated against rangefinder at steady hover.
+7. **`BARO_THST_FILT = 1.0`** (or lower for slow controllers).
+8. **`EK3_GND_EFF_DZ`** to match observed peak prop-wash (negative mode for
    rangefinder vehicles, positive `4` for baro-only).
-8. **`TKOFF_GNDEFF_ALT/TMO`** to match airframe.
-9. **`EK3_MAG_CAL = 7`, `COMPASS_MOTCT = 2`** with motor-comp cal completed.
-10. **`EK3_RNG_USE_HGT`** to `-1` or `70` (with HAGL switching available).
-11. **Rate / angle autotune** in a calm environment outdoors if possible —
+9. **`TKOFF_GNDEFF_ALT/TMO`** to match airframe.
+10. **`EK3_MAG_CAL = 7`, `COMPASS_MOTCT = 2`** with motor-comp cal completed.
+11. **`EK3_RNG_USE_HGT`** to a low positive value (~`8–15`) such that
+    `RNG_USE_HGT × RNGFND1_MAX_CM / 100` ≈ 1 m — rangefinder anchors PD
+    through the propwash band, baro takes over above. `-1` is the
+    fallback if the rangefinder is unreliable.
+12. **Rate / angle autotune** in a calm environment outdoors if possible —
     indoor turbulence biases autotune values high.
-12. **Reduce `ANG_*_P`** if the §2.3 oscillation check shows overshoot >1.3.
-13. **`ATC_ANG_YAW_P`** down to 4.5–6.0 from any autotuned excess.
-14. **`ACC_ZBIAS_LEARN = 3`, `INS_ACC_VRFB_Z = 0`** — let it learn for a
-    flight, persist the result. Use `7` to additionally inhibit on-ground
-    learning while disarmed.
-15. Optional: fly the **VALT** flight mode (mode 29) once basic AltHold is
+13. **Reduce `ANG_*_P`** if the §2.3 oscillation check shows overshoot >1.3
+    (and only then — see §4.10). Typical tuned indoor values are 12–18 on
+    roll/pitch and 8–12 on yaw; autotune commonly lands above the
+    documented `@Range` of 3–12 and that is fine on its own.
+14. **`ATC_ANG_YAW_P`** reduce only if §2.4 shows compass-noise-driven yaw
+    twitchiness; address the compass (`COMPASS_MOTCT=2`, `EK3_MAG_CAL=7`)
+    first.
+15. **VRFB calibration (one-time, then freeze)** — see §4.8. Set
+    `INS_ACC*_VRFB_Z = 0`, `ACC_ZBIAS_LEARN = 3`, fly 2–3 stable hovers,
+    verify the per-IMU values converge (flight-to-flight delta ≤ 0.01),
+    then **set `ACC_ZBIAS_LEARN = 2`** to freeze. Re-calibrate only on
+    hardware change (re-mount, prop swap, frame mod).
+16. **Optional: reduce `EK3_ABIAS_P_NSE`** from default 0.02 to 0.005
+    once VRFB is converged and stable (§4.8a). Trades faster bias
+    learning for less baro-propwash contamination of the AZ bias state.
+    Skip on baro-only vehicles or if you haven't completed step 15.
+17. Optional: fly the **VALT** flight mode (mode 29) once basic AltHold is
     solid, for stick-rate altitude control with mid-stick position-hold.
 
 ---
@@ -625,7 +935,8 @@ EK3_SRC1_VELXY     = 5      # Optical flow
 EK3_SRC1_POSXY     = 0      # No absolute horizontal aiding
 EK3_SRC1_POSZ      = 1      # Baro
 EK3_SRC1_VELZ      = 0
-EK3_RNG_USE_HGT    = -1     # or 70 with HAGL switching
+EK3_RNG_USE_HGT    = 8 to 15  # set so transition altitude ~1m: value = 100*1m/RNGFND1_MAX_CM
+                              # Examples: MAX_CM=1200 → 10; MAX_CM=700 → 15. Use -1 only as fallback.
 FLOW_TYPE          = 10     # vehicle-specific
 RNGFND1_TYPE       = 10     # vehicle-specific
 RNGFND1_MIN_CM     = 2      # as low as the sensor permits
@@ -639,11 +950,28 @@ EK3_GND_EFF_DZ     = -8              # negative = noise floor mode (rangefinder 
 TKOFF_GNDEFF_ALT   = 5               # m, @Range 0..5
 TKOFF_GNDEFF_TMO   = 3               # s, @Range 0..5 (firmware caps at 5)
 
+# --- Baro thermal compensation (§4.11) ---
+# Bench-derived for THIS airframe; fit per-vehicle from a 3-min disarmed warmup
+TCAL_ENABLED       = 1               # 0=off, 1=use, 2=learn+use. Set to 2 to learn, then back to 1
+TCAL_BARO_EXP      = <fitted>        # P_corrected = P + max(T-25,0)^EXP. @Range 0..2
+                                     # Typical small-FC indoor: 0.5–1.0
+                                     # Tzero=25°C is hardcoded (no correction below 25°C)
+
 # --- IMU ---
-INS_ACC_VRFB_Z     = 0               # IMU 0; let learn. Per-IMU: INS_ACC_VRFB_Z, INS_ACC2_VRFB_Z, INS_ACC3_VRFB_Z
-ACC_ZBIAS_LEARN    = 3               # bitmask: 1=Learn+Save, 2=Use, 4=Disable on-ground learning
-                                     # 3 = Learn+Use; 7 = Learn+Use+Inhibit-on-ground
+# Calibrate-then-freeze workflow (§4.8). For a calibrated airframe:
+INS_ACC_VRFB_Z     = <converged>     # IMU 0 frozen value. Per-IMU: INS_ACC_VRFB_Z, INS_ACC2_VRFB_Z, INS_ACC3_VRFB_Z
+ACC_ZBIAS_LEARN    = 2               # Use only — frozen, not learning. Set to 3 ONLY during one-time calibration
+                                     # (then read back converged INS_ACC*_VRFB_Z and set ACC_ZBIAS_LEARN back to 2)
+                                     # bitmask: 1=Learn+Save, 2=Use, 4=Disable EKF on-ground zero-vel learning
+                                     # 6 = Use + Inhibit-on-ground for handling-noisy disarmed periods
 INS_TCAL1_ENABLE   = 1               # only if calibrated right-side-up
+
+# --- EKF accel-bias process noise (optional, §4.8a) ---
+# Default 0.02 sits at top of @Range. Reduce only after VRFB has converged
+# (step 14). Lower value = EKF trusts VRFB prior more, less baro-propwash
+# contamination of XKF2.AZ.
+EK3_ABIAS_P_NSE    = 0.005           # 1/4 of default for indoor flow + RFND
+                                     # Stay at default 0.02 on baro-only vehicles
 
 # --- Compass ---
 EK3_MAG_CAL        = 7               # GROUND_AND_INFLIGHT (on ground + after first in-air yaw reset)
@@ -660,9 +988,12 @@ PSC_D_ACC_I        = same            # was PSC_ACCZ_I
 # Old names map to new names automatically via AP_Param conversion at first boot.
 
 # --- Attitude (after autotune review) ---
-ATC_ANG_RLL_P      = autotune output, but test §2.3 and reduce 25–30 % if oscillating
-ATC_ANG_PIT_P      = same
-ATC_ANG_YAW_P      = 4.5–6.0
+# Documented @Range for all three is 3.0–12.0; autotune commonly produces
+# values above that on small indoor copters. Keep autotune output unless
+# §2.3 shows oscillation or §2.4 shows compass-noise yaw twitchiness.
+ATC_ANG_RLL_P      = autotune output  # typical tuned: 12–18
+ATC_ANG_PIT_P      = autotune output  # typical tuned: 12–18
+ATC_ANG_YAW_P      = autotune output  # typical tuned: 8–12; reduce only on §2.4 evidence
 ATC_RAT_*_SMAX     = 0                # leave off for performance — don't use to mask oscillation
 
 # --- Motor / takeoff ---
