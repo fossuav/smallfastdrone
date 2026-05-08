@@ -1,6 +1,6 @@
 # Indoor Copter Tuning Playbook
 
-**Version:** 1.5.0
+**Version:** 1.6.0
 **Applies to branch:** `SmallFastDrone-4.7-beta` (verified at `41c83011e2`)
 **Upstream base:** ArduCopter 4.7-beta
 
@@ -22,6 +22,15 @@ The playbook assumes you have:
 - The vehicle's current parameter file.
 
 It is **purely a tuning guide**. It does not change any source code.
+
+**Highest-leverage starting move for any indoor airframe with altitude
+drift complaints:** run the §4.11 bench thermal-drift test and fit
+`TCAL_BARO_EXP`. This is a 3-minute disarmed bench session that requires
+no flying to derive the value, and on a small-frame indoor copter it has
+been measured to tighten EKF altitude std by ~4× over a 4-minute hover.
+Do this before chasing other parameters — most of what looks like long-
+hover drift is the baro warming up under power, and TCAL handles it at
+the source.
 
 When you update the playbook, bump the version using semver: patch for
 typos and small clarifications, minor for adding/restructuring sections,
@@ -759,6 +768,29 @@ indoor hovers (§2.2 branch D). It's not flight-correlated — the FC and
 baro warm up under power regardless of whether the vehicle is moving — so
 you can quantify it on the bench without leaving the ground.
 
+**This is the highest-leverage indoor altitude-drift fix once the basics
+(`THST_SCALE`, `GND_EFF_DZ`, datum reset on arm) are in place.** It is
+also one of the cheapest: a 3-minute bench session plus a parameter
+write, no flying required to derive the value.
+
+**Field-validated effect (small-frame indoor flow + rangefinder copter,
+SmallFastDrone-4.7-beta, A/B with all other parameters identical):**
+
+| Metric | No TCAL | `TCAL_BARO_EXP = 0.72` |
+|---|---|---|
+| EKF altitude std over a 4-minute VALT hover | 0.31 m | **0.067 m** |
+| EKF altitude range | −1.10 m to +2.0 m | 0.87 m to 1.23 m |
+| Baro warmup span (Δ°C in flight) | +17.5 °C | +19.6 °C |
+| `CTUN.DAlt` (VALT pos_desired) behaviour | drifting with the contaminated EKF | locked at one value for the whole flight |
+
+**4.6× tightening** of the EKF altitude estimate, with no flying-side
+changes. The bench-fitted exponent extrapolated cleanly from a 30–43 °C
+learned range to a 69 °C in-flight peak. Pilot subjectively reported
+the flight as "much better".
+
+The exponent value is per-airframe; do not copy `0.72` blindly. Run the
+bench test on each vehicle and fit / learn its own value.
+
 #### 4.11.1 Bench thermal-drift test
 
 A 3–4 minute disarmed bench session is enough to characterise the drift.
@@ -850,6 +882,21 @@ Then write the value:
 TCAL_BARO_EXP = <fitted value>
 TCAL_ENABLED  = 1
 ```
+
+**On extrapolation above `TCAL_TEMP_MAX`.** The bench session sets
+`TCAL_TEMP_MIN` and `TCAL_TEMP_MAX` to the temperature range observed
+during learning. In flight the baro typically reaches a higher peak
+than a static bench warmup does (motor heat soak, prolonged FC load).
+The firmware does not refuse to apply the correction above `TEMP_MAX`
+— it extrapolates the same power-law beyond the learned range. In
+practice this extrapolates cleanly because the model is single-parameter
+and the underlying drift mechanism is smooth. Field result: a learned
+range of 30–43 °C extrapolated to a 69 °C in-flight peak with no
+visible artefacts. But to maximise confidence, run the bench session
+long enough — or with enough thermal load (block airflow over the FC,
+run the VTX into a dummy load or the antenna) — to bring the bench peak
+within ~10 °C of your typical in-flight peak. A wider learned range is
+strictly better than relying on extrapolation.
 
 #### 4.11.3 What it does and doesn't help
 
