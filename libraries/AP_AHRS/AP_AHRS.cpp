@@ -3493,9 +3493,15 @@ bool AP_AHRS::reset_configured_backend(void)
     // reset EKF3 regardless of active EKF type — if we've fallen back
     // to DCM due to EKF failure, that's exactly when a bootstrap reset
     // is most needed to force re-convergence
+    switch (configured_ekf_type()) {
 #if HAL_NAVEKF3_AVAILABLE
-    return EKF3.InitialiseFilterBootstrap();
-#else
+    case EKFType::THREE:
+        return EKF3.InitialiseFilterBootstrap();
+#endif  // HAL_NAVEKF3_AVAILABLE
+    default:
+        break;
+    }
+
     return false;
 #endif
 }
