@@ -3503,7 +3503,6 @@ bool AP_AHRS::reset_configured_backend(void)
     }
 
     return false;
-#endif
 }
 #endif  // AP_AHRS_EKF_RESET_ENABLED
 
