@@ -556,7 +556,13 @@
 # define THROW_YAW_CATCH_WINDOW_DEG  30.0f  // yaw error window (deg) within which the absolute heading is engaged
 #endif
 #ifndef THROW_YAW_ALIGN_TIMEOUT_MS
-# define THROW_YAW_ALIGN_TIMEOUT_MS  2500   // ms before yaw alignment hands off regardless of error
+# define THROW_YAW_ALIGN_TIMEOUT_MS  2500   // ms floor before yaw alignment hands off regardless of error (scaled up for large rotations)
+#endif
+#ifndef THROW_YAW_ALIGN_MARGIN_MS
+# define THROW_YAW_ALIGN_MARGIN_MS   1000   // ms added to the slew-time estimate when sizing the adaptive alignment timeout (decel + settle)
+#endif
+#ifndef THROW_YAW_ALIGN_DONE_DEG
+# define THROW_YAW_ALIGN_DONE_DEG     5.0f  // heading error (deg) within which alignment is converged enough to hand off to the next mode
 #endif
 #ifndef THROW_YAW_RIDE_THRESH_DEG
 # define THROW_YAW_RIDE_THRESH_DEG  120.0f  // gyro Z threshold (deg/s) above which the spin is ridden (no torque)
