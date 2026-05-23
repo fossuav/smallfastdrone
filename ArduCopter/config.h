@@ -561,6 +561,9 @@
 #ifndef THROW_YAW_ALIGN_MARGIN_MS
 # define THROW_YAW_ALIGN_MARGIN_MS   1000   // ms added to the slew-time estimate when sizing the adaptive alignment timeout (decel + settle)
 #endif
+#ifndef THROW_YAW_ALIGN_TIMEOUT_MAX_MS
+# define THROW_YAW_ALIGN_TIMEOUT_MAX_MS 8000 // absolute ceiling on the adaptive alignment timeout, so a slow yaw tune or a non-decaying spin cannot stall the handoff for tens of seconds
+#endif
 #ifndef THROW_YAW_ALIGN_DONE_DEG
 # define THROW_YAW_ALIGN_DONE_DEG     5.0f  // heading error (deg) within which alignment is converged enough to hand off to the next mode
 #endif

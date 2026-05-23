@@ -160,7 +160,10 @@ void ModeThrow::run()
         // change — up to a 180 deg half-turn — needs more than the base
         // budget; with a fixed timeout the slew is cut off short and a
         // heading-holding next-mode (LOITER) freezes the partial heading.
-        // Floored at the base timeout.
+        // Floored at the base timeout and capped so a very slow yaw tune (or
+        // a spin that never decays) cannot stall the handoff for tens of
+        // seconds — at the floor of ATC_RATE_WPY_MAX a 180 deg slew alone
+        // would otherwise size the timeout at ~37 s.
         yaw_align_timeout_ms = THROW_YAW_ALIGN_TIMEOUT_MS;
         if (throw_target_yaw_valid) {
             const float slew_rads = attitude_control->get_slew_yaw_max_rads();
@@ -170,6 +173,7 @@ void ModeThrow::run()
                 yaw_align_timeout_ms = MAX((uint32_t)THROW_YAW_ALIGN_TIMEOUT_MS, needed_ms);
             }
         }
+        yaw_align_timeout_ms = MIN(yaw_align_timeout_ms, (uint32_t)THROW_YAW_ALIGN_TIMEOUT_MAX_MS);
 
         // initialise the z controller
         pos_control->D_init_controller_no_descent();
@@ -225,9 +229,7 @@ void ModeThrow::run()
         if (!nextmode_attempted) {
             const bool yaw_target_active = throw_target_yaw_valid &&
                                            (ThrowYawType)g2.throw_yaw_type.get() != ThrowYawType::None;
-            const bool yaw_converged = yaw_align_locked &&
-                fabsf(wrap_PI(throw_target_yaw_rad - ahrs.get_yaw_rad())) <= radians(THROW_YAW_ALIGN_DONE_DEG);
-            if (yaw_target_active && !yaw_converged) {
+            if (yaw_target_active && !throw_yaw_converged()) {
                 gcs().send_text(MAV_SEVERITY_WARNING, "Throw yaw align timeout");
             }
             throw_do_nextmode_handoff();
@@ -927,21 +929,32 @@ void ModeThrow::throw_apply_yaw_align(const Vector3f& thrust_vector)
     attitude_control->input_thrust_vector_rate_heading_rads(thrust_vector, ya_yaw_rate_rads);
 }
 
+// True once yaw has settled on the absolute target: locked, within the done
+// tolerance, AND no longer spinning faster than the ride threshold.  The spin
+// gate matters because a fast throw spin (hundreds of deg/s) sweeps the yaw
+// through the target every revolution; without it a transient sweep through
+// the done window would be mistaken for alignment and hand off mid-spin.
+bool ModeThrow::throw_yaw_converged() const
+{
+    return yaw_align_locked &&
+           fabsf(wrap_PI(throw_target_yaw_rad - ahrs.get_yaw_rad())) <= radians(THROW_YAW_ALIGN_DONE_DEG) &&
+           fabsf(ahrs.get_gyro().z) <= radians(THROW_YAW_RIDE_THRESH_DEG);
+}
+
 bool ModeThrow::throw_yaw_align_done() const
 {
     // Permit the PosHold→NEXTMODE handoff once yaw has actually converged
-    // on the absolute target — locked AND within the done tolerance.  We
-    // cannot hand off at the 30 deg catch-window lock: a heading-holding
-    // next-mode (LOITER) freezes whatever heading we hand off at, so the
-    // remaining error becomes permanent.  The adaptive timeout (sized to
-    // the rotation at HgtStabilise entry) is the safety net for the case
-    // where the heading is never reached.
+    // on the absolute target (see throw_yaw_converged).  We cannot hand off
+    // at the 30 deg catch-window lock: a heading-holding next-mode (LOITER)
+    // freezes whatever heading we hand off at, so the remaining error becomes
+    // permanent.  The adaptive timeout (sized to the rotation at HgtStabilise
+    // entry) is the safety net for the case where the heading is never reached
+    // or the spin never decays.
     if (!throw_target_yaw_valid ||
         (ThrowYawType)g2.throw_yaw_type.get() == ThrowYawType::None) {
         return true;
     }
-    if (yaw_align_locked &&
-        fabsf(wrap_PI(throw_target_yaw_rad - ahrs.get_yaw_rad())) <= radians(THROW_YAW_ALIGN_DONE_DEG)) {
+    if (throw_yaw_converged()) {
         return true;
     }
     if (yaw_align_start_ms != 0 &&
