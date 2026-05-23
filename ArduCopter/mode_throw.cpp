@@ -866,10 +866,16 @@ void ModeThrow::throw_apply_yaw_align(const Vector3f& thrust_vector)
     // Lock the moment yaw enters the catch window.  The lock command
     // (input_thrust_vector_heading_rad) is rate-limited by the same
     // get_slew_yaw_max_rads() so the post-lock convergence runs at the
-    // same cap the slew was using.
+    // same cap the slew was using.  Only announce alignment when the spin
+    // is below the ride threshold: a fast spin can sweep yaw through the
+    // catch window and latch the lock for one loop, which is not a genuine
+    // alignment — suppress the message there to avoid false "aligned"
+    // telemetry (locking behaviour itself is unchanged).
     if (!yaw_align_locked && fabsf(yaw_err_rad) <= catch_window_rad) {
         yaw_align_locked = true;
-        gcs().send_text(MAV_SEVERITY_INFO, "Throw yaw aligned");
+        if (fabsf(gyro_z_rads) <= ride_threshold_rads) {
+            gcs().send_text(MAV_SEVERITY_INFO, "Throw yaw aligned");
+        }
     }
 
     if (yaw_align_locked) {
