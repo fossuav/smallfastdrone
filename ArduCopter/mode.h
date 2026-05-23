@@ -1886,6 +1886,17 @@ public:
         Absolute = 3,            // face the heading set by THROW_YAW_DEG
     };
 
+    // Which source in throw_dir_finalise_target_yaw() supplied the yaw
+    // target.  Logged in THRO (YSrc) so post-flight analysis can tell a
+    // direction-determination error from dead-reckoning drift.
+    enum class ThrowYawSource : uint8_t {
+        None = 0,            // no target (disabled, or no source available)
+        ImuDirection = 1,    // IMU-integrated direction of travel
+        EntryVelocity = 2,   // EKF NED velocity at mode entry
+        EntryYaw = 3,        // EKF yaw at mode entry (stationary fallback)
+        Absolute = 4,        // THROW_YAW_DEG
+    };
+
 protected:
 
     const char *name() const override { return "Throw"; }
@@ -1955,6 +1966,7 @@ private:
     uint32_t throw_dir_last_us;        // timestamp of last integration step
     bool throw_target_yaw_valid;       // true if target_yaw_rad is set
     float throw_target_yaw_rad;        // captured at freefall transition for Uprighting
+    ThrowYawSource throw_yaw_source;   // which source set target_yaw_rad (logged in THRO)
 };
 
 #if MODE_TURTLE_ENABLED
