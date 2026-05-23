@@ -88,6 +88,15 @@ bool ModeThrow::init(bool ignore_checks)
     return true;
 }
 
+// Drops are designed to operate without horizontal aiding — detection is
+// body-frame / baro based — so a drop can arm GPS-free.  Upward throws keep
+// the upstream requirement of a position estimate (GPS or flow-relative);
+// only a fully aiding-less upward throw is refused at arming.
+bool ModeThrow::requires_position() const
+{
+    return g2.throw_type != ThrowType::Drop;
+}
+
 // runs the throw to start controller
 // should be called at 100hz or more
 void ModeThrow::run()
