@@ -12962,6 +12962,14 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "THROW_TYPE": 1,           # drop
             "THROW_NEXTMODE": 5,       # LOITER
             "THROW_SRC_SET": 2,        # switch to SRC2 on completion
+            # SRC2 must provide horizontal aiding: the completion switch
+            # lands the vehicle in LOITER then LAND, both of which need a
+            # position estimate.  SITL's default SRC2 has no horizontal
+            # source, so the EKF velocity dead-reckons, the land detector
+            # never settles and the vehicle never auto-disarms.
+            "EK3_SRC2_POSXY": 3,       # GPS
+            "EK3_SRC2_VELXY": 3,       # GPS
+            "EK3_SRC2_VELZ": 3,        # GPS
             "MOT_SPOOL_TIME": 0.5,
         })
 
