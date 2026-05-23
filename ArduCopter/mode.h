@@ -1917,6 +1917,7 @@ private:
     bool throw_attitude_good() const;
     void throw_do_nextmode_handoff();
     void throw_apply_yaw_align(const Vector3f& thrust_vector);
+    bool throw_yaw_converged() const;
     bool throw_yaw_align_done() const;
 
     // Throw stages
