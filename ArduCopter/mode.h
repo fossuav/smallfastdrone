@@ -1942,6 +1942,7 @@ private:
     uint32_t drop_confirm_start_ms; // system time drop conditions first sustained
     float drop_release_alt_m;       // EKF altitude (z-up, m) when freefall conditions first met
     uint32_t yaw_align_start_ms;    // system time YawAlign stage was entered
+    uint32_t yaw_align_timeout_ms;  // adaptive align timeout, sized to the rotation at HgtStabilise entry
     bool yaw_align_locked;          // true once current yaw entered the catch window and absolute target was engaged
 
     // Throw direction tracking (THROW_YAW_TYPE).  Source hierarchy at
