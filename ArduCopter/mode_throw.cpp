@@ -56,6 +56,7 @@ bool ModeThrow::init(bool ignore_checks)
     throw_dir_reset();
     throw_target_yaw_valid = false;
     throw_target_yaw_rad = 0.0f;
+    throw_yaw_source = ThrowYawSource::None;
 
     // Switch EKF source set for the throw phase if configured.
     // During throw/drop the vehicle is tumbling — position and velocity
@@ -401,18 +402,20 @@ void ModeThrow::run()
 // @Field: Vel: Magnitude of the velocity vector
 // @Field: VelZ: Vertical Velocity
 // @Field: Acc: Magnitude of the vector of the current acceleration
-// @Field: AccEfZ: Vertical earth frame accelerometer value
+// @Field: AeZ: Vertical earth frame accelerometer value
 // @Field: Throw: True if a throw has been detected since entering this mode
-// @Field: AttOk: True if the vehicle is upright 
+// @Field: AttOk: True if the vehicle is upright
 // @Field: HgtOk: True if the vehicle is within 0.5 m of the demanded height
 // @Field: PosOk: True if the vehicle is within 0.5 m of the demanded horizontal position
+// @Field: TYaw: Recovery yaw target heading (THROW_YAW_TYPE), 0 until resolved at the freefall transition
+// @Field: YSrc: Source that supplied the yaw target (0=none,1=IMU direction,2=entry velocity,3=entry yaw,4=absolute)
 
         AP::logger().WriteStreaming(
             "THRO",
-            "TimeUS,Stage,Vel,VelZ,Acc,AccEfZ,Throw,AttOk,HgtOk,PosOk",
-            "s-nnoo----",
-            "F-0000----",
-            "QBffffbbbb",
+            "TimeUS,Stage,Vel,VelZ,Acc,AeZ,Throw,AttOk,HgtOk,PosOk,TYaw,YSrc",
+            "s-nnoo----d-",
+            "F-0000----0-",
+            "QBffffbbbbfB",
             AP_HAL::micros64(),
             (uint8_t)stage,
             (double)velocity_ms,
@@ -422,7 +425,9 @@ void ModeThrow::run()
             throw_detect,
             attitude_ok,
             height_ok,
-            pos_ok);
+            pos_ok,
+            (double)degrees(throw_target_yaw_rad),
+            (uint8_t)throw_yaw_source);
     }
 #endif  // HAL_LOGGING_ENABLED
 }
@@ -687,6 +692,7 @@ bool ModeThrow::throw_dir_finalise_target_yaw()
     // disabled or no source has a confident horizontal vector.
     throw_target_yaw_valid = false;
     throw_target_yaw_rad = 0.0f;
+    throw_yaw_source = ThrowYawSource::None;
 
     const ThrowYawType yaw_type = (ThrowYawType)g2.throw_yaw_type.get();
     if (yaw_type == ThrowYawType::None) {
@@ -696,6 +702,7 @@ bool ModeThrow::throw_dir_finalise_target_yaw()
     if (yaw_type == ThrowYawType::Absolute) {
         throw_target_yaw_rad = wrap_PI(radians(g2.throw_yaw_deg.get()));
         throw_target_yaw_valid = true;
+        throw_yaw_source = ThrowYawSource::Absolute;
         return true;
     }
 
@@ -716,6 +723,7 @@ bool ModeThrow::throw_dir_finalise_target_yaw()
                                                 throw_dir_vel_ne_ms.x);
         heading_rad = wrap_PI(throw_dir_anchor_yaw_rad + pseudo_heading_rad);
         have_heading = true;
+        throw_yaw_source = ThrowYawSource::ImuDirection;
     }
 
     // Source 2: EKF NED velocity captured at mode entry.  Useful for
@@ -725,6 +733,7 @@ bool ModeThrow::throw_dir_finalise_target_yaw()
         throw_entry_vel_ne_ms.length() >= min_speed_ms) {
         heading_rad = atan2f(throw_entry_vel_ne_ms.y, throw_entry_vel_ne_ms.x);
         have_heading = true;
+        throw_yaw_source = ThrowYawSource::EntryVelocity;
     }
 
     // Source 3: EKF yaw captured at mode entry.  Useful for stationary
@@ -735,6 +744,7 @@ bool ModeThrow::throw_dir_finalise_target_yaw()
     if (!have_heading && throw_entry_yaw_valid) {
         heading_rad = throw_entry_yaw_rad;
         have_heading = true;
+        throw_yaw_source = ThrowYawSource::EntryYaw;
     }
 
     if (!have_heading) {
