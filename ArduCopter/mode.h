@@ -1862,7 +1862,7 @@ public:
     bool init(bool ignore_checks) override;
     void run() override;
 
-    bool requires_position() const override { return false; }
+    bool requires_position() const override;
     bool has_manual_throttle() const override { return false; }
     bool allows_arming(AP_Arming::Method method) const override { return true; };
     bool is_autopilot() const override { return false; }
