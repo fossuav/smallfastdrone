@@ -12649,7 +12649,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.progress("Testing throw mode without GPS")
         self.set_parameters({
             "GPS1_TYPE": 0,
-            "SIM_GPS_DISABLE": 1,
+            "SIM_GPS1_ENABLE": 0,
             "EK3_SRC1_POSXY": 0,
             "EK3_SRC1_VELXY": 0,
             "THROW_TYPE": 1,          # drop
