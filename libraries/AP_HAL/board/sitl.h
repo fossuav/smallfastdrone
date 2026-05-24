@@ -7,6 +7,14 @@
 #define HAL_MEM_CLASS HAL_MEM_CLASS_1000
 #define HAL_OS_SOCKETS 1
 
+// Enable the BLHeli / serial-RCOut feature set under SITL. The actual
+// serial passthrough and DShot reversing are no-ops in the simulator
+// (AP_HAL::RCOutput's base methods), but turning this on compiles
+// AP_BLHeli and registers the SERVO_BLH_* parameters (RVMASK, 3DMASK,
+// MASK, …) so the motor-direction / ESC tooling that depends on them can
+// be exercised in SITL instead of only on hardware.
+#define HAL_SUPPORT_RCOUT_SERIAL 1
+
 #define AP_FLASHSTORAGE_TYPE 3
 
 #if AP_FLASHSTORAGE_TYPE == 1
