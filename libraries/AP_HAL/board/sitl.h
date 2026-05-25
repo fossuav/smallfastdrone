@@ -15,6 +15,14 @@
 // be exercised in SITL instead of only on hardware.
 #define HAL_SUPPORT_RCOUT_SERIAL 1
 
+// Also expose bidirectional-DShot configuration (SERVO_BLH_BDMASK) under
+// SITL. The RPM telemetry itself can't be simulated — set_bidir_dshot_mask
+// and get_erpm are base AP_HAL::RCOutput no-ops, and the real bdshot
+// implementation lives in AP_HAL_ChibiOS (not built for SITL) — but
+// registering the param lets the ESC-setup wizard's bidirectional-DShot
+// toggle and write path be exercised in SITL rather than only on hardware.
+#define HAL_WITH_BIDIR_DSHOT 1
+
 #define AP_FLASHSTORAGE_TYPE 3
 
 #if AP_FLASHSTORAGE_TYPE == 1
