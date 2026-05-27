@@ -2,6 +2,27 @@
 
 #if MODE_THROW_ENABLED
 
+// Physics-based body-frame freefall ceiling for drops.  Under spin at
+// the IMU mount offset r, centripetal acceleration ω²·r projects into
+// the body-frame |a| reading during genuine freefall.  Bounding r ≤ 6
+// cm (covers typical FC stacks) gives cap = 0.5g freefall margin +
+// r·ω², which reduces to the standard 0.5g gate at ω=0.  A stationary
+// carrier (|a|≈1g, ω=0) is always rejected.
+//
+// Replaces a fixed 1.5g ceiling that failed under multi-axis tumble:
+// SFD1 log55 (2026-05-27) had combined gyro 25–30 rad/s for ~600 ms
+// post-release, putting body |a| at 15–30 m/s² (1.5–3g) throughout
+// genuine freefall.  The 1.5g cap rejected the entire window; detection
+// stalled ~900 ms until spin decayed enough for the 0.5g base gate to
+// fire, costing ~3.6 m of altitude budget.  The physics cap admits the
+// same window: at ω=30 rad/s cap=6g, at ω=50 cap=15.8g.
+static bool drop_body_in_freefall(float accel_mss, float gyro_rate)
+{
+    constexpr float IMU_OFFSET_MAX_M = 0.06f;
+    const float cap_mss = 0.5f * GRAVITY_MSS + IMU_OFFSET_MAX_M * sq(gyro_rate);
+    return accel_mss < cap_mss;
+}
+
 // throw_init - initialise throw controller
 bool ModeThrow::init(bool ignore_checks)
 {
@@ -485,24 +506,19 @@ bool ModeThrow::throw_detected()
 
     // Check for freefall.  For drops use body-frame accelerometer as the
     // primary check — it reads near zero in freefall regardless of EKF
-    // state, and ~1g while attached to a carrier.  Under heavy yaw spin
-    // (>15 rad/s) centripetal acceleration ω²·r at the IMU offset can
-    // inflate body |a| up to ~1g during genuine freefall (Marmotte5
-    // 2026-05-04 log2 cycle 3: gyro 26 rad/s held body |a| ≈ 1g for the
-    // entire 1.3s freefall, so the 0.5g gate never fired).  Admit body
-    // |a| up to 1.5g when the gyro confirms heavy spin — a stationary
-    // carrier has |a|≈1g but low gyro and is still rejected.  As a final
-    // fallback check earth-frame Z when |a| is even higher: centripetal
-    // is horizontal in body XY so earth-Z reads ~0 if the spin axis is
-    // vertical, but oscillates if the vehicle is also tumbling.  For
-    // upward throws keep the existing earth-frame check.
+    // state.  Under spin, centripetal force ω²·r at the IMU offset
+    // inflates body |a|; the drop_body_in_freefall() ceiling scales
+    // with ω² to admit the spinning-freefall envelope (see helper at
+    // top of file for cases driving the design).  As a final fallback
+    // check earth-frame Z: centripetal is horizontal in body XY so
+    // earth-Z reads ~0 if the spin axis is vertical, but oscillates
+    // under multi-axis tumble.  For upward throws keep the existing
+    // earth-frame check.
     bool free_falling;
     if (g2.throw_type == ThrowType::Drop) {
         const float accel_mss = copter.ins.get_accel().length();
         const float gyro_rate = copter.ins.get_gyro().length();
-        const bool body_freefall = (accel_mss < 0.5f * GRAVITY_MSS)
-                                || (accel_mss < 1.5f * GRAVITY_MSS
-                                    && gyro_rate > 15.0f);
+        const bool body_freefall = drop_body_in_freefall(accel_mss, gyro_rate);
         const bool spin_freefall = fabsf(ahrs.get_accel_ef().z) < 0.5f * GRAVITY_MSS
                                 && gyro_rate > 10.0f;
         free_falling = body_freefall || spin_freefall;
@@ -585,24 +601,24 @@ bool ModeThrow::throw_in_freefall() const
 {
     // Spool-up freefall verification.  Body-frame accel is the primary
     // check: it is EKF/AHRS-independent and reads near zero in genuine
-    // freefall regardless of filter health.  Under heavy yaw spin
-    // (>15 rad/s) centripetal acceleration at the IMU offset inflates
-    // body |a| up to ~1g during genuine freefall, so admit |a| up to
-    // 1.5g when the gyro confirms heavy spin (mirrors throw_detected()).
-    // For upward throws only the standard 0.5g check applies.
+    // freefall regardless of filter health.  Under spin, centripetal
+    // force inflates body |a| — drop_body_in_freefall() uses a
+    // physics-based ceiling that scales with ω² to admit the spinning-
+    // freefall envelope (mirrors throw_detected()).  Upward throws keep
+    // the standard 0.5g check.
     const float accel_mss = copter.ins.get_accel().length();
     const float gyro_rate = copter.ins.get_gyro().length();
-    const bool body_in_freefall = (accel_mss < 0.5f * GRAVITY_MSS)
-                               || (g2.throw_type == ThrowType::Drop
-                                   && accel_mss < 1.5f * GRAVITY_MSS
-                                   && gyro_rate > 15.0f);
+    const bool body_in_freefall = (g2.throw_type == ThrowType::Drop)
+                                ? drop_body_in_freefall(accel_mss, gyro_rate)
+                                : (accel_mss < 0.5f * GRAVITY_MSS);
     if (g2.throw_type != ThrowType::Drop || body_in_freefall) {
         return body_in_freefall;
     }
-    // Drop fallback: very large IMU offset / very high spin can push
-    // body |a| beyond 1.5g.  Earth-frame Z accel reads ~0 in freefall
-    // regardless of spin, but depends on AHRS attitude — if unhealthy
-    // we fall back to "not in freefall" (conservative).
+    // Drop earth-frame fallback: the body ceiling is conservative on r;
+    // an unusually large IMU offset or spin beyond the design envelope
+    // can still push body |a| above cap.  Earth-Z accel reads ~0 in
+    // freefall regardless of spin but depends on AHRS attitude — if
+    // unhealthy we fall back to "not in freefall" (conservative).
     if (!ahrs.has_status(AP_AHRS::Status::ATTITUDE_VALID)) {
         return false;
     }
