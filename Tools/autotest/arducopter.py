@@ -12875,6 +12875,82 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.disarm_vehicle(force=True)
         self.zero_throttle()
 
+    def ThrowSpinTumbleDrop(self):
+        '''Test that a multi-axis tumbling drop recovers via the physics-based body-frame freefall ceiling'''
+        # ThrowSpinDrop covers single-axis yaw spin where the spin axis
+        # is aligned with gravity — centripetal force projects entirely
+        # into the body XY (earth horizontal) plane, leaving earth-Z
+        # accel near zero so the spin_freefall (earth-frame Z) fallback
+        # gate catches it regardless of the body-frame ceiling.
+        #
+        # This test covers the harder case: TWIST on all three axes
+        # tilts the spin axis off vertical and tumbles the attitude, so
+        # centripetal force projects into earth-Z and breaks that
+        # fallback.  The only gate that catches it is the body-frame
+        # check, which used to have a fixed 1.5g cap; combined ω of
+        # ~30+ rad/s pushed body |a| above 1.5g and stalled detection.
+        # SFD1 log55 2026-05-27 hit exactly this signature in the field:
+        # ω 25-30 rad/s combined, body |a| 15-30 m/s² throughout 600 ms
+        # of genuine freefall, detection delayed ~900 ms (cost ~3.6 m
+        # altitude).  The physics-based cap (0.5g + r_max·ω²) admits
+        # the same window.
+        self.set_parameters({
+            "SIM_SHOVE_Z": -10.5,
+            "SIM_IMU_POS_X": 0.05,
+            "THROW_TYPE": 1,           # drop
+            "THROW_NEXTMODE": 5,       # LOITER
+            "MOT_SPOOL_TIME": 0.5,
+        })
+        self.reboot_sitl()  # SIM_IMU_POS takes effect on reboot
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.context_collect('STATUSTEXT')
+        self.arm_vehicle()
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            pass
+
+        # Wait until the vehicle is near apogee, then inject twist on
+        # all three axes.  Combined gyro magnitude saturates at
+        # sqrt(3)·35 ≈ 60 rad/s per the SITL per-axis 35 rad/s clamp,
+        # well above the single-axis 30 rad/s used in ThrowSpinDrop.
+        # The off-vertical spin axis means earth-Z accel oscillates
+        # under the resulting attitude tumble, so the earth-frame
+        # fallback cannot mask a broken body ceiling.
+        self.wait_altitude(50, 1000, timeout=60, relative=True)
+        try:
+            self.set_parameters({
+                "SIM_TWIST_X": 20.0,
+                "SIM_TWIST_Y": 20.0,
+                "SIM_TWIST_Z": 20.0,
+                "SIM_TWIST_TIME": 12000,
+            })
+        except ValueError:
+            pass
+
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True, timeout=30)
+        self.wait_mode('LOITER')
+
+        # Detection passing alone isn't sufficient — the spool-up
+        # freefall check runs every loop on the same gate, so a too-
+        # tight body ceiling shows up as "Throw: freefall lost,
+        # resetting" aborts that bounce the state machine back to
+        # Detecting.  Zero such messages means the body ceiling
+        # admitted the full freefall window.
+        msgs = self.context_collection('STATUSTEXT')
+        freefall_lost = [m for m in msgs if "freefall lost" in m.text]
+        if len(freefall_lost) > 0:
+            raise NotAchievedException(
+                "spool-up freefall check rejected tumbling drop %d times "
+                "(body-frame ceiling too tight for multi-axis spin)"
+                % len(freefall_lost))
+
+        self.disarm_vehicle(force=True)
+        self.zero_throttle()
+
     def ThrowYawAbsolute(self):
         '''Test that THROW_YAW_TYPE=3 (Absolute) drives the vehicle to face the configured heading after uprighting'''
         # Pick a target heading well clear of the SITL spawn heading
@@ -14144,6 +14220,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.ThrowModeNoGPS,
              self.ThrowDropSourceSwitch,
              self.ThrowSpinDrop,
+             self.ThrowSpinTumbleDrop,
              self.ThrowYawAbsolute,
              self.ThrowNextModeAcro,
              self.SetpointGlobalVel,
