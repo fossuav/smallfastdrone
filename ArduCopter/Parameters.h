@@ -14,6 +14,7 @@ class ModeRTL;
 #if WEATHERVANE_ENABLED
  #include <AC_AttitudeControl/AC_WeatherVane.h>
 #endif
+#include <AP_GroundEffect/AP_GroundEffect.h>
 
 // Global parameter class.
 //
@@ -506,8 +507,10 @@ public:
     AP_Enum<ModeThrow::ThrowType> throw_type;
 #endif
 
-    // ground effect compensation enable/disable
-    AP_Int8 gndeffect_comp_enabled;
+#if AP_GROUNDEFFECT_ENABLED
+    // ground effect detector
+    AP_GroundEffect ground_effect;
+#endif
 
 #if AP_TEMPCALIBRATION_ENABLED
     // temperature calibration handling
@@ -670,12 +673,6 @@ public:
 
     // hover Z-axis accel bias learning mode
     AP_Int8 accel_zbias_learn;
-    // ground effect compensation altitude threshold
-    AP_Float tkoff_gndeff_alt;
-
-    // ground effect compensation timeout (requires both timeout AND altitude)
-    AP_Float tkoff_gndeff_tmo;
-
     // EKF variance filter cutoff
     AP_Float fs_ekf_filt_hz;
 
