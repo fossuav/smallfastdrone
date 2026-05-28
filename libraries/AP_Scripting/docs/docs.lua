@@ -3593,6 +3593,15 @@ function ahrs:handle_external_position_estimate(location, accuracy, timestamp_ms
 ---@return boolean -- true if the wind state was set
 function ahrs:handle_external_wind_estimate(speed, speed_accuracy, direction, direction_accuracy) end
 
+-- configuration check whether the active EKF source set names GPS for any
+-- of pos/vel/yaw. Returns true only when the currently-selected source set
+-- has GPS configured somewhere; unaffected by short-term fusion state such
+-- as GPS timeouts or setLatLng-driven observations. The right gate for "is
+-- the EKF in a GPS-aided configuration" as distinct from "is the EKF
+-- currently fusing a GPS sample".
+---@return boolean
+function ahrs:using_gps() end
+
 -- desc
 ---@return Quaternion_ud|nil
 function ahrs:get_quaternion() end
