@@ -68,6 +68,17 @@ void Copter::ekf_check()
         ekf_check_state.has_ever_passed = false;
         ekf_check_state.fail_count = 0;
         ekf_check_state.source_switch_ms = AP_HAL::millis();
+        // Clear a latched failsafe too. Without this, fail_count is
+        // zeroed above and the recovery path at the bottom of this
+        // function (gated on fail_count > 0) can never fire to clear
+        // bad_variance, so failsafe.ekf would stay set forever and
+        // position_ok() would reject subsequent mode changes that
+        // require position.
+        if (ekf_check_state.bad_variance) {
+            ekf_check_state.bad_variance = false;
+            LOGGER_WRITE_ERROR(LogErrorSubsystem::EKFCHECK, LogErrorCode::EKFCHECK_VARIANCE_CLEARED);
+            failsafe_ekf_off_event();
+        }
     }
 
     // suppress check during source transition holdoff
