@@ -246,6 +246,19 @@ All outputs are capable of PWM and DShot. Motors 1-4 are capable of Bidirectiona
 - Motors 5-8  Group2 (TIM8)
 - Motor 9     Group3 (TIM4)
 
+<<<<<<< HEAD
+=======
+## 12V Peripheral Output (POWER AUX)
+
+The 12V pin on the **POWER AUX** connector is gated by a BEC enable pin. The pin is pre-mapped to GPIO 81 and configured as RELAY1. By default it is configured OFF via `RELAY1_DEFAULT`.
+
+- To make it controllable from the transmitter. set `RELAY1_FUNCTION` = 1 (Relay).
+- To change the default state to ON, set `RELAY1_DEFAULT` = 1.
+- Assign `RCx_OPTION` = 28 (Relay1 On/Off) to the channel you want to use as the switch.
+
+The VBAT pin on the same connector is a direct battery pass-through and is not controlled by firmware.
+
+>>>>>>> 2527252a89 (hwdef: ARK_FPV: update documentation for 12V Relay configuration)
 ## Loading Firmware
 
 Initial firmware load can be done with DFU by plugging in USB with the
