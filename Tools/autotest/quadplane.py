@@ -1980,17 +1980,23 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         if saved_spd <= 0:
             raise NotAchievedException("applet did not save wind (WIND_SPD=%f)" % saved_spd)
         self.progress("Phase 1 OK: applet saved wind %.1f m/s" % saved_spd)
-        self.fly_home_land_and_disarm(timeout=300)
+        # Return to launch and VTOL-land near home so the recorded origin
+        # stays close to the reboot location for the GPS-denied phase.
+        self.change_mode('QRTL')
+        self.wait_disarmed(timeout=300)
 
         # Phase 2: Disable GPS, configure for EXTNAV + dead reckoning, reboot.
         # Switching EK3_SRC1 to EXTNAV makes ahrs:using_gps() false (it is a
         # source-set check, not a GPS-health check) which is the applet's
-        # warm-start gate.
+        # warm-start gate. usingGPS() is a source-set check over all axes, so
+        # GPS must be dropped from velZ too (its default 3=GPS would otherwise
+        # keep ahrs:using_gps() true and block the warm-start).
         self.set_parameters({
             "SIM_GPS_DISABLE": 1,
             "SIM_GPS2_DISABLE": 1,
             "EK3_SRC1_POSXY": 6,     # EXTNAV (visual odometry)
             "EK3_SRC1_VELXY": 6,     # EXTNAV (visual odometry)
+            "EK3_SRC1_VELZ": 0,      # None (default 3=GPS keeps using_gps true)
             "VISO_TYPE": 1,          # MAVLink visual odometry (driver enabled)
         })
         self.reboot_sitl()
