@@ -3602,6 +3602,12 @@ function ahrs:handle_external_wind_estimate(speed, speed_accuracy, direction, di
 ---@return boolean
 function ahrs:using_gps() end
 
+-- whether the vehicle is assumed to be flying forward along its X axis, set
+-- by the vehicle/mode (true for fixed-wing forward flight, false in VTOL
+-- hover). The EKF wind estimate is only meaningful while this is true.
+---@return boolean
+function ahrs:get_fly_forward() end
+
 -- desc
 ---@return Quaternion_ud|nil
 function ahrs:get_quaternion() end

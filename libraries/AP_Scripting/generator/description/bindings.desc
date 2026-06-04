@@ -66,6 +66,7 @@ singleton AP_AHRS method handle_external_position_estimate depends AP_AHRS_EXTER
 singleton AP_AHRS method handle_external_wind_estimate boolean float'skip_check float'skip_check float'skip_check float'skip_check
 singleton AP_AHRS method handle_external_wind_estimate depends AP_AHRS_POSITION_RESET_ENABLED
 singleton AP_AHRS method using_gps boolean
+singleton AP_AHRS method get_fly_forward boolean
 
 include AP_Arming/AP_Arming.h
 
