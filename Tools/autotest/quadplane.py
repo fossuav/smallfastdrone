@@ -1968,10 +1968,13 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
 
         # Phase 1b: fly forward with GPS so the EKF learns the wind and the
         # applet saves it. TAKEOFF climbs in VTOL then transitions to forward
-        # flight, where airspeed plus GPS makes wind observable.
+        # flight, where airspeed plus GPS makes wind observable. The applet
+        # gates learning on fly_forward, so it cannot save during the VTOL
+        # climb - wait for the transition before expecting a save.
         self.change_mode('TAKEOFF')
         self.wait_ready_to_arm()
         self.arm_vehicle()
+        self.wait_statustext('Transition done', check_context=True, timeout=120)
         self.wait_statustext('Wind: saved', check_context=True, timeout=180)
         saved_spd = self.get_parameter('WIND_SPD')
         if saved_spd <= 0:
