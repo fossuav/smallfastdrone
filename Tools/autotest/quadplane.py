@@ -1930,9 +1930,22 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         )
 
     def GPSDeniedVTOL(self):
-        '''test GPS denial with recorded origin for VTOL takeoff and transition'''
+        '''test GPS denial with recorded origin for VTOL takeoff and transition,
+        including EKF wind warm-start via the wind_persist applet'''
         self.context_push()
         self.context_collect('STATUSTEXT')
+
+        # The wind_persist applet learns the EKF wind while flying with GPS,
+        # saves it to its WIND_ params, and reinjects it on the next GPS-denied
+        # arm so dead reckoning starts from a realistic wind state.
+        self.set_parameters({"SCR_ENABLE": 1})
+        self.reboot_sitl()
+        self.install_applet_script_context('wind_persist.lua')
+        self.reboot_sitl()
+        self.wait_statustext('Wind persistence applet loaded', check_context=True, timeout=30)
+
+        sim_wind_spd = 8
+        sim_wind_dir = 270
 
         # Phase 1: Boot with GPS, record the origin
         # AHRS_OPTIONS bits: 0=DISABLE_DCM_FALLBACK_FW, 1=DISABLE_DCM_FALLBACK_VTOL,
@@ -1942,11 +1955,34 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             "EK3_OPTIONS": 1,        # JammingExpected
             "FLTMODE1": 19,          # QLOITER - so reboot enters VTOL mode
             "ARMING_CHECK": 1830902, # all except GPS,GPS_CONFIG,VISION (clear bits 0,3,12,18)
+            "SIM_WIND_SPD": sim_wind_spd,
+            "SIM_WIND_DIR": sim_wind_dir,
+            "WIND_OPT": 1,           # enable the applet
+            "WIND_DIST": 0,          # disable the distance staleness check for the test
+            "WIND_SPD": 0,           # reset persisted wind from any prior run
+            "WIND_DIR": 0,
+            "WIND_LAT": 0,
+            "WIND_LON": 0,
         })
         self.reboot_sitl()
-        self.wait_ready_to_arm()
 
-        # Phase 2: Disable GPS, configure for EXTNAV + dead reckoning, reboot
+        # Phase 1b: fly forward with GPS so the EKF learns the wind and the
+        # applet saves it. TAKEOFF climbs in VTOL then transitions to forward
+        # flight, where airspeed plus GPS makes wind observable.
+        self.change_mode('TAKEOFF')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.wait_statustext('Wind: saved', check_context=True, timeout=180)
+        saved_spd = self.get_parameter('WIND_SPD')
+        if saved_spd <= 0:
+            raise NotAchievedException("applet did not save wind (WIND_SPD=%f)" % saved_spd)
+        self.progress("Phase 1 OK: applet saved wind %.1f m/s" % saved_spd)
+        self.fly_home_land_and_disarm(timeout=300)
+
+        # Phase 2: Disable GPS, configure for EXTNAV + dead reckoning, reboot.
+        # Switching EK3_SRC1 to EXTNAV makes ahrs:using_gps() false (it is a
+        # source-set check, not a GPS-health check) which is the applet's
+        # warm-start gate.
         self.set_parameters({
             "SIM_GPS_DISABLE": 1,
             "SIM_GPS2_DISABLE": 1,
@@ -1963,10 +1999,13 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.wait_statustext('EKF3 IMU0 initialised', check_context=True, timeout=30)
         self.wait_statustext('using recorded origin', check_context=True, timeout=30)
 
-        # Phase 3: Arm and takeoff in QLOITER without GPS
+        # Phase 3: Arm and takeoff in QLOITER without GPS. The applet's
+        # arming-edge warm-start fires here since GPS is not in the source set.
         self.change_mode('QLOITER')
         self.delay_sim_time(15)  # 10s required for IMU consistency checks
+        self.context_collect('STATUSTEXT')
         self.arm_vehicle()
+        self.wait_statustext('Wind: warm-started', check_context=True, timeout=30)
         self.set_rc(3, 2000)
         self.wait_altitude(15, 30, relative=True, timeout=60)
         self.set_rc(3, 1500)
