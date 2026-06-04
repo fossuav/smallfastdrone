@@ -10,18 +10,20 @@
   mechanism can be used on its own, independent of any flight mode.
 
   Operation:
-    - While armed, flying, and the EKF is fusing GPS, the script samples
-      ahrs:wind_estimate() at 1 Hz, waits for the estimate to settle
+    - While armed, flying forward, and the EKF is fusing GPS, the script
+      samples ahrs:wind_estimate() at 1 Hz, waits for the estimate to settle
       (low speed and direction variance over a short window), then saves
-      it to WIND_SPD/DIR/SACC/DACC and the location WIND_LAT/LON.
+      it to WIND_SPD/DIR/SACC/DACC and the location WIND_LAT/LON. The
+      fly_forward gate matters on VTOL airframes: the EKF wind estimate is
+      only meaningful in fixed-wing forward flight, not in hover.
     - On the disarmed->armed transition, if the EKF is NOT fusing GPS
       (a GPS-denied takeoff) and a value has been saved, it pushes the
       saved wind back to the EKF via ahrs:handle_external_wind_estimate.
       Skipped if the current location is further than WIND_DIST from the
       saved location, so a stale value is not used after a long transit.
 
-  Requires the ahrs:using_gps() and ahrs:handle_external_wind_estimate()
-  bindings.
+  Requires the ahrs:using_gps(), ahrs:get_fly_forward() and
+  ahrs:handle_external_wind_estimate() bindings.
 ]]
 
 local MAV_SEVERITY = {
@@ -272,12 +274,16 @@ local function attempt_warmstart()
 end
 
 -- Sample EKF wind once per second and save settled values to params.
--- Only runs while armed, flying, and the EKF is fusing GPS, so the wind
--- estimate is being learned reliably from GPS-constrained ground velocity.
--- First save targets ~10 s after those conditions are first met;
--- subsequent saves are gated by WIND_REPEAT_SAVE_MS plus delta thresholds.
+-- Only runs while armed, flying forward, and the EKF is fusing GPS, so the
+-- wind estimate is being learned reliably from GPS-constrained ground
+-- velocity. The fly_forward gate is essential: the EKF wind estimate is only
+-- meaningful in forward flight, so on a VTOL it must not sample during hover
+-- (fly_forward is false in QLOITER etc, true once transitioned to fixed
+-- wing). First save targets ~10 s of forward flight; subsequent saves are
+-- gated by WIND_REPEAT_SAVE_MS plus delta thresholds.
 local function update_wind_persistence(now_ms)
-    if not arming:is_armed() or not vehicle:get_likely_flying() or not ekf_using_gps() then
+    if not arming:is_armed() or not vehicle:get_likely_flying() or
+       not ekf_using_gps() or not ahrs:get_fly_forward() then
         g_state.learn_start_ms = 0
         return
     end

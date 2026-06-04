@@ -11,9 +11,14 @@ still air and accumulates position error as it dead reckons through the real
 wind. Seeding the last known wind reduces that drift.
 
 The applet only writes wind to the EKF; it does not change any flight mode or
-control behaviour. It requires the `ahrs:using_gps()` and
-`ahrs:handle_external_wind_estimate()` bindings, so the autopilot must have at
-least 1 MB of flash (`AP_AHRS_POSITION_RESET_ENABLED`).
+control behaviour. It requires the `ahrs:using_gps()`,
+`ahrs:get_fly_forward()` and `ahrs:handle_external_wind_estimate()` bindings,
+so the autopilot must have at least 1 MB of flash
+(`AP_AHRS_POSITION_RESET_ENABLED`).
+
+The EKF wind estimate is only meaningful in fixed-wing forward flight, so on a
+VTOL airframe the applet learns wind only while `fly_forward` is set (i.e. once
+transitioned to forward flight, not during hover).
 
 # Parameters
 
@@ -37,7 +42,7 @@ WIND_DIST : if the current location is further than this (m) from WIND_LAT/LON, 
 
 1. Copy `wind_persist.lua` to the `APM/scripts` directory on the SD card and set `SCR_ENABLE = 1`, then reboot.
 2. Leave `WIND_OPT = 1`.
-3. Fly a leg with a healthy GPS fix. While armed, flying, and the EKF is fusing GPS, the script samples the EKF wind at 1 Hz and, once it settles, saves it to `WIND_SPD`/`WIND_DIR` (and the location). A `Wind: saved ...` message is sent on each save.
+3. Fly a forward-flight leg with a healthy GPS fix. While armed, flying forward (`fly_forward` set), and the EKF is fusing GPS, the script samples the EKF wind at 1 Hz and, once it settles, saves it to `WIND_SPD`/`WIND_DIR` (and the location). A `Wind: saved ...` message is sent on each save. On a VTOL, transition to fixed-wing first; the script will not learn wind in hover.
 4. On the next arm where the EKF is not fusing GPS (a GPS-denied takeoff, or a switch to a GPS-denied EKF source set before arming), the script pushes the saved wind into the EKF and reports `Wind: warm-started ...`.
 
 Notes:
