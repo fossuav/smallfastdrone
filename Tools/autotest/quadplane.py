@@ -2041,6 +2041,99 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
+    def GPSDeniedVTOLZeroVelHold(self):
+        '''EK3_OPTIONS ZeroVelConstPos keeps the EKF velocity variance bounded
+        during a GPS-denied VTOL hover that has no velocity aiding'''
+        # Seed a recorded origin directly so the EKF can initialise GPS-denied
+        # without a prior GPS flight, then configure a GPS-denied VTOL: GPS off,
+        # EXTNAV source set (no ext-nav data arrives so it times out into the
+        # AID_NONE constant-position mode), and QLOITER on boot so fly_forward
+        # (assume_zero_sideslip) is false - the regime the zero-velocity hold
+        # targets. EK3_OPTIONS bit 1 (ZeroVelConstPos) fuses a synthetic zero
+        # horizontal velocity so the velocity state cannot drift while unaided.
+        loc = self.sitl_start_location()
+        self.set_parameters({
+            # AHRS_OPTIONS bits: 0,1=DISABLE_DCM_FALLBACK_FW/VTOL (so a DCM
+            #   fallback is observable), 3=RECORD_ORIGIN, 4=USE_RECORDED_ORIGIN_FOR_NONGPS
+            "AHRS_OPTIONS": 27,
+            "AHRS_ORIGIN_LAT": loc.lat,
+            "AHRS_ORIGIN_LON": loc.lng,
+            "AHRS_ORIGIN_ALT": loc.alt,
+            "SIM_GPS_DISABLE": 1,
+            "SIM_GPS2_DISABLE": 1,
+            "EK3_SRC1_POSXY": 6,     # EXTNAV (no data -> times out -> AID_NONE)
+            "EK3_SRC1_VELXY": 6,     # EXTNAV
+            "EK3_SRC1_VELZ": 0,      # None
+            "VISO_TYPE": 1,          # MAVLink visual odometry (driver enabled)
+            "ARMING_CHECK": 1830902, # all except GPS,GPS_CONFIG,VISION
+            "EK3_OPTIONS": 2,        # ZeroVelConstPos
+            # Tight hold noise so the velocity-state constraint is observable in
+            # benign SITL. The constant-position fake-position fusion alone holds
+            # the velocity-state variance around 0.05-0.12, so the default 1.0 m/s
+            # (sized for the real perturbed case) barely bites here. 0.05 m/s pins
+            # the velocity state well below that floor, which the check below uses
+            # to confirm the synthetic zero-velocity measurement is being fused.
+            "EK3_ZVEL_M_NSE": 0.05,
+            "FLTMODE1": 19,          # QLOITER, so reboot enters VTOL mode
+        })
+        self.reboot_sitl()
+
+        # EKF3 initialises GPS-denied and loads the recorded origin; const
+        # position mode (AID_NONE) is established in QLOITER.
+        self.context_collect('STATUSTEXT')
+        self.change_mode('QLOITER')
+        self.wait_statustext('using recorded origin', check_context=True, timeout=60)
+        self.delay_sim_time(15)  # 10s IMU consistency window; no event is emitted
+
+        # Drop the boot-time messages (a transient "DCM active" is emitted before
+        # EKF3 comes up) so the flight-phase failsafe/DCM checks only see the hold.
+        self.context_clear_collection('STATUSTEXT')
+
+        # Arm and climb to a hover on the throttle stick (no position aiding).
+        self.arm_vehicle()
+        self.set_rc(3, 2000)
+        self.wait_altitude(15, 30, relative=True, timeout=60)
+        self.set_rc(3, 1500)
+
+        # Hold the unaided GPS-denied hover so the zero-velocity fusion settles and
+        # any EKF failsafe would have time to fire. No single event marks "held long
+        # enough", so a fixed sim-time hold is used.
+        self.delay_sim_time(30)
+
+        if self.statustext_in_collections('EKF Failsafe'):
+            raise NotAchievedException("EKF failsafe during zero-velocity hold")
+        if self.statustext_in_collections('DCM active'):
+            raise NotAchievedException("EKF3 fell back to DCM during zero-velocity hold")
+
+        # Confirm the zero-velocity hold actually constrained the velocity state:
+        # read the settled tail of XKV1 (core 0) velocity-NE variances (V04, V05).
+        # Constant position alone holds these around 0.05-0.12; with the hold fused
+        # at a 0.05 m/s noise they sit well under 0.04. This is the discriminating
+        # check - without ZeroVelConstPos the mean is ~0.077.
+        mlog = self.dfreader_for_current_onboard_log()
+        v04 = []
+        v05 = []
+        while True:
+            m = mlog.recv_match(type='XKV1')
+            if m is None:
+                break
+            if int(m.C) != 0:
+                continue
+            v04.append(m.V04)
+            v05.append(m.V05)
+        if len(v04) < 40:
+            raise NotAchievedException("insufficient XKV1 samples (%u)" % len(v04))
+        mean04 = sum(v04[-40:]) / 40
+        mean05 = sum(v05[-40:]) / 40
+        self.progress("Hover XKV1 velocity variance mean N=%.4f E=%.4f" % (mean04, mean05))
+        if mean04 > 0.04 or mean05 > 0.04:
+            raise NotAchievedException(
+                "velocity state not constrained by zero-vel hold (N=%.4f E=%.4f)" %
+                (mean04, mean05))
+
+        self.disarm_vehicle(force=True)
+        self.reboot_sitl()
+
     def TransitionAnglePScaling(self):
         '''verify ATSC (angle P scaling) behavior during forward transition'''
         self.set_parameters({
@@ -3670,6 +3763,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             self.RTL_AUTOLAND_1_FROM_GUIDED,  # as in fly-home then go to landing sequence
             self.AHRSFlyForwardFlag,
             self.GPSDeniedVTOL,
+            self.GPSDeniedVTOLZeroVelHold,
             self.GPSDeniedFBWBAltitude,
             self.DoRepositionTerrain,
             self.DoRepositionTerrain2,
