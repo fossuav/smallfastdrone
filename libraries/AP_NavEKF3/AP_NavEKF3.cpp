@@ -738,10 +738,19 @@ const AP_Param::GroupInfo NavEKF3::var_info2[] = {
 
     // @Param: OPTIONS
     // @DisplayName: Optional EKF behaviour
-    // @Description: This controls optional EKF behaviour. Setting JammingExpected will change the EKF nehaviour such that if dead reckoning navigation is possible it will require the preflight alignment GPS quality checks controlled by EK3_GPS_CHECK and EK3_CHECK_SCALE to pass before resuming GPS use if GPS lock is lost for more than 2 seconds to prevent bad
-    // @Bitmask: 0:JammingExpected
+    // @Description: This controls optional EKF behaviour. Setting JammingExpected will change the EKF nehaviour such that if dead reckoning navigation is possible it will require the preflight alignment GPS quality checks controlled by EK3_GPS_CHECK and EK3_CHECK_SCALE to pass before resuming GPS use if GPS lock is lost for more than 2 seconds to prevent bad. Setting ZeroVelConstPos fuses a synthetic zero horizontal velocity measurement while the EKF has no aiding (constant position mode) and the vehicle is not flying forward, to stop the velocity state drifting during a deliberately stationary GPS-denied hold such as a VTOL hover takeoff. Only enable ZeroVelConstPos for operations where the vehicle is genuinely station-keeping when unaided; the velocity noise is set by EK3_ZVEL_M_NSE.
+    // @Bitmask: 0:JammingExpected,1:ZeroVelConstPos
     // @User: Advanced
     AP_GROUPINFO("OPTIONS",  11, NavEKF3, _options, 0),
+
+    // @Param: ZVEL_M_NSE
+    // @DisplayName: Zero velocity hold measurement noise
+    // @Description: 1-sigma noise of the synthetic zero horizontal velocity measurement fused when EK3_OPTIONS bit 1 (ZeroVelConstPos) is set and the EKF has no aiding (e.g. a VTOL holding a GPS-denied hover). Lower values arrest velocity drift more firmly but oppose genuine low-speed motion harder; keep loose enough that pilot repositioning is not fought.
+    // @Range: 0.1 50.0
+    // @Increment: 0.1
+    // @User: Advanced
+    // @Units: m/s
+    AP_GROUPINFO("ZVEL_M_NSE", 12, NavEKF3, _zeroVelNoise, 1.0f),
 
     AP_GROUPEND
 };
