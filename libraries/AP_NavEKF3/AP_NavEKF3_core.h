@@ -1123,6 +1123,7 @@ private:
     bool fuseVelData;               // this boolean causes the velNED measurements to be fused
     bool fusePosData;               // this boolean causes the posNE measurements to be fused
     bool fuseHgtData;               // this boolean causes the hgtMea measurements to be fused
+    bool fuseZeroVelHold;           // true when the fused velNED measurement is the synthetic zero-velocity constant-position hold (EK3_OPTIONS ZeroVelConstPos), so a separate observation noise is used
     Vector3F innovMag;              // innovation output from fusion of X,Y,Z compass measurements
     Vector3F varInnovMag;           // innovation variance output from fusion of X,Y,Z compass measurements
     ftype innovVtas;                // innovation output from fusion of airspeed measurements
