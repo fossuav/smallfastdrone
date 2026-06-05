@@ -696,6 +696,7 @@ void NavEKF3_core::SelectVelPosFusion()
     // initialise all possible data we may fuse
     fusePosData = false;
     fuseVelData = false;
+    fuseZeroVelHold = false;
 
     // Determine if we need to fuse position and velocity data on this time step
     if (gpsDataToFuse && (PV_AidingMode == AID_ABSOLUTE) && (posxy_source == AP_NavEKF_Source::SourceXY::GPS)) {
@@ -805,9 +806,28 @@ void NavEKF3_core::SelectVelPosFusion()
             }
         } else {
             fusePosData = true;
-            fuseVelData = false;
             velPosObs[3] = lastKnownPositionNE.x;
             velPosObs[4] = lastKnownPositionNE.y;
+            // Optionally also fuse a synthetic zero horizontal velocity measurement.
+            // This branch is the non-fixed-wing constant-position case (the fixed-wing
+            // launch case above already constrains velocity). Without it the velocity
+            // state is unconstrained and drifts on IMU integration, which can grow the
+            // velocity variance into an EKF failsafe and leaves a bad velocity for the
+            // transition into forward flight. When the operator opts in via EK3_OPTIONS
+            // ZeroVelConstPos and the motors are armed, assert the vehicle is
+            // approximately stationary (e.g. a VTOL holding a GPS-denied hover under
+            // pilot position control). Only reached in AID_NONE and when not
+            // assume_zero_sideslip(); the hold releases automatically as soon as any
+            // aiding returns and PV_AidingMode leaves AID_NONE.
+            if ((frontend->_options & (int32_t)NavEKF3::Options::ZeroVelConstPos) && motorsArmed) {
+                fuseVelData = true;
+                velPosObs[0] = 0.0f;
+                velPosObs[1] = 0.0f;
+                velPosObs[2] = stateStruct.velocity.z;  // leave vertical to height fusion
+                fuseZeroVelHold = true;
+            } else {
+                fuseVelData = false;
+            }
         }
     }
 
@@ -865,6 +885,13 @@ void NavEKF3_core::FuseVelPosNED()
             R_OBS[2] = R_OBS[0];
             R_OBS[3] = R_OBS[0];
             R_OBS[4] = R_OBS[0];
+            if (fuseZeroVelHold) {
+                // separately tunable, tighter noise for the synthetic zero horizontal
+                // velocity hold so it actually arrests drift; the synthetic position
+                // measurement keeps the EK3_NOAID_M_NSE value set above
+                R_OBS[0] = sq(constrain_ftype(frontend->_zeroVelNoise, 0.1f, 50.0f));
+                R_OBS[1] = R_OBS[0];
+            }
             for (uint8_t i=0; i<=2; i++) R_OBS_DATA_CHECKS[i] = R_OBS[i];
         } else {
             if (gpsSpdAccuracy > 0.0f) {
