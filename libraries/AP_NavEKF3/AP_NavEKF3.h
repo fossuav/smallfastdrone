@@ -428,6 +428,7 @@ private:
     AP_Int8 _imuMask;               // Bitmask of IMUs to instantiate EKF3 for
     AP_Int16 _gpsCheckScaler;       // Percentage increase to be applied to GPS pre-flight accuracy and drift thresholds
     AP_Float _noaidHorizNoise;      // horizontal position measurement noise assumed when synthesised zero position measurements are used to constrain attitude drift : m
+    AP_Float _zeroVelNoise;         // horizontal velocity measurement noise assumed when synthesised zero velocity measurements are fused during an unaided constant-position hold (EK3_OPTIONS ZeroVelConstPos) : m/s
     AP_Float _yawNoise;             // magnetic yaw measurement noise : rad
     AP_Int16 _yawInnovGate;         // Percentage number of standard deviations applied to magnetic yaw innovation consistency check
     AP_Int8 _tauVelPosOutput;       // Time constant of output complementary filter : csec (centi-seconds)
@@ -466,6 +467,7 @@ private:
     // enum for processing options
     enum class Options {
         JammingExpected     = (1<<0),
+        ZeroVelConstPos     = (1<<1),
     };
 
 // Possible values for _flowUse
