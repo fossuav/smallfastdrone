@@ -783,18 +783,28 @@ bool NavEKF3_core::setWind(float speed, float speed_accuracy, float direction, f
 
     // update the vehicle velocity states to be consistent with the new wind estimate if dead reckoning
     if ((imuSampleTime_ms - lastPosPassTime_ms) > frontend->deadReckonDeclare_ms) {
-        velResetNE = stateStruct.wind_vel - wind_vel_prev;
-        stateStruct.velocity.xy() += velResetNE;
+        // The ground-velocity = airspeed-along-heading + wind identity that makes a
+        // wind change imply the same ground-velocity change only holds when flying
+        // forward with zero sideslip. Gate the velocity update on that: a hovering
+        // multirotor or VTOL has a ground velocity independent of the wind estimate,
+        // so folding the wind change into velocity would inject a phantom ground
+        // velocity of order the wind speed - the cause of the GPS-denied cold-arm EKF
+        // failsafe. The wind-set marker below is still recorded either way so the
+        // warm-started wind is preserved across the transition to forward flight.
+        if (assume_zero_sideslip()) {
+            velResetNE = stateStruct.wind_vel - wind_vel_prev;
+            stateStruct.velocity.xy() += velResetNE;
 
-        // update the output buffer
-        for (uint8_t i=0; i<imu_buffer_length; i++) {
-            storedOutput[i].velocity.xy() = stateStruct.velocity.xy();
+            // update the output buffer
+            for (uint8_t i=0; i<imu_buffer_length; i++) {
+                storedOutput[i].velocity.xy() = stateStruct.velocity.xy();
+            }
+            outputDataNew.velocity.xy() = stateStruct.velocity.xy();
+            outputDataDelayed.velocity.xy() = stateStruct.velocity.xy();
+
+            // store the time of the reset
+            lastVelReset_ms = imuSampleTime_ms;
         }
-        outputDataNew.velocity.xy() = stateStruct.velocity.xy();
-        outputDataDelayed.velocity.xy() = stateStruct.velocity.xy();
-
-        // store the time of the reset
-        lastVelReset_ms = imuSampleTime_ms;
         lastExtWindVelSet_ms = imuSampleTime_ms;
     }
 
