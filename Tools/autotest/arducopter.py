@@ -12977,6 +12977,29 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.change_mode('LAND')
         self.wait_disarmed(timeout=90)
 
+    def ThrowAbortRestoresSourceSet(self):
+        '''Leaving throw without completing must restore the pre-throw EKF source set'''
+        # ModeThrow::init() switches to THROW_SRC_INI on entry; only a
+        # completed throw restores it (in the THROW_COMPLETE handoff).  Any
+        # other exit -- mode switched out, never thrown, disarm -- must
+        # restore the source set active before throw was entered, otherwise
+        # the vehicle stays stuck on the throw set for the rest of the
+        # session.  Prove the restore happens on the abort path.
+        self.set_parameters({
+            "THROW_SRC_INI": 2,    # switch to SRC2 on throw entry
+            "THROW_SRC_SET": 1,    # completion would restore SRC1 (not exercised here)
+        })
+        self.wait_ready_to_arm()   # EKF comes up on source set 1 (primary)
+        self.context_collect('STATUSTEXT')
+
+        # entering throw (disarmed) switches to the secondary set
+        self.change_mode('THROW')
+        self.wait_statustext("Throw: EKF Source Set 2", check_context=True)
+
+        # leave throw without ever throwing; exit() must restore set 1
+        self.change_mode('ALT_HOLD')
+        self.wait_statustext("Throw: restored EKF Source Set 1", check_context=True)
+
     def GroundEffectCompensation_takeOffExpected(self):
         '''Test EKF's handling of takeoff-expected'''
         self.change_mode('ALT_HOLD')
@@ -14125,6 +14148,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.ThrowDoubleDrop,
              self.ThrowModeNoGPS,
              self.ThrowDropSourceSwitch,
+             self.ThrowAbortRestoresSourceSet,
              self.ThrowSpinDrop,
              self.ThrowSpinTumbleDrop,
              self.ThrowYawAbsolute,
