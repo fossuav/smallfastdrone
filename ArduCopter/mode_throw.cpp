@@ -39,6 +39,7 @@ bool ModeThrow::init(bool ignore_checks)
     // init state
     stage = Throw_Disarmed;
     nextmode_attempted = false;
+    source_set_switched = false;
     xy_controller_active = false;
     drop_confirm_start_ms = 0;
     drop_release_alt_m = 0;
@@ -81,13 +82,16 @@ bool ModeThrow::init(bool ignore_checks)
     throw_yaw_source = ThrowYawSource::None;
 
     // Switch EKF source set for the throw phase if configured.
-    // During throw/drop the vehicle is tumbling — position and velocity
+    // During throw/drop the vehicle is tumbling -- position and velocity
     // sources (optical flow, GPS) produce garbage.  Switching to a
     // source set with no horizontal aiding prevents EKF variance growth
-    // and nuisance EKF failsafes.  THROW_SRC_SET restores the operating
-    // source set at THROW_COMPLETE.
+    // and nuisance EKF failsafes.  A completed throw restores THROW_SRC_SET
+    // at THROW_COMPLETE; exit() restores the pre-throw set on any other exit
+    // so an aborted/never-thrown throw cannot leave the source set stuck.
     const int8_t src_init = g2.throw_src_init.get();
     if (src_init >= 1 && src_init <= 3) {
+        saved_source_set = AP::ahrs().get_posvelyaw_source_set();
+        source_set_switched = true;
         AP::ahrs().set_posvelyaw_source_set(AP_NavEKF_Source::SourceSetSelection(src_init - 1));
         gcs().send_text(MAV_SEVERITY_INFO, "Throw: EKF Source Set %d", src_init);
     }
@@ -109,7 +113,23 @@ bool ModeThrow::init(bool ignore_checks)
     return true;
 }
 
-// Drops are designed to operate without horizontal aiding — detection is
+// Restore the EKF source set that was active before init() switched it for
+// the throw phase.  A completed throw restores THROW_SRC_SET in
+// throw_do_nextmode_handoff() and clears source_set_switched first, so this
+// only fires when throw is left without completing (pilot or failsafe
+// switches mode while still waiting for / recovering from the throw), which
+// would otherwise leave the vehicle stuck on the throw source set for the
+// rest of the power cycle.
+void ModeThrow::exit()
+{
+    if (source_set_switched) {
+        AP::ahrs().set_posvelyaw_source_set(AP_NavEKF_Source::SourceSetSelection(saved_source_set));
+        gcs().send_text(MAV_SEVERITY_INFO, "Throw: restored EKF Source Set %d", saved_source_set + 1);
+        source_set_switched = false;
+    }
+}
+
+// Drops are designed to operate without horizontal aiding -- detection is
 // body-frame / baro based — so a drop can arm GPS-free.  Upward throws keep
 // the upstream requirement of a position estimate (GPS or flow-relative);
 // only a fully aiding-less upward throw is refused at arming.
@@ -993,6 +1013,10 @@ void ModeThrow::throw_do_nextmode_handoff()
         AP::ahrs().set_posvelyaw_source_set(AP_NavEKF_Source::SourceSetSelection(srcset - 1));
         gcs().send_text(MAV_SEVERITY_INFO, "EKF Source Set %d", srcset);
     }
+    // The completion path owns the post-throw source set; stop exit() from
+    // restoring the pre-throw set over it.  set_mode() below calls exit()
+    // synchronously, so this must be cleared before the mode change.
+    source_set_switched = false;
     switch ((Mode::Number)g2.throw_nextmode.get()) {
         case Mode::Number::AUTO:
         case Mode::Number::GUIDED:
