@@ -512,6 +512,10 @@ public:
     AP_Float throw_yaw_deg;
 #endif
 
+#if MODE_VALT_ENABLED
+    AP_Float valt_pos_expo;    // VALT stick-to-position-authority blend expo (0 = hard cutoff)
+#endif
+
     // ground effect compensation enable/disable
     AP_Int8 gndeffect_comp_enabled;
 
