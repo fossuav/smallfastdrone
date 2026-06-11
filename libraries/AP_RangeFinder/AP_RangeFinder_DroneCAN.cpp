@@ -102,7 +102,6 @@ void AP_RangeFinder_DroneCAN::update()
         // handle additional states received by measurement handler
         set_status(_status);
     }
-
 }
 
 //RangeFinder message handler
@@ -138,6 +137,14 @@ void AP_RangeFinder_DroneCAN::handle_measurement(AP_DroneCAN *ap_dronecan, const
             driver->_distance_m = msg.range;
             driver->_last_reading_ms = AP_HAL::millis();
             driver->_status = RangeFinder::Status::OutOfRangeHigh;
+            driver->new_data = true;
+            break;
+        }
+        case UAVCAN_EQUIPMENT_RANGE_SENSOR_MEASUREMENT_READING_TYPE_UNDEFINED:
+        {
+            driver->_distance_m = 0;
+            driver->_last_reading_ms = AP_HAL::millis();
+            driver->_status = RangeFinder::Status::NoData;
             driver->new_data = true;
             break;
         }
