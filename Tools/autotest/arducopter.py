@@ -1990,6 +1990,93 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
+    def EK3_AglKfVelForVelD(self):
+        '''AGL KF vertical-velocity fusion bounds the EKF velZ estimate with no velZ source'''
+        # Indoor optical-flow config (no GPS), baro keeps absolute height
+        # (EK3_RNG_USE_HGT=-1, rangefinder is not a height source), and no
+        # vertical-velocity source (EK3_SRC1_VELZ=0). An uncompensated Z accel
+        # offset (the vibration-rectification effect that bit real TD-5Inch
+        # flights) then integrates open-loop into a vertical velocity / altitude
+        # runaway. EK3_OPTIONS bit 5 (AglKfVelForVelD) fuses the rangefinder-aided
+        # 2-state AGL KF velocity as a velD observation to keep it bounded.
+        #
+        # The invariant has two halves and the test proves both: with the option
+        # OFF the EKF vertical velocity diverges under the injected bias; with it
+        # ON the divergence is arrested.
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "EK3_IMU_MASK": 1,      # single core so the injected bias is not masked by a lane switch
+            "EK3_RNG_USE_HGT": -1,  # baro owns absolute height; rangefinder is not a height source
+            "EK3_ALT_M_NSE": 10,    # deweight baro so the vertical channel depends on a velZ observation
+        })
+        self.set_analog_rangefinder_parameters()
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+
+        bias_z = 0.4    # m/s/s injected Z accel offset (vibration-rectification analog)
+        hover_alt = 20  # m AGL, headroom before the (no-fusion) divergence flies it down
+
+        # The invariant is measured as the EKF vertical-velocity error against the
+        # rangefinder-anchored AGL KF velocity (which tracks truth): innovation
+        # err = VD + VAgl (VD is NED-down, VAgl is +up, so they sum to ~0 when the
+        # EKF velocity is correct). The AGL KF runs in BOTH phases (bit 4); only the
+        # velD fusion (bit 5) differs, isolating the fusion's effect. Measuring the
+        # estimate error rather than the flown trajectory avoids conflating the fix
+        # with the closed-loop motion the corrupted estimate causes.
+        def max_velD_error_after_bias(options_value):
+            self.set_parameters({
+                "EK3_OPTIONS": options_value,
+                "SIM_ACC1_BIAS_Z": 0,
+            })
+            self.reboot_sitl()
+            self.wait_ready_to_arm(require_absolute=False)
+            self.takeoff(hover_alt, mode="ALT_HOLD", require_absolute=False)
+            # let the hover settle so the EKF velocity error is near zero before the stimulus
+            self.wait_climbrate(-0.3, 0.3, timeout=30, minimum_duration=3)
+            bias_time = self.get_sim_time()
+            self.set_parameter("SIM_ACC1_BIAS_Z", bias_z)
+            self.delay_sim_time(14)
+            self.disarm_vehicle(force=True)
+
+            # Measure in the settled window [bias+4, bias+10]: skip the bias-onset
+            # transient (the fusion takes a moment to catch up) and stop before the
+            # forced disarm so post-disarm free-fall samples are excluded.
+            dfreader = self.dfreader_for_current_onboard_log()
+            last_vagl = None
+            max_err = 0.0
+            while True:
+                m = dfreader.recv_match(type=["XKF1", "XKF6"])
+                if m is None:
+                    break
+                if getattr(m, "C", 0) != 0:
+                    continue
+                t = m.TimeUS * 1.0e-6
+                if t < bias_time + 4 or t > bias_time + 10:
+                    continue
+                if m.get_type() == "XKF6":
+                    last_vagl = m.VAgl
+                elif last_vagl is not None:
+                    max_err = max(max_err, abs(m.VD + last_vagl))
+            return max_err
+
+        # Half 1: fusion OFF (AGL KF only) - the EKF velD must drift from truth
+        self.start_subtest("Fusion OFF: EKF velD diverges from rangefinder truth under Z accel bias")
+        err_off = max_velD_error_after_bias(16)
+        self.progress("max EKF velD error with fusion OFF: %.2f m/s" % err_off)
+        if err_off < 1.0:
+            raise NotAchievedException(
+                "Expected EKF velD to diverge from truth with fusion off (got %.2f m/s)" % err_off)
+
+        # Half 2: fusion ON - velD stays anchored to the AGL KF velocity
+        self.start_subtest("Fusion ON: AGL KF velocity fusion keeps EKF velD on truth")
+        err_on = max_velD_error_after_bias(48)
+        self.progress("max EKF velD error with fusion ON: %.2f m/s" % err_on)
+        if err_on > 0.5:
+            raise NotAchievedException(
+                "AGL KF velocity fusion failed to keep velD on truth (got %.2f m/s)" % err_on)
+
+        self.reboot_sitl()
+
     # StabilityPatch - fly south, then hold loiter within 5m
     # position and altitude and reduce 1 motor to 60% efficiency
     def StabilityPatch(self,
@@ -14212,6 +14299,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.EK3_AccelBiasInhibitOnGroundMoving,
              self.EK3_AccelBiasZeroVelOptFlow,
              self.EK3_FlowAxisLockoutRecovery,
+             self.EK3_AglKfVelForVelD,
              self.VibrationRectificationBiasLearning,
              self.TakeoffGroundEffectAlt,
              self.StabilityPatch,
