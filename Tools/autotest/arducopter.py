@@ -2278,6 +2278,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.start_subtest("Fusion on: settled velD error with bit 4 alone")
         r = fly_leg(agl_kf_veld, bias_z=0.4, bias_hold=45, settle=35)
         self.progress("fusion on (settled): max velD error %.2f m/s over %u samples"
+        # Bit 4 alone is what the parameter documentation tells users to set, so it has
+        # to enable the AGL KF by itself. The hold gives the Z accel bias time to
+        # converge and the window skips that transient, measuring the settled error
+        # rather than the speed of bias learning.
+        self.start_subtest("Fusion on: AGL KF velocity fusion keeps EKF velD on truth")
+        r = fly_leg(agl_kf_veld, bias_z=0.4, bias_hold=45, settle=35)
+        self.progress("fusion on: max velD error %.2f m/s over %u samples"
                       % (r["max_velD_err"], r["n_velD"]))
         if not r["fused"]:
             raise NotAchievedException("AGL KF velocity was never fused with the option enabled")
