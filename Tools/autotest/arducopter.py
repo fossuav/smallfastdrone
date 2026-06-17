@@ -3763,6 +3763,308 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 raise NotAchievedException("Alt should be limited by EKF optical flow limits")
         self.reboot_sitl(force=True)
 
+    def LoiterNoCompassYaw(self):
+        '''Loiter indoors with optical flow and no GPS, compass not an EK3 yaw source'''
+        # Indoor case: position from optical flow + rangefinder, no GPS. The
+        # compass stays enabled and healthy but is not an EK3 yaw source
+        # (EK3_SRC1_YAW=0/None), so the EKF runs in relative-position mode with
+        # a free-running yaw. using_noncompass_for_yaw() stays true, so the
+        # Copter arm-time compass-health gate is skipped. Verify that arming
+        # directly in Loiter is permitted and that Loiter stays engaged.
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 3,
+            "EK3_ENABLE": 1,
+            "EK2_ENABLE": 0,
+            "EK3_SRC1_YAW": 0,  # None - compass enabled but not used for yaw
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+
+        # arm and take off directly in Loiter: this is the path that matters -
+        # Loiter requires_position(), and arming exercises the arm-time
+        # compass-health gate while the compass is not the EKF yaw source.
+        self.takeoff(alt_min=10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
+
+        # confirm Loiter stays engaged and armed (no EKF failsafe / mode
+        # revert). A lat/lon position-hold check is not used: with no GPS the
+        # EKF has no absolute origin, so global position is not valid here.
+        self.delay_sim_time(15, "confirm Loiter stays engaged and armed")
+        self.wait_mode('LOITER')
+        if not self.armed():
+            raise NotAchievedException("Disarmed during Loiter without compass yaw source")
+
+        self.land_and_disarm()
+
+    def LoiterNoCompassYawGPS(self):
+        '''Loiter with GPS and no optical flow, compass not an EK3 yaw source'''
+        # GPS-aided, no optical flow. Compass enabled but not an EK3 yaw source
+        # (EK3_SRC1_YAW=0/None), so yaw comes from the GSF estimator, which only
+        # aligns once the vehicle has GPS velocity to work with. Loiter cannot
+        # be entered on the ground (no heading -> no absolute position), so
+        # exercise the supported path: arm and climb in ALT_HOLD, fly forward
+        # to let GSF align yaw, then switch to Loiter and confirm it holds.
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 3,
+            "EK3_ENABLE": 1,
+            "EK2_ENABLE": 0,
+            "EK3_SRC1_YAW": 0,  # None - compass enabled but not used for yaw
+            "SIM_FLOW_ENABLE": 0,
+            "FLOW_TYPE": 0,
+        })
+        self.reboot_sitl()
+
+        # GSF cannot align yaw while stationary, so there is no absolute
+        # position yet; arm and climb in ALT_HOLD, which needs no position.
+        self.wait_gps_fix_type_gte(3)
+        self.context_collect("STATUSTEXT")
+        self.change_mode('ALT_HOLD')
+        self.wait_prearm_sys_status_healthy(timeout=120)
+        self.arm_vehicle()
+        self.set_rc(3, 1700)
+        self.wait_altitude(8, 20, relative=True, timeout=60)
+        self.set_rc(3, 1500)
+
+        # fly forward so the GSF has a velocity to align yaw from
+        self.set_rc(2, 1300)
+        self.wait_statustext("yaw aligned", check_context=True, timeout=60)
+        self.set_rc(2, 1500)
+
+        # yaw is aligned, so the EKF now has an absolute position and Loiter is
+        # usable; switch to it and confirm it stays engaged and armed.
+        self.wait_ekf_happy(require_absolute=True, timeout=30)
+        self.change_mode('LOITER')
+        self.delay_sim_time(15, "confirm Loiter stays engaged and armed")
+        self.wait_mode('LOITER')
+        if not self.armed():
+            raise NotAchievedException("Disarmed during Loiter without compass yaw source")
+
+        self.do_RTL()
+
+    def LoiterFlowBrakeOvershoot(self):
+        '''Forward-jab overshoot in optical-flow Loiter at low height'''
+        # Optical flow, no GPS, low height: the EKF flow speed limit is small,
+        # so AC_Loiter's drag term (which shapes the desired velocity) is large.
+        # The drag is removed from the desired velocity but NOT from the
+        # acceleration feed-forward passed to the position controller, so a
+        # forward stick drives the vehicle past its desired-velocity trajectory;
+        # position overshoots the target and the loop yanks it back (backward
+        # pitch on release). High LOIT_ANG_MAX inflates the mismatch. This test
+        # flies a deterministic forward jab + release for log comparison.
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 3,
+            "EK3_ENABLE": 1,
+            "EK2_ENABLE": 0,
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+            "LOIT_ANG_MAX": 30,
+            "LOIT_SPEED_MS": 5,
+            "LOIT_ACC_MAX_M": 2,
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+        # flow is not healthy stationary, so climb in ALT_HOLD to a low hover
+        self.takeoff(alt_min=2, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
+        self.change_mode('LOITER')
+        self.delay_sim_time(5, "let altitude settle")
+
+        # deterministic forward jab then release (the RCIN.C2 dip marks it in the log)
+        self.set_rc(2, 1100)
+        self.delay_sim_time(3, "let log data accumulate")
+        self.set_rc(2, 1500)
+        self.delay_sim_time(8, "let vehicle settle and log data accumulate")
+
+        self.disarm_vehicle(force=True)
+
+    def ModeFlowHold(self):
+        '''test FlowHold mode - position hold and flow-based height estimation'''
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            # the height estimator discards negative instantaneous
+            # heights, so flow noise biases its estimate low; this test
+            # is about the estimator arithmetic, not noise rejection:
+            "SIM_FLOW_RND": 0,
+            # a little wind so position-hold is against an external
+            # force rather than just coming to rest:
+            "SIM_WIND_SPD": 1,
+            "SIM_WIND_DIR": 225,
+            "SIM_WIND_T": 1,  # full wind at low altitude (no shear)
+        })
+        self.reboot_sitl()
+
+        # ground truth for height-above-ground comes from the simulated
+        # GPS; the EKF height (and anything derived from it, e.g.
+        # GLOBAL_POSITION_INT.relative_alt) is corrupted by baro drift
+        # later in this test
+        def true_agl_m(ground_alt_m):
+            m = self.assert_receive_message('GPS_RAW_INT')
+            return m.alt * 0.001 - ground_alt_m
+
+        self.wait_ready_to_arm()
+        ground_alt_m = self.assert_receive_message('GPS_RAW_INT').alt * 0.001
+
+        self.takeoff(8, mode='FLOWHOLD')
+
+        self.start_subtest("hold position after pilot input is released")
+        # flow is only used from 3s after arming:
+        self.delay_sim_time(5, "let FlowHold settle")
+        self.set_rc(2, 1200)
+        self.wait_groundspeed(1.0, 100, timeout=10)
+        self.set_rc(2, 1500)
+        self.wait_groundspeed(0, 0.3, timeout=30, minimum_duration=5)
+        loc = self.mav.location()
+        self.delay_sim_time(15, "watch for drift")
+        drift_m = self.get_distance(loc, self.mav.location())
+        self.progress("Drifted %.2fm while holding" % drift_m)
+        if drift_m > 3:
+            raise NotAchievedException("Drifted %.2fm in FlowHold" % drift_m)
+
+        self.start_subtest("height estimate recovers from EKF height error")
+        # FlowHold scales flow to a velocity using its own height
+        # estimate, broadcast as named float HEST.  Check it currently
+        # agrees with the true height:
+        hest_m = self.assert_receive_named_value_float('HEST').value
+        agl_m = true_agl_m(ground_alt_m)
+        self.progress("HEST %.2fm true-AGL %.2fm" % (hest_m, agl_m))
+        if abs(hest_m - agl_m) > 1.5:
+            raise NotAchievedException(
+                "HEST %.2fm does not match true height %.2fm" %
+                (hest_m, agl_m))
+
+        # EK3's default height source is the baro.  Drift the baro low;
+        # the EKF height sinks with it and the height controller climbs
+        # the vehicle to hold its altitude target, leaving the vehicle
+        # higher above the ground than FlowHold's height estimate.
+        self.progress("Drifting baro to give EKF an incorrect height")
+        self.set_parameter("SIM_BARO_DRIFT", -0.35)
+        want_agl_m = 10
+        tstart = self.get_sim_time()
+        while true_agl_m(ground_alt_m) < want_agl_m:
+            if self.get_sim_time_cached() - tstart > 60:
+                raise NotAchievedException("Did not climb with baro drift")
+        self.set_parameter("SIM_BARO_DRIFT", 0)
+
+        # the height estimator only updates when it sees significant
+        # delta-velocity and delta-flow; at this height that takes hard
+        # accelerations, so bang the roll and pitch sticks back and
+        # forth (out of phase) while waiting for the estimate to
+        # converge on the true height
+        self.progress("Stirring sticks to excite the height estimator")
+        tstart = self.get_sim_time()
+        last_stick_flip = 0
+        last_report = 0
+        flip_pitch = True
+        rc_pitch = 2000
+        rc_roll = 2000
+        try:
+            while True:
+                now = self.get_sim_time_cached()
+                if now - tstart > 150:
+                    raise NotAchievedException(
+                        "HEST did not converge; HEST %.2fm true %.2fm" %
+                        (hest_m, agl_m))
+                if now - last_stick_flip > 0.5:
+                    if flip_pitch:
+                        rc_pitch = 3000 - rc_pitch
+                        self.set_rc(2, rc_pitch)
+                    else:
+                        rc_roll = 3000 - rc_roll
+                        self.set_rc(1, rc_roll)
+                    flip_pitch = not flip_pitch
+                    last_stick_flip = now
+                m = self.assert_receive_message('NAMED_VALUE_FLOAT')
+                if m.name != 'HEST':
+                    continue
+                hest_m = m.value
+                agl_m = true_agl_m(ground_alt_m)
+                if now - last_report > 5:
+                    self.progress("HEST %.2fm true-AGL %.2fm" % (hest_m, agl_m))
+                    last_report = now
+                if abs(hest_m - agl_m) < 0.4:
+                    self.progress(
+                        "HEST converged in %.1fs; HEST %.2fm true %.2fm" %
+                        (now - tstart, hest_m, agl_m))
+                    break
+        finally:
+            self.set_rc(1, 1500)
+            self.set_rc(2, 1500)
+
+        self.do_RTL()
+
+    def EK3_FlowAxisLockoutRecovery(self):
+        '''Recover horizontal velocity from a single-axis optical-flow innovation lockout'''
+        # A residual one-axis accel bias under optical-flow nav can drive that axis's
+        # velocity estimate to diverge: once its flow innovation exceeds the gate the
+        # axis is rejected continuously, while the healthy axis keeps the shared
+        # flow-fusion timer fresh so the 5 s AID_RELATIVE timeout never fires. With the
+        # AGL KF enabled, FuseOptFlow re-anchors horizontal velocity to the flow
+        # measurement (gated on aglKfValid so the range, and thus the flow-derived
+        # velocity, is trustworthy). The rule: the recovery is allowed only when the
+        # AGL KF gate is set. Prove both halves - reset fires and bounds velocity with
+        # the gate on; no reset and a larger velocity error with it off.
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 3,
+            "EK3_ENABLE": 1,
+            "EK2_ENABLE": 0,
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+            "EK3_OPTIONS": 24,  # AglKfForOptflow (bit4) + FuseRngOnGndUntilFlying (bit3)
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+        # flow is not healthy stationary, so climb in ALT_HOLD to a low hover;
+        # ALT_HOLD leaves horizontal position uncontrolled so the EKF velocity
+        # divergence is observed without the Loiter controller fighting it.
+        self.takeoff(alt_min=2, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
+        self.delay_sim_time(5, "let the AGL KF converge before injecting the bias")
+
+        self.start_subtest("AGL KF gate on: single-axis lockout is recovered")
+        self.context_collect('STATUSTEXT')
+        # a body-X accel bias drives the X velocity estimate to ramp; once its flow
+        # innovation exceeds the gate the axis locks out and diverges
+        self.set_parameter("SIM_ACC1_BIAS_X", 1.5)
+        self.wait_statustext("flow vel reset", check_context=True, timeout=60)
+        # the injected bias perturbs the estimate, so don't rely on a graceful landing
+        self.disarm_vehicle(force=True)
+
+        self.start_subtest("AGL KF gate off: no recovery, velocity diverges")
+        self.set_parameters({
+            "SIM_ACC1_BIAS_X": 0,
+            "EK3_OPTIONS": 8,  # clear AglKfForOptflow (bit4), keep FuseRngOnGndUntilFlying (bit3)
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+        self.takeoff(alt_min=2, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
+        self.delay_sim_time(5, "let the AGL KF converge before injecting the bias")
+        self.context_clear_collection('STATUSTEXT')
+        self.set_parameter("SIM_ACC1_BIAS_X", 1.5)
+        # the lockout still occurs (proves the case is not vacuous): the EKF velocity
+        # estimate runs away because the rejected axis is never corrected or reset
+        self.wait_groundspeed(4, 1000, timeout=40)
+        # but with the gate off the recovery must not fire
+        if self.statustext_in_collections("flow vel reset"):
+            raise NotAchievedException("flow vel reset fired without the AGL KF gate")
+        # the velocity estimate is diverged, so a normal landing won't settle - force disarm
+        self.disarm_vehicle(force=True)
+
+
     def OpticalFlowCalibration(self):
         '''test optical flow calibration'''
         ex = None
@@ -14436,6 +14738,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.TakeoffGroundEffectAlt,
              self.TouchdownGroundEffectAlt,
              self.VibrationRectificationBiasLearning,
+             self.EK3_FlowAxisLockoutRecovery,
              self.StabilityPatch,
              self.OBSTACLE_DISTANCE_3D,
              self.AC_Avoidance_Proximity,
