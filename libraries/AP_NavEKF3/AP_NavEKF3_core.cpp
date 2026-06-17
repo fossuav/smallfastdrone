@@ -272,6 +272,7 @@ void NavEKF3_core::InitialiseVariables()
     fusingStationaryZeroVel = false;
     fusingGndEffectHgtRef = false;
     fusingAglKfVel = false;
+    aglKfVelGateOpen = false;
     inhibitWindStates = true;
     windStateIsObservable = false;
     treatWindStatesAsTruth = false;
