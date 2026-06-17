@@ -12800,6 +12800,51 @@ switch value'''
     def dfreader_for_current_onboard_log(self):
         return self.dfreader_for_path(self.current_onboard_log_filepath())
 
+    def assert_EV_count(self, event_id, count):
+        '''assert the current onboard log holds count instances of EV.Id=event_id'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        found = 0
+        while True:
+            m = dfreader.recv_match(type='EV')
+            if m is None:
+                break
+            if m.Id == event_id:
+                found += 1
+        if found != count:
+            raise NotAchievedException("Want %u EV.Id=%u, got %u" %
+                                       (count, event_id, found))
+        self.progress("Found %u EV.Id=%u as expected" % (found, event_id))
+
+    def max_dfreader_field(self, msg_type, field):
+        '''largest value a field of msg_type reached in the current onboard log'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        ret = 0
+        while True:
+            m = dfreader.recv_match(type=msg_type)
+            if m is None:
+                break
+            ret = max(ret, getattr(m, field))
+        return ret
+
+    def assert_log_has_no_dropped_blocks(self, path):
+        '''check the DSF.Dp (dropped-block) counter in a dataflash log is
+        zero throughout.  A non-zero count means the logging backend could
+        not keep up and silently discarded log blocks; any log produced in
+        that state is incomplete and unusable (e.g. for Replay).'''
+        dfreader = self.dfreader_for_path(path)
+        max_dropped = 0
+        while True:
+            m = dfreader.recv_match(type='DSF')
+            if m is None:
+                break
+            max_dropped = max(max_dropped, m.Dp)
+        if max_dropped != 0:
+            raise NotAchievedException(
+                "Log (%s) has %u dropped block(s) (DSF.Dp); logging could not "
+                "keep up so the log is incomplete (try a lower --speedup)" %
+                (path, max_dropped))
+        self.progress("Log (%s) has no dropped blocks" % path)
+
     def current_onboard_log_contains_message(self, messagetype):
         self.progress("Checking (%s) for (%s)" %
                       (self.current_onboard_log_filepath(), messagetype))
