@@ -495,5 +495,9 @@ void NavEKF3_core::detectMovementSinceArming(void)
     } else if (onGround) {
         // we are confidently on the ground so reset the latch for the next arm
         movedSinceArming = false;
+#if EK3_FEATURE_OPTFLOW_AGL_KF
+        // give flow aiding a fresh start for the next flight
+        flowVelResetUnhealthy = false;
+#endif
     }
 }
