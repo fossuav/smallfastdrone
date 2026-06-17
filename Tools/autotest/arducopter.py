@@ -3805,6 +3805,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "LOIT_SPEED_MS": 5,
             "LOIT_ACC_MAX_M": 2,
             "EK3_OPTIONS": 24,  # AglKfForOptflow (bit4) + FuseRngOnGndUntilFlying (bit3)
+            "EK3_OPTIONS": 8,  # AglKfForOptflow
         })
         self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
         self.set_analog_rangefinder_parameters()
@@ -3842,7 +3843,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.start_subtest("AGL KF gate off: no recovery, velocity diverges")
         self.set_parameters({
             "SIM_ACC1_BIAS_X": 0,
-            "EK3_OPTIONS": 8,  # clear AglKfForOptflow (bit4), keep FuseRngOnGndUntilFlying (bit3)
+            "EK3_OPTIONS": 0,  # clear AglKfForOptflow
         })
         self.reboot_sitl()
         self.wait_ready_to_arm(require_absolute=False, timeout=120)
