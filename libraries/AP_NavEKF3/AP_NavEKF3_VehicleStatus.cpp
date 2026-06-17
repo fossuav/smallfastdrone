@@ -476,5 +476,9 @@ void NavEKF3_core::detectTakeoff(void)
     } else if (onGround) {
         // we are confidently on the ground so set the takeoff detected status to false
         takeOffDetected = false;
+#if EK3_FEATURE_OPTFLOW_AGL_KF
+        // give flow aiding a fresh start for the next flight
+        flowVelResetUnhealthy = false;
+#endif
     }
 }
