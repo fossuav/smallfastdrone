@@ -105,6 +105,14 @@ const AP_Param::GroupInfo AP_OpticalFlow::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("_OPTIONS", 7,  AP_OpticalFlow, _options,   0),
 
+    // @Param: _HF_RATEF
+    // @DisplayName: HereFlow output rate correction factor
+    // @Description: Correction applied to the rate of a HereFlow/DroneCAN flow node whose reported integration_interval is wrong, so it reports flow and its own gyro at the wrong rate. This scales flow rate and body rate together (so the gyro compensation stays valid), unlike FLOW_FXSCALER/FYSCALER which only scale flow. Leave at 1.0 unless the flow_cal_check sensor-rate slope (flow node gyro vs IMU gyro) is not ~1.0; then set this to 1/slope. Only affects FLOW_TYPE=6 (DroneCAN).
+    // @Range: 0.25 4.0
+    // @Increment: 0.01
+    // @User: Advanced
+    AP_GROUPINFO("_HF_RATEF", 8,  AP_OpticalFlow, _hereflow_rate_scale, 1.0f),
+
     // @Param: _HGT_MIN
     // @DisplayName: Optical flow minimum focus height
     // @Description: Height above ground below which this sensor cannot focus, so its output is not motion. In flight below this height EKF3 discards the flow rather than dead reckoning a phantom velocity from it. Once the rangefinder stops reporting below its own minimum, EKF3 keeps discarding the flow while the rangefinder reports out of range low, and otherwise for up to 5s using the height change since its last reading. The check uses the rangefinder height at the vehicle origin, so a large FLOW_POS offset biases it. EKF3 also discards flow within 0.05 of the rangefinder ground clearance, the larger of RNGFNDx_GNDCLR and 0.05, whatever this is set to, so only a value above that has any effect. Set this to the sensor's focus limit and no higher: with no flow to fuse, a vehicle held below it for more than 5s loses flow aiding and reverts to constant position mode. 0 leaves only the ground clearance check.
@@ -112,7 +120,7 @@ const AP_Param::GroupInfo AP_OpticalFlow::var_info[] = {
     // @Increment: 0.01
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_HGT_MIN", 8, AP_OpticalFlow, _height_min, 0.0f),
+    AP_GROUPINFO("_HGT_MIN", 9, AP_OpticalFlow, _height_min, 0.0f),
 
     AP_GROUPEND
 };
