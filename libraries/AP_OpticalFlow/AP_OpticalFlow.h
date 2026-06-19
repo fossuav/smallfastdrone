@@ -150,6 +150,7 @@ private:
     AP_Float  _height_override;              // height of the sensor above the ground. Only used in rover
     AP_Float  _height_min;                   // height below which the sensor cannot focus on the ground
     AP_Int16 _options;              // options parameter
+    AP_Float _hereflow_rate_scale;  // HereFlow output-rate correction (flow and gyro), 1.0 = none
 
     // method called by backend to update frontend state:
     void update_state(const OpticalFlow_state &state);
