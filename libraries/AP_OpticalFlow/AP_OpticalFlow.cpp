@@ -105,6 +105,13 @@ const AP_Param::GroupInfo AP_OpticalFlow::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("_OPTIONS", 7,  AP_OpticalFlow, _options,   0),
 
+    // @Param: _HF_RATEF
+    // @DisplayName: HereFlow output rate correction factor
+    // @Description: Correction applied to the rate of a HereFlow/DroneCAN flow node whose reported integration_interval is wrong, so it reports flow and its own gyro at the wrong rate. This scales flow rate and body rate together (so the gyro compensation stays valid), unlike FLOW_FXSCALER/FYSCALER which only scale flow. Leave at 1.0 unless the flow_cal_check sensor-rate slope (flow node gyro vs IMU gyro) is not ~1.0; then set this to 1/slope. Only affects FLOW_TYPE=6 (DroneCAN).
+    // @Range: 0.25 4.0
+    // @Increment: 0.01
+    // @User: Advanced
+    AP_GROUPINFO("_HF_RATEF", 8,  AP_OpticalFlow, _hereflow_rate_scale, 1.0f),
     // @Param: _HGT_MIN
     // @DisplayName: Optical flow minimum focus height
     // @Description: Height above ground below which this sensor cannot focus, so its output is not motion. In flight below this height EKF3 treats the flow as zero motion rather than dead reckoning a phantom velocity from it. The check uses the rangefinder height at the vehicle origin, so a large FLOW_POS offset biases it, and a value only has effect above both RNGFNDx_MIN and RNGFNDx_GNDCLR. 0 disables it.
@@ -112,7 +119,7 @@ const AP_Param::GroupInfo AP_OpticalFlow::var_info[] = {
     // @Increment: 0.01
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_HGT_MIN", 8, AP_OpticalFlow, _height_min, 0.0f),
+    AP_GROUPINFO("_HGT_MIN", 9, AP_OpticalFlow, _height_min, 0.0f),
 
     AP_GROUPEND
 };
