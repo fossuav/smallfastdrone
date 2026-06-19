@@ -491,7 +491,7 @@ private:
         JammingExpected         = (1<<0),
         ManualLaneSwitch        = (1<<1),
         OptflowMayUseTerrainAlt = (1<<2),
-        AglKfForOptflow         = (1<<3),  // Use IMU-aided 2-state AGL KF for optflow scaling
+        AglKfForOptflow         = (1<<3),  // Use IMU-aided AGL KF for optflow scaling
         AglKfVelForVelD         = (1<<4),  // Fuse AGL KF vertical velocity as a velD observation
         OptflowAssumeFlatGnd    = (1<<5),  // Keep flow nav alive above rangefinder range on a flat-ground assumption
     };
