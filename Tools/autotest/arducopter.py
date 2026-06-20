@@ -4497,6 +4497,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
     def xkfa_recent_mean(self, field, nsamples=50):
         '''mean of the most recent valid XKFA (core 0) values of a field'''
+    def xkfa_recent_bias_mean(self, nsamples=50):
+        '''mean of the most recent valid XKFA (core 0) accel-Z bias estimates'''
         dfreader = self.dfreader_for_current_onboard_log()
         vals = []
         while True:
@@ -4505,6 +4507,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 break
             if m.Valid:
                 vals.append(getattr(m, field))
+                vals.append(m.Bias)
         if len(vals) < nsamples:
             raise NotAchievedException("insufficient XKFA samples (%u)" % len(vals))
         return sum(vals[-nsamples:]) / nsamples
@@ -4589,6 +4592,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 (bias_peak, accel_bias_lim))
 
         bias_before = self.xkfa_recent_mean('Bias')
+        bias_before = self.xkfa_recent_bias_mean()
 
         # inject an accel-Z bias on IMU1 and confirm the AGL KF bias estimate
         # follows it
@@ -4597,6 +4601,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.delay_sim_time(30, reason="AGL KF to learn the injected accel-Z bias")
         bias_after = self.xkfa_recent_mean('Bias')
+        bias_after = self.xkfa_recent_bias_mean()
         self.progress("AGL KF accel-Z bias before=%.3f after=%.3f" %
                       (bias_before, bias_after))
         if bias_after - bias_before < 0.1:
