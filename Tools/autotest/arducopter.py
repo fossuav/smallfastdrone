@@ -2077,6 +2077,98 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.reboot_sitl()
 
+    def EK3_AglKfRngHeightSwitch(self):
+        '''AGL KF keeps the rangefinder height switch engaged when baro drift locks out the legacy terrain estimator'''
+        # Indoor optical-flow config (no GPS) with the rangefinder allowed as a
+        # height source below the switch height (EK3_RNG_USE_HGT>0). The switch-on
+        # decision is gated by the legacy 1-state terrain estimator, which predicts
+        # range from the baro-contaminated main-filter altitude. A baro drift makes
+        # that estimator's innovation fail, freezes its state and lets its validity
+        # timestamp go stale - vetoing the switch so altitude follows the drifting
+        # baro (the EK3_RNG_USE_HGT feedback lockout). The AGL KF fuses the
+        # rangefinder independently of baro, so when it owns the height switch
+        # (EK3_OPTIONS bit 4) the switch stays engaged through the drift.
+        #
+        # Invariant, proved in both halves: under baro drift the EKF altitude
+        # diverges from the rangefinder with the AGL-KF height switch OFF, and
+        # stays on it with the switch ON. The ON half only holds because the switch
+        # is gated on the AGL KF's own fusion freshness, not the stalled legacy
+        # timestamp - so it regresses if that gating is removed.
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "EK3_IMU_MASK": 1,       # single core so the drift is not masked by a lane switch
+            "EK3_RNG_USE_HGT": 70,   # rangefinder is the height source below 70% of its max range
+            "EK3_RNG_USE_SPD": 4,    # keep the rangefinder through slow repositioning
+        })
+        self.set_analog_rangefinder_parameters()  # RNGFND1_MAX=40 -> switch height ~28 m
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+
+        baro_drift = 0.3   # m/s baro altitude drift (temperature-style)
+        hover_alt = 10     # m AGL, below the ~28 m switch height and within RF range
+
+        # Track the EKF height estimate against the rangefinder, which is baro-
+        # independent and follows truth: diff = (-XKF1.PD) - RFND.Dist. The range of
+        # diff over the window is offset-free - it stays flat while the rangefinder
+        # is the height source and grows once altitude reverts to the drifting baro.
+        def height_vs_rng_spread_under_baro_drift(options_value):
+            self.set_parameters({
+                "EK3_OPTIONS": options_value,
+                "SIM_BARO_DRIFT": 0,
+            })
+            self.reboot_sitl()
+            self.wait_ready_to_arm(require_absolute=False)
+            self.takeoff(hover_alt, mode="ALT_HOLD", require_absolute=False)
+            # settle the hover so the height switch has engaged and the estimate
+            # error is steady before the baro stimulus
+            self.wait_climbrate(-0.3, 0.3, timeout=30, minimum_duration=3)
+            drift_time = self.get_sim_time()
+            self.set_parameter("SIM_BARO_DRIFT", baro_drift)
+            self.delay_sim_time(14)
+            self.disarm_vehicle(force=True)
+
+            # Measure in [drift+4, drift+12]: skip the onset transient and stop
+            # before the forced disarm so post-disarm free-fall is excluded.
+            dfreader = self.dfreader_for_current_onboard_log()
+            last_rng = None
+            diff_min = None
+            diff_max = None
+            while True:
+                m = dfreader.recv_match(type=["XKF1", "RFND"])
+                if m is None:
+                    break
+                t = m.TimeUS * 1.0e-6
+                if t < drift_time + 4 or t > drift_time + 12:
+                    continue
+                if m.get_type() == "RFND":
+                    if getattr(m, "Instance", 0) == 0:
+                        last_rng = m.Dist
+                elif getattr(m, "C", 0) == 0 and last_rng is not None:
+                    diff = -m.PD - last_rng
+                    diff_min = diff if diff_min is None else min(diff_min, diff)
+                    diff_max = diff if diff_max is None else max(diff_max, diff)
+            if diff_min is None:
+                raise NotAchievedException("No XKF1/RFND samples in the measurement window")
+            return diff_max - diff_min
+
+        # Half 1: AGL-KF height switch OFF - legacy switch locks out, altitude follows baro
+        self.start_subtest("Switch OFF: EKF altitude diverges from the rangefinder under baro drift")
+        spread_off = height_vs_rng_spread_under_baro_drift(0)
+        self.progress("EKF-vs-rangefinder spread with AGL-KF switch OFF: %.2f m" % spread_off)
+        if spread_off < 1.5:
+            raise NotAchievedException(
+                "Expected EKF altitude to diverge from the rangefinder with the switch off (got %.2f m)" % spread_off)
+
+        # Half 2: AGL-KF height switch ON - rangefinder stays the height source through the drift
+        self.start_subtest("Switch ON: AGL KF keeps altitude on the rangefinder through baro drift")
+        spread_on = height_vs_rng_spread_under_baro_drift(16)
+        self.progress("EKF-vs-rangefinder spread with AGL-KF switch ON: %.2f m" % spread_on)
+        if spread_on > 0.7:
+            raise NotAchievedException(
+                "AGL-KF height switch failed to keep altitude on the rangefinder (got %.2f m)" % spread_on)
+
+        self.reboot_sitl()
+
     # StabilityPatch - fly south, then hold loiter within 5m
     # position and altitude and reduce 1 motor to 60% efficiency
     def StabilityPatch(self,
@@ -14300,6 +14392,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.EK3_AccelBiasZeroVelOptFlow,
              self.EK3_FlowAxisLockoutRecovery,
              self.EK3_AglKfVelForVelD,
+             self.EK3_AglKfRngHeightSwitch,
              self.VibrationRectificationBiasLearning,
              self.TakeoffGroundEffectAlt,
              self.StabilityPatch,
