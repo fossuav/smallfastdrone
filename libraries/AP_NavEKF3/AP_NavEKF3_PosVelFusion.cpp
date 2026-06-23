@@ -1249,20 +1249,31 @@ void NavEKF3_core::FuseVelPosNED()
                 // Don't use 'fake' horizontal measurements used to constrain attitude drift during
                 // periods of non-aiding to learn bias as these can give incorrect esitmates.
                 const bool horizInhibit = PV_AidingMode == AID_NONE && obsIndex != 2 && obsIndex != 5;
-                // Inhibit Z-axis accel bias learning during ground effect when it cannot be learned
-                // cleanly: before takeoff has been detected the bias is unobservable (learning it on
-                // the ground produces a large wrong value), and while baro is the height source ground
-                // effect corrupts the height the bias would learn from. A rangefinder or GPS height in
-                // flight is unaffected by ground effect, so leave the bias learning in that case.
-                // takeOffDetected (not onGroundNotMoving) is used because it is false through the whole
-                // pre-takeoff phase including just after arming, whereas the onGroundNotMoving stillness
-                // filter warms up too slowly to cover the early-ground window where the bias runs away.
+                // Learn the Z-axis accel bias only where it is observable from a trustworthy
+                // reference: stationary on the ground (zero-velocity fusion pins it) or airborne
+                // with a good height reference. Inhibit when armed on the ground (motor vibration,
+                // no real observation) or airborne on a corrupt height reference (baro in ground
+                // effect), where learning would drive the bias to a wrong value.
                 const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
-                const bool inhibitZBias = gndEffectActive &&
-                                          (!takeOffDetected || (activeHgtSource == AP_NavEKF_Source::SourceZ::BARO));
+                bool heightRefGood;
+                switch (activeHgtSource) {
+                case AP_NavEKF_Source::SourceZ::RANGEFINDER:
+                    heightRefGood = (imuSampleTime_ms - rngValidMeaTime_ms < 500);
+                    break;
+                case AP_NavEKF_Source::SourceZ::BARO:
+                    heightRefGood = !gndEffectActive;
+                    break;
+                case AP_NavEKF_Source::SourceZ::GPS:
+                    heightRefGood = gpsAccuracyGoodForAltitude;
+                    break;
+                default:
+                    heightRefGood = false;
+                    break;
+                }
+                const bool learnZBias = onGroundNotMoving || (takeOffDetected && heightRefGood);
                 if (!horizInhibit && !accelBiasLearningInhibited() && !badIMUdata) {
                     for (uint8_t i = 13; i<=15; i++) {
-                        const bool zAxisInhibit = (i == 15) && inhibitZBias;
+                        const bool zAxisInhibit = (i == 15) && !learnZBias;
                         if (!dvelBiasAxisInhibit[i-13] && !zAxisInhibit) {
                             Kfusion[i] = P[i][stateIndex]*SK;
                         } else {
