@@ -1219,12 +1219,16 @@ void NavEKF3_core::FuseVelPosNED()
                 // Don't use 'fake' horizontal measurements used to constrain attitude drift during
                 // periods of non-aiding to learn bias as these can give incorrect esitmates.
                 const bool horizInhibit = PV_AidingMode == AID_NONE && obsIndex != 2 && obsIndex != 5;
-                // In ground effect the AccZ rectification offset differs from the hover
-                // value, so hold the Z bias rather than learn the ground value.
-                const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
+                // Ground effect corrupts the baro, so a Z accel bias learned from a baro
+                // height observation taken there is wrong. Other height sources are immune,
+                // and selectHeightForFusion() has already switched to baro if they went
+                // stale, so gating the baro case alone keeps a low rangefinder hover learning.
+                const bool hgtObsInGndEffect = (obsIndex == 5) &&
+                                               (activeHgtSource == AP_NavEKF_Source::SourceZ::BARO) &&
+                                               (dal.get_takeoff_expected() || dal.get_touchdown_expected());
                 if (!horizInhibit && !accelBiasLearningInhibited() && !badIMUdata) {
                     for (uint8_t i = 13; i<=15; i++) {
-                        const bool zAxisInhibit = (i == 15) && gndEffectActive;
+                        const bool zAxisInhibit = (i == 15) && hgtObsInGndEffect;
                         if (!dvelBiasAxisInhibit[i-13] && !zAxisInhibit) {
                             Kfusion[i] = P[i][stateIndex]*SK;
                         } else {
