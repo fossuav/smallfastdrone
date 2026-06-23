@@ -760,6 +760,14 @@ const AP_Param::GroupInfo NavEKF3::var_info2[] = {
     // @Range: 0 255
     // @User: Advanced
     AP_GROUPINFO("FLOW_QMIN", 13, NavEKF3, _flowQualMin, 0),
+    // @Param: AGL_ABIAS_P
+    // @DisplayName: AGL KF accel-Z bias process noise
+    // @Description: Process noise for the AGL Kalman filter's accel-Z bias state. Higher values let the bias track a drifting accelerometer offset (e.g. from IMU temperature change in flight) instead of locking to its initial value, which otherwise leaks into the AGL velocity estimate. Decoupled from EK3_ABIAS_P_NSE so the main filter bias stays conservative. The AGL KF bias state has no prediction term and only moves on a rangefinder update that passes the innovation gate, so stale or absent range data cannot drive it; a sloping or reflective surface still can, and does so faster at higher values.
+    // @Range: 0.01 0.5
+    // @Increment: 0.01
+    // @User: Advanced
+    // @Units: m/s/s/s
+    AP_GROUPINFO("AGL_ABIAS_P", 12, NavEKF3, _aglKfAccelBiasPnse, 0.05f),
 
     AP_GROUPEND
 };
