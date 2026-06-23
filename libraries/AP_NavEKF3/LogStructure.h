@@ -12,6 +12,7 @@
     LOG_XKF5_MSG, \
     LOG_XKF6_MSG, \
     LOG_XKF7_MSG, \
+    LOG_XKFR_MSG, \
     LOG_XKFD_MSG, \
     LOG_XKFM_MSG, \
     LOG_XKFS_MSG, \
@@ -290,6 +291,36 @@ struct PACKED log_XKF7 {
     uint8_t flowVelResetUnhealthy;
 };
 
+// @LoggerMessage: XKFR
+// @Description: EKF3 rangefinder height-source switch decision diagnostics
+// @Field: TimeUS: Time since system startup
+// @Field: C: EKF3 core this data is for
+// @Field: HSrc: active height source (0=None,1=Baro,2=Rangefinder,3=GPS,4=Beacon,6=ExtNav)
+// @Field: ZSrc: configured primary height source (same enum as HSrc)
+// @Field: RFresh: 1 when rangefinder data is fresh enough to consider the switch
+// @Field: RAge: time since the rangefinder measurement was last accepted (ms)
+// @Field: HAGL: height above ground fed to the switch threshold
+// @Field: RMax: upper switch-off threshold (RNGFND max range * RNG_USE_HGT)
+// @Field: bLow: 1 when below the lower switch-on threshold with a fresh terrain reference
+// @Field: aUp: 1 when above the upper switch-off threshold
+// @Field: tT: 1 when terrain is trusted (consistent and slow enough)
+// @Field: AglV: 1 when the AGL KF height estimate is valid
+struct PACKED log_XKFR {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t core;
+    uint8_t hgtSource;
+    uint8_t posZSource;
+    uint8_t rngFresh;
+    uint32_t rngMeaAge_ms;
+    float heightAboveGnd;
+    float rangeMaxUse;
+    uint8_t belowLower;
+    uint8_t aboveUpper;
+    uint8_t trustTerrain;
+    uint8_t aglKfValid;
+};
+
 // @LoggerMessage: XKFD
 // @Description: EKF3 Body Frame Odometry errors
 // @Field: TimeUS: Time since system startup
@@ -490,6 +521,8 @@ struct PACKED log_XKV {
       "XKF6","QBffffffB","TimeUS,C,HAgl,VAgl,HAglStd,VAglStd,Bias,BiasStd,Valid", "s#mnmnoo-", "F--------", true }, \
     { LOG_XKF7_MSG, sizeof(log_XKF7), \
       "XKF7","QBBBB","TimeUS,C,FVC,FVR,FVU", "s#---", "F----", true }, \
+    { LOG_XKFR_MSG, sizeof(log_XKFR), \
+      "XKFR","QBBBBIffBBBB","TimeUS,C,HSrc,ZSrc,RFresh,RAge,HAGL,RMax,bLow,aUp,tT,AglV", "s#---smm----", "F-----00----", true }, \
     { LOG_XKFD_MSG, sizeof(log_XKFD), \
       "XKFD","QBffffff","TimeUS,C,IX,IY,IZ,IVX,IVY,IVZ", "s#------", "F-------" , true }, \
     { LOG_XKFM_MSG, sizeof(log_XKFM),   \

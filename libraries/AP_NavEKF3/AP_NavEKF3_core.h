@@ -1526,6 +1526,18 @@ private:
     AP_NavEKF_Source::SourceZ activeHgtSource;  // active height source
     AP_NavEKF_Source::SourceZ prevHgtSource;    // previous height source used to detect changes in source
 
+    // diagnostics for the rangefinder height-source switch decision (logged as XKFR)
+    struct {
+        bool rngFresh;          // rangeFinderDataIsFresh: the outer freshness gate at the switch branch
+        bool inSwitchRegion;    // true when the switch-region branch ran and evaluated the gates below
+        bool belowLower;        // belowLowerSwHgt: height + freshness gate to switch ON
+        bool aboveUpper;        // aboveUpperSwHgt: height gate to switch OFF
+        bool trustTerrain;      // terrain consistent and slow enough to switch ON
+        uint32_t rngMeaAge_ms;  // imuSampleTime_ms - rngValidMeaTime_ms when the decision was taken
+        ftype heightAboveGnd;   // height fed to the switch threshold
+        ftype rangeMaxUse;      // upper switch-off threshold
+    } rngHgtSwitchDbg;
+
     // Movement detector
     bool takeOffDetected;           // true when takeoff has been detected
     ftype rngAtStartOfFlight;       // range finder measurement at start of flight
