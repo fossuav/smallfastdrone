@@ -1249,16 +1249,16 @@ void NavEKF3_core::FuseVelPosNED()
                 // Don't use 'fake' horizontal measurements used to constrain attitude drift during
                 // periods of non-aiding to learn bias as these can give incorrect esitmates.
                 const bool horizInhibit = PV_AidingMode == AID_NONE && obsIndex != 2 && obsIndex != 5;
-                // Inhibit Z-axis accel bias learning during ground effect, but only while baro is
-                // the height source. Ground effect corrupts the baro height, so learning the bias
-                // from it gives a wrong estimate. A rangefinder or GPS height is not affected by
-                // ground effect, so the bias stays observable from a clean reference and keeps
-                // learning - matching the baro-only innovation flooring above.
+                // Inhibit Z-axis accel bias learning during ground effect because motor thrust
+                // causes a DC offset in AccZ that is not present in normal flight.
+                // When out of ground effect (controlled by TKOFF_GNDEFF_ALT on Copter side),
+                // allow bias learning from baro position corrections - this allows the EKF to
+                // adapt to in-flight AccZ offsets (vibration rectification) that differ from
+                // ground conditions.
                 const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
-                const bool inhibitZBias = gndEffectActive && (activeHgtSource == AP_NavEKF_Source::SourceZ::BARO);
                 if (!horizInhibit && !accelBiasLearningInhibited() && !badIMUdata) {
                     for (uint8_t i = 13; i<=15; i++) {
-                        const bool zAxisInhibit = (i == 15) && inhibitZBias;
+                        const bool zAxisInhibit = (i == 15) && gndEffectActive;
                         if (!dvelBiasAxisInhibit[i-13] && !zAxisInhibit) {
                             Kfusion[i] = P[i][stateIndex]*SK;
                         } else {
