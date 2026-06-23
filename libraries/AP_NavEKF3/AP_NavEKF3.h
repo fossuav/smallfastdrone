@@ -485,6 +485,7 @@ private:
     AP_Int32 _options;              // bit mask of processing options
     AP_Float _aglKfVelMaxSpd;       // maximum horizontal speed for AGL KF vertical velocity fusion (m/s)
     AP_Int16 _flowQualMin;          // flow quality below which a lockout is not recovered by a reset
+    AP_Float _aglKfAccelBiasPnse;   // AGL KF accel-Z bias state process noise : m/s^2
 
     // enum for processing options
     enum class Option {
