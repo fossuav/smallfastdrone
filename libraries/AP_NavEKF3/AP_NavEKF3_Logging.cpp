@@ -249,6 +249,25 @@ void NavEKF3_core::Log_Write_XKF5(uint64_t time_us) const
 #endif
     };
     AP::logger().WriteBlock(&pkt7, sizeof(pkt7));
+
+#if AP_RANGEFINDER_ENABLED
+    const struct log_XKFR pktr{
+        LOG_PACKET_HEADER_INIT(LOG_XKFR_MSG),
+        time_us       : time_us,
+        core          : DAL_CORE(core_index),
+        hgtSource     : (uint8_t)activeHgtSource,
+        posZSource    : (uint8_t)frontend->sources.getPosZSource(core_index),
+        rngFresh      : (uint8_t)rngHgtSwitchDbg.rngFresh,
+        rngMeaAge_ms  : rngHgtSwitchDbg.rngMeaAge_ms,
+        heightAboveGnd : (float)rngHgtSwitchDbg.heightAboveGnd,
+        rangeMaxUse   : (float)rngHgtSwitchDbg.rangeMaxUse,
+        belowLower    : (uint8_t)rngHgtSwitchDbg.belowLower,
+        aboveUpper    : (uint8_t)rngHgtSwitchDbg.aboveUpper,
+        trustTerrain  : (uint8_t)rngHgtSwitchDbg.trustTerrain,
+        aglKfValid    : (uint8_t)aglKfValid
+    };
+    AP::logger().WriteBlock(&pktr, sizeof(pktr));
+#endif
 }
 
 void NavEKF3_core::Log_Write_Quaternion(uint64_t time_us) const

@@ -1393,6 +1393,16 @@ void NavEKF3_core::selectHeightForFusion()
 #if EK3_FEATURE_EXTERNAL_NAV
     const bool extNavDataIsFresh = (imuSampleTime_ms - extNavMeasTime_ms < 500);
 #endif
+    // reset the switch diagnostics each cycle; the branch below fills them in when it runs
+    rngHgtSwitchDbg.rngFresh = rangeFinderDataIsFresh;
+    rngHgtSwitchDbg.inSwitchRegion = false;
+    rngHgtSwitchDbg.belowLower = false;
+    rngHgtSwitchDbg.aboveUpper = false;
+    rngHgtSwitchDbg.trustTerrain = false;
+    rngHgtSwitchDbg.rngMeaAge_ms = imuSampleTime_ms - rngValidMeaTime_ms;
+    rngHgtSwitchDbg.heightAboveGnd = 0;
+    rngHgtSwitchDbg.rangeMaxUse = 0;
+
     // select height source
     if ((frontend->sources.getPosZSource(core_index) == AP_NavEKF_Source::SourceZ::NONE)) {
         // user has specified no height sensor
@@ -1432,6 +1442,12 @@ void NavEKF3_core::selectHeightForFusion()
         bool aboveUpperSwHgt = heightAboveGnd > rangeMaxUse;
         bool belowLowerSwHgt = (heightAboveGnd < 0.7f * rangeMaxUse) && (imuSampleTime_ms - hgtValidTime_ms < 1000);
 
+        rngHgtSwitchDbg.inSwitchRegion = true;
+        rngHgtSwitchDbg.heightAboveGnd = heightAboveGnd;
+        rngHgtSwitchDbg.rangeMaxUse = rangeMaxUse;
+        rngHgtSwitchDbg.aboveUpper = aboveUpperSwHgt;
+        rngHgtSwitchDbg.belowLower = belowLowerSwHgt;
+
         // The vehicle only marks terrain stable during takeoff and landing, leaving
         // altitude on baro through cruise/hover. When the IMU-aided AGL KF is enabled
         // and valid it provides a reliable, de-glitched height above ground that is
@@ -1458,6 +1474,7 @@ void NavEKF3_core::selectHeightForFusion()
             dontTrustTerrain = !terrainStable;
             trustTerrain = terrainStable;
         }
+        rngHgtSwitchDbg.trustTerrain = trustTerrain;
 
         /*
             * Switch between range finder and primary height source using height above ground and speed thresholds with
