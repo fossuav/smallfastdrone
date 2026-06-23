@@ -1250,13 +1250,16 @@ void NavEKF3_core::FuseVelPosNED()
                 // periods of non-aiding to learn bias as these can give incorrect esitmates.
                 const bool horizInhibit = PV_AidingMode == AID_NONE && obsIndex != 2 && obsIndex != 5;
                 // Inhibit Z-axis accel bias learning during ground effect when it cannot be learned
-                // cleanly: while stationary on the ground the bias is unobservable (learning it then
-                // produces a large wrong value), and while baro is the height source ground effect
-                // corrupts the height the bias would learn from. A rangefinder or GPS height in
+                // cleanly: before takeoff has been detected the bias is unobservable (learning it on
+                // the ground produces a large wrong value), and while baro is the height source ground
+                // effect corrupts the height the bias would learn from. A rangefinder or GPS height in
                 // flight is unaffected by ground effect, so leave the bias learning in that case.
+                // takeOffDetected (not onGroundNotMoving) is used because it is false through the whole
+                // pre-takeoff phase including just after arming, whereas the onGroundNotMoving stillness
+                // filter warms up too slowly to cover the early-ground window where the bias runs away.
                 const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
                 const bool inhibitZBias = gndEffectActive &&
-                                          (onGroundNotMoving || (activeHgtSource == AP_NavEKF_Source::SourceZ::BARO));
+                                          (!takeOffDetected || (activeHgtSource == AP_NavEKF_Source::SourceZ::BARO));
                 if (!horizInhibit && !accelBiasLearningInhibited() && !badIMUdata) {
                     for (uint8_t i = 13; i<=15; i++) {
                         const bool zAxisInhibit = (i == 15) && inhibitZBias;
