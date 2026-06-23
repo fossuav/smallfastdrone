@@ -2458,7 +2458,7 @@ bool AP_Param::load_defaults_file(const char *filename, bool last_pass)
     }
     free(mutable_filename);
 
-    num_param_overrides = num_defaults;
+    num_param_overrides = idx;
 
     return true;
 }
@@ -2588,7 +2588,7 @@ void AP_Param::load_param_defaults(const volatile char *ptr, int32_t length, boo
             vp->set_float(value, var_type);
         }
     }
-    num_param_overrides = num_defaults;
+    num_param_overrides = idx;
 }
 #endif // AP_PARAM_MAX_EMBEDDED_PARAM > 0 || defined(HAL_HAVE_AP_ROMFS_EMBEDDED_H)
 
