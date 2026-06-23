@@ -342,6 +342,16 @@ private:
     bool variances_valid;
     uint32_t last_ekf_check_us;
 
+    // values computed inside ekf_over_threshold(), stashed for the EKFC decision-trace log
+    struct {
+        float vel_var;          // filtered velocity variance compared against the threshold
+        float pos_var;          // filtered position variance
+        float hgt_var;          // height variance (unfiltered)
+        float mag_var_max;      // largest of the three mag axis variances
+        uint8_t over_count;     // composite over-threshold count
+        bool optflow_healthy;   // optical flow healthy (selects the velocity 2x-threshold branch)
+    } ekf_check_vars;
+
     // takeoff check
     uint32_t takeoff_check_warning_ms;  // system time user was last warned of takeoff check failure
 
@@ -909,6 +919,7 @@ private:
 
     // Log.cpp
     void Log_Write_Control_Tuning();
+    void Log_Write_EKF_Check(bool over_threshold, bool has_position, bool checks_passed, uint8_t fail_count, bool bad_variance, uint8_t source_set);
     void Log_Write_Attitude();
     void Log_Write_Rate();
     void Log_Write_EKF_POS();

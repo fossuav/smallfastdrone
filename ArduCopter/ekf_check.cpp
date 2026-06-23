@@ -148,6 +148,12 @@ void Copter::ekf_check()
     // set AP_Notify flags
     AP_Notify::flags.ekf_bad = ekf_check_state.bad_variance;
 
+#if HAL_LOGGING_ENABLED
+    Log_Write_EKF_Check(over_threshold, has_position, checks_passed,
+                        ekf_check_state.fail_count, ekf_check_state.bad_variance,
+                        current_source_set);
+#endif
+
     // To-Do: add ekf variances to extended status
 }
 
@@ -160,6 +166,7 @@ bool Copter::ekf_over_threshold()
     variances_valid = ahrs.get_variances(vel_var, position_var, height_var, mag_variance, tas_variance);
 
     if (!variances_valid) {
+        ekf_check_vars = {};
         return false;
     }
 
@@ -194,6 +201,14 @@ bool Copter::ekf_over_threshold()
     } else if (vel_var >= g.fs_ekf_thresh) {
         over_thresh_count++;
     }
+
+    // stash the decision inputs for the EKFC log
+    ekf_check_vars.vel_var = vel_var;
+    ekf_check_vars.pos_var = position_var;
+    ekf_check_vars.hgt_var = height_var;
+    ekf_check_vars.mag_var_max = mag_max;
+    ekf_check_vars.over_count = over_thresh_count;
+    ekf_check_vars.optflow_healthy = optflow_healthy;
 
     if ((position_var >= g.fs_ekf_thresh && over_thresh_count >= 1) || over_thresh_count >= 2) {
         return true;

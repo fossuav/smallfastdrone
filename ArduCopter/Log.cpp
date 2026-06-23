@@ -73,6 +73,48 @@ void Copter::Log_Write_Control_Tuning()
     logger.WriteBlock(&pkt, sizeof(pkt));
 }
 
+struct PACKED log_EKF_Check {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    float    vel_var;
+    float    pos_var;
+    float    hgt_var;
+    float    mag_var;
+    float    thresh;
+    uint8_t  over_count;
+    uint8_t  optflow_healthy;
+    uint8_t  over_threshold;
+    uint8_t  has_position;
+    uint8_t  checks_passed;
+    uint8_t  fail_count;
+    uint8_t  bad_variance;
+    uint8_t  source_set;
+};
+
+// Write the ekf_check() decision inputs. The failsafe compares filtered
+// variances that XKF4 does not log, so this traces the actual decision at 10Hz.
+void Copter::Log_Write_EKF_Check(bool over_threshold, bool has_position, bool checks_passed, uint8_t fail_count, bool bad_variance, uint8_t source_set)
+{
+    const struct log_EKF_Check pkt = {
+        LOG_PACKET_HEADER_INIT(LOG_EKF_CHECK_MSG),
+        time_us         : AP_HAL::micros64(),
+        vel_var         : ekf_check_vars.vel_var,
+        pos_var         : ekf_check_vars.pos_var,
+        hgt_var         : ekf_check_vars.hgt_var,
+        mag_var         : ekf_check_vars.mag_var_max,
+        thresh          : g.fs_ekf_thresh.get(),
+        over_count      : ekf_check_vars.over_count,
+        optflow_healthy : ekf_check_vars.optflow_healthy,
+        over_threshold  : over_threshold,
+        has_position    : has_position,
+        checks_passed   : checks_passed,
+        fail_count      : fail_count,
+        bad_variance    : bad_variance,
+        source_set      : source_set,
+    };
+    logger.WriteBlock(&pkt, sizeof(pkt));
+}
+
 // Write an attitude packet
 void Copter::Log_Write_Attitude()
 {
@@ -485,6 +527,25 @@ const struct LogStructure Copter::log_structure[] = {
 
     { LOG_CONTROL_TUNING_MSG, sizeof(log_Control_Tuning),
       "CTUN", "Qffffffffffff", "TimeUS,ThI,ABst,ThO,ThH,DAlt,Alt,BAlt,DSAlt,SAlt,TAlt,DCRt,CRt", "s----mmmmmmnn", "F----00000000", true },
+
+// @LoggerMessage: EKFC
+// @Description: ekf_check failsafe decision trace (the filtered variances XKF4 does not log)
+// @Field: TimeUS: Time since system startup
+// @Field: VV: filtered velocity variance compared against the threshold
+// @Field: PV: filtered position variance
+// @Field: HV: height variance (unfiltered)
+// @Field: MV: largest mag axis variance
+// @Field: Thr: failsafe variance threshold (FS_EKF_THRESH)
+// @Field: OvC: composite over-threshold count
+// @Field: OptH: optical flow healthy (selects the velocity 2x-threshold branch)
+// @Field: OvrT: over-threshold result this iteration
+// @Field: HasP: EKF reports a usable position
+// @Field: Pass: checks passed this iteration
+// @Field: FCnt: consecutive failure counter (failsafe at EKF_CHECK_ITERATIONS_MAX)
+// @Field: Bad: variance latched bad (failsafe active)
+// @Field: SS: active EKF source set
+    { LOG_EKF_CHECK_MSG, sizeof(log_EKF_Check),
+      "EKFC", "QfffffBBBBBBBB", "TimeUS,VV,PV,HV,MV,Thr,OvC,OptH,OvrT,HasP,Pass,FCnt,Bad,SS", "s-------------", "F-------------", true },
     { LOG_DATA_INT16_MSG, sizeof(log_Data_Int16t),         
       "D16",   "QBh",         "TimeUS,Id,Value", "s--", "F--" },
     { LOG_DATA_UINT16_MSG, sizeof(log_Data_UInt16t),         
