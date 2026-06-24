@@ -503,7 +503,7 @@ private:
         FuseRngOnGndUntilFlying = (1<<3),
         AglKfForOptflow         = (1<<4),  // Use IMU-aided 2-state AGL KF for optflow scaling
         AglKfVelForVelD         = (1<<5),  // Fuse AGL KF vertical velocity as a velD observation (rangefinder-anchored; baro keeps absolute height)
-        OptflowAssumeFlatGnd    = (1<<6),  // Above rangefinder range assume flat ground, keeping the terrain offset valid so flow nav holds without a spurious failsafe
+        OptflowAssumeFlatGnd    = (1<<6),  // Keep flow nav alive above rangefinder range: prefer the terrain database, fall back to a flat-ground assumption
     };
     bool option_is_enabled(Option option) const {
         return (_options & (uint32_t)option) != 0;

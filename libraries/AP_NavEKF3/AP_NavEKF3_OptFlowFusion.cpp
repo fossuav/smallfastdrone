@@ -40,15 +40,6 @@ void NavEKF3_core::SelectFlowFusion()
     flowDataValid = ((imuSampleTime_ms - flowValidMeaTime_ms) < 1000);
     // check is the terrain offset estimate is still valid - if we are using range finder as the main height reference, the ground is assumed to be at 0
     gndOffsetValid = ((imuSampleTime_ms - gndHgtValidTime_ms) < 5000) || (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER);
-    // Over a large flat area the frozen terrain offset stays a valid height-above-ground reference once the
-    // rangefinder climbs out of range. Keep it valid while flow is still being fused and the height source is
-    // healthy so horiz_pos_rel does not drop and trip a spurious failsafe at the ceiling. Healthy flow fusion
-    // is self-validating: a wrong flat-ground assumption grows the flow innovations and stops fusion, letting
-    // the 5 s timeout above invalidate the offset.
-    if (frontend->option_is_enabled(NavEKF3::Option::OptflowAssumeFlatGnd) &&
-        ((imuSampleTime_ms - prevFlowFuseTime_ms) < 1000) && !hgtTimeout) {
-        gndOffsetValid = true;
-    }
     // Perform tilt check
     bool tiltOK = (prevTnb.c.z > frontend->DCM33FlowMin);
     // Constrain measurements to zero if takeoff is not detected and the height above ground
