@@ -22,7 +22,8 @@
     LOG_XKV1_MSG, \
     LOG_XKV2_MSG, \
     LOG_XKY0_MSG, \
-    LOG_XKY1_MSG
+    LOG_XKY1_MSG, \
+    LOG_XKVL_MSG
 
 // @LoggerMessage: XKF0
 // @Description: EKF3 beacon sensor diagnostics
@@ -321,6 +322,30 @@ struct PACKED log_XKFR {
     uint8_t aglKfValid;
 };
 
+// @LoggerMessage: XKVL
+// @Description: EKF3 optical-flow control limits handed to the position controller (getEkfControlLimits)
+// @Field: TimeUS: Time since system startup
+// @Field: C: EKF3 core this data is for
+// @Field: VGain: nav velocity gain scaler returned to the position controller (1.0 = no reduction)
+// @Field: GSpd: ground speed limit returned to the position controller
+// @Field: AMode: PV aiding mode (0=None,1=Relative,2=Absolute)
+// @Field: RelyF: 1 when the relyingOnFlowData gate is true (flow limits active)
+// @Field: dBodyV: time since body-velocity fusion (ms); >1000 keeps RelyF true
+// @Field: dFlowV: time since a valid flow measurement (ms); <=10000 keeps RelyF true
+// @Field: HAgl: height above ground used to scale the limits
+struct PACKED log_XKVL {
+    LOG_PACKET_HEADER;
+    uint64_t time_us;
+    uint8_t core;
+    float velGainScaler;
+    float gndSpdLimit;
+    uint8_t aidMode;
+    uint8_t relyingOnFlow;
+    uint32_t bodyVelAge_ms;
+    uint32_t flowMeaAge_ms;
+    float heightAboveGnd;
+};
+
 // @LoggerMessage: XKFD
 // @Description: EKF3 Body Frame Odometry errors
 // @Field: TimeUS: Time since system startup
@@ -523,6 +548,8 @@ struct PACKED log_XKV {
       "XKF7","QBBBB","TimeUS,C,FVC,FVR,FVU", "s#---", "F----", true }, \
     { LOG_XKFR_MSG, sizeof(log_XKFR), \
       "XKFR","QBBBBIffBBBB","TimeUS,C,HSrc,ZSrc,RFresh,RAge,HAGL,RMax,bLow,aUp,tT,AglV", "s#---smm----", "F-----00----", true }, \
+    { LOG_XKVL_MSG, sizeof(log_XKVL), \
+      "XKVL","QBffBBIIf","TimeUS,C,VGain,GSpd,AMode,RelyF,dBodyV,dFlowV,HAgl", "s#-n--ssm", "F-00----0", true }, \
     { LOG_XKFD_MSG, sizeof(log_XKFD), \
       "XKFD","QBffffff","TimeUS,C,IX,IY,IZ,IVX,IVY,IVZ", "s#------", "F-------" , true }, \
     { LOG_XKFM_MSG, sizeof(log_XKFM),   \

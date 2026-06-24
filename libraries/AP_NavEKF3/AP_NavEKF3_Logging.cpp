@@ -268,6 +268,31 @@ void NavEKF3_core::Log_Write_XKF5(uint64_t time_us) const
     };
     AP::logger().WriteBlock(&pktr, sizeof(pktr));
 #endif
+
+    // optical-flow control limits handed to the position controller, with the gate that
+    // decides whether they apply (getEkfControlLimits returns 1.0/400 unless relyingOnFlowData
+    // is true in AID_RELATIVE)
+    float xkvlGndSpd, xkvlScaler;
+    getEkfControlLimits(xkvlGndSpd, xkvlScaler);
+    ftype xkvlHagl = MAX((terrainState - stateStruct.position[2]), rngOnGnd);
+#if EK3_FEATURE_OPTFLOW_AGL_KF
+    if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid) {
+        xkvlHagl = MAX(aglKfH, rngOnGnd);
+    }
+#endif
+    const struct log_XKVL pktvl{
+        LOG_PACKET_HEADER_INIT(LOG_XKVL_MSG),
+        time_us        : time_us,
+        core           : DAL_CORE(core_index),
+        velGainScaler  : xkvlScaler,
+        gndSpdLimit    : xkvlGndSpd,
+        aidMode        : (uint8_t)PV_AidingMode,
+        relyingOnFlow  : (uint8_t)((imuSampleTime_ms - prevBodyVelFuseTime_ms > 1000) && (imuSampleTime_ms - flowValidMeaTime_ms <= 10000)),
+        bodyVelAge_ms  : imuSampleTime_ms - prevBodyVelFuseTime_ms,
+        flowMeaAge_ms  : imuSampleTime_ms - flowValidMeaTime_ms,
+        heightAboveGnd : (float)xkvlHagl
+    };
+    AP::logger().WriteBlock(&pktvl, sizeof(pktvl));
 }
 
 void NavEKF3_core::Log_Write_Quaternion(uint64_t time_us) const
