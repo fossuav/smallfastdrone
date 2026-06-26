@@ -47,57 +47,94 @@ PRs rebased) on every refresh:
 - **ArduCopter** - a 3-way merge artifact dropped master's surface-tracking
   `get_pilot_speed_*_adjusted_ms()` into #32471's hover-bias commit; 4.7 has no
   declarations or callers, so they were removed.
+- **ArduPlane** - #32768's `update_home()` block in `commands.cpp` used master's
+  `AP_GPS_FixType::FIX_3D`; on 4.7 `gps.status()` returns `AP_GPS::GPS_Status`, so
+  it was changed to `AP_GPS::GPS_OK_FIX_3D` to match the line just below it. The
+  copter-only code pass missed this - **build plane as well** (`./waf plane`) so
+  plane-only breaks surface before the test pass.
 
-## Phase 2 - tests (`refresh.sh tests`)
+## Phase 2 - tests
 
-The code pass (`run`) drops every `Tools/autotest` change so the SITL tests do not
-collide commit-by-commit. `refresh.sh tests` replays the same commit list keeping
-ONLY the autotest hunks and auto-resolves test-vs-test collisions by keeping both
-sides.
+Two steps:
 
-Reality of the last run: ~34 test commits came in; 13 keep-both collisions in 4
-files (`arducopter.py` x10, `vehicle_test_suite.py`, `arduplane.py`, `quadplane.py`).
-Keep-both produces invalid Python where two PRs edit the same registration list or
-redefine the same method, so those 4 files were replaced with the integrated copies
-from the loiter branch:
+1. `refresh.sh tests` - replays the commit list keeping ONLY the autotest hunks
+   and keeps both sides on test-vs-test collisions. Fine for the files where PRs
+   touch disjoint code, which is most of them.
+2. `refresh.sh rebuild-tests` - rebuilds the few HOT files where PRs edit the same
+   registration list / method, so keep-both yields invalid Python. These are
+   `arducopter.py`, `arduplane.py`, `quadplane.py`, `vehicle_test_suite.py`.
 
-    git checkout SmallFastDrone-4.7-beta-loiter -- Tools/autotest/arducopter.py \
-        Tools/autotest/vehicle_test_suite.py Tools/autotest/arduplane.py \
-        Tools/autotest/quadplane.py
+`rebuild-tests` does NOT use the loiter branch. The earlier loiter-scaffold
+fallback asserted loiter-era semantics and drifted from the PRs as they evolved -
+`EK3_FlowAxisLockoutRecovery` failed against the current #33484 code purely
+because of that. Instead `rebuild_testfile.sh` resets each hot file to base and
+whole-file 3-way merges each PR's net change (`merge-base..head`) in order;
+`resolve_additive.py` clears the additive conflicts; the rest stop for hand
+resolution. Every reconstructed test body is then byte-identical to the PR head
+it came from (verify with a per-method diff against `refs/sfdpr/<n>`).
 
-After that the suite imports and all the reconstructed-feature tests are present
-(EK3_FlowAxisLockoutRecovery, EK3_FlowMinHeightFloor, EK3_AglKfVelForVelD,
-TakeoffGroundEffectAlt, LoiterFlowBrakeOvershoot, BaroDriftResetOnArm, ...).
+### Two manual cases to expect in rebuild-tests
 
-### Validation finding (important)
+- 4.7 lacks a master test that a PR's diff context includes (e.g. arduplane's
+  `UTMGlobalPosition*`, arducopter's `Scripting6DoFMotors`). `resolve_additive.py`
+  handles these: it keeps only the PR's own addition and drops the master-only
+  entries 4.7 does not carry.
+- diff3 mis-alignment: when a PR adds a method right where 4.7 already has one with
+  a similar docstring, the merge can split 4.7's method - def+docstring inside the
+  markers, body left in the common region below. This happened with #33507 (vs
+  `EK3_FlowAxisLockoutRecovery`) and #33568 (vs `LoiterFlowBrakeOvershoot`).
+  Recipe: resolve the conflict to OUR side only (reconnects 4.7's method to its
+  body), then insert the PR's new method verbatim from `refs/sfdpr/<n>` just before
+  4.7's method, and add the one registration line. Confirm with py_compile and a
+  no-dangling-registration check (a `self.X,` whose `def X` you dropped).
 
-`test.Copter.EK3_FlowAxisLockoutRecovery` FAILS with "flow vel reset fired without
-the AGL KF gate". This is NOT a reconstruction bug - the gate is correct in the
-rebuilt code (`AP_NavEKF3_OptFlowFusion.cpp` ~824-828 requires
-`AglKfForOptflow && aglKfValid`, and the reset + its GCS message only fire inside
-that block). It is a loiter-test-vs-current-PR-code mismatch: the loiter test file
-asserts loiter-era semantics, and #33484 evolved during review. This is the cost of
-using loiter's test files for the conflicted merges.
+### Validation (last refresh)
 
-To validate faithfully, the conflicted test files need the PRs' OWN current test
-versions merged (the per-PR test-conflict resolution we skipped), not loiter's. The
-cleanly-applied (non-conflicted) PR tests and the feature tests that match the
-rebuilt code can be run now; the loiter-sourced files are scaffolding.
+Copter: 14 of 15 reconstructed tests pass, including the previously-failing
+`EK3_FlowAxisLockoutRecovery` (the point of the rebuild). The one Copter failure,
+`VibrationRectificationBiasLearning`, is a real code-integration gap - see below.
+
+Plane/QuadPlane: `AmslAltPreservedAfterUpdateHomeAtDifferentElevation` passes.
+`EK3HeightDatumResetFlushesBuffers` is flaky, not regressed: its #32770 threshold
+is 0.1 m and the post-reset transient sits right on it (0.073 m pass, 0.107 m fail
+across runs). Both its test body and #32770's code (`3e3a57d7d1`) are faithful to
+the PR head; the threshold is just tight under SITL variance.
+
+### Open: VibrationRectificationBiasLearning fails (#32471 code gap)
+
+`test.Copter.VibrationRectificationBiasLearning` fails deterministically:
+`INS_ACC_VRFB_Z should be non-zero with bitmask 7, got 0.000002`. The test is
+byte-identical to #32471's head, so it is faithful; the VRF hover Z-bias feature
+just is not learning on our branch. The Copter learning glue is present
+(`Attitude.cpp` update/save_hover_bias_learning) but its per-IMU loop is gated on
+`ahrs.get_accel_bias_z_for_imu()` and uses the EKF accel-Z bias. Two #32471
+commits are NOT patch-present on our branch (altered during the code-pass AHRS
+refactor resolution):
+
+    AP_NavEKF3: add hover Z-bias correction for vibration rectification
+    Copter:     add hover Z-bias learning for vibration rectification
+
+so the EKF side the learning depends on is incompletely integrated. Fix is in the
+feature code (re-apply those two against the current AHRS), not the test. Until
+then this test is expected red.
 
 ## Current state / pick up here
 
-- Branch `SmallFastDrone-4.7.1-beta` = beta7 + the full stack; `./waf copter` builds.
-- Phase 1 (feature code) complete; all conflict resolutions recorded by rerere.
-- Phase 2 (tests) brought in; 4 files are loiter copies (scaffold), suite loads,
-  SITL runs.
+- Branch `SmallFastDrone-4.7.1-beta` = beta7 + the full stack; `./waf copter` and
+  `./waf plane` both build.
+- Phase 1 (feature code) complete; conflict resolutions recorded by rerere.
+- Phase 2 tests: the hot files are now rebuilt from the PR heads (not loiter) via
+  `refresh.sh rebuild-tests`; every reconstructed body is byte-identical to its
+  PR. Suite loads, SITL runs, 16 of 18 reconstructed tests pass.
 - Next:
-  1. Do the proper per-PR test merge for `arducopter.py` / `vehicle_test_suite.py`
-     so tests match the rebuilt code (replaces the loiter scaffold).
-  2. Run the matching feature autotests to get green validations.
-  3. Re-apply the build fixups above (they are committed here but a from-scratch
-     refresh re-introduces the master-isms - rerere does not cover them).
-  4. Then fold in VALT (#32270) and throw-mode (#32955 + local) once their PRs
-     are rebased.
+  1. Fix the #32471 VRF code gap (re-apply the two hover Z-bias commits against
+     the current AHRS) so `VibrationRectificationBiasLearning` goes green - the
+     test is correct, the feature is not learning. See the section above.
+  2. Re-apply the build fixups (incl. the new ArduPlane one) on a from-scratch
+     refresh - rerere does not cover them.
+  3. Fold in VALT (#32270) and throw-mode (#32955 + local) once their PRs rebase;
+     their loiter-local tests (EK3_AglKfRngHeightSwitch, EKFSourceSetFailsafe,
+     Throw*, ModeVAltHold) were dropped because no current PR carries them.
 
 ## Excluded (pending updated PRs)
 

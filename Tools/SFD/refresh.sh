@@ -146,12 +146,29 @@ do_tests() {
   echo "DONE (tests): processed $i/$n; now py_compile the Tools/autotest files touched in $ST/tconflicts.log"
 }
 
+# The few files where PRs edit the same registration list / method, so keep-both
+# (do_tests) yields invalid Python. Rebuild these from the PR heads instead of
+# the loiter scaffold (see rebuild_testfile.sh / REFRESH_NOTES.md "Phase 2").
+HOTFILES="Tools/autotest/arducopter.py Tools/autotest/arduplane.py Tools/autotest/quadplane.py Tools/autotest/vehicle_test_suite.py"
+
+do_rebuild_tests() {
+  # resumable via per-file .applied sidecars in .state; to restart a hot file
+  # from base, delete its sidecar (or clear .state for a fresh refresh cycle).
+  for f in $HOTFILES; do
+    echo "=== $f ==="
+    bash "$DIR/rebuild_testfile.sh" "$f" || {
+      echo "STOP: resolve manual conflicts in $f, then re-run 'rebuild-tests'"; exit 2; }
+  done
+  echo "DONE (rebuild-tests): hot files rebuilt from PR heads"
+}
+
 case "${1:-run}" in
   fetch)  do_fetch ;;
   plan)   do_plan ;;
   run)    do_run stop ;;
   survey) : > "$ST/conflicts.log"; do_run survey ;;
   tests)  : > "$ST/tconflicts.log"; rm -f "$ST/tprog.idx"; do_tests ;;
+  rebuild-tests) do_rebuild_tests ;;
   status) echo "progress $(prog)/$(wc -l < "$ST/apply.txt" 2>/dev/null || echo '?'); $(git rev-list --count "$BASE"..HEAD 2>/dev/null) commits on branch" ;;
-  *) echo "usage: refresh.sh {fetch|plan|run|survey|tests|status}"; exit 1 ;;
+  *) echo "usage: refresh.sh {fetch|plan|run|survey|tests|rebuild-tests|status}"; exit 1 ;;
 esac

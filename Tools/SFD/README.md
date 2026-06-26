@@ -17,7 +17,10 @@ Tools/SFD/refresh.sh plan      # ordered apply list (skips commits already in ba
 Tools/SFD/refresh.sh run       # cherry-pick code; stops on each NEW conflict
 # ... resolve, git add, git commit -C <sha>, bump .state/progress.idx, re-run ...
 ./waf configure --board sitl && ./waf copter   # build; fix any master-isms (REFRESH_NOTES)
-Tools/SFD/refresh.sh tests     # phase 2: bring deferred Tools/autotest changes in
+./waf plane                                    # also build plane - the copter-only
+                                               # pass misses plane-only breaks
+Tools/SFD/refresh.sh tests          # phase 2a: deferred Tools/autotest changes
+Tools/SFD/refresh.sh rebuild-tests  # phase 2b: rebuild hot files from PR heads
 ```
 
 `git rerere` is enabled (`rerere.enabled true`), so once a conflict is resolved
@@ -39,9 +42,19 @@ single batch after the feature code is in place (see "Tests" below).
 
 ## Tests (phase 2)
 
-`refresh.sh tests` brings the deferred `Tools/autotest` changes in (inverse of the
-code pass - keeps only autotest hunks, keep-both on collisions). Run it after the
-code pass and a successful build. Keep-both breaks the few files where PRs edit the
-same registration list/method; those get the integrated loiter copy as scaffold.
-See REFRESH_NOTES.md "Phase 2" for the exact steps, the known flow-lockout
-test-vs-code mismatch, and what is left to do.
+Two steps, run after the code pass and a successful build:
+
+```sh
+Tools/SFD/refresh.sh tests          # keep-both for files PRs touch disjointly
+Tools/SFD/refresh.sh rebuild-tests  # rebuild the hot files from the PR heads
+```
+
+`tests` keeps only the autotest hunks and keeps both sides on collisions - fine
+for the files where PRs do not overlap. For the few HOT files where PRs edit the
+same registration list / method (`arducopter.py`, `arduplane.py`, `quadplane.py`,
+`vehicle_test_suite.py`), keep-both yields invalid Python, so `rebuild-tests`
+reconstructs them with `rebuild_testfile.sh`: reset to base, then 3-way merge each
+PR's net change to the file in order, auto-resolving the additive conflicts via
+`resolve_additive.py` and stopping on the rest for hand resolution. The result
+matches the current PR heads (not the loiter branch). See REFRESH_NOTES.md
+"Phase 2" for the two manual conflict shapes and the standing validation findings.
