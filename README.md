@@ -20,7 +20,7 @@ branches has become somewhat onerous, so I have instead started this new repo gi
 
 ## Included Features ##
 
-The branch is based on ArduPilot 4.7.0-beta1. It also includes the following PRs and features, grouped by upstream status.
+The branch is based on ArduPilot 4.7.0-beta6. It also includes the following PRs and features, grouped by upstream status.
 
 ### Merged upstream ###
 
@@ -44,6 +44,7 @@ The branch is based on ArduPilot 4.7.0-beta1. It also includes the following PRs
 - Ground Clearance Fusion Fix (https://github.com/ArduPilot/ardupilot/pull/30490)
 - Motortest Error Rate (https://github.com/ArduPilot/ardupilot/pull/31274)
 - MSP VTX Support (https://github.com/ArduPilot/ardupilot/pull/29768)
+- Scripting OSD (https://github.com/ArduPilot/ardupilot/pull/32045)
 - Separate LEVEL Arming Check (https://github.com/ArduPilot/ardupilot/pull/32391)
 - Customizable ARM_DELAY (https://github.com/ArduPilot/ardupilot/pull/32398)
 - Fast Boot Parameter (https://github.com/ArduPilot/ardupilot/pull/32238)
