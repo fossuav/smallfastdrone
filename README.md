@@ -24,6 +24,7 @@ The branch is based on ArduPilot 4.7.0-beta1. It also includes the following PRs
 
 ### Merged upstream ###
 
+- Quintuple Notch (https://github.com/ArduPilot/ardupilot/pull/30994)
 - Fence Improvements (https://github.com/ArduPilot/ardupilot/pull/31005, https://github.com/ArduPilot/ardupilot/pull/31619)
 - Recorded Origin Fix (https://github.com/ArduPilot/ardupilot/pull/32469)
 - Baro Thrust Compensation Filter (https://github.com/ArduPilot/ardupilot/pull/32392)
@@ -36,11 +37,13 @@ The branch is based on ArduPilot 4.7.0-beta1. It also includes the following PRs
 - EKF Bootstrap Reset (https://github.com/ArduPilot/ardupilot/pull/32202)
 - Low Noise IMU Support (https://github.com/ArduPilot/ardupilot/pull/32399)
 - Throw Mode RPM Fix (https://github.com/ArduPilot/ardupilot/pull/32955, supersedes closed https://github.com/ArduPilot/ardupilot/pull/32393)
+- VTX Actual Power Reporting (https://github.com/ArduPilot/ardupilot/pull/32937)
 
 ### In review ###
 
 - Ground Clearance Fusion Fix (https://github.com/ArduPilot/ardupilot/pull/30490)
 - Motortest Error Rate (https://github.com/ArduPilot/ardupilot/pull/31274)
+- MSP VTX Support (https://github.com/ArduPilot/ardupilot/pull/29768)
 - Separate LEVEL Arming Check (https://github.com/ArduPilot/ardupilot/pull/32391)
 - Customizable ARM_DELAY (https://github.com/ArduPilot/ardupilot/pull/32398)
 - Fast Boot Parameter (https://github.com/ArduPilot/ardupilot/pull/32238)
@@ -56,6 +59,7 @@ The branch is based on ArduPilot 4.7.0-beta1. It also includes the following PRs
 [![Fast rates](https://img.youtube.com/vi/B8Dp2jwDamU/0.jpg)](https://www.youtube.com/playlist?list=PL_O9QDs-WAVyBpf7URQQgCmNQwv_aTcMf)
 - ESC Logging Control (https://github.com/ArduPilot/ardupilot/pull/30841)
 - iFlight Borg H7 (https://github.com/ArduPilot/ardupilot/pull/31216)
+- DFU Mode via System Bootloader (https://github.com/ArduPilot/ardupilot/pull/31770)
 - Pending Arm on Switch (https://github.com/ArduPilot/ardupilot/pull/32401)
 - Acro Bias Inhibit (https://github.com/ArduPilot/ardupilot/pull/32473)
 - AC_Loiter Brake/Drag Feed-forward Fix (https://github.com/ArduPilot/ardupilot/pull/33318)
