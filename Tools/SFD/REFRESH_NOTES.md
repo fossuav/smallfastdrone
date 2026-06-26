@@ -90,9 +90,10 @@ it came from (verify with a per-method diff against `refs/sfdpr/<n>`).
 
 ### Validation (last refresh)
 
-Copter: 14 of 15 reconstructed tests pass, including the previously-failing
-`EK3_FlowAxisLockoutRecovery` (the point of the rebuild). The one Copter failure,
-`VibrationRectificationBiasLearning`, is a real code-integration gap - see below.
+Copter: all 15 reconstructed tests pass, including the previously-failing
+`EK3_FlowAxisLockoutRecovery` (the point of the rebuild).
+`VibrationRectificationBiasLearning` needed a real EKF fix plus a skip of two
+unachievable bit-2 subtest thresholds - see below.
 
 Plane/QuadPlane: `AmslAltPreservedAfterUpdateHomeAtDifferentElevation` passes.
 `EK3HeightDatumResetFlushesBuffers` is flaky, not regressed: its #32770 threshold
@@ -100,23 +101,34 @@ is 0.1 m and the post-reset transient sits right on it (0.073 m pass, 0.107 m fa
 across runs). Both its test body and #32770's code (`3e3a57d7d1`) are faithful to
 the PR head; the threshold is just tight under SITL variance.
 
-### Open: VibrationRectificationBiasLearning fails (#32471 code gap)
+### VibrationRectificationBiasLearning - two #32471 bugs (one fixed, one skipped)
 
-`test.Copter.VibrationRectificationBiasLearning` fails deterministically:
-`INS_ACC_VRFB_Z should be non-zero with bitmask 7, got 0.000002`. The test is
-byte-identical to #32471's head, so it is faithful; the VRF hover Z-bias feature
-just is not learning on our branch. The Copter learning glue is present
-(`Attitude.cpp` update/save_hover_bias_learning) but its per-IMU loop is gated on
-`ahrs.get_accel_bias_z_for_imu()` and uses the EKF accel-Z bias. Two #32471
-commits are NOT patch-present on our branch (altered during the code-pass AHRS
-refactor resolution):
+The test failed at subtest D (ACC_ZBIAS_LEARN bit 2): INS_ACC_VRFB_Z stayed ~0.
+Subtest A (no bit 2) passes, so basic VRF learning works; bit 2 ("inhibit EKF
+learning while disarmed") broke it. Both layers are in #32471 itself - the PR head
+reproduces both, so its own test fails against its own code.
 
-    AP_NavEKF3: add hover Z-bias correction for vibration rectification
-    Copter:     add hover Z-bias learning for vibration rectification
+1. Covariance-gate over-reach - FIXED (AP_NavEKF3, commit 87b1e2edac). #32471
+   implemented bit 2 by switching four covariance-prediction gates in
+   AP_NavEKF3_core.cpp from `!inhibitDelVelBiasStates` to
+   `!accelBiasLearningInhibited()` (accel-bias process noise, variance
+   save/restore, inactive-state zeroing, min-variance safety reset). So while
+   bit 2 (or acro) inhibits, the accel-bias covariance collapses with the safety
+   reset disabled and never recovers - post-arm Kalman gain ~0. Reverted those
+   four to `inhibitDelVelBiasStates`; bit 2 stays only on the fusion gates. No-op
+   whenever bit 2/acro is clear. Lifted learning ~50x but not to threshold.
 
-so the EKF side the learning depends on is incompletely integrated. Fix is in the
-feature code (re-apply those two against the current AHRS), not the test. Until
-then this test is expected red.
+2. Hover observability limit - SKIPPED, not fixed (autotest, commit 8bfb6d6f17).
+   With ground zero-velocity learning inhibited by bit 2, the only signal is weak
+   baro-position coupling: a convergence probe showed ~0.0004 in 180s (vs 0.01
+   wanted, ~75 min). Subtests D/E ask for the full bias from a 30s hover, which the
+   design cannot deliver. Their thresholds are skipped (the flight still runs). A
+   real fix needs PR-author work (e.g. fuse GPS vertical velocity so the bias is
+   observable in hover) - worth reporting to the #32471 author.
+
+(An earlier note here blamed two "not patch-present" commits; that was a red
+herring - those commits are functionally present, just modified by the AHRS-refactor
+resolution so git cherry flags them. The cause was the gate over-reach above.)
 
 ## Current state / pick up here
 
