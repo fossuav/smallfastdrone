@@ -14,8 +14,10 @@ where our local copy has drifted from - or been superseded by - upstream.
 # from a checkout sitting on a vanilla ArduPilot-4.7 branch:
 Tools/SFD/refresh.sh fetch     # fetch every PR head (pull/N/head)
 Tools/SFD/refresh.sh plan      # ordered apply list (skips commits already in base)
-Tools/SFD/refresh.sh run       # cherry-pick; stops on each NEW conflict
+Tools/SFD/refresh.sh run       # cherry-pick code; stops on each NEW conflict
 # ... resolve, git add, git commit -C <sha>, bump .state/progress.idx, re-run ...
+./waf configure --board sitl && ./waf copter   # build; fix any master-isms (REFRESH_NOTES)
+Tools/SFD/refresh.sh tests     # phase 2: bring deferred Tools/autotest changes in
 ```
 
 `git rerere` is enabled (`rerere.enabled true`), so once a conflict is resolved
@@ -37,7 +39,9 @@ single batch after the feature code is in place (see "Tests" below).
 
 ## Tests (phase 2)
 
-Deferred autotest changes still need to come in so the branch can be validated.
-They are pulled in after the feature cherry-picks; method TBD (most likely a
-batch apply of the autotest paths from the integrated loiter branch, since the
-PRs' tests collide with each other when applied independently).
+`refresh.sh tests` brings the deferred `Tools/autotest` changes in (inverse of the
+code pass - keeps only autotest hunks, keep-both on collisions). Run it after the
+code pass and a successful build. Keep-both breaks the few files where PRs edit the
+same registration list/method; those get the integrated loiter copy as scaffold.
+See REFRESH_NOTES.md "Phase 2" for the exact steps, the known flow-lockout
+test-vs-code mismatch, and what is left to do.

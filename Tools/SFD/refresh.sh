@@ -109,11 +109,49 @@ do_run() {  # mode: stop (default) or survey
   echo "DONE: processed $i/$n"
 }
 
+# Phase 2: bring the deferred Tools/autotest changes back in. Inverse of do_run -
+# replay the same commit list keeping ONLY the autotest hunks (the feature code is
+# already on the branch) and auto-resolving test-vs-test collisions by keeping both
+# sides. Run AFTER the code pass + a successful build.
+#
+# CAVEAT (see REFRESH_NOTES.md "Phase 2"): keep-both produces invalid Python where
+# PRs edit the same registration list / method. After this runs, py_compile the
+# touched files; for the few that break, take the integrated copy from the loiter
+# branch (`git checkout SmallFastDrone-4.7-beta-loiter -- <file>`) until the per-PR
+# test merges are done properly. Those loiter files assert loiter-era behaviour and
+# may not match the current PR code (a flow-lockout test mismatch is known).
+do_tests() {
+  [ -s "$ST/apply.txt" ] || { echo "run 'plan' first"; exit 1; }
+  mapfile -t S < "$ST/apply.txt"
+  local i; i="$(cat "$ST/tprog.idx" 2>/dev/null || echo 0)"; local n=${#S[@]}
+  while [ "$i" -lt "$n" ]; do
+    local sha="${S[$i]}" pr; pr="$(grep -m1 -F "$sha" "$ST/sha_pr.tsv" | cut -f2)"
+    git cherry-pick -n "$sha" >/dev/null 2>&1
+    # drop every non-autotest change (code already applied); keep Tools/autotest
+    for f in $(git diff --cached --name-only; git diff --name-only --diff-filter=U); do
+      case "$f" in Tools/autotest/*) ;; *) git checkout HEAD -- "$f" 2>/dev/null || git rm -f -q "$f" 2>/dev/null;; esac
+    done
+    # auto-resolve test collisions: keep both sides (additive)
+    for f in $(git diff --name-only --diff-filter=U -- Tools/autotest); do
+      sed -i '/^<<<<<<< /d; /^=======$/d; /^>>>>>>> /d' "$f"; git add "$f"
+      echo "#$pr $f" >> "$ST/tconflicts.log"
+    done
+    if git diff --cached --quiet; then
+      git checkout -- . 2>/dev/null; git cherry-pick --quit 2>/dev/null
+    else
+      git commit -C "$sha" -q --no-verify; git cherry-pick --quit 2>/dev/null
+    fi
+    i=$((i+1)); echo "$i">"$ST/tprog.idx"
+  done
+  echo "DONE (tests): processed $i/$n; now py_compile the Tools/autotest files touched in $ST/tconflicts.log"
+}
+
 case "${1:-run}" in
   fetch)  do_fetch ;;
   plan)   do_plan ;;
   run)    do_run stop ;;
   survey) : > "$ST/conflicts.log"; do_run survey ;;
+  tests)  : > "$ST/tconflicts.log"; rm -f "$ST/tprog.idx"; do_tests ;;
   status) echo "progress $(prog)/$(wc -l < "$ST/apply.txt" 2>/dev/null || echo '?'); $(git rev-list --count "$BASE"..HEAD 2>/dev/null) commits on branch" ;;
-  *) echo "usage: refresh.sh {fetch|plan|run|survey|status}"; exit 1 ;;
+  *) echo "usage: refresh.sh {fetch|plan|run|survey|tests|status}"; exit 1 ;;
 esac

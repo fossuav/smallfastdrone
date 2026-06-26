@@ -48,7 +48,57 @@ PRs rebased) on every refresh:
   `get_pilot_speed_*_adjusted_ms()` into #32471's hover-bias commit; 4.7 has no
   declarations or callers, so they were removed.
 
-## Still to do
+## Phase 2 - tests (`refresh.sh tests`)
 
-- Tests are deferred (Tools/autotest dropped per commit). Pull them in as a batch.
-- VALT (#32270) and throw-mode (#32955 + local) excluded pending updated PRs.
+The code pass (`run`) drops every `Tools/autotest` change so the SITL tests do not
+collide commit-by-commit. `refresh.sh tests` replays the same commit list keeping
+ONLY the autotest hunks and auto-resolves test-vs-test collisions by keeping both
+sides.
+
+Reality of the last run: ~34 test commits came in; 13 keep-both collisions in 4
+files (`arducopter.py` x10, `vehicle_test_suite.py`, `arduplane.py`, `quadplane.py`).
+Keep-both produces invalid Python where two PRs edit the same registration list or
+redefine the same method, so those 4 files were replaced with the integrated copies
+from the loiter branch:
+
+    git checkout SmallFastDrone-4.7-beta-loiter -- Tools/autotest/arducopter.py \
+        Tools/autotest/vehicle_test_suite.py Tools/autotest/arduplane.py \
+        Tools/autotest/quadplane.py
+
+After that the suite imports and all the reconstructed-feature tests are present
+(EK3_FlowAxisLockoutRecovery, EK3_FlowMinHeightFloor, EK3_AglKfVelForVelD,
+TakeoffGroundEffectAlt, LoiterFlowBrakeOvershoot, BaroDriftResetOnArm, ...).
+
+### Validation finding (important)
+
+`test.Copter.EK3_FlowAxisLockoutRecovery` FAILS with "flow vel reset fired without
+the AGL KF gate". This is NOT a reconstruction bug - the gate is correct in the
+rebuilt code (`AP_NavEKF3_OptFlowFusion.cpp` ~824-828 requires
+`AglKfForOptflow && aglKfValid`, and the reset + its GCS message only fire inside
+that block). It is a loiter-test-vs-current-PR-code mismatch: the loiter test file
+asserts loiter-era semantics, and #33484 evolved during review. This is the cost of
+using loiter's test files for the conflicted merges.
+
+To validate faithfully, the conflicted test files need the PRs' OWN current test
+versions merged (the per-PR test-conflict resolution we skipped), not loiter's. The
+cleanly-applied (non-conflicted) PR tests and the feature tests that match the
+rebuilt code can be run now; the loiter-sourced files are scaffolding.
+
+## Current state / pick up here
+
+- Branch `SmallFastDrone-4.7.1-beta` = beta7 + the full stack; `./waf copter` builds.
+- Phase 1 (feature code) complete; all conflict resolutions recorded by rerere.
+- Phase 2 (tests) brought in; 4 files are loiter copies (scaffold), suite loads,
+  SITL runs.
+- Next:
+  1. Do the proper per-PR test merge for `arducopter.py` / `vehicle_test_suite.py`
+     so tests match the rebuilt code (replaces the loiter scaffold).
+  2. Run the matching feature autotests to get green validations.
+  3. Re-apply the build fixups above (they are committed here but a from-scratch
+     refresh re-introduces the master-isms - rerere does not cover them).
+  4. Then fold in VALT (#32270) and throw-mode (#32955 + local) once their PRs
+     are rebased.
+
+## Excluded (pending updated PRs)
+
+- VALT (#32270), throw-mode RPM (#32955) and the local throw-mode work.
