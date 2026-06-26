@@ -159,7 +159,7 @@ bool Plane::update_home()
     Location origin;
     if (g2.home_reset_threshold > 0 &&
         ahrs.get_origin(origin) &&
-        gps.status() >= AP_GPS_FixType::FIX_3D) {
+        gps.status() >= AP_GPS::GPS_OK_FIX_3D) {
         const float gps_origin_diff_m = fabsf(0.01f *
             (float)(gps.location().alt - origin.alt));
         displaced = gps_origin_diff_m > origin_alt_tolerance_m;
