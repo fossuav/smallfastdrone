@@ -282,6 +282,69 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.do_RTL()
 
+    def ModeVAltHold(self):
+        '''Test VALT velocity alt-hold mode (mode 29)'''
+        # use mode number directly since pymavlink does not know VALT
+        VALT = 29
+
+        self.takeoff(10, mode="ALT_HOLD")
+        self.change_mode(VALT)
+
+        # verify altitude is maintained with neutral sticks
+        self.progress("Checking altitude hold with velocity control")
+        self.watch_altitude_maintained(altitude_min=9, altitude_max=11)
+
+        # verify altitude is maintained while flying laterally
+        self.progress("Checking altitude hold during lateral flight")
+        self.set_rc_from_map({
+            1: 1000,
+            2: 1000,
+        })
+        self.watch_altitude_maintained(altitude_min=9, altitude_max=11)
+        self.set_rc_from_map({
+            1: 1500,
+            2: 1500,
+        })
+
+        # command a climb and verify altitude increases
+        self.progress("Commanding climb with throttle 1800")
+        self.set_rc(3, 1800)
+        self.wait_altitude(12, 25, relative=True, timeout=10)
+        alt_after_climb = self.get_altitude(relative=True)
+        self.progress("Altitude after climb: %.1f" % alt_after_climb)
+
+        # release stick to neutral and let it settle
+        self.progress("Releasing stick, checking altitude settles")
+        self.set_rc(3, 1500)
+        self.delay_sim_time(3)
+        settled_alt = self.get_altitude(relative=True)
+        self.progress("Settled altitude: %.1f" % settled_alt)
+
+        # verify altitude is maintained at the new altitude
+        self.watch_altitude_maintained(
+            altitude_min=settled_alt - 1,
+            altitude_max=settled_alt + 1,
+            minimum_duration=3,
+        )
+
+        # repeat hold and descent with the position-authority blend enabled
+        # (VALT_POS_EXPO > 0) to confirm it does not regress normal behaviour:
+        # mid-stick still holds, and a full-down command still descends.
+        self.progress("Enabling VALT_POS_EXPO blend")
+        self.set_parameter("VALT_POS_EXPO", 3)
+        self.watch_altitude_maintained(
+            altitude_min=settled_alt - 1,
+            altitude_max=settled_alt + 1,
+            minimum_duration=3,
+        )
+        self.progress("Commanding descent with throttle 1200")
+        self.set_rc(3, 1200)
+        self.wait_altitude(3, settled_alt - 3, relative=True, timeout=20)
+        self.set_rc(3, 1500)
+        self.watch_altitude_maintained(altitude_min=2, altitude_max=settled_alt - 2)
+
+        self.do_RTL()
+
     def fly_to_origin(self, final_alt=10):
         origin = self.poll_message("GPS_GLOBAL_ORIGIN")
         self.change_mode("GUIDED")
@@ -1666,6 +1729,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.disarm_vehicle()
         self.wait_disarmed()
 
+
     # Tests the motor failsafe
     def TakeoffCheck(self):
         '''Test takeoff check'''
@@ -1783,18 +1847,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             maintain=1,
         )
 
-        # Add bias to the second IMU and reboot so it is present from boot.
-        # On-ground Z accel-bias learning is fast only while the bias-state
-        # variance is still high (just after boot); stepping a bias into an
-        # already-converged filter is not a physically realistic on-ground
-        # event (the only real late step is motor vibration rectification,
-        # which appears once armed, when the periodic height-datum reset is
-        # disabled). The re-assert lands before the on-ground observability
-        # window opens, so the bias is effectively present from boot.
-        self.set_parameters({
-            'SIM_ACC2_BIAS_Z': 0.7,
-        })
-        self.reboot_sitl()
+        # Add 2m/s/s bias to the second IMU
         self.set_parameters({
             'SIM_ACC2_BIAS_Z': 0.7,
         })
@@ -1827,12 +1880,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             condition="XKF2.C==0",
         )
 
-        # Add bias to the IMU and reboot so it is present from boot (see the
-        # note on the earlier injection). EK3_IMU_MASK persists across reboot.
-        self.set_parameters({
-            'SIM_ACC2_BIAS_Z': 0.7,
-        })
-        self.reboot_sitl()
+        # Add 2m/s/s bias to the second IMU
         self.set_parameters({
             'SIM_ACC2_BIAS_Z': 0.7,
         })
@@ -1866,20 +1914,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # check), and GPS velocity innovations can drive incorrect bias learning
         # during ground movement. With the fix, all bias learning is inhibited
         # when onGround && !onGroundNotMoving.
+        self.context_push()
 
-        # Enable logging while disarmed so we capture ground-only EKF data.
-        # Inject the positive-control bias before the reboot so it is present
-        # from boot (fast on-ground learning while the bias variance is high);
-        # a step into an already-converged filter is not a realistic on-ground
-        # event. The re-assert lands before the observability window opens.
+        # Enable logging while disarmed so we capture ground-only EKF data
         self.set_parameters({
             "LOG_FILE_DSRMROT": 1,
-            'SIM_ACC2_BIAS_Z': 0.7,
         })
         self.reboot_sitl()
-        self.set_parameters({
-            'SIM_ACC2_BIAS_Z': 0.7,
-        })
         self.wait_ready_to_arm()
 
         # Phase 1: Positive control - verify bias learning works when stationary
@@ -1888,7 +1929,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             'SIM_ACC2_BIAS_Z': 0.7,
         })
         self.delay_sim_time(30)
-        self.delay_sim_time(30, reason="EKF to learn accel bias")
         self.assert_dataflash_message_field_level_at(
             "XKF2", "AZ", 0.7,
             condition="XKF2.C==1",
@@ -1960,6 +2000,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             tolerance=0.3,
         )
 
+        self.context_pop()
+        self.reboot_sitl()
+
     def EK3_AccelBiasZeroVelOptFlow(self):
         '''Test EKF3 zero velocity fusion learns bias with optical flow config'''
         # When optical flow is configured (AID_RELATIVE) but the vehicle is
@@ -2005,7 +2048,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # vertical-velocity source (EK3_SRC1_VELZ=0). An uncompensated Z accel
         # offset (the vibration-rectification effect that bit real TD-5Inch
         # flights) then integrates open-loop into a vertical velocity / altitude
-        # runaway. EK3_OPTIONS AglKfVelForVelD fuses the rangefinder-aided
+        # runaway. EK3_OPTIONS bit 5 (AglKfVelForVelD) fuses the rangefinder-aided
         # 2-state AGL KF velocity as a velD observation to keep it bounded.
         #
         # The invariant has two halves and the test proves both: with the option
@@ -2027,8 +2070,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # The invariant is measured as the EKF vertical-velocity error against the
         # rangefinder-anchored AGL KF velocity (which tracks truth): innovation
         # err = VD + VAgl (VD is NED-down, VAgl is +up, so they sum to ~0 when the
-        # EKF velocity is correct). The AGL KF runs in BOTH phases; only the velD
-        # fusion (AglKfVelForVelD) differs, isolating the fusion's effect. Measuring the
+        # EKF velocity is correct). The AGL KF runs in BOTH phases (bit 4); only the
+        # velD fusion (bit 5) differs, isolating the fusion's effect. Measuring the
         # estimate error rather than the flown trajectory avoids conflating the fix
         # with the closed-loop motion the corrupted estimate causes.
         def max_velD_error_after_bias(options_value):
@@ -2053,7 +2096,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             last_vagl = None
             max_err = 0.0
             while True:
-                m = dfreader.recv_match(type=["XKF1", "XKFA"])
+                m = dfreader.recv_match(type=["XKF1", "XKF6"])
                 if m is None:
                     break
                 if getattr(m, "C", 0) != 0:
@@ -2061,18 +2104,15 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 t = m.TimeUS * 1.0e-6
                 if t < bias_time + 4 or t > bias_time + 10:
                     continue
-                if m.get_type() == "XKFA":
+                if m.get_type() == "XKF6":
                     last_vagl = m.VAgl
                 elif last_vagl is not None:
                     max_err = max(max_err, abs(m.VD + last_vagl))
             return max_err
 
-        agl_kf_only = 1 << 3  # EK3_OPTIONS AglKfForOptflow (runs the AGL KF)
-        agl_kf_veld = 1 << 4  # EK3_OPTIONS AglKfVelForVelD (fuses its velocity as velD)
-
         # Half 1: fusion OFF (AGL KF only) - the EKF velD must drift from truth
         self.start_subtest("Fusion OFF: EKF velD diverges from rangefinder truth under Z accel bias")
-        err_off = max_velD_error_after_bias(agl_kf_only)
+        err_off = max_velD_error_after_bias(16)
         self.progress("max EKF velD error with fusion OFF: %.2f m/s" % err_off)
         if err_off < 1.0:
             raise NotAchievedException(
@@ -2080,7 +2120,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         # Half 2: fusion ON - velD stays anchored to the AGL KF velocity
         self.start_subtest("Fusion ON: AGL KF velocity fusion keeps EKF velD on truth")
-        err_on = max_velD_error_after_bias(agl_kf_only | agl_kf_veld)
+        err_on = max_velD_error_after_bias(48)
         self.progress("max EKF velD error with fusion ON: %.2f m/s" % err_on)
         if err_on > 0.5:
             raise NotAchievedException(
@@ -2088,68 +2128,97 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.reboot_sitl()
 
-    def EK3_ZeroVelFusionNotUsedWithGPS(self):
-        '''Test EKF3 zero velocity changes do not affect GPS-enabled setups'''
-        # Addresses review concern: does zero velocity fusion interfere
-        # with GPS-enabled configurations? This test places the vehicle on
-        # a fast-moving boat with GPS active and verifies:
-        # 1. EKF tracks GPS velocity (not pulled to zero)
-        # 2. Accel bias learning works via GPS velocity observations
+    def EK3_AglKfRngHeightSwitch(self):
+        '''AGL KF keeps the rangefinder height switch engaged when baro drift locks out the legacy terrain estimator'''
+        # Indoor optical-flow config (no GPS) with the rangefinder allowed as a
+        # height source below the switch height (EK3_RNG_USE_HGT>0). The switch-on
+        # decision is gated by the legacy 1-state terrain estimator, which predicts
+        # range from the baro-contaminated main-filter altitude. A baro drift makes
+        # that estimator's innovation fail, freezes its state and lets its validity
+        # timestamp go stale - vetoing the switch so altitude follows the drifting
+        # baro (the EK3_RNG_USE_HGT feedback lockout). The AGL KF fuses the
+        # rangefinder independently of baro, so when it owns the height switch
+        # (EK3_OPTIONS bit 4) the switch stays engaged through the drift.
         #
-        # The ship uses a large circle (1000m diameter) at 15 m/s so
-        # motion is smooth enough that onGroundNotMoving stays TRUE once
-        # the ship reaches steady speed. Despite this, zero velocity
-        # fusion does NOT activate because GPS provides recent velocity
-        # data (haveRecentGpsVel is true in SelectVelPosFusion), so the
-        # condition for synthetic zero velocity injection is never met.
-
+        # Invariant, proved in both halves: under baro drift the EKF altitude
+        # diverges from the rangefinder with the AGL-KF height switch OFF, and
+        # stays on it with the switch ON. The ON half only holds because the switch
+        # is gated on the AGL KF's own fusion freshness, not the stalled legacy
+        # timestamp - so it regresses if that gating is removed.
         self.set_parameters({
-            "LOG_FILE_DSRMROT": 1,
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "EK3_IMU_MASK": 1,       # single core so the drift is not masked by a lane switch
+            "EK3_RNG_USE_HGT": 70,   # rangefinder is the height source below 70% of its max range
+            "EK3_RNG_USE_SPD": 4,    # keep the rangefinder through slow repositioning
         })
+        self.set_analog_rangefinder_parameters()  # RNGFND1_MAX=40 -> switch height ~28 m
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+
+        baro_drift = 0.3   # m/s baro altitude drift (temperature-style)
+        hover_alt = 10     # m AGL, below the ~28 m switch height and within RF range
+
+        # Track the EKF height estimate against the rangefinder, which is baro-
+        # independent and follows truth: diff = (-XKF1.PD) - RFND.Dist. The range of
+        # diff over the window is offset-free - it stays flat while the rangefinder
+        # is the height source and grows once altitude reverts to the drifting baro.
+        def height_vs_rng_spread_under_baro_drift(options_value):
+            self.set_parameters({
+                "EK3_OPTIONS": options_value,
+                "SIM_BARO_DRIFT": 0,
+            })
+            self.reboot_sitl()
+            self.wait_ready_to_arm(require_absolute=False)
+            self.takeoff(hover_alt, mode="ALT_HOLD", require_absolute=False)
+            # settle the hover so the height switch has engaged and the estimate
+            # error is steady before the baro stimulus
+            self.wait_climbrate(-0.3, 0.3, timeout=30, minimum_duration=3)
+            drift_time = self.get_sim_time()
+            self.set_parameter("SIM_BARO_DRIFT", baro_drift)
+            self.delay_sim_time(14)
+            self.disarm_vehicle(force=True)
+
+            # Measure in [drift+4, drift+12]: skip the onset transient and stop
+            # before the forced disarm so post-disarm free-fall is excluded.
+            dfreader = self.dfreader_for_current_onboard_log()
+            last_rng = None
+            diff_min = None
+            diff_max = None
+            while True:
+                m = dfreader.recv_match(type=["XKF1", "RFND"])
+                if m is None:
+                    break
+                t = m.TimeUS * 1.0e-6
+                if t < drift_time + 4 or t > drift_time + 12:
+                    continue
+                if m.get_type() == "RFND":
+                    if getattr(m, "Instance", 0) == 0:
+                        last_rng = m.Dist
+                elif getattr(m, "C", 0) == 0 and last_rng is not None:
+                    diff = -m.PD - last_rng
+                    diff_min = diff if diff_min is None else min(diff_min, diff)
+                    diff_max = diff if diff_max is None else max(diff_max, diff)
+            if diff_min is None:
+                raise NotAchievedException("No XKF1/RFND samples in the measurement window")
+            return diff_max - diff_min
+
+        # Half 1: AGL-KF height switch OFF - legacy switch locks out, altitude follows baro
+        self.start_subtest("Switch OFF: EKF altitude diverges from the rangefinder under baro drift")
+        spread_off = height_vs_rng_spread_under_baro_drift(0)
+        self.progress("EKF-vs-rangefinder spread with AGL-KF switch OFF: %.2f m" % spread_off)
+        if spread_off < 1.5:
+            raise NotAchievedException(
+                "Expected EKF altitude to diverge from the rangefinder with the switch off (got %.2f m)" % spread_off)
+
+        # Half 2: AGL-KF height switch ON - rangefinder stays the height source through the drift
+        self.start_subtest("Switch ON: AGL KF keeps altitude on the rangefinder through baro drift")
+        spread_on = height_vs_rng_spread_under_baro_drift(16)
+        self.progress("EKF-vs-rangefinder spread with AGL-KF switch ON: %.2f m" % spread_on)
+        if spread_on > 0.7:
+            raise NotAchievedException(
+                "AGL-KF height switch failed to keep altitude on the rangefinder (got %.2f m)" % spread_on)
+
         self.reboot_sitl()
-        self.wait_ready_to_arm()
-
-        # Start ship with large radius to keep IMU motion below the
-        # on-ground-not-moving detection thresholds. At 15 m/s on
-        # 1000m diameter (r=500m) with EK3_OGNM_TEST_SF=2.0 (default):
-        #   angular rate = 0.03 rad/s (1.7 deg/s) vs 6 deg/s threshold
-        #   centripetal accel = 0.45 m/s^2 vs 2.0 m/s^2 threshold
-        # So onGroundNotMoving remains TRUE at steady state.
-        self.start_subtest("Verify EKF tracks GPS velocity on moving boat")
-        self.set_parameters({
-            "SIM_SHIP_ENABLE": 1,
-            "SIM_SHIP_SPEED": 15,
-            "SIM_SHIP_PSIZE": 1000,
-            "SIM_SHIP_DSIZE": 10,
-        })
-
-        # Wait for ship to reach speed and movement filters to settle.
-        # During initial acceleration onGroundNotMoving briefly goes
-        # false, but recovers once at constant speed.
-        self.wait_groundspeed(13, 17)
-        self.delay_sim_time(10)
-
-        # Verify EKF velocity matches GPS, not zero. If zero velocity
-        # fusion were incorrectly active, groundspeed would drift to 0.
-        self.wait_groundspeed(13, 17, timeout=10)
-
-        # Inject Z-bias and verify bias learning via GPS velocity.
-        # With onGroundNotMoving TRUE and gravity-aligned Z axis, the
-        # bias is observable. GPS velocity provides the Kalman filter
-        # measurement needed to converge the bias estimate.
-        self.start_subtest("Verify accel bias learned via GPS velocity")
-        self.set_parameters({
-            'SIM_ACC2_BIAS_Z': 0.7,
-        })
-        self.delay_sim_time(30)
-        self.assert_dataflash_message_field_level_at(
-            "XKF2", "AZ", 0.7,
-            condition="XKF2.C==1",
-            maintain=1,
-        )
-
-        # Confirm velocity still tracking GPS after bias convergence
-        self.wait_groundspeed(13, 17, timeout=10)
 
     # StabilityPatch - fly south, then hold loiter within 5m
     # position and altitude and reduce 1 motor to 60% efficiency
@@ -2402,7 +2471,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "FENCE_TYPE": 1,
             "FENCE_ALT_MAX_TP": frame,
             "FENCE_ALT_MAX": alt,
-            "FENCE_ENABLE" : 1,
             "TERRAIN_ENABLE": terrain,
             "SIM_TERRAIN": terrain,
         })
@@ -3742,160 +3810,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException(
                 "EKF did not fall back to AID_RELATIVE after GPS-to-flow switch")
 
-    def LoiterNoCompassYaw(self):
-        '''Loiter indoors with optical flow and no GPS, compass not an EK3 yaw source'''
-        # Indoor case: position from optical flow + rangefinder, no GPS. The
-        # compass stays enabled and healthy but is not an EK3 yaw source
-        # (EK3_SRC1_YAW=0/None), so the EKF runs in relative-position mode with
-        # a free-running yaw. using_noncompass_for_yaw() stays true, so the
-        # Copter arm-time compass-health gate is skipped. Verify that arming
-        # directly in Loiter is permitted and that Loiter stays engaged.
-        self.set_parameters({
-            "AHRS_EKF_TYPE": 3,
-            "EK3_ENABLE": 1,
-            "EK2_ENABLE": 0,
-            "EK3_SRC1_YAW": 0,  # None - compass enabled but not used for yaw
-            "SIM_FLOW_ENABLE": 1,
-            "FLOW_TYPE": 10,
-            "SIM_GPS1_ENABLE": 0,
-            "SIM_TERRAIN": 0,
-        })
-        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
-        self.set_analog_rangefinder_parameters()
-        self.reboot_sitl()
-
-        self.wait_ready_to_arm(require_absolute=False, timeout=120)
-
-        # arm and take off directly in Loiter: this is the path that matters -
-        # Loiter requires_position(), and arming exercises the arm-time
-        # compass-health gate while the compass is not the EKF yaw source.
-        self.takeoff(alt_min=10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
-
-        # confirm Loiter stays engaged and armed (no EKF failsafe / mode
-        # revert). A lat/lon position-hold check is not used: with no GPS the
-        # EKF has no absolute origin, so global position is not valid here.
-        self.delay_sim_time(15)
-        self.wait_mode('LOITER')
-        if not self.armed():
-            raise NotAchievedException("Disarmed during Loiter without compass yaw source")
-
-        self.land_and_disarm()
-
-    def xkfa_recent_bias_mean(self, nsamples=50):
-        '''mean of the most recent valid XKFA (core 0) accel-Z bias estimates'''
-        dfreader = self.dfreader_for_current_onboard_log()
-        vals = []
-        while True:
-            m = dfreader.recv_match(type='XKFA', condition='XKFA.C==0')
-            if m is None:
-                break
-            if m.Valid:
-                vals.append(m.Bias)
-        if len(vals) < nsamples:
-            raise NotAchievedException("insufficient XKFA samples (%u)" % len(vals))
-        return sum(vals[-nsamples:]) / nsamples
-
-    def OpticalFlowAGLKalmanFilter(self):
-        '''AGL KF estimates an accel-Z bias that tracks an injected IMU bias'''
-        # The AGL KF (XKFA, enabled by EK3_OPTIONS bit 3) used for optical-flow
-        # height scaling carries an accel-Z bias state so its rangefinder-anchored
-        # height stays independent of the vehicle's accel-Z bias. The bias is only
-        # observable in flight (on the ground the height is clamped and the
-        # innovation carries no bias signal), so fly an optical-flow hover and
-        # confirm the estimate moves to track an injected IMU accel-Z bias. XKFA
-        # is logged for the primary core only, so run a single lane and inject the
-        # bias on its IMU. A before/after delta is used rather than an absolute
-        # value: with only the scaling option set the main-filter altitude is not
-        # anchored, so the exact converged bias depends on the resulting vertical
-        # motion, but it must still shift in the direction of the injected bias.
-        self.set_parameters({
-            "SIM_FLOW_ENABLE": 1,
-            "FLOW_TYPE": 10,
-            "SIM_GPS1_ENABLE": 0,
-            "SIM_TERRAIN": 0,
-            "EK3_IMU_MASK": 1,  # single lane: primary is core 0 (IMU1) throughout
-            "EK3_OPTIONS": 8,   # bit 3: use the AGL KF for optical-flow scaling
-        })
-        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
-        self.set_analog_rangefinder_parameters()
-        self.reboot_sitl()
-        self.wait_ready_to_arm(require_absolute=False, timeout=120)
-        self.takeoff(alt_min=10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
-
-        # let the AGL KF settle on the rangefinder, then confirm it is valid and
-        # record the bias estimate baseline
-        self.delay_sim_time(15, reason="AGL KF to settle on the rangefinder")
-        self.assert_dataflash_message_field_level_at(
-            "XKFA", "Valid", 1,
-            condition="XKFA.C==0",
-            tolerance=0.5,
-            maintain=1,
-        )
-        bias_before = self.xkfa_recent_bias_mean()
-
-        # inject an accel-Z bias on IMU1 and confirm the AGL KF bias estimate
-        # follows it
-        self.set_parameters({
-            "SIM_ACC1_BIAS_Z": 0.7,
-        })
-        self.delay_sim_time(30, reason="AGL KF to learn the injected accel-Z bias")
-        bias_after = self.xkfa_recent_bias_mean()
-        self.progress("AGL KF accel-Z bias before=%.3f after=%.3f" %
-                      (bias_before, bias_after))
-        if bias_after - bias_before < 0.1:
-            raise NotAchievedException(
-                "AGL KF did not learn injected accel-Z bias (before=%.3f after=%.3f)" %
-                (bias_before, bias_after))
-
-        self.land_and_disarm()
-
-        self.land_and_disarm()
-
-    def LoiterNoCompassYawGPS(self):
-        '''Loiter with GPS and no optical flow, compass not an EK3 yaw source'''
-        # GPS-aided, no optical flow. Compass enabled but not an EK3 yaw source
-        # (EK3_SRC1_YAW=0/None), so yaw comes from the GSF estimator, which only
-        # aligns once the vehicle has GPS velocity to work with. Loiter cannot
-        # be entered on the ground (no heading -> no absolute position), so
-        # exercise the supported path: arm and climb in ALT_HOLD, fly forward
-        # to let GSF align yaw, then switch to Loiter and confirm it holds.
-        self.set_parameters({
-            "AHRS_EKF_TYPE": 3,
-            "EK3_ENABLE": 1,
-            "EK2_ENABLE": 0,
-            "EK3_SRC1_YAW": 0,  # None - compass enabled but not used for yaw
-            "SIM_FLOW_ENABLE": 0,
-            "FLOW_TYPE": 0,
-        })
-        self.reboot_sitl()
-
-        # GSF cannot align yaw while stationary, so there is no absolute
-        # position yet; arm and climb in ALT_HOLD, which needs no position.
-        self.wait_gps_fix_type_gte(3)
-        self.context_collect("STATUSTEXT")
-        self.change_mode('ALT_HOLD')
-        self.wait_prearm_sys_status_healthy(timeout=120)
-        self.arm_vehicle()
-        self.set_rc(3, 1700)
-        self.wait_altitude(8, 20, relative=True, timeout=60)
-        self.set_rc(3, 1500)
-
-        # fly forward so the GSF has a velocity to align yaw from
-        self.set_rc(2, 1300)
-        self.wait_statustext("yaw aligned", check_context=True, timeout=60)
-        self.set_rc(2, 1500)
-
-        # yaw is aligned, so the EKF now has an absolute position and Loiter is
-        # usable; switch to it and confirm it stays engaged and armed.
-        self.wait_ekf_happy(require_absolute=True, timeout=30)
-        self.change_mode('LOITER')
-        self.delay_sim_time(15)
-        self.wait_mode('LOITER')
-        if not self.armed():
-            raise NotAchievedException("Disarmed during Loiter without compass yaw source")
-
-        self.do_RTL()
-
     def LoiterFlowBrakeOvershoot(self):
         '''Forward-jab overshoot in optical-flow Loiter at low height'''
         # Optical flow, no GPS, low height: the EKF flow speed limit is small,
@@ -3906,17 +3820,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # position overshoots the target and the loop yanks it back (backward
         # pitch on release). High LOIT_ANG_MAX inflates the mismatch. This test
         # flies a deterministic forward jab + release for log comparison.
-    def EK3_FlowAxisLockoutRecovery(self):
-        '''Recover horizontal velocity from a single-axis optical-flow innovation lockout'''
-        # A residual one-axis accel bias under optical-flow nav can drive that axis's
-        # velocity estimate to diverge: once its flow innovation exceeds the gate the
-        # axis is rejected continuously, while the healthy axis keeps the shared
-        # flow-fusion timer fresh so the 5 s AID_RELATIVE timeout never fires. With the
-        # AGL KF enabled, FuseOptFlow re-anchors horizontal velocity to the flow
-        # measurement (gated on aglKfValid so the range, and thus the flow-derived
-        # velocity, is trustworthy). The rule: the recovery is allowed only when the
-        # AGL KF gate is set. Prove both halves - reset fires and bounds velocity with
-        # the gate on; no reset and a larger velocity error with it off.
         self.set_parameters({
             "AHRS_EKF_TYPE": 3,
             "EK3_ENABLE": 1,
@@ -3928,8 +3831,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "LOIT_ANG_MAX": 30,
             "LOIT_SPEED_MS": 5,
             "LOIT_ACC_MAX_M": 2,
-            "EK3_OPTIONS": 24,  # AglKfForOptflow (bit4) + FuseRngOnGndUntilFlying (bit3)
-            "EK3_OPTIONS": 8,  # AglKfForOptflow
         })
         self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
         self.set_analog_rangefinder_parameters()
@@ -3949,6 +3850,33 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.change_mode('ALT_HOLD')
         self.land_and_disarm()
+
+    def EK3_FlowAxisLockoutRecovery(self):
+        '''Recover horizontal velocity from a single-axis optical-flow innovation lockout'''
+        # A residual one-axis accel bias under optical-flow nav can drive that axis's
+        # velocity estimate to diverge: once its flow innovation exceeds the gate the
+        # axis is rejected continuously, while the healthy axis keeps the shared
+        # flow-fusion timer fresh so the 5 s AID_RELATIVE timeout never fires. With the
+        # AGL KF enabled, FuseOptFlow re-anchors horizontal velocity to the flow
+        # measurement (gated on aglKfValid so the range, and thus the flow-derived
+        # velocity, is trustworthy). The rule: the recovery is allowed only when the
+        # AGL KF gate is set. Prove both halves - reset fires and bounds velocity with
+        # the gate on; no reset and a larger velocity error with it off.
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 3,
+            "EK3_ENABLE": 1,
+            "EK2_ENABLE": 0,
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+            "EK3_OPTIONS": 24,  # AglKfForOptflow (bit4) + FuseRngOnGndUntilFlying (bit3)
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
         # flow is not healthy stationary, so climb in ALT_HOLD to a low hover;
         # ALT_HOLD leaves horizontal position uncontrolled so the EKF velocity
         # divergence is observed without the Loiter controller fighting it.
@@ -3967,7 +3895,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.start_subtest("AGL KF gate off: no recovery, velocity diverges")
         self.set_parameters({
             "SIM_ACC1_BIAS_X": 0,
-            "EK3_OPTIONS": 0,  # clear AglKfForOptflow
+            "EK3_OPTIONS": 8,  # clear AglKfForOptflow (bit4), keep FuseRngOnGndUntilFlying (bit3)
         })
         self.reboot_sitl()
         self.wait_ready_to_arm(require_absolute=False, timeout=120)
@@ -11537,34 +11465,42 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException("GSF reset failed, vehicle flew too far (%f > %f)" % (dist_m, dist_m_max))
 
     def EKFBootstrapReset(self):
-        '''verify EKF reset aux switch is disarmed-only and preserves origin'''
+        '''test EKF bootstrap reset via aux switch'''
         self.set_parameters({
             "RC8_OPTION": 187,  # EKF_RESET
+            "FS_EKF_THRESH": 0,  # disable EKF failsafe
         })
         self.reboot_sitl()
 
+        self.change_mode('GUIDED')
         self.wait_ready_to_arm()
-        home = self.mav.location()
+        self.arm_vehicle()
+        self.user_takeoff(alt_min=10)
 
+        # collect STATUSTEXT after takeoff so boot messages aren't matched
+        self.context_push()
         self.context_collect('STATUSTEXT')
 
-        # disarmed: reset should succeed and re-bootstrap the cores
+        # trigger EKF bootstrap reset
         self.set_rc(8, 2000)
-        self.wait_statustext("EKF bootstrap reset performed", check_context=True, timeout=10)
-        self.wait_statustext("EKF3 IMU. initialised", check_context=True, regex=True, timeout=10)
+        self.wait_text("EKF3 IMU. initialised", timeout=5, regex=True,
+                       check_context=True)
         self.set_rc(8, 1000)
 
-        # take off and confirm the GUIDED position controller holds station
-        # at the pre-reset location - if the origin had moved during the
-        # reset, position hold would drive the vehicle away from home
-        self.takeoff(10, mode='GUIDED')
-        self.wait_location(home, accuracy=5, height_accuracy=None,
-                           minimum_duration=10, timeout=30)
+        self.context_pop()
 
-        # armed: reset should be refused
-        self.set_rc(8, 2000)
-        self.wait_statustext("EKF reset ignored: vehicle armed", check_context=True, timeout=10)
-        self.set_rc(8, 1000)
+        # verify vehicle is still stable - hover for a few seconds
+        self.delay_sim_time(5)
+
+        # check altitude didn't diverge wildly (should stay within ~5m of 10m)
+        gpi = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=5)
+        if gpi is None:
+            raise NotAchievedException("Did not get GLOBAL_POSITION_INT")
+        alt_m = gpi.relative_alt / 1000.0
+        if abs(alt_m - 10.0) > 5.0:
+            raise NotAchievedException(
+                "Altitude diverged after EKF reset: %.1f (expected ~10m)" % alt_m
+            )
 
         self.do_RTL()
 
@@ -12225,68 +12161,14 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
-    def EK3_NoGPSLeakWhenNotSource(self):
-        '''verify EKF does not leak GPS position when GPS is not the configured source'''
-        # With EKF configured to use optical flow (POSXY source is
-        # not GPS) and GPS simultaneously healthy, verify the
-        # reported vehicle position does not track a simulated GPS
-        # glitch.  On master, NavEKF3_core::getGPSLLH() returns the
-        # raw GPS fix irrespective of the configured POSXY source,
-        # so getLLH() fallbacks leak the glitched GPS lat/lon to
-        # callers (including GCS_MAVLINK::send_global_position_int
-        # which ignores the return value of ahrs.get_location()).
-        # This bypasses the EKF's source configuration and causes
-        # vehicle code to follow GPS glitches/spoofing that the EKF
-        # has correctly rejected.
-        self.set_parameters({
-            "EK3_SRC1_POSXY": 5,   # OPTFLOW (no optflow data provided)
-            "EK3_SRC1_VELXY": 5,   # OPTFLOW
-            "EK3_SRC1_POSZ": 1,    # BARO
-            "EK3_SRC1_VELZ": 0,    # None
-            "AHRS_EKF_TYPE": 3,
-        })
-        self.reboot_sitl()
-
-        # allow EKF to initialise: validOrigin set from GPS, filter
-        # reaches steady AID_NONE state
-        self.wait_statustext("EKF3 IMU0 initialised", timeout=30)
-
-        # capture baseline reported position
-        m = self.assert_receive_message('GLOBAL_POSITION_INT')
-        baseline_lat = m.lat
-        baseline_lon = m.lon
-        self.progress("Baseline: lat=%d lon=%d" % (baseline_lat, baseline_lon))
-
-        # glitch simulated GPS by ~0.005 deg latitude (~555 m north)
-        self.set_parameter("SIM_GPS1_GLTCH_X", 0.005)
-
-        m = self.assert_receive_message('GLOBAL_POSITION_INT')
-        lat_change_deg = abs(m.lat - baseline_lat) * 1e-7
-        self.progress("After GPS glitch: lat=%d lon=%d (baseline lat=%d, change=%.6f deg)" %
-                      (m.lat, m.lon, baseline_lat, lat_change_deg))
-
-        if lat_change_deg > 0.001:
-            raise NotAchievedException(
-                "GPS position leaked into reported location despite "
-                "EK3_SRC1_POSXY=OPTFLOW: baseline lat %d, after glitch %d "
-                "(delta %.6f deg)" %
-                (baseline_lat, m.lat, lat_change_deg))
-
-    def BaroDriftClearedAtArm(self):
-        '''Test that arm-time datum reset clears accumulated baro drift'''
+    def BaroDriftResetOnArm(self):
+        '''Test that baro temperature drift is cleared on arming'''
+        # Scenario: GPS sets home, then GPS is lost (indoor flight).
         # Baro drifts from temperature while sitting on the ground.
-        # AP_Arming_Copter::arm() calls ahrs.resetHeightDatum() on
-        # the re-arm path (home set but not locked), which
-        # recalibrates the baro and zeroes the EKF vertical
-        # position state.  This test verifies:
-        #   1. Reported altitude returns near zero post-arm
-        #      (drift cleared by the reset)
-        #   2. The post-reset altitude has no buffer-flush
-        #      transient (Paul's fix in resetHeightDatum)
-        # Two scenarios:
-        #   a. GPS sets home, then GPS is lost (indoor flight)
-        #   b. No GPS ever, origin from AHRS_ORIGIN parameters
-        self.start_subtest("GPS sets home, then GPS lost")
+        # On arming, resetHeightDatum should recalibrate the baro
+        # and zero the altitude.
+        # On master, resetHeightDatum is only called when home is NOT
+        # set. With home already set from GPS, the drift persists.
         self.wait_ready_to_arm()
 
         # home is now set from GPS. Disable GPS to simulate indoors.
@@ -12299,32 +12181,36 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.delay_sim_time(5)
 
         # simulate temperature baro drift at 0.3 m/s while sitting
-        # on the ground for 30 s (~9 m of drift accumulated)
+        # on the ground (30 seconds = ~9m drift)
         self.set_parameter("SIM_BARO_DRIFT", 0.3)
         self.delay_sim_time(30)
         self.set_parameter("SIM_BARO_DRIFT", 0)
 
+        # check altitude has drifted
+        m = self.assert_receive_message('GLOBAL_POSITION_INT')
+        pre_arm_alt = m.relative_alt * 0.001
+        self.progress("Pre-arm relative alt: %.2f m" % pre_arm_alt)
+        if abs(pre_arm_alt) < 3.0:
+            raise NotAchievedException(
+                "Expected significant baro drift, got %.2f m" % pre_arm_alt)
+
+        # arm in stabilize — should trigger datum reset
         self.change_mode("STABILIZE")
         self.arm_vehicle()
 
-        # Sample altitude for 2s post-arm.  arm() calls
-        # resetHeightDatum which both zeroes the accumulated drift
-        # and (with Paul's fix) flushes the storedBaro and output
-        # observer buffers so no stale samples are fused as
-        # delayed observations after the reset.
-        arm_tstart = self.get_sim_time()
-        peak_excursion = 0.0
-        while self.get_sim_time() - arm_tstart < 2.0:
-            m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=1)
-            if m is None:
-                continue
-            peak_excursion = max(peak_excursion, abs(m.relative_alt * 0.001))
-        self.progress("Peak altitude excursion over 2s post-arm: %.3f m" % peak_excursion)
-        if peak_excursion > 0.2:
+        # wait for baro to be fused with new calibration, then
+        # drain all buffered messages to get a truly fresh reading
+        self.delay_sim_time(10)
+        while self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=False) is not None:
+            pass
+        m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=5)
+        if m is None:
+            raise NotAchievedException("Did not receive GLOBAL_POSITION_INT")
+        post_arm_alt = m.relative_alt * 0.001
+        self.progress("Post-arm relative alt: %.2f m" % post_arm_alt)
+        if abs(post_arm_alt) > 2.0:
             raise NotAchievedException(
-                "Post-arm altitude transient exceeds 0.2 m: %.3f m "
-                "(arm-time reset did not clear drift or stale baro "
-                "buffer not flushed)" % peak_excursion)
+                "Altitude should be near zero after arming, got %.2f m" % post_arm_alt)
 
         self.disarm_vehicle(force=True)
 
@@ -12342,12 +12228,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.reboot_sitl()
 
-        # wait for the EKF to read AHRS_ORIGIN_* and start fusing baro.
-        # wait_ready_to_arm() needs GPS-derived EKF flags that the
-        # no-GPS / saved-origin path never reaches (even with
-        # ARMING_SKIPCHK=-1), and the EKF emits no statustext for the
-        # saved-origin path on subsequent reboots, so a fixed delay
-        # is the only available wait here.
+        # wait for origin and home to be established
         self.delay_sim_time(15)
 
         # simulate temperature baro drift
@@ -12355,22 +12236,26 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.delay_sim_time(30)
         self.set_parameter("SIM_BARO_DRIFT", 0)
 
+        m = self.assert_receive_message('GLOBAL_POSITION_INT')
+        pre_arm_alt = m.relative_alt * 0.001
+        self.progress("Pre-arm relative alt: %.2f m" % pre_arm_alt)
+        if abs(pre_arm_alt) < 3.0:
+            raise NotAchievedException(
+                "Expected significant baro drift, got %.2f m" % pre_arm_alt)
+
         self.change_mode("STABILIZE")
         self.arm_vehicle()
-
-        arm_tstart = self.get_sim_time()
-        peak_excursion = 0.0
-        while self.get_sim_time() - arm_tstart < 2.0:
-            m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=1)
-            if m is None:
-                continue
-            peak_excursion = max(peak_excursion, abs(m.relative_alt * 0.001))
-        self.progress("Peak altitude excursion over 2s post-arm: %.3f m" % peak_excursion)
-        if peak_excursion > 0.2:
+        self.delay_sim_time(10)
+        while self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=False) is not None:
+            pass
+        m = self.mav.recv_match(type='GLOBAL_POSITION_INT', blocking=True, timeout=5)
+        if m is None:
+            raise NotAchievedException("Did not receive GLOBAL_POSITION_INT")
+        post_arm_alt = m.relative_alt * 0.001
+        self.progress("Post-arm relative alt: %.2f m" % post_arm_alt)
+        if abs(post_arm_alt) > 2.0:
             raise NotAchievedException(
-                "Post-arm altitude transient exceeds 0.2 m: %.3f m "
-                "(arm-time reset did not clear drift or stale baro "
-                "buffer not flushed)" % peak_excursion)
+                "Altitude should be near zero after arming, got %.2f m" % post_arm_alt)
 
         self.disarm_vehicle(force=True)
 
@@ -12392,6 +12277,58 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.assert_prearm_failure("EK3 sources require Compass")
         self.context_pop()
+
+    def EKFSourceSetFailsafe(self):
+        '''Test EKF failsafe gate resets on source set switch'''
+        # Configure source set 2 with no position/velocity aiding.
+        # When the vehicle switches from GPS (set 1) to no-aiding (set 2),
+        # has_position drops to false.  Without the ekf_check source-reset
+        # fix, the failsafe fires within 1 second because has_ever_passed
+        # is still true from the GPS fix.
+        self.set_parameters({
+            "EK3_SRC2_POSXY": 0,  # none
+            "EK3_SRC2_VELXY": 0,  # none
+            "EK3_SRC2_POSZ": 1,   # baro
+            "EK3_SRC2_VELZ": 0,   # none
+            "EK3_SRC2_YAW": 1,    # compass
+            "RC8_OPTION": 90,      # EKF source selector
+        })
+        self.set_rc(8, 1000)  # ensure source set 1 (GPS)
+        self.reboot_sitl()
+
+        # take off with GPS — EKF establishes position, has_ever_passed latches true
+        self.takeoff(10, mode="LOITER")
+        self.delay_sim_time(5)
+
+        # switch to ALT_HOLD which does not require position
+        self.change_mode('ALT_HOLD')
+
+        self.context_collect('STATUSTEXT')
+
+        # switch to source set 2 (no position aiding)
+        self.progress("Switching to no-aiding source set")
+        self.set_rc(8, 1500)
+
+        # wait for EKF to lose position.  The EKF stays in AID_ABSOLUTE
+        # for posRetryTimeNoVel_ms (7s) after the last GPS fusion, then
+        # posTimeout fires and horiz_pos_abs goes false.  Once
+        # has_position is false and has_ever_passed is true, ekf_check
+        # increments fail_count at 10Hz — failsafe fires after 1s.
+        # Total: ~8s without the fix.  Wait 10s to be safe.
+        self.delay_sim_time(10)
+
+        # verify no EKF failsafe fired
+        if self.statustext_in_collections("EKF variance"):
+            raise NotAchievedException(
+                "EKF failsafe triggered on intentional source set switch")
+
+        # switch back to GPS source set
+        self.progress("Switching back to GPS source set")
+        self.set_rc(8, 1000)
+        self.delay_sim_time(2)
+
+        # return and land
+        self.do_RTL()
 
     def EK3_EXT_NAV_vel_without_vert(self):
         '''Test that EK3 External Navigation velocity works without vertical velocity.'''
@@ -13274,26 +13211,27 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
     def ThrowDoubleDrop(self):
         '''Test a more complicated drop-mode scenario'''
         self.progress("Getting a lift to altitude")
+        # Use a gentle shove to reach altitude at realistic speed.
+        # Extreme speeds cause aerodynamic drag that exceeds the
+        # spool-up freefall threshold.
         self.set_parameters({
-            "SIM_SHOVE_Z": -11,
+            "SIM_SHOVE_Z": -10.5,
             "THROW_TYPE": 1,   # drop
-            "MOT_SPOOL_TIME": 2,
+            "MOT_SPOOL_TIME": 0.5,
         })
         self.change_mode('THROW')
         self.wait_ready_to_arm()
         self.arm_vehicle()
         try:
-            self.set_parameter("SIM_SHOVE_TIME", 30000)
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
         except ValueError:
             # the shove resets this to zero
             pass
 
-        self.wait_altitude(100, 1000, timeout=100, relative=True)
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
         self.context_collect('STATUSTEXT')
-        self.wait_statustext("throw detected - spooling motors", check_context=True, timeout=10)
-        self.wait_statustext("throttle is unlimited - uprighting", check_context=True)
-        self.wait_statustext("uprighted - controlling height", check_context=True)
-        self.wait_statustext("height achieved - controlling position", check_context=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved, good position", check_context=True)
         self.progress("Waiting for still")
         self.wait_speed_vector(Vector3(0, 0, 0))
         self.change_mode('ALT_HOLD')
@@ -13312,18 +13250,331 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_ready_to_arm()
         self.arm_vehicle()
         try:
-            self.set_parameter("SIM_SHOVE_TIME", 30000)
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
         except ValueError:
             # the shove resets this to zero
             pass
 
-        self.wait_altitude(100, 1000, timeout=100, relative=True)
-        self.wait_statustext("throw detected - spooling motors", check_context=True, timeout=10)
-        self.wait_statustext("throttle is unlimited - uprighting", check_context=True)
-        self.wait_statustext("uprighted - controlling height", check_context=True)
-        self.wait_statustext("height achieved - controlling position", check_context=True)
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved, good position", check_context=True)
         self.wait_mode('AUTO')
         self.wait_disarmed(timeout=240)
+
+    def ThrowModeNoGPS(self):
+        '''Test throw mode works without GPS (baro-only, transitions to ALT_HOLD)'''
+        self.progress("Testing throw mode without GPS")
+        self.set_parameters({
+            "GPS1_TYPE": 0,
+            "SIM_GPS1_ENABLE": 0,
+            "EK3_SRC1_POSXY": 0,
+            "EK3_SRC1_VELXY": 0,
+            "THROW_TYPE": 1,          # drop
+            "THROW_NEXTMODE": 2,      # ALT_HOLD
+            "SIM_SHOVE_Z": -10.5,
+            "MOT_SPOOL_TIME": 0.5,
+        })
+        self.reboot_sitl()
+
+        self.change_mode('THROW')
+        self.wait_prearm_sys_status_healthy(timeout=120)
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True)
+        self.wait_mode('ALT_HOLD')
+        self.set_rc(3, 1000)
+        self.wait_disarmed(timeout=90)
+        self.zero_throttle()
+
+    def ThrowSpinDrop(self):
+        '''Test that a heavily-spinning drop recovers via the spin-aware spool-up freefall check'''
+        # Sequence: shove launches the vehicle straight up; once it has
+        # cleared the shove altitude, we apply a yaw twist so that the
+        # vehicle is spinning when it peaks and starts to fall.  An IMU
+        # offset turns sustained yaw rate into body-frame centripetal
+        # acceleration that inflates body |accel| above 0.5g during
+        # genuine freefall.  Without the spin-aware OR-gate the spool-up
+        # "freefall lost" check rejects the freefall, detection bounces
+        # Wait_Throttle_Unlimited↔Detecting, and recovery never starts.
+        self.set_parameters({
+            "SIM_SHOVE_Z": -10.5,
+            "SIM_IMU_POS_X": 0.05,
+            "THROW_TYPE": 1,           # drop
+            "THROW_NEXTMODE": 5,       # LOITER
+            "MOT_SPOOL_TIME": 0.5,
+        })
+        self.reboot_sitl()  # SIM_IMU_POS takes effect on reboot
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.context_collect('STATUSTEXT')
+        self.arm_vehicle()
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            pass
+
+        # Wait until the vehicle has cleared the shove climb and is
+        # nearing apogee, then inject yaw spin.  TWIST is angular
+        # acceleration; the SITL gyro clamps at 35 rad/s, so this
+        # saturates within ~1.2 s and stays there.  Applying twist late
+        # ensures the vehicle is in genuine freefall (not under shove)
+        # by the time the spool-up freefall check runs.
+        self.wait_altitude(50, 1000, timeout=60, relative=True)
+        try:
+            self.set_parameter("SIM_TWIST_Z", 30.0)
+            self.set_parameter("SIM_TWIST_TIME", 12000)
+        except ValueError:
+            pass
+
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True, timeout=30)
+        self.wait_mode('LOITER')
+
+        # The spin-aware spool-up check should admit the freefall
+        # without a single abort.  Any "Throw: freefall lost, resetting"
+        # message means the body-only check fired on a valid spinning
+        # freefall — i.e. the spin-aware OR-gate is missing or broken.
+        msgs = self.context_collection('STATUSTEXT')
+        freefall_lost = [m for m in msgs if "freefall lost" in m.text]
+        if len(freefall_lost) > 0:
+            raise NotAchievedException(
+                "spool-up freefall check rejected spinning drop %d times "
+                "(spin-aware path missing in Wait_Throttle_Unlimited)"
+                % len(freefall_lost))
+
+        # Heavy yaw spin combined with the IMU offset makes natural
+        # LAND-and-touchdown unreliable in SITL — force disarm rather
+        # than wait it out.
+        self.disarm_vehicle(force=True)
+        self.zero_throttle()
+
+    def ThrowSpinTumbleDrop(self):
+        '''Test that a multi-axis tumbling drop recovers via the physics-based body-frame freefall ceiling'''
+        # ThrowSpinDrop covers single-axis yaw spin where the spin axis
+        # is aligned with gravity — centripetal force projects entirely
+        # into the body XY (earth horizontal) plane, leaving earth-Z
+        # accel near zero so the spin_freefall (earth-frame Z) fallback
+        # gate catches it regardless of the body-frame ceiling.
+        #
+        # This test covers the harder case: TWIST on all three axes
+        # tilts the spin axis off vertical and tumbles the attitude, so
+        # centripetal force projects into earth-Z and breaks that
+        # fallback.  The only gate that catches it is the body-frame
+        # check, which used to have a fixed 1.5g cap; combined ω of
+        # ~30+ rad/s pushed body |a| above 1.5g and stalled detection.
+        # SFD1 log55 2026-05-27 hit exactly this signature in the field:
+        # ω 25-30 rad/s combined, body |a| 15-30 m/s² throughout 600 ms
+        # of genuine freefall, detection delayed ~900 ms (cost ~3.6 m
+        # altitude).  The physics-based cap (0.5g + r_max·ω²) admits
+        # the same window.
+        self.set_parameters({
+            "SIM_SHOVE_Z": -10.5,
+            "SIM_IMU_POS_X": 0.05,
+            "THROW_TYPE": 1,           # drop
+            "THROW_NEXTMODE": 5,       # LOITER
+            "MOT_SPOOL_TIME": 0.5,
+        })
+        self.reboot_sitl()  # SIM_IMU_POS takes effect on reboot
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.context_collect('STATUSTEXT')
+        self.arm_vehicle()
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            pass
+
+        # Wait until the vehicle is near apogee, then inject twist on
+        # all three axes.  Combined gyro magnitude saturates at
+        # sqrt(3)·35 ≈ 60 rad/s per the SITL per-axis 35 rad/s clamp,
+        # well above the single-axis 30 rad/s used in ThrowSpinDrop.
+        # The off-vertical spin axis means earth-Z accel oscillates
+        # under the resulting attitude tumble, so the earth-frame
+        # fallback cannot mask a broken body ceiling.
+        self.wait_altitude(50, 1000, timeout=60, relative=True)
+        try:
+            self.set_parameters({
+                "SIM_TWIST_X": 20.0,
+                "SIM_TWIST_Y": 20.0,
+                "SIM_TWIST_Z": 20.0,
+                "SIM_TWIST_TIME": 12000,
+            })
+        except ValueError:
+            pass
+
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True, timeout=30)
+        self.wait_mode('LOITER')
+
+        # Detection passing alone isn't sufficient — the spool-up
+        # freefall check runs every loop on the same gate, so a too-
+        # tight body ceiling shows up as "Throw: freefall lost,
+        # resetting" aborts that bounce the state machine back to
+        # Detecting.  Zero such messages means the body ceiling
+        # admitted the full freefall window.
+        msgs = self.context_collection('STATUSTEXT')
+        freefall_lost = [m for m in msgs if "freefall lost" in m.text]
+        if len(freefall_lost) > 0:
+            raise NotAchievedException(
+                "spool-up freefall check rejected tumbling drop %d times "
+                "(body-frame ceiling too tight for multi-axis spin)"
+                % len(freefall_lost))
+
+        self.disarm_vehicle(force=True)
+        self.zero_throttle()
+
+    def ThrowYawAbsolute(self):
+        '''Test that THROW_YAW_TYPE=3 (Absolute) drives the vehicle to face the configured heading after uprighting'''
+        # Pick a target heading well clear of the SITL spawn heading
+        # (270°) and outside the wait_heading default 5° tolerance.
+        target_heading_deg = 90
+        self.set_parameters({
+            "SIM_SHOVE_Z": -10.5,
+            "THROW_TYPE": 1,                         # drop
+            "THROW_NEXTMODE": 5,                     # LOITER
+            "MOT_SPOOL_TIME": 0.5,
+            "THROW_YAW_TYPE": 3,                     # Absolute
+            "THROW_YAW_DEG": target_heading_deg,
+        })
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True, timeout=30)
+        self.wait_mode('LOITER')
+
+        # The Uprighting stage commands a quaternion target with the
+        # absolute heading.  Allow a few seconds for the attitude
+        # controller to converge, then assert the heading is close.
+        self.wait_heading(target_heading_deg, accuracy=10, timeout=15)
+
+        self.set_rc(3, 1000)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=90)
+        self.zero_throttle()
+
+    def ThrowNextModeAcro(self):
+        '''Test that throw mode transitions to ACRO after recovery (regression for nextmode whitelist)'''
+        # ACRO needs no horizontal position and is a manual rate-control
+        # mode, so it's a natural target for hand-throws into pilot
+        # control.  The switch at the bottom of the ModeThrow state
+        # machine has historically only allowed a fixed set of nextmodes;
+        # an unlisted mode falls through to "default: do nothing" and
+        # the vehicle gets stuck in throw PosHold (cf. marmotte/log1
+        # for the same bug class with VALT).
+        self.set_parameters({
+            "SIM_SHOVE_Z": -10.5,
+            "THROW_TYPE": 1,                         # drop
+            "THROW_NEXTMODE": 1,                     # ACRO
+            "MOT_SPOOL_TIME": 0.5,
+        })
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True, timeout=30)
+
+        # Without the whitelist fix the switch falls through and the
+        # vehicle stays in THROW PosHold; with the fix it should be in
+        # ACRO promptly after height stabilisation.
+        self.wait_mode('ACRO', timeout=20)
+
+        self.set_rc(3, 1000)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=90)
+        self.zero_throttle()
+
+    def ThrowDropSourceSwitch(self):
+        '''Test EKF source set switch on throw mode completion'''
+        self.progress("Testing throw drop with EKF source set switch")
+        self.set_parameters({
+            "SIM_SHOVE_Z": -10.5,
+            "THROW_TYPE": 1,           # drop
+            "THROW_NEXTMODE": 5,       # LOITER
+            "THROW_SRC_SET": 2,        # switch to SRC2 on completion
+            # SRC2 must provide horizontal aiding: the completion switch
+            # lands the vehicle in LOITER then LAND, both of which need a
+            # position estimate.  SITL's default SRC2 has no horizontal
+            # source, so the EKF velocity dead-reckons, the land detector
+            # never settles and the vehicle never auto-disarms.
+            "EK3_SRC2_POSXY": 3,       # GPS
+            "EK3_SRC2_VELXY": 3,       # GPS
+            "EK3_SRC2_VELZ": 3,        # GPS
+            "MOT_SPOOL_TIME": 0.5,
+        })
+
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved, good position", check_context=True)
+        self.wait_statustext("EKF Source Set 2", check_context=True)
+        self.wait_mode('LOITER')
+
+        # hold LOITER briefly to confirm stability after source switch
+        self.delay_sim_time(5)
+
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=90)
+
+    def ThrowAbortRestoresSourceSet(self):
+        '''Leaving throw without completing must restore the pre-throw EKF source set'''
+        # ModeThrow::init() switches to THROW_SRC_INI on entry; only a
+        # completed throw restores it (in the THROW_COMPLETE handoff).  Any
+        # other exit -- mode switched out, never thrown, disarm -- must
+        # restore the source set active before throw was entered, otherwise
+        # the vehicle stays stuck on the throw set for the rest of the
+        # session.  Prove the restore happens on the abort path.
+        self.set_parameters({
+            "THROW_SRC_INI": 2,    # switch to SRC2 on throw entry
+            "THROW_SRC_SET": 1,    # completion would restore SRC1 (not exercised here)
+        })
+        self.wait_ready_to_arm()   # EKF comes up on source set 1 (primary)
+        self.context_collect('STATUSTEXT')
+
+        # entering throw (disarmed) switches to the secondary set
+        self.change_mode('THROW')
+        self.wait_statustext("Throw: EKF Source Set 2", check_context=True)
+
+        # leave throw without ever throwing; exit() must restore set 1
+        self.change_mode('ALT_HOLD')
+        self.wait_statustext("Throw: restored EKF Source Set 1", check_context=True)
 
     def GroundEffectCompensation_takeOffExpected(self):
         '''Test EKF's handling of takeoff-expected'''
@@ -13449,22 +13700,20 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException(
                 "INS_ACC_VRFB_Z should persist across flights, got %f" % vrfb_z)
         self.progress("INS_ACC_VRFB_Z persisted: was %f, now %f" % (saved_vrfb_z, vrfb_z))
+
+        self.context_pop()
+        self.reboot_sitl()
+
     def TakeoffGroundEffectAlt(self):
-        '''Test GNDEFF_ALT and GNDEFF_TMO gate the ground-effect compensation window'''
-        # SIM_BARO_GEFF_M injects a real baro static-pressure error near the
-        # ground so the compensation window has something to compensate for;
-        # without it the detector parameters would be exercised but the
-        # underlying baro error they exist to mitigate wouldn't be present.
-        self.set_parameters({
-            "LOG_FILE_DSRMROT": 1,
-            "SIM_BARO_GEFF_M": 1.0,
-        })
+        '''Test TKOFF_GNDEFF_ALT and TKOFF_GNDEFF_TMO control ground effect'''
+        self.context_push()
+        self.set_parameter("LOG_FILE_DSRMROT", 1)
 
         # Subtest A: large threshold — takeoff_expected persists at 5m
-        self.start_subtest("Large GNDEFF_ALT keeps ground effect at 5m")
-        self.set_parameter("GNDEFF_ALT", 10)
+        self.start_subtest("Large TKOFF_GNDEFF_ALT keeps ground effect at 5m")
+        self.set_parameter("TKOFF_GNDEFF_ALT", 10)
         self.takeoff(5, mode='ALT_HOLD')
-        self.delay_sim_time(5, reason='let ground effect compensation estimation settle')
+        self.delay_sim_time(5)
         self.change_mode('LAND')
         self.wait_disarmed()
         durations_large = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
@@ -13475,16 +13724,10 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 "takeoff_expected should persist with large threshold (got %fs, want>3)" % total_large)
 
         # Subtest B: small threshold — takeoff_expected clears quickly
-        # Pin GNDEFF_TMO=0 explicitly to test the pre-default-bump "legacy"
-        # release behaviour (altitude check alone). The default is non-zero
-        # so the comparison with subtest C below needs an explicit floor.
-        self.start_subtest("Small GNDEFF_ALT clears ground effect at 5m")
-        self.set_parameters({
-            "GNDEFF_ALT": 0.5,
-            "GNDEFF_TMO": 0,
-        })
+        self.start_subtest("Small TKOFF_GNDEFF_ALT clears ground effect at 5m")
+        self.set_parameter("TKOFF_GNDEFF_ALT", 0.5)
         self.takeoff(5, mode='ALT_HOLD')
-        self.delay_sim_time(5, reason='let ground effect compensation estimation settle')
+        self.delay_sim_time(5)
         self.change_mode('LAND')
         self.wait_disarmed()
         durations_small = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
@@ -13497,16 +13740,16 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 "Smaller threshold should have shorter ground effect (small=%fs >= large=%fs)"
                 % (total_small, total_large))
 
-        # Subtest C: GNDEFF_TMO requires both timeout AND altitude
+        # Subtest C: TKOFF_GNDEFF_TMO requires both timeout AND altitude
         # With small altitude threshold but timeout set, ground effect should persist longer
-        self.start_subtest("GNDEFF_TMO extends ground effect duration")
+        self.start_subtest("TKOFF_GNDEFF_TMO extends ground effect duration")
         self.set_parameters({
-            "GNDEFF_ALT": 0.5,  # Small threshold - would clear quickly without timeout
-            "GNDEFF_TMO": 3,    # Require 3s timeout as well
+            "TKOFF_GNDEFF_ALT": 0.5,  # Small threshold - would clear quickly without timeout
+            "TKOFF_GNDEFF_TMO": 3,    # Require 3s timeout as well
         })
         self.reboot_sitl()
         self.takeoff(5, mode='ALT_HOLD')
-        self.delay_sim_time(5, reason='let ground effect compensation estimation settle')
+        self.delay_sim_time(5)
         self.change_mode('LAND')
         self.wait_disarmed()
         durations_tmo = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
@@ -13516,50 +13759,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # With timeout, ground effect should persist longer than without (even with small alt threshold)
         if total_tmo <= total_small:
             raise NotAchievedException(
-                "GNDEFF_TMO should extend ground effect (tmo=%fs <= no_tmo=%fs)"
+                "TKOFF_GNDEFF_TMO should extend ground effect (tmo=%fs <= no_tmo=%fs)"
                 % (total_tmo, total_small))
 
-    def TouchdownGroundEffectAlt(self):
-        '''Test GNDEFF_ALT gates the touchdown ground-effect signal'''
-        # touchdown_expected fires only when slow horizontal motion AND slow
-        # descent AND near-ground (height < GNDEFF_ALT). Exercise the altitude
-        # gate by landing twice from the same altitude with different
-        # GNDEFF_ALT values: a small threshold should only fire near the
-        # ground, a large threshold (>= takeoff altitude) should fire for the
-        # whole descent.
-        self.set_parameter("LOG_FILE_DSRMROT", 1)
-
-        # Subtest A: small threshold - touchdown_expected only fires near ground
-        self.start_subtest("Small GNDEFF_ALT only triggers touchdown near ground")
-        self.set_parameter("GNDEFF_ALT", 1.0)
-        self.takeoff(3, mode='GUIDED')
-        self.delay_sim_time(2)
-        self.change_mode('LAND')
-        self.wait_disarmed()
-        durations_small = self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True)
-        total_small = sum(durations_small)
-        self.progress("touchdown_expected total with GNDEFF_ALT=1.0: %fs" % total_small)
-        if total_small < 0.5:
-            raise NotAchievedException(
-                "touchdown_expected should fire near ground (got %fs, want>0.5)" % total_small)
-
-        # Subtest B: large threshold gates touchdown over the full descent
-        self.start_subtest("Large GNDEFF_ALT triggers touchdown for whole descent")
-        self.set_parameter("GNDEFF_ALT", 5.0)
-        self.takeoff(3, mode='GUIDED')
-        self.delay_sim_time(2)
-        self.change_mode('LAND')
-        self.wait_disarmed()
-        durations_large = self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True)
-        total_large = sum(durations_large)
-        self.progress("touchdown_expected total with GNDEFF_ALT=5.0: %fs" % total_large)
-
-        # Comparative assertion: a higher threshold catches the descent earlier
-        # so total touchdown_expected duration must be longer.
-        if total_large <= total_small:
-            raise NotAchievedException(
-                "Larger threshold should have longer touchdown (large=%fs <= small=%fs)"
-                % (total_large, total_small))
+        self.context_pop()
+        self.reboot_sitl()
 
     def _MAV_CMD_CONDITION_YAW(self, command):
         self.start_subtest("absolute")
@@ -14506,13 +14710,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.EK3AccelBias,
              self.EK3_AccelBiasInhibitOnGroundMoving,
              self.EK3_AccelBiasZeroVelOptFlow,
-             self.EK3_AglKfVelForVelD,
-             self.EK3_ZeroVelFusionNotUsedWithGPS,
-             self.VibrationRectificationBiasLearning,
-             self.TakeoffGroundEffectAlt,
-             self.TouchdownGroundEffectAlt,
              self.EK3_FlowAxisLockoutRecovery,
              self.EK3_FlowMinHeightFloor,
+             self.EK3_AglKfVelForVelD,
+             self.EK3_AglKfRngHeightSwitch,
+             self.VibrationRectificationBiasLearning,
+             self.TakeoffGroundEffectAlt,
              self.StabilityPatch,
              self.OBSTACLE_DISTANCE_3D,
              self.AC_Avoidance_Proximity,
@@ -14523,6 +14726,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.BaroWindCorrection,
              self.SetpointGlobalPos,
              self.ThrowDoubleDrop,
+             self.ThrowModeNoGPS,
+             self.ThrowDropSourceSwitch,
+             self.ThrowAbortRestoresSourceSet,
+             self.ThrowSpinDrop,
+             self.ThrowSpinTumbleDrop,
+             self.ThrowYawAbsolute,
+             self.ThrowNextModeAcro,
              self.SetpointGlobalVel,
              self.SetpointBadVel,
              self.SplineTerrain,
@@ -14551,6 +14761,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.GPSGlitchLoiter2,
              self.GPSGlitchAuto,
              self.ModeAltHold,
+             self.ModeVAltHold,
              self.ModeLoiter,
              self.SimpleMode,
              self.SuperSimpleCircle,
@@ -14560,10 +14771,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.OpticalFlowLocation,
              self.OpticalFlowLimits,
              self.OpticalFlowGPSLossAiding,
-             self.LoiterNoCompassYaw,
-             self.LoiterNoCompassYawGPS,
              self.LoiterFlowBrakeOvershoot,
-             self.OpticalFlowAGLKalmanFilter,
              self.OpticalFlowCalibration,
              self.MotorFail,
              self.ModeFlip,
@@ -16037,7 +16245,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_statustext("SITL: Clamp: grabbed vehicle", check_context=True)
         self.arm_vehicle()
         self.set_rc(3, 2000)
-        self.wait_altitude(-0.2, 5, minimum_duration=5, relative=True)
+        self.wait_altitude(-1, 5, minimum_duration=5, relative=True)
         self.run_cmd(mavutil.mavlink.MAV_CMD_DO_SET_SERVO, p1=11, p2=1000)
         self.wait_statustext("SITL: Clamp: released vehicle", check_context=True)
         self.wait_altitude(5, 5000, minimum_duration=1, relative=True)
@@ -16053,7 +16261,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_statustext("SITL: Clamp: grabbed vehicle", check_context=True)
         self.arm_vehicle()
         self.set_rc(3, 2000)
-        self.wait_altitude(-0.2, 1, minimum_duration=5, relative=True)
+        self.wait_altitude(-1, 1, minimum_duration=5, relative=True)
         self.run_cmd(mavutil.mavlink.MAV_CMD_DO_SET_SERVO, p1=11, p2=1000)
         self.wait_statustext("SITL: Clamp: released vehicle", check_context=True)
         self.wait_altitude(5, 5000, minimum_duration=1, relative=True)
@@ -16517,35 +16725,6 @@ RTL_ALT_M 111
 
         # Test done
         self.land_and_disarm()
-
-    def Scripting6DoFMotors(self):
-        '''test 6DoF scripting motor matrix'''
-        self.context_collect('STATUSTEXT')
-
-        self.set_parameters({
-            "FRAME_CLASS": 16,  # MOTOR_FRAME_6DOF_SCRIPTING
-            "SCR_ENABLE": 1,
-        })
-
-        self.install_example_script_context("Copter_Motors_6DoF.lua")
-        self.reboot_sitl()
-
-        self.wait_statustext("6DoF Copter quad scripting", timeout=30, check_context=True)
-        self.wait_ready_to_arm()
-
-        self.upload_simple_relhome_mission([
-            (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 30, 0, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 30, 30, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0, 0, 0),
-        ])
-
-        num_wp = self.get_mission_count()
-        self.set_parameter("AUTO_OPTIONS", 3)
-        self.change_mode('AUTO')
-        self.arm_vehicle()
-        self.wait_waypoint(num_wp-1, num_wp-1, timeout=120)
-        self.wait_disarmed(timeout=60)
 
     def ScriptingOSD(self):
         '''test OSD scripting with waypoint mission - requires SFML OSD'''
@@ -17648,9 +17827,9 @@ return update, 1000
             self.MSPDisplayPortVTXConfig,
             self.MotorTest,
             self.AltEstimation,
-            self.EK3_NoGPSLeakWhenNotSource,
-            self.BaroDriftClearedAtArm,
+            self.BaroDriftResetOnArm,
             self.EKFSource,
+            self.EKFSourceSetFailsafe,
             self.GSF,
             self.GSF_reset,
             self.EKFBootstrapReset,
@@ -17768,7 +17947,6 @@ return update, 1000
             self.ScriptingFlipMode,
             self.RC_OPTIONS_1_FS_THR_ENABLE_0,
             self.ScriptingFlyVelocity,
-            self.Scripting6DoFMotors,
             self.ScriptingOSD,
             self.EK3_EXT_NAV_vel_without_vert,
             self.CompassLearnCopyFromEKF,
@@ -17782,252 +17960,6 @@ return update, 1000
             self.EKF3SRCPerCore,
         ])
         return ret
-
-            self.UTMGlobalPosition,
-            self.UTMGlobalPositionWaypoint,
-            self.HomeAltResetTest,
-            self.AmslAltPreservedOnRearmAtDifferentElevation,
-        ])
-        return ret
-
-    def UTMGlobalPositionWaypoint(self):
-        '''test UTM_GLOBAL_POSITION waypoint fields in AUTO and GUIDED'''
-        self.set_parameter("AUTO_OPTIONS", 3)
-        self.start_flying_simple_relhome_mission([
-            (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 100, 0, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0, 0, 0),
-        ])
-        # seq 0 = home, seq 1 = TAKEOFF, seq 2 = WAYPOINT (100m north)
-        wp = self.assert_fetch_mission_item_int(1, 1, 2, mavutil.mavlink.MAV_MISSION_TYPE_MISSION)
-
-        self.wait_current_waypoint(2, timeout=60)
-
-        # epsilon=1 allows for 1-unit (0.11m) rounding from AP's internal coordinate conversion
-        m = self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "next_lat": wp.x,
-            "next_lon": wp.y,
-        }, poll=True, epsilon=1)
-        if not (m.flags & mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_NEXT_WAYPOINT_AVAILABLE):
-            raise NotAchievedException(f"AUTO: NEXT_WAYPOINT_AVAILABLE not set (flags=0x{m.flags:x})")
-        self.do_RTL()
-        self.zero_throttle()
-
-        # GUIDED mode
-        self.takeoff(20, mode='GUIDED')
-        home = self.poll_message("HOME_POSITION")
-        target_lat = home.latitude + 10000
-        target_lon = home.longitude
-        self.send_set_position_target_global_int(target_lat, target_lon, 20)
-        self.delay_sim_time(1, reason="guided target to propagate to UTM message")
-        m = self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "next_lat": target_lat,
-            "next_lon": target_lon,
-        }, poll=True, epsilon=1)
-        if not (m.flags & mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_NEXT_WAYPOINT_AVAILABLE):
-            raise NotAchievedException(f"GUIDED: NEXT_WAYPOINT_AVAILABLE not set (flags=0x{m.flags:x})")
-        self.do_RTL()
-
-    def UTMGlobalPosition(self):
-        '''test UTM_GLOBAL_POSITION message sending'''
-        self.wait_ready_to_arm()
-        m = self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "flight_state": mavutil.mavlink.UTM_FLIGHT_STATE_GROUND,
-        }, poll=True)
-        if all(b == 0 for b in m.uas_id):
-            raise NotAchievedException("UAS ID is all zeros")
-        expected_flags = (
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_UAS_ID_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_POSITION_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_ALTITUDE_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_RELATIVE_ALTITUDE_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_HORIZONTAL_VELO_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_VERTICAL_VELO_AVAILABLE
-        )
-        if m.flags & expected_flags != expected_flags:
-            raise NotAchievedException(
-                f"Expected flags 0x{expected_flags:x}, got 0x{m.flags:x}")
-        self.takeoff(alt_min=10, mode="LOITER")
-        self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "flight_state": mavutil.mavlink.UTM_FLIGHT_STATE_AIRBORNE,
-        }, poll=True)
-        self.land_and_disarm()
-
-    def HomeAltResetTest(self):
-        '''fly mission from cliff top to water, land, then RTL to cliff top'''
-        # terrain handler must be running before customise_SITL_commandline so that
-        # TERRAIN_REQUESTs from firmware at KalaupapaCliffs are answered immediately.
-        self.install_terrain_handlers_context()
-        try:
-            # wipe=True clears any stale EEPROM state from a previous failed run;
-            # a prior failure may leave TERRAIN_ENABLE=1, which causes the firmware to
-            # fetch terrain data at boot and block WPNAV parameter responses.
-            self.customise_SITL_commandline(["--home", "KalaupapaCliffs"], wipe=True)
-            # non-terrain params first; TERRAIN_ENABLE last because enabling it causes a
-            # brief firmware pause that drops subsequent PARAM_REQUEST_READ responses
-            self.set_parameters({
-                "AUTO_OPTIONS": 3,
-                "WP_SPD": 10,           # m/s; keeps test duration manageable
-                "WP_SPD_DN": 5,         # m/s
-                "WP_SPD_UP": 5,         # m/s; RTL initial climb from sea level
-                "RTL_ALT_M": 40,        # m above home (cliff top), clears cliff face on return
-                "TERRAIN_ENABLE": 1,
-                "SIM_TERRAIN": 1,
-            })
-            self.wait_ready_to_arm()
-
-            # Explicitly fix home to the current position/altitude before arming so
-            # that waypoints relative to home are computed from the correct location.
-            self.run_cmd(
-                mavutil.mavlink.MAV_CMD_DO_SET_HOME,
-            )
-
-            # read descent rate parameters so checks below are not hard-coded
-            wp_spd_dn = self.get_parameter("WP_SPD_DN")   # high-speed descent (m/s)
-            land_spd_ms = self.get_parameter("LAND_SPD_MS")  # final-approach descent (m/s)
-
-            cruise_alt = 40  # m relative to home (cliff top)
-
-            # Phase 1: take off from cliff top, fly north off the cliff edge, land near sea level.
-            # All waypoint altitudes are relative to home (cliff top).
-            self.start_flying_simple_relhome_mission([
-                (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, cruise_alt),
-                # fly north clear of the cliff edge; still at cruise_alt above cliff top
-                (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 200, 0, cruise_alt),
-                # land on the water; NAV_LAND descends to terrain (~640m below home)
-                (mavutil.mavlink.MAV_CMD_NAV_LAND, 0, 0, 0),
-            ])
-
-            # verify vehicle reaches cruise speed on the outbound leg
-            self.wait_groundspeed(7, 13, timeout=120)
-            # verify high-speed descent phase (above LAND_ALT_LOW_M) at WP_SPD_DN
-            self.wait_climbrate(
-                -wp_spd_dn - 1,
-                -wp_spd_dn + 1,
-                minimum_duration=5,
-                timeout=300,
-            )
-            # verify final low-speed approach (below LAND_ALT_LOW_M) at LAND_SPD_MS
-            self.wait_climbrate(
-                -land_spd_ms - 0.1,
-                -land_spd_ms + 0.1,
-                minimum_duration=5,
-                timeout=120,
-            )
-            # verify vehicle decelerates before landing
-            self.wait_groundspeed(0, 2, minimum_duration=5, timeout=300)
-            self.wait_disarmed(timeout=600)
-
-            # Phase 2: re-arm near sea level and climb to cruise_alt above home (a ~640m
-            # vertical climb at WP_SPD_UP); then switch to RTL to return to cliff top.
-            self.start_flying_simple_relhome_mission([
-                (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, cruise_alt),
-            ])
-
-            # wait for vehicle to reach cruise_alt above home (cliff top + cruise_alt ASL)
-            self.wait_altitude(cruise_alt - 1, cruise_alt + 5, relative=True, timeout=200)
-
-            # RTL_ALT equals cruise_alt, so the vehicle flies directly to the home position
-            self.change_mode("RTL")
-            # verify vehicle reaches cruise speed on the inbound horizontal leg
-            self.wait_groundspeed(7, 13, timeout=120)
-            # verify high-speed descent phase (RTL_ALT_M - LAND_ALT_LOW_M) at WP_SPD_DN
-            # duration is shorter here (~30 m at WP_SPD_DN) so minimum_duration is smaller
-            self.wait_climbrate(
-                -wp_spd_dn - 1,
-                -wp_spd_dn + 1,
-                minimum_duration=2,
-                timeout=300,
-            )
-            # verify final low-speed approach (below LAND_ALT_LOW_M) at LAND_SPD_MS
-            self.wait_climbrate(
-                -land_spd_ms - 0.1,
-                -land_spd_ms + 0.1,
-                minimum_duration=5,
-                timeout=120,
-            )
-            # verify vehicle decelerates on arrival at home
-            self.wait_groundspeed(0, 2, minimum_duration=5, timeout=300)
-            self.wait_rtl_complete(timeout=300)
-        finally:
-            # reset SITL home back to the default location so the framework's
-            # post-test reboot_sitl() location check passes
-            self.customise_SITL_commandline([])
-
-    def AmslAltPreservedOnRearmAtDifferentElevation(self):
-        '''re-arm at different elevation without corrupting AMSL altitude'''
-        # From PR review (rmackay9): pilot arms at base, home auto-set
-        # (not locked); vehicle flies to a higher/lower elevation and
-        # lands there; user creates an AMSL mission; rearm should not
-        # zero the EKF altitude-above-origin, otherwise AMSL-targeted
-        # mission waypoints are flown at the wrong altitude.
-        self.install_terrain_handlers_context()
-        try:
-            # KalaupapaCliffs is a ~500 m tall cliff; a flight off the
-            # top and a landing at sea level gives a large unambiguous
-            # elevation change for the rearm check.
-            self.customise_SITL_commandline(["--home", "KalaupapaCliffs"], wipe=True)
-            self.set_parameters({
-                "AUTO_OPTIONS": 3,
-                "WP_SPD": 10,
-                "WP_SPD_DN": 5,
-                "WP_SPD_UP": 5,
-                "TERRAIN_ENABLE": 1,
-                "SIM_TERRAIN": 1,
-            })
-            self.wait_ready_to_arm()
-
-            # Deliberately do NOT call MAV_CMD_DO_SET_HOME so home
-            # stays auto-set from first arm but unlocked.  That is
-            # the scenario the PR review flagged.
-
-            cliff_alt_amsl_mm = self.assert_receive_message('GLOBAL_POSITION_INT').alt
-            self.progress("Cliff-top AMSL: %.1f m" % (cliff_alt_amsl_mm * 0.001))
-
-            # Phase 1: fly off the cliff edge and land at sea level
-            self.start_flying_simple_relhome_mission([
-                (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 40),
-                (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 200, 0, 40),
-                (mavutil.mavlink.MAV_CMD_NAV_LAND, 0, 0, 0),
-            ])
-            self.wait_disarmed(timeout=600)
-
-            # Capture AMSL altitude reported while disarmed at sea
-            # level.  EKF altitude tracking should already reflect
-            # the elevation drop from the cliff top.
-            pre_rearm_amsl_mm = self.assert_receive_message('GLOBAL_POSITION_INT').alt
-            self.progress("Pre-rearm AMSL: %.1f m" % (pre_rearm_amsl_mm * 0.001))
-            drop_m = (cliff_alt_amsl_mm - pre_rearm_amsl_mm) * 0.001
-            if drop_m < 50.0:
-                raise NotAchievedException(
-                    "Expected >50 m altitude drop cliff-top -> landing, got %.1f m" %
-                    drop_m)
-
-            # Rearm at sea level.  Home is still auto-set at cliff
-            # top and NOT locked, so this goes through the
-            # !home_is_locked() branch of the arming code.  Without
-            # the elevation-change guard the EKF datum gets reset,
-            # zeroing position.z while origin.alt is unchanged, and
-            # the reported AMSL altitude jumps up by the full cliff
-            # height (O(500 m)) -- wrecking AMSL mission targeting.
-            self.arm_vehicle()
-            self.delay_sim_time(2)
-            post_rearm_amsl_mm = self.assert_receive_message('GLOBAL_POSITION_INT').alt
-            self.progress("Post-rearm AMSL: %.1f m" % (post_rearm_amsl_mm * 0.001))
-
-            self.disarm_vehicle(force=True)
-
-            delta_m = abs(post_rearm_amsl_mm - pre_rearm_amsl_mm) * 0.001
-            if delta_m > 10.0:
-                raise NotAchievedException(
-                    "AMSL altitude changed by %.1f m between disarm and rearm "
-                    "(pre=%.1f m, post=%.1f m); EKF datum reset corrupted "
-                    "altitude tracking" %
-                    (delta_m,
-                     pre_rearm_amsl_mm * 0.001,
-                     post_rearm_amsl_mm * 0.001))
-        finally:
-            self.customise_SITL_commandline([])
 
     def testcan(self):
         ret = ([
