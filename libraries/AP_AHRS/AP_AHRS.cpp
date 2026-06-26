@@ -3499,7 +3499,7 @@ bool AP_AHRS::reset_configured_backend(void)
     switch (configured_ekf_type()) {
 #if AP_AHRS_NAVEKF3_ENABLED
     case EKFType::THREE:
-        return ekf3.EKF3.InitialiseFilterBootstrap();
+        return EKF3.InitialiseFilterBootstrap();
 #endif  // AP_AHRS_NAVEKF3_ENABLED
     default:
         break;
