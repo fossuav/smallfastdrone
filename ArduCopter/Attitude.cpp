@@ -138,27 +138,6 @@ float Copter::get_pilot_speed_dn_ms() const
     }
 }
 
-// Returns the maximum pilot climb rate (m/s) adjusted for the climb/descent rate currently
-// being commanded by surface tracking, to always result in at least PILOT_SPD_UP on full up stick.
-float Copter::get_pilot_speed_up_adjusted_ms() const
-{
-    // terrain velocity in Up-positive frame (m/s)
-    const float terrain_climb_ms = -pos_control->get_vel_terrain_D_ms();
-    // floored at zero to prevent sign flip if terrain velocity exceeds PILOT_SPD_UP
-    return MAX(0.0f, g2.pilot_speed_up_ms - terrain_climb_ms);
-}
-
-// Returns the maximum pilot descent rate (m/s, positive magnitude) adjusted for the
-// climb/descent rate currently being commanded by surface tracking, to always result in
-// at least PILOT_SPD_DN on full down stick.
-float Copter::get_pilot_speed_dn_adjusted_ms() const
-{
-    // terrain velocity in Up-positive frame (m/s)
-    const float terrain_climb_ms = -pos_control->get_vel_terrain_D_ms();
-    // floored at zero to prevent sign flip if terrain velocity exceeds PILOT_SPD_DN
-    return MAX(0.0f, get_pilot_speed_dn_ms() + terrain_climb_ms);
-}
-
 // Time constant for hover bias learning filter (seconds)
 #define HOVER_BIAS_TC 2.0f
 
