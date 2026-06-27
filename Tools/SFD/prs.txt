@@ -43,6 +43,9 @@
 33497   # HereFlow output rate correction FLOW_HF_RATEF
 33498   # Inhibit Z gyro bias without yaw source
 33507   # AGL KF accel-Z bias estimation
+# PENDING (local branch pr-ekf3-aglkf-height, off #33359): fuse the IMU-aided AGL KF
+# height as the rangefinder height observation (de-glitch). Depends on #33359 for the
+# AGL KF state/option; add the PR number here once opened.
 33543   # AP_Param loaded defaults count
 33568   # Optical flow relative-aiding fallback on GPS loss
 33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H
