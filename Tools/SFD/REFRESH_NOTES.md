@@ -240,8 +240,7 @@ the code pass:
 
 Throw-mode RPM (#32955) is still genuinely excluded (pending an updated PR).
 
-Optical flow flat-ground (EK3_OPTIONS bit 5, OptflowAssumeFlatGnd) lives on the
-local branch pr-optflow-flat-ground, squashed onto #33478's head (it needs bit 4
-to exist). prs.txt holds a commented PENDING slot after #33478; replace it with
-the PR number once the PR is opened. Until then the change rides on the SFD branch
-as the two cherry-picked commits and would be lost on a from-scratch refresh.
+Optical flow flat-ground (EK3_OPTIONS bit 5, OptflowAssumeFlatGnd) is #33585,
+squashed onto #33478's head (it needs bit 4 to exist) and slotted after #33478 in
+prs.txt. The PR is stacked on #33478, so its diff shows the bit-4 commits until
+that merges.
