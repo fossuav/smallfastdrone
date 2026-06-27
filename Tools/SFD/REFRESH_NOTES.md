@@ -230,13 +230,15 @@ the code pass:
 - Throw mode (#32475, restacked/fixed) + the AP_GroundEffect throw-drop baro
   de-weight (takeoff window asserted post-detection; the de-weight rides in the
   #32472 ground-effect PR, 4.7.1 carries the AP_GroundEffect-API adaptation).
-- VALT mode (#32270, fixed).
 - 11 per-board SFD hwdef enables + the new SmallFastDronev1 board (SFD-local, no PR):
   MambaH743v4, MatekH743(+bdshot), MicoAir405v2/743v2/743-AIO, BETAFPV-F405,
   BlitzF745(+AIO), ARK_FPV. DFU bootloader binaries for the DFU-enabled boards still
   need rebuilding.
-- THROW_SRC_SET registration + the throw/VALT ParametersG2 index fixes (group indices
-  must stay < 64; THROW_YAW_TYPE/DEG and VALT_POS_EXPO had landed at 64/65/66).
+- THROW_SRC_SET registration + the throw ParametersG2 index fix (group indices must
+  stay < 64; THROW_YAW_TYPE/DEG had landed at 64/65, moved to 27/28). VALT_POS_EXPO
+  is no longer part of this fix - #32270 now ships it at 29 directly (see below), so
+  on a from-scratch refresh drop the old "66 -> 29" VALT_POS_EXPO line from the index
+  fix and keep only the throw lines.
 
 Throw-mode RPM (#32955) is still genuinely excluded (pending an updated PR).
 
@@ -244,3 +246,11 @@ Optical flow flat-ground (EK3_OPTIONS bit 5, OptflowAssumeFlatGnd) is #33585,
 squashed onto #33478's head (it needs bit 4 to exist) and slotted after #33478 in
 prs.txt. The PR is stacked on #33478, so its diff shows the bit-4 commits until
 that merges.
+
+VALT (#32270) is no longer excluded - it is in prs.txt in the submitted tier. The
+PR was rebased onto current master (it had drifted to CONFLICTING) and its
+VALT_POS_EXPO index changed from 59 to 29 to match what the branch already ships,
+so sourcing VALT from the PR on a from-scratch refresh keeps the parameter index
+stable. The blend commit's Parameters.cpp hunk conflicts against master's SURFTRAK
+block (adjacent insert); keep both. rerere had recorded the old index-59 resolution
+- re-check VALT_POS_EXPO is 29 after any replay.

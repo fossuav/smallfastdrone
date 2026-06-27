@@ -6,8 +6,8 @@
 # merged-upstream PRs + #33115 + the permanent SFD-local hwdef. See REFRESH_NOTES.md.
 #
 # Format: one PR number per line; "#" starts a comment. Blank lines ignored.
-# Excluded for now (need updated PRs): VALT (#32270), Throw Mode RPM (#32955) and
-# the local throw-mode work.
+# Excluded for now: Throw Mode RPM (#32955, may no longer be needed) and the
+# local throw-mode work.
 
 # --- In review ---
 31005   # Fence: min alt disarm (still open despite the old "merged" label)
@@ -34,6 +34,7 @@
 31770   # DFU mode via system bootloader
 32401   # Pending arm on switch
 32473   # Acro bias inhibit
+32270   # VALT velocity alt-hold mode (VALT_POS_EXPO at index 29 to match the branch)
 33318   # AC_Loiter brake/drag feed-forward fix
 33359   # AGL KF rangefinder height switch
 33478   # AGL KF velocity velD fusion
