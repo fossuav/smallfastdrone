@@ -57,3 +57,9 @@
 33543   # AP_Param loaded defaults count
 33568   # Optical flow relative-aiding fallback on GPS loss
 33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H
+
+# --- Merged upstream, but MUST apply last ---
+# #33115 deletes "|| dal.get_takeoff_expected()" from the zero-velocity-fusion
+# gates; the EKF PRs above carry that expression in their context/hunks, so apply
+# it after them or their diffs re-introduce it. Merged to master 2026-05-27.
+33115   # Do not look at takeoff for zero velocity fusion

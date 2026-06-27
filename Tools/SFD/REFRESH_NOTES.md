@@ -126,6 +126,12 @@ reproduces both, so its own test fails against its own code.
    real fix needs PR-author work (e.g. fuse GPS vertical velocity so the bias is
    observable in hover) - worth reporting to the #32471 author.
 
+Cross-checked against the loiter branch (built in a worktree): its subtest D fails
+too, at 0.000002 - the same as this branch before the covariance fix, and worse
+than the fixed 0.000108. So loiter has no missing ingredient; the limitation is in
+#32471 itself, present wherever its code is. Adding #33115 (below) did not move the
+number (0.000103 -> 0.000108).
+
 (An earlier note here blamed two "not patch-present" commits; that was a red
 herring - those commits are functionally present, just modified by the AHRS-refactor
 resolution so git cherry flags them. The cause was the gate over-reach above.)
