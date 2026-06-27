@@ -4,6 +4,25 @@ Notes from rebuilding the PR stack onto 4.7-beta7 (see refresh.sh / prs.txt).
 Re-check these each refresh; most are because a PR was written against master
 and master/4.7 have diverged.
 
+## SmallFastDrone-4.7-base (the replay base)
+
+refresh.sh now stacks onto `SmallFastDrone-4.7-base` instead of vanilla 4.7. The
+base = `upstream/ArduPilot-4.7` + the 14 merged-upstream PRs + #33115 + the 11
+permanent SFD-local hwdef commits + the AP_AHRS 4.7-compat fixup (baked in, so the
+replay no longer re-applies it). copter + plane build.
+
+Rebuild the base when 4.7 advances, a baked PR's head moves, or an in-flight PR
+merges (promote it in): branch off `upstream/ArduPilot-4.7`, replay the merged-PR
+list (30994 31619 32469 32392 32200 32396 32945 31500 32770 32022 32389 32202
+32399 32937, then 33115 last), re-apply the AP_AHRS compat fixup, then cherry-pick
+the 11 hwdef commits. #31005 is NOT baked (still open upstream) - it stays in the
+replay's prs.txt.
+
+CAVEAT: the base is currently code-only. The merged PRs' autotest changes are NOT
+yet baked in, and the replay's prs.txt no longer lists those PRs, so a from-scratch
+rebuild will LACK the merged PRs' tests until `rebuild-tests` is run for the merged
+set on the base. Do this before relying on the base for a full from-scratch rebuild.
+
 ## Superseded upstream - needs a PR rebase before it is worth carrying
 
 - **#31274 Motortest error rate** - 4.7 already implements this differently

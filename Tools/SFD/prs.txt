@@ -1,32 +1,16 @@
 # SFD refresh PR manifest
 #
-# Ordered list of upstream ArduPilot/ardupilot pull requests that make up the
-# Small Fast Drone feature set, in the same order as the "Included Features"
-# list in README.md. refresh.sh cherry-picks these onto a vanilla
-# ArduPilot-4.7 base (see README.md in this directory).
+# Ordered list of the IN-FLIGHT upstream ArduPilot/ardupilot pull requests that
+# make up the Small Fast Drone feature set. refresh.sh cherry-picks these onto
+# SmallFastDrone-4.7-base (override with SFD_BASE), which already bakes in the
+# merged-upstream PRs + #33115 + the permanent SFD-local hwdef. See REFRESH_NOTES.md.
 #
 # Format: one PR number per line; "#" starts a comment. Blank lines ignored.
-# Deliberately excluded for now (need updated PRs): VALT (#32270),
-# Throw Mode RPM (#32955) and the local-only throw-mode work.
-
-# --- Merged upstream ---
-30994   # Quintuple Notch
-31005   # Fence: min alt disarm
-31619   # Fence AGL update
-32469   # Recorded origin fix
-32392   # Baro thrust compensation filter
-32200   # EK3_MAG_CAL=7
-32396   # EKF zero velocity fusion
-32945   # getLLH GPS fallback only when GPS is the position source
-31500   # VTX max power
-32770   # Baro height datum reset (resetHeightDatum flush)
-32022   # Arming consistency check fix
-32389   # IMU-aided AGL filter for optical flow
-32202   # EKF bootstrap reset
-32399   # Low noise IMU support
-32937   # VTX actual power reporting
+# Excluded for now (need updated PRs): VALT (#32270), Throw Mode RPM (#32955) and
+# the local throw-mode work.
 
 # --- In review ---
+31005   # Fence: min alt disarm (still open despite the old "merged" label)
 30490   # Ground clearance fusion fix
 31274   # Motortest error rate   (NOTE: superseded upstream - see refresh notes)
 29768   # MSP VTX support
@@ -60,9 +44,3 @@
 33543   # AP_Param loaded defaults count
 33568   # Optical flow relative-aiding fallback on GPS loss
 33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H
-
-# --- Merged upstream, but MUST apply last ---
-# #33115 deletes "|| dal.get_takeoff_expected()" from the zero-velocity-fusion
-# gates; the EKF PRs above carry that expression in their context/hunks, so apply
-# it after them or their diffs re-introduce it. Merged to master 2026-05-27.
-33115   # Do not look at takeoff for zero velocity fusion

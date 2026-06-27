@@ -2,8 +2,10 @@
 #
 # SFD branch refresh
 # -----------------
-# Rebuild the Small Fast Drone feature set on top of a vanilla ArduPilot-4.7
-# base by cherry-picking the upstream PR branches listed in prs.txt, in order.
+# Rebuild the Small Fast Drone feature set on top of SmallFastDrone-4.7-base
+# (= vanilla 4.7 + the merged-upstream PRs + #33115 + the permanent SFD-local
+# hwdef; override with SFD_BASE) by cherry-picking the in-flight PR branches in
+# prs.txt, in order.
 #
 # Why this exists: the SFD branches are a curated stack of in-flight upstream
 # PRs. Those PRs keep evolving in review, so periodically we want to re-stack
@@ -36,7 +38,7 @@
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(git rev-parse --show-toplevel)"
-BASE="${SFD_BASE:-upstream/ArduPilot-4.7}"
+BASE="${SFD_BASE:-SmallFastDrone-4.7-base}"
 MASTER="${SFD_MASTER:-upstream/master}"
 DEFER="Tools/autotest"
 ST="$DIR/.state"
