@@ -33,11 +33,19 @@ and master/4.7 have diverged.
 - **#33484 option-bit doc** - kept Bit 4 (velD) description from #33478 and applied
   the PR's en-dash -> hyphen ASCII fix.
 
-## Post-merge build fixups (NOT captured by rerere - reapply each refresh)
+## Post-merge fixups (NOT captured by rerere - reapply each refresh)
 
-These commits apply cleanly but do not compile on 4.7 because they use master-only
-names. rerere only replays *conflict* resolutions, so these must be redone (or the
-PRs rebased) on every refresh:
+These commits apply cleanly (no conflict, so rerere never sees them) but still need
+redoing on every refresh. Two kinds, with different long-term homes:
+
+- **4.7-backport artifacts** - the PR's master version is fine; it only breaks when
+  cherry-picked onto 4.7 (master-only names). These never go upstream; reapply
+  forever (or until the PR is rebased onto 4.7).
+- **Genuine upstream bugs** - the PR is wrong on master too (its own test fails
+  against its own code). The real home is the PR itself; report/submit there and
+  drop the local fixup once the PR head carries it. Reapply locally until then.
+
+### 4.7-backport artifacts
 
 - **AP_AHRS** - master renamed `HAL_NAVEKF[23]_AVAILABLE` to `AP_AHRS_NAVEKF[23]_ENABLED`
   and uses an `ekf3.EKF3` backend accessor. Added compat `#define`s in
@@ -52,6 +60,19 @@ PRs rebased) on every refresh:
   it was changed to `AP_GPS::GPS_OK_FIX_3D` to match the line just below it. The
   copter-only code pass missed this - **build plane as well** (`./waf plane`) so
   plane-only breaks surface before the test pass.
+
+### Genuine upstream bugs - belong in #32471, reapply locally until fixed there
+
+- **AP_NavEKF3 covariance gates** (commit 87b1e2edac). #32471 switched four
+  covariance-prediction gates in `AP_NavEKF3_core.cpp` from `!inhibitDelVelBiasStates`
+  to `!accelBiasLearningInhibited()`, collapsing the accel-bias covariance while
+  bit 2/acro inhibits. Revert those four to `!inhibitDelVelBiasStates`. This is a
+  bug in #32471 on master too - **report it to the #32471 author**; once the PR head
+  carries it, this fixup and the test skip below both go away. See the VRF section.
+- **autotest VRF skip** (commit 8bfb6d6f17). Subtests D/E of
+  `VibrationRectificationBiasLearning` assert hover Z-bias learning that #32471
+  cannot deliver (observability limit). Skipped. Drop the skip if/when #32471 makes
+  the hover bias observable.
 
 ## Phase 2 - tests
 
