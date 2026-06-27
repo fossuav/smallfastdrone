@@ -147,7 +147,10 @@ ROMFS_WILDCARD libraries/AP_OSD/fonts/font0.bin
 
 # setup for BF migration
 define HAL_FRAME_TYPE_DEFAULT 12
+define AP_INERTIALSENSOR_LOW_NOISE 1
 
 # reduce flash usage
 include ../include/minimize_fpv_osd.inc
 undef AP_OPTICALFLOW_ENABLED
+define ARMING_DELAY_MSEC 0
+define AP_ARMING_IMU_CONSISTENCY_CHECK_TIME_MS 2000
