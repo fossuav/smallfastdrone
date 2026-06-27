@@ -223,3 +223,4 @@ ROMFS_WILDCARD libraries/AP_OSD/fonts/font*.bin
 
 # build ABIN for flash-from-bootloader support:
 env BUILD_ABIN True
+ENABLE_DFU_BOOT 1
