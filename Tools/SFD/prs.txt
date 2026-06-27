@@ -11,8 +11,8 @@
 
 # --- In review ---
 31005   # Fence: min alt disarm (still open despite the old "merged" label)
-30490   # Ground clearance fusion fix
-31274   # Motortest error rate   (NOTE: superseded upstream - see refresh notes)
+32232   # Ground clearance fusion fix + rangefinder on-ground reading till takeoff
+31274   # Motortest error rate + ESC error-rate gate in are_motors_running()
 29768   # MSP VTX support
 32045   # Scripting OSD
 32391   # Separate LEVEL arming check
@@ -37,6 +37,9 @@
 33318   # AC_Loiter brake/drag feed-forward fix
 33359   # AGL KF rangefinder height switch
 33478   # AGL KF velocity velD fusion
+# PENDING (local branch pr-optflow-flat-ground, off #33478): EK3_OPTIONS bit 5
+# OptflowAssumeFlatGnd - keep flow nav alive above rangefinder range. Add the PR
+# number here once opened; must stay after #33478 so bit 4 exists first.
 33484   # Optical flow axis lockout recovery + focus-height floor
 33497   # HereFlow output rate correction FLOW_HF_RATEF
 33498   # Inhibit Z gyro bias without yaw source
