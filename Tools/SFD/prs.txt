@@ -36,16 +36,13 @@
 32473   # Acro bias inhibit
 32270   # VALT velocity alt-hold mode (VALT_POS_EXPO at index 29 to match the branch)
 33318   # AC_Loiter brake/drag feed-forward fix
-33359   # AGL KF rangefinder height switch
+33359   # AGL KF rangefinder height switch + fuse aglKfH as the height observation
 33478   # AGL KF velocity velD fusion
 33585   # Optflow flat-ground above rangefinder range (bit 5; must stay after #33478 for bit 4)
 33484   # Optical flow axis lockout recovery + focus-height floor
 33497   # HereFlow output rate correction FLOW_HF_RATEF
 33498   # Inhibit Z gyro bias without yaw source
 33507   # AGL KF accel-Z bias estimation
-# PENDING (local branch pr-ekf3-aglkf-height, off #33359): fuse the IMU-aided AGL KF
-# height as the rangefinder height observation (de-glitch). Depends on #33359 for the
-# AGL KF state/option; add the PR number here once opened.
 33543   # AP_Param loaded defaults count
 33568   # Optical flow relative-aiding fallback on GPS loss
 33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H
