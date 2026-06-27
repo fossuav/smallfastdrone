@@ -1173,7 +1173,7 @@ bool AP_Vehicle::motors_takeoff_check(float rpm_min, float rpm_max)
     // check ESCs are sending RPM at expected level
     uint32_t motor_mask = motors->get_motor_mask();
     const bool telem_active = AP::esc_telem().is_telemetry_active(motor_mask);
-    const bool rpm_adequate = AP::esc_telem().are_motors_running(motor_mask, rpm_min, rpm_max);
+    const bool rpm_adequate = AP::esc_telem().are_motors_running(motor_mask, rpm_min, rpm_max, 1.0f);
 
     // if RPM is at the expected level clear block
     if (telem_active && rpm_adequate) {
