@@ -155,3 +155,5 @@ define HAL_OSD_TYPE_DEFAULT 5
 
 # setup for BF migration
 define HAL_FRAME_TYPE_DEFAULT 12
+
+ENABLE_DFU_BOOT 1
