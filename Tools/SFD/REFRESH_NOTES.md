@@ -26,12 +26,17 @@ re-running rebuild-tests: #30994's quintuple-notch test is already in 4.7, so ke
 the `cur` side and add `30994` to its `.applied` sidecar (it modifies an existing
 test rather than adding a new method, so the split-method recipe does not apply).
 
-## Superseded upstream - needs a PR rebase before it is worth carrying
+## Reconciled against 4.7's refactors during the merge (verify they still hold)
 
-- **#31274 Motortest error rate** - 4.7 already implements this differently
-  (`get_raw_rpm_and_error_rate()`, `motors_takeoff_check()` /
-  `are_motors_running(..., 1.0f)`). The PR was dropped entirely. Rebase it on
-  current upstream or retire it.
+- **#31274 Motortest error rate** - revived. 4.7 already renamed the getter to
+  `get_raw_rpm_and_error_rate()` and refactored the takeoff path into
+  `motors_takeoff_check()`, so the PR's own takeoff_check.cpp inline version is
+  dropped (keep `ours`). What is carried is the ESC error-rate gate in
+  `are_motors_running(..., float max_error_rate)`; the sole caller lives in
+  AP_Vehicle.cpp (not takeoff_check.cpp) and is updated to pass `1.0f`. The PR's
+  AP_Periph / autotest commits are redundant against 4.7 and skipped. When
+  re-running from the PR head, take the gate commits by SHA rather than
+  `tail -n +2`, which re-lists the reworked (different patch-id) commits.
 
 ## Divergences resolved during the merge (verify they still hold)
 
@@ -234,3 +239,9 @@ the code pass:
   must stay < 64; THROW_YAW_TYPE/DEG and VALT_POS_EXPO had landed at 64/65/66).
 
 Throw-mode RPM (#32955) is still genuinely excluded (pending an updated PR).
+
+Optical flow flat-ground (EK3_OPTIONS bit 5, OptflowAssumeFlatGnd) lives on the
+local branch pr-optflow-flat-ground, squashed onto #33478's head (it needs bit 4
+to exist). prs.txt holds a commented PENDING slot after #33478; replace it with
+the PR number once the PR is opened. Until then the change rides on the SFD branch
+as the two cherry-picked commits and would be lost on a from-scratch refresh.
