@@ -226,6 +226,12 @@
 # define MODE_THROW_ENABLED 1
 #endif
 
+// VALT mode is not part of this branch yet; define the flag so throw mode's
+// guarded VALT-as-nextmode case compiles out. Superseded when VALT is added.
+#ifndef MODE_VALT_ENABLED
+# define MODE_VALT_ENABLED 0
+#endif
+
 //////////////////////////////////////////////////////////////////////////////
 // ZigZag - allow vehicle to fly in a zigzag manner with predefined point A B
 #ifndef MODE_ZIGZAG_ENABLED
