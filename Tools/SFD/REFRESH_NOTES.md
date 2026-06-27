@@ -32,6 +32,17 @@ and master/4.7 have diverged.
   regressed AGL-KF awareness).
 - **#33484 option-bit doc** - kept Bit 4 (velD) description from #33478 and applied
   the PR's en-dash -> hyphen ASCII fix.
+- **#32972 baro-ground-effect** - the PR had branched from an OLD #32768 and carried
+  ~13 duplicate base commits (resetHeightDatum tolerance, the BaroDriftClearedAtArm /
+  AmslAltPreserved tests, Plane guards), so it conflicted as a superseded version.
+  Fixed the PR by restacking it on the CURRENT #32768 tip with only its 4 own commits
+  (suppress ResetHeight during ground effect, negative EK3_GND_EFF_DZ as baro noise
+  floor, pre-takeoff baro reference, BaroGroundEffectAtTakeoff test) - the fixed
+  pr-baro-gnd-effect is force-pushed. On a from-scratch refresh it now applies clean
+  (vanilla -> #32768 -> the 4 commits).
+- **#32945 getLLH GPS-source guard** - rmackay9's merged fix; supersedes the local
+  pr-ekf3-gps-source-leak commit (guards getLLH's three GPS fallbacks on
+  pos_from_GPS instead of inside getGPSLLH). Applies clean.
 
 ## Post-merge fixups (NOT captured by rerere - reapply each refresh)
 
@@ -165,16 +176,39 @@ resolution so git cherry flags them. The cause was the gate over-reach above.)
 - Phase 2 tests: the hot files are now rebuilt from the PR heads (not loiter) via
   `refresh.sh rebuild-tests`; every reconstructed body is byte-identical to its
   PR. Suite loads, SITL runs, 16 of 18 reconstructed tests pass.
+- prs.txt gained #32972 (fixed, restacked on #32768), #32945 (rmackay9 getLLH guard)
+  and #32514 (EKF failsafe gate reset on source change). All three are folded into
+  the branch (code + tests EK3_NoGPSLeakWhenNotSource, EKFSourceSetFailsafe,
+  BaroGroundEffectAtTakeoff all pass).
+- VALT (#32270) and throw mode (#32475) are fixed and integrated as local work (see
+  "Local work NOT in prs.txt"). The previously-dropped EKFSourceSetFailsafe now rides
+  in via #32514.
 - Next:
   1. Fix the #32471 VRF code gap (re-apply the two hover Z-bias commits against
      the current AHRS) so `VibrationRectificationBiasLearning` goes green - the
      test is correct, the feature is not learning. See the section above.
-  2. Re-apply the build fixups (incl. the new ArduPlane one) on a from-scratch
-     refresh - rerere does not cover them.
-  3. Fold in VALT (#32270) and throw-mode (#32955 + local) once their PRs rebase;
-     their loiter-local tests (EK3_AglKfRngHeightSwitch, EKFSourceSetFailsafe,
-     Throw*, ModeVAltHold) were dropped because no current PR carries them.
+  2. On a from-scratch refresh, re-apply the build fixups (rerere does not cover
+     them) AND re-fold the local work (prs.txt does not cover it).
+  3. Rebuild the DFU bootloader binaries for the boards that gained ENABLE_DFU_BOOT.
+  4. Root-cause the EKF const-pos stall (EKF stuck at flags 167, no horizontal
+     aiding) behind ThrowDropSourceSwitch and the GroundEffectCompensation tests;
+     throw mode code is byte-identical to the PR, so the cause is EKF-side.
 
-## Excluded (pending updated PRs)
+## Local work NOT in prs.txt (re-fold after a from-scratch refresh)
 
-- VALT (#32270), throw-mode RPM (#32955) and the local throw-mode work.
+A from-scratch refresh rebuilds ONLY the prs.txt stack on a vanilla 4.7 base; the
+following live on the branch as local commits and are lost unless re-applied after
+the code pass:
+
+- Throw mode (#32475, restacked/fixed) + the AP_GroundEffect throw-drop baro
+  de-weight (takeoff window asserted post-detection; the de-weight rides in the
+  #32472 ground-effect PR, 4.7.1 carries the AP_GroundEffect-API adaptation).
+- VALT mode (#32270, fixed).
+- 11 per-board SFD hwdef enables + the new SmallFastDronev1 board (SFD-local, no PR):
+  MambaH743v4, MatekH743(+bdshot), MicoAir405v2/743v2/743-AIO, BETAFPV-F405,
+  BlitzF745(+AIO), ARK_FPV. DFU bootloader binaries for the DFU-enabled boards still
+  need rebuilding.
+- THROW_SRC_SET registration + the throw/VALT ParametersG2 index fixes (group indices
+  must stay < 64; THROW_YAW_TYPE/DEG and VALT_POS_EXPO had landed at 64/65/66).
+
+Throw-mode RPM (#32955) is still genuinely excluded (pending an updated PR).
