@@ -17,6 +17,7 @@
 32392   # Baro thrust compensation filter
 32200   # EK3_MAG_CAL=7
 32396   # EKF zero velocity fusion
+32945   # getLLH GPS fallback only when GPS is the position source
 31500   # VTX max power
 32770   # Baro height datum reset (resetHeightDatum flush)
 32022   # Arming consistency check fix
@@ -37,6 +38,8 @@
 32472   # Ground effect altitude/timeout
 32768   # Baro drift reset on arming
 32553   # Terrain offset reset on ground-effect clear
+32972   # Protect height fusion from baro ground effect at takeoff
+32514   # Reset EKF failsafe gate on source set change
 
 # --- Submitted, limited review ---
 27893   # Fast rates (1/3)
