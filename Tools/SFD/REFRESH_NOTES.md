@@ -18,10 +18,13 @@ list (30994 31619 32469 32392 32200 32396 32945 31500 32770 32022 32389 32202
 the 11 hwdef commits. #31005 is NOT baked (still open upstream) - it stays in the
 replay's prs.txt.
 
-CAVEAT: the base is currently code-only. The merged PRs' autotest changes are NOT
-yet baked in, and the replay's prs.txt no longer lists those PRs, so a from-scratch
-rebuild will LACK the merged PRs' tests until `rebuild-tests` is run for the merged
-set on the base. Do this before relying on the base for a full from-scratch rebuild.
+The base also carries the merged PRs' tests: `refresh.sh tests` for the non-hot
+files plus `rebuild-tests` for the four hot files (arducopter / arduplane /
+quadplane / vehicle_test_suite), all compiling; the suite loads and
+EK3_NoGPSLeakWhenNotSource + DynamicNotches pass on the base. One manual case when
+re-running rebuild-tests: #30994's quintuple-notch test is already in 4.7, so keep
+the `cur` side and add `30994` to its `.applied` sidecar (it modifies an existing
+test rather than adding a new method, so the split-method recipe does not apply).
 
 ## Superseded upstream - needs a PR rebase before it is worth carrying
 
