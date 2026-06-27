@@ -20,50 +20,79 @@ branches has become somewhat onerous, so I have instead started this new repo gi
 
 ## Included Features ##
 
-The branch is based on ArduPilot 4.7.0-beta7. It also includes the following PRs and features:
+The branch is based on ArduPilot 4.7.0-beta7. It also includes the following PRs and features, grouped by function:
 
-- Quintuple Notch (https://github.com/ArduPilot/ardupilot/pull/30994)
-- Fence Improvements (https://github.com/ArduPilot/ardupilot/pull/31005, https://github.com/ArduPilot/ardupilot/pull/31619)
-- Recorded Origin Fix (https://github.com/ArduPilot/ardupilot/pull/32469)
-- Baro Thrust Compensation Filter (https://github.com/ArduPilot/ardupilot/pull/32392)
-- EK3_MAG_CAL=7 Ground and In-flight Mode (https://github.com/ArduPilot/ardupilot/pull/32200)
-- EKF Zero Velocity Fusion (https://github.com/ArduPilot/ardupilot/pull/32396)
-- Zero Velocity Fusion Takeoff Fix (https://github.com/ArduPilot/ardupilot/pull/33115)
-- VTX Max Power (https://github.com/ArduPilot/ardupilot/pull/31500)
-- Baro Height Datum Reset (https://github.com/ArduPilot/ardupilot/pull/32770, supersedes closed https://github.com/ArduPilot/ardupilot/pull/32400)
-- Arming Consistency Check Fix (https://github.com/ArduPilot/ardupilot/pull/32022)
+### Optical Flow & AGL Kalman Filter ###
+
 - IMU-aided AGL Filter for Optical Flow (https://github.com/ArduPilot/ardupilot/pull/32389)
-- EKF Bootstrap Reset (https://github.com/ArduPilot/ardupilot/pull/32202)
-- Low Noise IMU Support (https://github.com/ArduPilot/ardupilot/pull/32399)
-- VTX Actual Power Reporting (https://github.com/ArduPilot/ardupilot/pull/32937)
 - Ground Clearance Fusion Fix (https://github.com/ArduPilot/ardupilot/pull/30490)
-- Motortest Error Rate (https://github.com/ArduPilot/ardupilot/pull/31274)
-- MSP VTX Support (https://github.com/ArduPilot/ardupilot/pull/29768)
-- Scripting OSD (https://github.com/ArduPilot/ardupilot/pull/32045)
-- Separate LEVEL Arming Check (https://github.com/ArduPilot/ardupilot/pull/32391)
-- Customizable ARM_DELAY (https://github.com/ArduPilot/ardupilot/pull/32398)
-- Fast Boot Parameter (https://github.com/ArduPilot/ardupilot/pull/32238)
-- Hover Z-Bias Learning (https://github.com/ArduPilot/ardupilot/pull/32471)
-- Ground Effect Altitude/Timeout (https://github.com/ArduPilot/ardupilot/pull/32472)
-- Baro Drift Reset on Arming (https://github.com/ArduPilot/ardupilot/pull/32768)
-- Terrain Offset Reset on Ground Effect Clear (https://github.com/ArduPilot/ardupilot/pull/32553)
-- Fast Rates (https://github.com/ArduPilot/ardupilot/pull/27893, https://github.com/ArduPilot/ardupilot/pull/29000, https://github.com/ArduPilot/ardupilot/pull/30980)
-[![Fast rates](https://img.youtube.com/vi/B8Dp2jwDamU/0.jpg)](https://www.youtube.com/playlist?list=PL_O9QDs-WAVyBpf7URQQgCmNQwv_aTcMf)
-- ESC Logging Control (https://github.com/ArduPilot/ardupilot/pull/30841)
-- iFlight Borg H7 (https://github.com/ArduPilot/ardupilot/pull/31216)
-- DFU Mode via System Bootloader (https://github.com/ArduPilot/ardupilot/pull/31770)
-- Pending Arm on Switch (https://github.com/ArduPilot/ardupilot/pull/32401)
-- Acro Bias Inhibit (https://github.com/ArduPilot/ardupilot/pull/32473)
-- AC_Loiter Brake/Drag Feed-forward Fix (https://github.com/ArduPilot/ardupilot/pull/33318)
 - AGL KF Rangefinder Height Switch (https://github.com/ArduPilot/ardupilot/pull/33359)
 - AGL KF Velocity velD Fusion (https://github.com/ArduPilot/ardupilot/pull/33478)
 - Optical Flow Axis Lockout Recovery and Focus-Height Floor (https://github.com/ArduPilot/ardupilot/pull/33484)
 - HereFlow Output Rate Correction FLOW_HF_RATEF (https://github.com/ArduPilot/ardupilot/pull/33497)
 - Inhibit Z Gyro Bias from Optical Flow without Yaw Source (https://github.com/ArduPilot/ardupilot/pull/33498)
 - AGL KF Accel-Z Bias Estimation (https://github.com/ArduPilot/ardupilot/pull/33507)
-- Loaded Defaults Count Fix (https://github.com/ArduPilot/ardupilot/pull/33543)
 - Optical Flow Relative-Aiding Fallback on GPS Loss (https://github.com/ArduPilot/ardupilot/pull/33568)
 - Configurable Optical Flow Nav Gain Detune Height EK3_FLOW_GAIN_H (https://github.com/ArduPilot/ardupilot/pull/33569)
+
+### EKF & Inertial Navigation ###
+
+- Recorded Origin Fix (https://github.com/ArduPilot/ardupilot/pull/32469)
+- EK3_MAG_CAL=7 Ground and In-flight Mode (https://github.com/ArduPilot/ardupilot/pull/32200)
+- EKF Zero Velocity Fusion (https://github.com/ArduPilot/ardupilot/pull/32396)
+- Zero Velocity Fusion Takeoff Fix (https://github.com/ArduPilot/ardupilot/pull/33115)
+- EKF Bootstrap Reset (https://github.com/ArduPilot/ardupilot/pull/32202)
+- Low Noise IMU Support (https://github.com/ArduPilot/ardupilot/pull/32399)
+- Hover Z-Bias Learning (https://github.com/ArduPilot/ardupilot/pull/32471)
+- Acro Bias Inhibit (https://github.com/ArduPilot/ardupilot/pull/32473)
+
+### Barometer & Ground Effect ###
+
+- Baro Thrust Compensation Filter (https://github.com/ArduPilot/ardupilot/pull/32392)
+- Baro Height Datum Reset (https://github.com/ArduPilot/ardupilot/pull/32770, supersedes closed https://github.com/ArduPilot/ardupilot/pull/32400)
+- Baro Drift Reset on Arming (https://github.com/ArduPilot/ardupilot/pull/32768)
+- Ground Effect Altitude/Timeout (https://github.com/ArduPilot/ardupilot/pull/32472)
+- Terrain Offset Reset on Ground Effect Clear (https://github.com/ArduPilot/ardupilot/pull/32553)
+
+### Rates, Notch & Control ###
+
+- Quintuple Notch (https://github.com/ArduPilot/ardupilot/pull/30994)
+- Fast Rates (https://github.com/ArduPilot/ardupilot/pull/27893, https://github.com/ArduPilot/ardupilot/pull/29000, https://github.com/ArduPilot/ardupilot/pull/30980)
+[![Fast rates](https://img.youtube.com/vi/B8Dp2jwDamU/0.jpg)](https://www.youtube.com/playlist?list=PL_O9QDs-WAVyBpf7URQQgCmNQwv_aTcMf)
+- AC_Loiter Brake/Drag Feed-forward Fix (https://github.com/ArduPilot/ardupilot/pull/33318)
+
+### Fences ###
+
+- Fence Improvements (https://github.com/ArduPilot/ardupilot/pull/31005, https://github.com/ArduPilot/ardupilot/pull/31619)
+
+### Arming ###
+
+- Arming Consistency Check Fix (https://github.com/ArduPilot/ardupilot/pull/32022)
+- Separate LEVEL Arming Check (https://github.com/ArduPilot/ardupilot/pull/32391)
+- Customizable ARM_DELAY (https://github.com/ArduPilot/ardupilot/pull/32398)
+- Pending Arm on Switch (https://github.com/ArduPilot/ardupilot/pull/32401)
+
+### VTX ###
+
+- VTX Max Power (https://github.com/ArduPilot/ardupilot/pull/31500)
+- VTX Actual Power Reporting (https://github.com/ArduPilot/ardupilot/pull/32937)
+- MSP VTX Support (https://github.com/ArduPilot/ardupilot/pull/29768)
+
+### ESC, Motors & Logging ###
+
+- ESC Logging Control (https://github.com/ArduPilot/ardupilot/pull/30841)
+- Motortest Error Rate (https://github.com/ArduPilot/ardupilot/pull/31274)
+
+### Boards & Boot ###
+
+- iFlight Borg H7 (https://github.com/ArduPilot/ardupilot/pull/31216)
+- DFU Mode via System Bootloader (https://github.com/ArduPilot/ardupilot/pull/31770)
+- Fast Boot Parameter (https://github.com/ArduPilot/ardupilot/pull/32238)
+
+### Scripting & Parameters ###
+
+- Scripting OSD (https://github.com/ArduPilot/ardupilot/pull/32045)
+- Loaded Defaults Count Fix (https://github.com/ArduPilot/ardupilot/pull/33543)
 
 
 ## SmallFastDronev1 Target ##
