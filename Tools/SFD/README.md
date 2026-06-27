@@ -13,6 +13,7 @@ where our local copy has drifted from - or been superseded by - upstream.
 ```sh
 # from a checkout sitting on a vanilla ArduPilot-4.7 branch:
 Tools/SFD/refresh.sh fetch     # fetch every PR head (pull/N/head)
+Tools/SFD/refresh.sh changed   # which PRs (or the base) moved since the last lock
 Tools/SFD/refresh.sh plan      # ordered apply list (skips commits already in base)
 Tools/SFD/refresh.sh run       # cherry-pick code; stops on each NEW conflict
 # ... resolve, git add, git commit -C <sha>, bump .state/progress.idx, re-run ...
@@ -21,7 +22,30 @@ Tools/SFD/refresh.sh run       # cherry-pick code; stops on each NEW conflict
                                                # pass misses plane-only breaks
 Tools/SFD/refresh.sh tests          # phase 2a: deferred Tools/autotest changes
 Tools/SFD/refresh.sh rebuild-tests  # phase 2b: rebuild hot files from PR heads
+
+# after a clean refresh, capture state for next time and commit it:
+Tools/SFD/refresh.sh rerere-save    # prune + archive resolutions to rr-cache.tar.gz
+Tools/SFD/refresh.sh lock           # record the PR head SHAs to applied.lock
+git add Tools/SFD/rr-cache.tar.gz Tools/SFD/applied.lock && git commit -m "Tools: refresh SFD rerere cache + lock"
 ```
+
+### Portable rerere + incremental refresh
+
+`run`/`survey`/`tests`/`rebuild-tests` call `ensure_rerere`, which enables rerere
+and seeds an empty local cache from the committed `rr-cache.tar.gz`. So recorded
+conflict resolutions travel with the repo - a refresh on a different machine
+replays them instead of re-resolving from zero (the `.git/rr-cache` is otherwise
+machine-local). `rerere-save` prunes unresolved entries, runs `git rerere gc`, and
+re-archives the cache to commit; it stays ~2 MB.
+
+There is no commit-level "only re-apply changed PRs" - the stack is linear, so a
+change in a mid-stack PR shifts every cherry-pick after it. Instead the refresh is
+incremental in *effort*: `run` re-applies everything, but unchanged conflicts
+replay from the rerere cache automatically and only genuinely-new conflicts stop
+the run. `changed` tells you up front which PRs moved (vs `applied.lock`) so you
+know where to look; if it reports nothing moved and the base is unchanged, there
+is nothing to refresh. The recurring manual cost that rerere does NOT cover is the
+post-merge build fixups (REFRESH_NOTES) - reapply those by hand each rebuild.
 
 `git rerere` is enabled (`rerere.enabled true`), so once a conflict is resolved
 its resolution is recorded and replayed automatically on the next refresh -

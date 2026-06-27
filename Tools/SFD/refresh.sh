@@ -35,13 +35,72 @@
 
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(git rev-parse --show-toplevel)"
 BASE="${SFD_BASE:-upstream/ArduPilot-4.7}"
 MASTER="${SFD_MASTER:-upstream/master}"
 DEFER="Tools/autotest"
 ST="$DIR/.state"
+LOCK="$DIR/applied.lock"   # tracked: per-PR head SHAs at the last refresh
 mkdir -p "$ST"
 
 prs() { sed 's/#.*//' "$DIR/prs.txt" | awk 'NF{print $1}'; }
+
+# Make rerere portable: recorded conflict resolutions live in the committed
+# rr-cache.tar.gz, so a refresh on a fresh clone / different machine replays them
+# instead of re-resolving from zero. ensure_rerere seeds an empty local cache from
+# the tarball; rerere_save (run after a refresh) prunes + re-archives it to commit.
+rr_path() {
+  local gd; gd="$(git rev-parse --git-common-dir)"
+  case "$gd" in /*) echo "$gd/rr-cache";; *) echo "$ROOT/$gd/rr-cache";; esac
+}
+ensure_rerere() {
+  git config rerere.enabled true
+  git config rerere.autoupdate true
+  local rr; rr="$(rr_path)"
+  if { [ ! -d "$rr" ] || [ -z "$(ls -A "$rr" 2>/dev/null)" ]; } && [ -f "$DIR/rr-cache.tar.gz" ]; then
+    mkdir -p "$rr"; tar -C "$rr" -xzf "$DIR/rr-cache.tar.gz"
+    echo "seeded rerere cache from Tools/SFD/rr-cache.tar.gz"
+  fi
+}
+do_rerere_save() {
+  local rr; rr="$(rr_path)"
+  [ -d "$rr" ] || { echo "no local rr-cache to save"; return 1; }
+  git rerere gc >/dev/null 2>&1 || true        # expire stale resolutions
+  for d in "$rr"/*/; do                         # drop unresolved (no postimage) entries
+    [ -d "$d" ] && [ ! -f "$d/postimage" ] && rm -rf "$d"
+  done
+  tar -C "$rr" -czf "$DIR/rr-cache.tar.gz" .
+  echo "wrote $DIR/rr-cache.tar.gz ($(du -h "$DIR/rr-cache.tar.gz" | cut -f1), $(ls -1d "$rr"/*/ 2>/dev/null | wc -l) resolutions) - commit it"
+}
+
+# Record the PR head SHAs (and base) that this refresh was built from. Commit the
+# result so a later refresh can tell which PRs actually moved.
+do_lock() {
+  { echo -e "BASE\t$(git rev-parse "$BASE")\t$BASE"
+    for n in $(prs); do
+      git rev-parse --verify -q "refs/sfdpr/$n" >/dev/null || continue
+      echo -e "$n\t$(git rev-parse "refs/sfdpr/$n")"
+    done
+  } > "$LOCK"
+  echo "wrote $LOCK ($(grep -c . "$LOCK") entries) - commit it"
+}
+
+# Report which PRs (and the base) moved since the lock. The unchanged ones replay
+# from the rerere cache with no manual work; focus on the CHANGED/NEW ones.
+do_changed() {
+  [ -f "$LOCK" ] || { echo "no $LOCK yet - run 'lock' after a clean refresh, commit it"; return 1; }
+  local ob nb; ob="$(awk -F'\t' '$1=="BASE"{print $2}' "$LOCK")"; nb="$(git rev-parse "$BASE")"
+  [ "$ob" = "$nb" ] && echo "base $BASE: unchanged" \
+    || echo "base $BASE: CHANGED $(git rev-parse --short "$ob")->$(git rev-parse --short "$nb") (full rebuild)"
+  local any=0
+  for n in $(prs); do
+    git rev-parse --verify -q "refs/sfdpr/$n" >/dev/null || { echo "  #$n: no ref (run 'fetch')"; any=1; continue; }
+    local o nw; o="$(awk -F'\t' -v p="$n" '$1==p{print $2}' "$LOCK")"; nw="$(git rev-parse "refs/sfdpr/$n")"
+    if [ -z "$o" ]; then echo "  #$n: NEW (not in lock)"; any=1
+    elif [ "$o" != "$nw" ]; then echo "  #$n: CHANGED $(git rev-parse --short "$o")->$(git rev-parse --short "$nw")"; any=1; fi
+  done
+  [ "$any" = 0 ] && echo "all PRs unchanged since the lock - nothing to refresh"
+}
 
 do_fetch() {
   local rs=""
@@ -165,10 +224,13 @@ do_rebuild_tests() {
 case "${1:-run}" in
   fetch)  do_fetch ;;
   plan)   do_plan ;;
-  run)    do_run stop ;;
-  survey) : > "$ST/conflicts.log"; do_run survey ;;
-  tests)  : > "$ST/tconflicts.log"; rm -f "$ST/tprog.idx"; do_tests ;;
-  rebuild-tests) do_rebuild_tests ;;
+  changed) do_changed ;;
+  run)    ensure_rerere; do_run stop ;;
+  survey) ensure_rerere; : > "$ST/conflicts.log"; do_run survey ;;
+  tests)  ensure_rerere; : > "$ST/tconflicts.log"; rm -f "$ST/tprog.idx"; do_tests ;;
+  rebuild-tests) ensure_rerere; do_rebuild_tests ;;
+  lock)   do_lock ;;
+  rerere-save) do_rerere_save ;;
   status) echo "progress $(prog)/$(wc -l < "$ST/apply.txt" 2>/dev/null || echo '?'); $(git rev-list --count "$BASE"..HEAD 2>/dev/null) commits on branch" ;;
-  *) echo "usage: refresh.sh {fetch|plan|run|survey|tests|rebuild-tests|status}"; exit 1 ;;
+  *) echo "usage: refresh.sh {fetch|plan|changed|run|survey|tests|rebuild-tests|lock|rerere-save|status}"; exit 1 ;;
 esac
