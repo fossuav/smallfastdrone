@@ -5,8 +5,11 @@ void Copter::update_ground_effect_detector(void)
 {
     AP_GroundEffect &gndeff = g2.ground_effect;
 
-    // throw mode never wants the takeoff expected EKF code
-    gndeff.enable_takeoff_comp(flightmode->mode_number() != Mode::Number::THROW);
+    // THROW suppresses the takeoff baro-deweight until a drop is detected
+    // (land_complete is still set); after detection, motor prop wash
+    // contaminates the baro, so allow the deweight window through the spool-up.
+    const bool in_throw = flightmode->mode_number() == Mode::Number::THROW;
+    gndeff.enable_takeoff_comp(!in_throw || !ap.land_complete);
     gndeff.set_high_vibrations(vibration_check.high_vibes);
 
     // ALT_HOLD has manual attitude and no NE controller, so a near-level
