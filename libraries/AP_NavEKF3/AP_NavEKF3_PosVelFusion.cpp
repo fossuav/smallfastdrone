@@ -1191,7 +1191,16 @@ void NavEKF3_core::FuseVelPosNED()
                 }
 
                 if (hgtTimeout) {
-                    ResetHeight();
+                    // Do not reset height to baro during ground effect: prop wash
+                    // corrupts baro on spool-up, so a reset would slam the state to a
+                    // fictitious altitude. Ride through on IMU integration instead.
+                    // Restricted to non-fly-forward vehicles so plane behaviour (where
+                    // takeoff_expected can latch in flight) is unchanged.
+                    const bool gndEffectActive = (dal.get_takeoff_expected() || dal.get_touchdown_expected()) &&
+                                                 !assume_zero_sideslip();
+                    if (!gndEffectActive) {
+                        ResetHeight();
+                    }
 
                     // Don't fuse the same data we have used to reset states.
                     fuseHgtData = false;
@@ -1253,7 +1262,13 @@ void NavEKF3_core::FuseVelPosNED()
                     const ftype gndMaxBaroErr = fabsF(frontend->_baroGndEffectDeadZone);
                     const ftype gndBaroInnovFloor = -0.5;
 
-                    if ((dal.get_touchdown_expected() || dal.get_takeoff_expected()) && activeHgtSource == AP_NavEKF_Source::SourceZ::BARO) {
+                    // While the pre-liftoff clean-reference substitution is active
+                    // (selectHeightForFusion uses meaHgtAtTakeOff) the observation is not
+                    // corrupt, so its drift correction must not be clamped by this floor.
+                    const bool usingGndBaroRef = is_negative(frontend->_baroGndEffectDeadZone) &&
+                                                 !assume_zero_sideslip() && dal.get_time_flying_ms() == 0;
+                    if ((dal.get_touchdown_expected() || dal.get_takeoff_expected()) &&
+                        activeHgtSource == AP_NavEKF_Source::SourceZ::BARO && !usingGndBaroRef) {
                         // when baro positive pressure error due to ground effect is expected,
                         // floor the barometer innovation at gndBaroInnovFloor
                         // constrain the correction between 0 and gndBaroInnovFloor+gndMaxBaroErr
@@ -1676,7 +1691,19 @@ void NavEKF3_core::selectHeightForFusion()
         posDownObsNoise = sq(constrain_ftype(frontend->_baroAltNoise, 0.1f, 100.0f));
         // reduce weighting (increase observation noise) on baro if we are likely to be experiencing rotor wash ground interaction
         if (dal.get_takeoff_expected() || dal.get_touchdown_expected()) {
-            if (is_negative(frontend->_baroGndEffectDeadZone)) {
+            if (is_negative(frontend->_baroGndEffectDeadZone) &&
+                !assume_zero_sideslip() && dal.get_time_flying_ms() == 0) {
+                // Before liftoff, replace the prop-wash-corrupted baro with the clean
+                // pre-ground-effect reference at moderate noise. This anchors PD near
+                // takeoff height and keeps the AccZ bias observable through spool-up,
+                // which the heavy deweight below is too weak to do - matters for
+                // no-rangefinder configs such as carrier drops. Restricted to
+                // non-fly-forward vehicles: on fly-forward types get_time_flying_ms()
+                // is is_flying() based and can read zero in flight, which would wrongly
+                // anchor altitude to the takeoff reference.
+                hgtMea = meaHgtAtTakeOff;
+                posDownObsNoise = sq(MAX(fabsF(frontend->_baroGndEffectDeadZone) * 0.1f, 1.0f));
+            } else if (is_negative(frontend->_baroGndEffectDeadZone)) {
                 // Use |value| as the observation noise floor in metres.
                 // This heavily deweights baro during ground effect while
                 // maintaining a weak anchor against pure-IMU drift.
