@@ -66,7 +66,14 @@ test rather than adding a new method, so the split-method recipe does not apply)
   (suppress ResetHeight during ground effect, negative EK3_GND_EFF_DZ as baro noise
   floor, pre-takeoff baro reference, BaroGroundEffectAtTakeoff test) - the fixed
   pr-baro-gnd-effect is force-pushed. On a from-scratch refresh it now applies clean
-  (vanilla -> #32768 -> the 4 commits).
+  (vanilla -> #32768 -> the 4 commits). Later folded in df8c0dfcc8: restrict the
+  spool-up anchor and the ResetHeight suppression to non-fly-forward vehicles
+  (assume_zero_sideslip - get_time_flying_ms/takeoff_expected are is_flying() based
+  and unsafe in plane flight) and skip the baro innovation floor while the clean
+  reference is active so it does not clamp the drift correction. NOTE the current SFD
+  branch's #32972 cherry-pick predates the spool-up commits, so it carries them
+  locally as ebed712c36 (already plane-safe). On the next refresh that re-pulls
+  #32972, drop ebed712c36 - the spool-up plus the guard come from #32972.
 - **#32945 getLLH GPS-source guard** - rmackay9's merged fix; supersedes the local
   pr-ekf3-gps-source-leak commit (guards getLLH's three GPS fallbacks on
   pos_from_GPS instead of inside getGPSLLH). Applies clean.
