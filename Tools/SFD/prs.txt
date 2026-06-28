@@ -46,5 +46,4 @@
 33543   # AP_Param loaded defaults count
 33568   # Optical flow relative-aiding fallback on GPS loss
 33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H
-# PENDING (local branch pr-hal-notch-cap, off master, standalone): raise
-# HAL_HNF_MAX_FILTERS for quintuple-notch headroom. Add the PR number once opened.
+33587   # HAL notch count cap for quintuple notches (HAL_HNF_MAX_FILTERS, standalone)
