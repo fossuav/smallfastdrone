@@ -1042,7 +1042,15 @@ Mode::AltHoldModeState Mode::get_alt_hold_state_D_ms(float target_climb_rate_ms)
 
     } else if (!copter.ap.auto_armed || copter.ap.land_complete) {
         // the aircraft is armed and landed
-        if (target_climb_rate_ms < 0.0f && !copter.ap.using_interlock) {
+        // mid-stick (zero climb rate) normally spools up to prepare for take
+        // off; modes where mid-stick is a resting hold state (VALT) keep the
+        // motors in ground idle so they only spool on a deliberate climb
+        // command -- this stops a spooled-but-not-taking-off airframe from
+        // reaching the land-detector take-off guard (land_detector.cpp).
+        const bool request_ground_idle = !copter.ap.using_interlock &&
+            (target_climb_rate_ms < 0.0f ||
+             (is_zero(target_climb_rate_ms) && !spool_up_at_zero_climb_on_ground()));
+        if (request_ground_idle) {
             // the aircraft should move to a ground idle state
             motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::GROUND_IDLE);
         } else {
