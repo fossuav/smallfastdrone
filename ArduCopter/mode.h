@@ -163,6 +163,15 @@ public:
     virtual bool is_taking_off() const;
     static void takeoff_stop() { takeoff.stop(); }
 
+    // whether mid-stick (zero commanded climb rate) on the ground should spool
+    // the motors to THROTTLE_UNLIMITED in preparation for take off.  Default
+    // true preserves the stock "prepare for imminent take off" behaviour; modes
+    // where mid-stick is a resting hold state (VALT) return false so the motors
+    // stay in ground idle until a deliberate climb is commanded.  This closes
+    // the land-detector take-off guard window (land_detector.cpp) where a
+    // spooled-but-not-taking-off airframe trips a flow_of_control internal error.
+    virtual bool spool_up_at_zero_climb_on_ground() const { return true; }
+
     virtual bool is_landing() const { return false; }
 
     // mode requires terrain to be present to be functional
@@ -2031,6 +2040,11 @@ protected:
     // velocity-controlled Flying state: no surface tracking,
     // pos_desired override for velocity control
     void alt_hold_run_flying(float &target_roll_rad, float &target_pitch_rad, float target_climb_rate_ms) override;
+
+    // mid-stick is VALT's resting hold state, not a take-off-prep state: keep
+    // the motors in ground idle at zero climb rate so they only spool on a
+    // deliberate climb command (closes the land-detector take-off guard window).
+    bool spool_up_at_zero_climb_on_ground() const override { return false; }
 
 };
 #endif
