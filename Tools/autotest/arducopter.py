@@ -371,6 +371,24 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.do_RTL()
 
+    def ModeLandAdvancedFailsafe(self):
+        '''LAND_FS_OPTIONS advanced land failsafe: an RC-failsafe LAND with the
+        option enabled still descends and lands - the vibration-resistant
+        throttle does not stall the descent and the baro runaway cap does not
+        false-trip on a healthy estimate.'''
+        self.set_parameters({
+            "FS_THR_ENABLE": 3,     # RC failsafe action = LAND
+            "LAND_FS_OPTIONS": 1,   # advanced land failsafe: vibe-comp + baro runaway cap
+        })
+        self.takeoffAndMoveAway()
+        self.progress("Triggering RC failsafe into LAND with advanced failsafe enabled")
+        self.set_parameter("SIM_RC_FAIL", 1)
+        self.wait_mode("LAND")
+        # healthy EKF: no runaway, so the baro cap must not trip and the vehicle
+        # must descend and land rather than fly away or hang capped in the air
+        self.wait_landed_and_disarmed()
+        self.set_parameter("SIM_RC_FAIL", 0)
+
     def fly_to_origin(self, final_alt=10):
         origin = self.poll_message("GPS_GLOBAL_ORIGIN")
         self.change_mode("GUIDED")
@@ -14711,6 +14729,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.GPSGlitchAuto,
              self.ModeAltHold,
              self.ModeVAltHold,
+             self.ModeLandAdvancedFailsafe,
              self.ModeLoiter,
              self.SimpleMode,
              self.SuperSimpleCircle,
