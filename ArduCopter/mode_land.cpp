@@ -30,6 +30,13 @@ const AP_Param::GroupInfo ModeLand::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("ALT_LOW_M", 3, ModeLand, land_alt_low_m, 10),
 
+    // @Param: FS_OPTIONS
+    // @DisplayName: Land failsafe options
+    // @Description: Options that apply when LAND is entered because of a failsafe (radio, GCS or EKF), when the pilot cannot intervene. Bit 0 (Advanced land failsafe) enables two protections against a corrupt EKF vertical estimate flying the vehicle away: (1) the vertical throttle is driven from the vibration-resistant controller (feed-forward from the commanded descent plus a heavily gained-down integrator) so a wrong-sign velocity cannot make LAND add throttle to "arrest" a descent that is not happening; (2) a baro-only runaway detector - independent of the EKF - clamps the throttle below hover if the barometer shows a large sustained ascent, so the vehicle physically cannot climb away.
+    // @Bitmask: 0:Advanced land failsafe (vibration-resistant throttle + baro runaway cap)
+    // @User: Advanced
+    AP_GROUPINFO("FS_OPTIONS", 4, ModeLand, fs_options, 0),
+
     AP_GROUPEND
 };
 
@@ -85,6 +92,10 @@ bool ModeLand::init(bool ignore_checks)
     land_start_time = millis();
     land_pause = false;
 
+    // reset advanced land failsafe state
+    adv_fs_active = false;
+    adv_fs_throttle_capped = false;
+
     // reset flag indicating if pilot has applied roll or pitch inputs during landing
     copter.ap.land_repo_active = false;
 
@@ -107,15 +118,98 @@ bool ModeLand::init(bool ignore_checks)
     return true;
 }
 
+// Advanced land failsafe tuning (LAND_FS_OPTIONS bit 0)
+// Baro net ascent that confirms a runaway climb.  Deliberately large: this
+// backstop exists to stop a hundreds-of-metres fly-away, not to police small
+// excursions, so it sits well above any near-ground baro / ground-effect noise
+// and a false trip is very unlikely.
+#define LAND_FS_RUNAWAY_CLIMB_M   10.0f
+// Throttle ceiling once a runaway is confirmed, as a fraction of hover throttle.
+// Below hover so the vehicle descends regardless of the (corrupt) estimate.
+#define LAND_FS_THROTTLE_CAP      0.90f
+
 // land_run - runs the land controller
 // should be called at 100hz or more
 void ModeLand::run()
 {
+    update_advanced_failsafe();
+
     if (control_position) {
         gps_run();
     } else {
         nogps_run();
     }
+
+    // clamp the throttle AFTER the vertical controller has set it
+    apply_advanced_failsafe_throttle_cap();
+}
+
+// update_advanced_failsafe - engage the failsafe-landing protections (bit 0).
+// During a failsafe-triggered landing the pilot cannot intervene, so:
+//  - drive the vertical throttle from the vibration-resistant law so a corrupt
+//    EKF vertical velocity cannot make LAND add throttle and climb away; and
+//  - watch the barometer (independent of the EKF) for a large sustained ascent
+//    that means the vehicle is running away despite being told to land.
+void ModeLand::update_advanced_failsafe()
+{
+    // a failsafe that removes the pilot or corrupts the vertical estimate
+    const bool failsafe_active = copter.failsafe.radio ||
+                                 copter.failsafe.gcs ||
+                                 copter.failsafe.ekf;
+    const bool armed = option_is_enabled(Option::AdvancedFailsafe) && failsafe_active;
+
+    // vibration-resistant throttle: OR in the vibration-failsafe detector's
+    // request so we never clear a genuine compensation owned by check_vibration()
+    pos_control->set_vibe_comp(armed || copter.vibration_check.high_vibes);
+
+    if (!armed) {
+        adv_fs_active = false;
+        adv_fs_throttle_capped = false;
+        return;
+    }
+
+    // baro-only runaway-climb detector.  LAND only ever commands a descent, so
+    // any large net ascent of the barometer is a fly-away regardless of what the
+    // (corrupt) EKF vertical velocity says.
+    const float baro_alt_m = copter.barometer.get_altitude();
+    if (!adv_fs_active) {
+        // rising edge: start measuring the ascent from here
+        adv_fs_active = true;
+        adv_fs_baro_alt_min_m = baro_alt_m;
+        adv_fs_throttle_capped = false;
+    }
+    adv_fs_baro_alt_min_m = MIN(adv_fs_baro_alt_min_m, baro_alt_m);
+    if (baro_alt_m - adv_fs_baro_alt_min_m > LAND_FS_RUNAWAY_CLIMB_M) {
+        // latched for the rest of the failsafe landing so the vehicle is brought down
+        if (!adv_fs_throttle_capped) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "Land FS: baro runaway, capping throttle");
+        }
+        adv_fs_throttle_capped = true;
+    }
+}
+
+// apply_advanced_failsafe_throttle_cap - hard throttle ceiling once a baro-
+// confirmed runaway climb has latched.  Runs after the vertical controller so it
+// clamps the actual commanded throttle: below hover the vehicle cannot sustain a
+// climb whatever the (corrupt) vertical estimate demands.
+void ModeLand::apply_advanced_failsafe_throttle_cap()
+{
+    if (!adv_fs_throttle_capped) {
+        return;
+    }
+    const float cap = motors->get_throttle_hover() * LAND_FS_THROTTLE_CAP;
+    if (attitude_control->get_throttle_in() > cap) {
+        attitude_control->set_throttle_out(cap, true, copter.g.throttle_filt);
+    }
+}
+
+// hand vibration compensation back to the vibration-failsafe detector and clear
+// the advanced-failsafe state so leaving LAND does not strand either protection
+void ModeLand::exit()
+{
+    pos_control->set_vibe_comp(copter.vibration_check.high_vibes);
+    adv_fs_active = false;
+    adv_fs_throttle_capped = false;
 }
 
 // land_gps_run - runs the land controller
