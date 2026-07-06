@@ -16558,6 +16558,9 @@ return update, 1000
             "AUTA_LP_RATE": 200,
             "AUTA_LP_ANG": 360,
             "AUTA_LP_SPD": 12,
+            "AUTA_RL_RATE": 360,
+            "AUTA_RL_ANG": 360,
+            "AUTA_RL_DIR": 1,
             "RC9_OPTION": 300,  # Scripting1
         })
 
@@ -16596,6 +16599,25 @@ return update, 1000
         self.wait_statustext("Loop: looping", check_context=True, timeout=15)
         # Reaching the top proves the loop actually rotated through inverted
         self.wait_statustext("Loop: over the top", check_context=True, timeout=20)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=30)
+        self.wait_mode("LOITER")
+        self.set_rc(9, 1000)
+        self.do_RTL()
+
+        self.start_subtest("AutoAcro roll move in isolation")
+        self.set_parameter("AUTA_MOVE", 3)
+        self.change_mode("LOITER")
+        self.set_rc(3, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(75, mode="LOITER")
+        self.context_clear_collection('STATUSTEXT')
+        self.context_collect('STATUSTEXT')
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: move 1/1 Roll", check_context=True, timeout=10)
+        self.wait_statustext("Roll: rolling", check_context=True, timeout=15)
+        # Reaching inverted proves the roll actually rotated past 180
+        self.wait_statustext("Roll: inverted", check_context=True, timeout=20)
         self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=30)
         self.wait_mode("LOITER")
         self.set_rc(9, 1000)
