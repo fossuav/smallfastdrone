@@ -16623,6 +16623,25 @@ return update, 1000
         self.set_rc(9, 1000)
         self.do_RTL()
 
+        self.start_subtest("AutoAcro immelmann move in isolation")
+        self.set_parameter("AUTA_MOVE", 4)
+        self.change_mode("LOITER")
+        self.set_rc(3, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(75, mode="LOITER")
+        self.context_clear_collection('STATUSTEXT')
+        self.context_collect('STATUSTEXT')
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: move 1/1 Immelmann", check_context=True, timeout=10)
+        # Both phases must run: the half-loop up, then the half-roll to upright
+        self.wait_statustext("Immelmann: pulling up", check_context=True, timeout=15)
+        self.wait_statustext("Immelmann: rolling upright", check_context=True, timeout=20)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=30)
+        self.wait_mode("LOITER")
+        self.set_rc(9, 1000)
+        self.do_RTL()
+
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
         ret = ([
