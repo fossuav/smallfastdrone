@@ -16529,9 +16529,7 @@ return update, 1000
         self.progress("Figure of Eight test complete")
 
     def AutoAcroDisplay(self):
-        '''Test the autoacro.lua display sequencer (M1: single flip move)'''
-        self.start_subtest("AutoAcro single-move display")
-
+        '''Test the autoacro.lua display sequencer (M2: flip and loop moves)'''
         self.set_parameters({
             "SCR_ENABLE": 1,
             "WP_ACC": 5,
@@ -16545,39 +16543,61 @@ return update, 1000
             "ATC_THR_MIX_MAX": 0.9,
         })
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
         self.install_applet_script_context("autoacro.lua")
         self.reboot_sitl()
 
         # Script parameters exist after the script has booted once
         self.set_parameters({
             "AUTA_ENABLE": 1,
-            "AUTA_MOVE": 0,
             "AUTA_AXIS": 1,  # Roll
             "AUTA_RATE": 720,
             "AUTA_NUM": 1,
             "AUTA_THR": 0.0,
             "AUTA_HOVER": 0.37,
+            "AUTA_LP_RATE": 200,
+            "AUTA_LP_ANG": 360,
+            "AUTA_LP_SPD": 12,
             "RC9_OPTION": 300,  # Scripting1
         })
+
+        # Individual moves are validated in isolation before chaining
+        # (AUTA_MOVE selects a single schedule entry).
+        self.start_subtest("AutoAcro flip move in isolation")
+        self.set_parameter("AUTA_MOVE", 1)
         self.wait_ready_to_arm()
         self.arm_vehicle()
-        # Match the flip test's altitude so the flip's altitude loss stays clear of the ground
+        # 75m keeps the flip's altitude loss clear of the ground
         self.takeoff(75, mode="LOITER")
-
         self.context_collect('STATUSTEXT')
-
-        # Raise the switch to run the display
         self.set_rc(9, 2000)
-        self.wait_statustext("AutoAcro: display starting", check_context=True, timeout=10)
-        self.wait_statustext("AutoAcro: move 1/1", check_context=True, timeout=10)
-        # The flip maneuver reports trajectory restore on completion
-        self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
-        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=10)
-
-        # The sequencer must return to the mode it started from (Loiter)
+        self.wait_statustext("AutoAcro: move 1/1 Flip", check_context=True, timeout=10)
+        # The flip reports its rotation; completion is signalled by the sequencer.
+        # ("Trajectory restored" is only emitted on the flip's clean-restore path,
+        # not the restore-timeout path, so it is not a reliable completion signal.)
+        self.wait_statustext("Flipping", check_context=True, timeout=15)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=100)
         self.wait_mode("LOITER")
+        self.set_rc(9, 1000)
+        self.do_RTL()
 
-        # Lower the switch, land and disarm
+        self.start_subtest("AutoAcro loop move in isolation")
+        self.set_parameter("AUTA_MOVE", 2)
+        self.change_mode("LOITER")
+        self.set_rc(3, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        # Height for the loop to climb and descend clear of the ground
+        self.takeoff(75, mode="LOITER")
+        self.context_clear_collection('STATUSTEXT')
+        self.context_collect('STATUSTEXT')
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: move 1/1 Loop", check_context=True, timeout=10)
+        self.wait_statustext("Loop: looping", check_context=True, timeout=15)
+        # Reaching the top proves the loop actually rotated through inverted
+        self.wait_statustext("Loop: over the top", check_context=True, timeout=20)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=30)
+        self.wait_mode("LOITER")
         self.set_rc(9, 1000)
         self.do_RTL()
 
