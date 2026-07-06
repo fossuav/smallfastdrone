@@ -16528,7 +16528,59 @@ return update, 1000
         self.do_RTL()
         self.progress("Figure of Eight test complete")
 
-    
+    def AutoAcroDisplay(self):
+        '''Test the autoacro.lua display sequencer (M1: single flip move)'''
+        self.start_subtest("AutoAcro single-move display")
+
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "WP_ACC": 5,
+            "WP_ACC_Z": 5,
+            "WP_JERK": 20,
+            "WP_SPD": 20,
+            "WP_SPD_DN": 10,
+            "WP_SPD_UP": 10,
+            "PSC_JERK_D": 40,
+            "PSC_JERK_NE": 40,
+            "ATC_THR_MIX_MAX": 0.9,
+        })
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
+        self.install_applet_script_context("autoacro.lua")
+        self.reboot_sitl()
+
+        # Script parameters exist after the script has booted once
+        self.set_parameters({
+            "AUTA_ENABLE": 1,
+            "AUTA_MOVE": 0,
+            "AUTA_AXIS": 1,  # Roll
+            "AUTA_RATE": 720,
+            "AUTA_NUM": 1,
+            "AUTA_THR": 0.0,
+            "AUTA_HOVER": 0.37,
+            "RC9_OPTION": 300,  # Scripting1
+        })
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        # Match the flip test's altitude so the flip's altitude loss stays clear of the ground
+        self.takeoff(75, mode="LOITER")
+
+        self.context_collect('STATUSTEXT')
+
+        # Raise the switch to run the display
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: display starting", check_context=True, timeout=10)
+        self.wait_statustext("AutoAcro: move 1/1", check_context=True, timeout=10)
+        # The flip maneuver reports trajectory restore on completion
+        self.wait_statustext("Trajectory restored", check_context=True, timeout=100)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=10)
+
+        # The sequencer must return to the mode it started from (Loiter)
+        self.wait_mode("LOITER")
+
+        # Lower the switch, land and disarm
+        self.set_rc(9, 1000)
+        self.do_RTL()
+
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
         ret = ([
@@ -16684,6 +16736,7 @@ return update, 1000
             self.PeriphMultiUARTTunnel,
             self.EKF3SRCPerCore,
             self.ScriptingFlipOnASwitch,
+            self.AutoAcroDisplay,
         ])
         return ret
 
