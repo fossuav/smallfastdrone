@@ -16642,6 +16642,45 @@ return update, 1000
         self.set_rc(9, 1000)
         self.do_RTL()
 
+        self.start_subtest("AutoAcro split-S move in isolation")
+        self.set_parameter("AUTA_MOVE", 5)
+        self.change_mode("LOITER")
+        self.set_rc(3, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(75, mode="LOITER")
+        self.context_clear_collection('STATUSTEXT')
+        self.context_collect('STATUSTEXT')
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: move 1/1 Split-S", check_context=True, timeout=10)
+        # "pulling through" only fires after the half-roll actually reaches inverted
+        self.wait_statustext("Split-S: rolling inverted", check_context=True, timeout=15)
+        self.wait_statustext("Split-S: pulling through", check_context=True, timeout=20)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=30)
+        self.wait_mode("LOITER")
+        self.set_rc(9, 1000)
+        self.do_RTL()
+
+        self.start_subtest("AutoAcro wingover move in isolation")
+        self.set_parameter("AUTA_MOVE", 6)
+        self.change_mode("LOITER")
+        self.set_rc(3, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(75, mode="LOITER")
+        self.context_clear_collection('STATUSTEXT')
+        self.context_collect('STATUSTEXT')
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: move 1/1 Wingover", check_context=True, timeout=10)
+        # "turning" fires after the pull-up reaches its climb angle;
+        # "recovering" after the yaw-around completes 180 degrees
+        self.wait_statustext("Wingover: turning", check_context=True, timeout=15)
+        self.wait_statustext("Wingover: recovering", check_context=True, timeout=20)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=30)
+        self.wait_mode("LOITER")
+        self.set_rc(9, 1000)
+        self.do_RTL()
+
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
         ret = ([
