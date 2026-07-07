@@ -16672,10 +16672,8 @@ return update, 1000
         self.context_collect('STATUSTEXT')
         self.set_rc(9, 2000)
         self.wait_statustext("AutoAcro: move 1/1 Wingover", check_context=True, timeout=10)
-        # "turning" fires after the pull-up reaches its climb angle;
-        # "recovering" after the yaw-around completes 180 degrees
+        # The guided wingover flies a velocity trajectory; "turning" marks the start
         self.wait_statustext("Wingover: turning", check_context=True, timeout=15)
-        self.wait_statustext("Wingover: recovering", check_context=True, timeout=20)
         self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=30)
         self.wait_mode("LOITER")
         self.set_rc(9, 1000)
@@ -16715,13 +16713,15 @@ return update, 1000
 
         # One sortie: take off once, fly each move back-to-back (returning to
         # Loiter between), then land. Avoids a flaky per-move RTL at low speedup.
-        self.change_mode("LOITER")
-        self.set_rc(3, 1000)
         self.wait_ready_to_arm()
         self.arm_vehicle()
-        self.takeoff(75, mode="LOITER")
+        # GUIDED takeoff climbs to the exact height (LOITER plateaus ~76 m);
+        # then hand to LOITER for the sequencer.
+        self.takeoff(100, mode="GUIDED")
+        self.change_mode("LOITER")
         self.context_collect('STATUSTEXT')
-        for move_num, name in ((2, "Loop"),):
+        for move_num, name in ((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
+                               (5, "Split-S"), (6, "Wingover")):
             self.start_subtest("Smoothness capture: %s" % name)
             self.set_parameter("AUTA_MOVE", move_num)
             self.context_clear_collection('STATUSTEXT')
