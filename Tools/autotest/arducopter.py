@@ -16555,10 +16555,10 @@ return update, 1000
             "AUTA_NUM": 1,
             "AUTA_THR": 0.0,
             "AUTA_HOVER": 0.37,
-            "AUTA_LP_RATE": 200,
+            "AUTA_LP_RATE": 150,  # tuned from log271 reps
             "AUTA_LP_ANG": 360,
-            "AUTA_LP_SPD": 12,
-            "AUTA_RL_RATE": 360,
+            "AUTA_LP_SPD": 20,    # tuned from log271 reps
+            "AUTA_RL_RATE": 450,  # tuned from log271 reps
             "AUTA_RL_ANG": 360,
             "AUTA_RL_DIR": 1,
             "RC9_OPTION": 300,  # Scripting1
@@ -16680,6 +16680,58 @@ return update, 1000
         self.wait_mode("LOITER")
         self.set_rc(9, 1000)
         self.do_RTL()
+
+    def AutoAcroSmoothness(self):
+        '''Fly moves on the native Rise255 model at low speedup with dense logging'''
+        # Relaunch on the retrofitted native Rise255 model (real Rise tune +
+        # physics calibrated to the real drone) so the aerobatic dynamics are
+        # realistic, then capture dense position/attitude for a spatial trace.
+        self.customise_SITL_commandline(
+            [],
+            model="X:@ROMFS/models/Rise255.json",
+            defaults_filepath=self.model_defaults_filepath("Rise255"),
+            wipe=True,
+        )
+        self.set_parameters({"SCR_ENABLE": 1})
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
+        self.install_applet_script_context("autoacro.lua")
+        self.reboot_sitl()
+
+        self.set_parameters({
+            "SIM_SPEEDUP": 5,  # low speedup for physics fidelity
+            "LOG_BITMASK": int(self.get_parameter("LOG_BITMASK")) | 1,  # full-rate attitude
+            "AUTA_ENABLE": 1,
+            "AUTA_HOVER": 0.125,  # Rise255 hover throttle (T/W ~8)
+            "AUTA_LP_RATE": 70,
+            "AUTA_LP_ANG": 360,
+            "AUTA_LP_SPD": 30,
+            "AUTA_LP_MODE": 1,
+            "AUTA_RL_RATE": 450,
+            "AUTA_RL_ANG": 360,
+            "AUTA_RL_DIR": 1,
+            "RC9_OPTION": 300,  # Scripting1
+        })
+
+        # One sortie: take off once, fly each move back-to-back (returning to
+        # Loiter between), then land. Avoids a flaky per-move RTL at low speedup.
+        self.change_mode("LOITER")
+        self.set_rc(3, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(75, mode="LOITER")
+        self.context_collect('STATUSTEXT')
+        for move_num, name in ((2, "Loop"),):
+            self.start_subtest("Smoothness capture: %s" % name)
+            self.set_parameter("AUTA_MOVE", move_num)
+            self.context_clear_collection('STATUSTEXT')
+            self.set_rc(9, 2000)
+            self.wait_statustext("AutoAcro: move 1/1 %s" % name, check_context=True, timeout=15)
+            self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=60)
+            self.wait_mode("LOITER")
+            self.set_rc(9, 1000)
+            self.delay_sim_time(2)
+        self.land_and_disarm()
 
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
@@ -16837,6 +16889,7 @@ return update, 1000
             self.EKF3SRCPerCore,
             self.ScriptingFlipOnASwitch,
             self.AutoAcroDisplay,
+            self.AutoAcroSmoothness,
         ])
         return ret
 
