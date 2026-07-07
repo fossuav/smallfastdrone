@@ -11,9 +11,13 @@
     # vehicle diameter
     "diagonal_size" : 0.25,
 
-    # ref parameters from a constant-speed run: the Rise255 cruises at
-    # 25.4 m/s at ~24 deg lean (low drag -> high top speed at hard lean)
-    "refSpd" : 25.4,    # m/s
+    # ref parameters calibrated against the RealFlight characterisation flight
+    # (RealFlightModelCharacterise): at ~24 deg lean the RealFlight model holds
+    # ~17 m/s, so refSpd is pulled down from the earlier 25.4 cruise estimate to
+    # add drag. Hover already matches (native hover motor PWM ~1223 vs RealFlight
+    # ~1200); refCurrent/refVoltage only set the battery power model, not the
+    # thrust scale (they cancel in SIM_Frame's velocity_max/disc_area).
+    "refSpd" : 21.0,    # m/s
     "refAngle" : 24.0,  # degrees
     "refVoltage" : 23.2, # volts
     "refCurrent" : 5, # Amps
