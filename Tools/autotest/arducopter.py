@@ -16825,7 +16825,7 @@ return update, 1000
             "AUTA_HOVER": 0.125,  # Rise255 hover throttle (T/W ~8)
             "AUTA_LP_RATE": 70,
             "AUTA_LP_ANG": 360,
-            "AUTA_LP_SPD": 30,
+            "AUTA_LP_SPD": 20,  # reachable on the calibrated model (~21 m/s ceiling)
             "AUTA_LP_MODE": 1,
             "AUTA_RL_RATE": 450,
             "AUTA_RL_ANG": 360,
@@ -16842,10 +16842,13 @@ return update, 1000
         self.takeoff(100, mode="GUIDED")
         self.change_mode("LOITER")
         self.context_collect('STATUSTEXT')
-        # Isolated per-move verification: one move per sortie (a back-to-back
-        # multi-move run is too tangled to measure per-move). Edit this tuple to
-        # the move being tuned.
-        for move_num, name in ((4, "Immelmann"),):
+        # Per-move verification on the calibrated model. Each move is bracketed
+        # by LOITER and analysed by its relative entry-vs-exit metrics, so a
+        # back-to-back sortie is fine here; the order keeps altitude in a safe
+        # band (immelmann climbs, split-S descends). Edit this tuple to isolate
+        # a single move when tuning.
+        for move_num, name in ((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
+                               (5, "Split-S"), (6, "Wingover")):
             self.start_subtest("Smoothness capture: %s" % name)
             self.set_parameter("AUTA_MOVE", move_num)
             self.context_clear_collection('STATUSTEXT')
