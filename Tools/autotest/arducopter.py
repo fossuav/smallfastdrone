@@ -16724,7 +16724,7 @@ return update, 1000
         # Isolated per-move verification: one move per sortie (a back-to-back
         # multi-move run is too tangled to measure per-move). Edit this tuple to
         # the move being tuned.
-        for move_num, name in ((6, "Wingover"),):
+        for move_num, name in ((4, "Immelmann"),):
             self.start_subtest("Smoothness capture: %s" % name)
             self.set_parameter("AUTA_MOVE", move_num)
             self.context_clear_collection('STATUSTEXT')
