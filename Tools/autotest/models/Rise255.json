@@ -1,0 +1,58 @@
+# Native SITL approximation of the Rise255 (SmallFastDrone) high-performance
+# quad, for realistic aerobatic testing without RealFlight. Based on the 5"
+# freestyle model; the drag (refSpd/refAngle) and prop expo are calibrated to
+# the RealFlight Rise255 logs (25.4 m/s cruise at ~24 deg lean = low drag) and
+# the realflight-Rise255 params (hover 0.125, MOT_THST_EXPO 0.58).
+
+{
+    # total vehicle mass in kg
+    "mass" : 0.8,
+
+    # vehicle diameter
+    "diagonal_size" : 0.25,
+
+    # ref parameters from a constant-speed run: the Rise255 cruises at
+    # 25.4 m/s at ~24 deg lean (low drag -> high top speed at hard lean)
+    "refSpd" : 25.4,    # m/s
+    "refAngle" : 24.0,  # degrees
+    "refVoltage" : 23.2, # volts
+    "refCurrent" : 5, # Amps
+    "refAlt" : 607,       # meters AMSL
+    "refTempC" : 25,     # degrees C
+    "refBatRes" : 0.0226, # BAT.Res from log
+
+    # full battery voltage (6S)
+    "maxVoltage" : 25.2,
+
+    # full battery capacity, Ah (0 = unlimited)
+    "battCapacityAh" : 0,
+
+    # MOT_THST_EXPO (from realflight-Rise255 params)
+    "propExpo" : 0.58,
+
+    # approximate maximum yaw rate in deg/sec
+    "refRotRate" : 700,
+
+    # hover throttle from 0 to 1 (T/W ~8)
+    "hoverThrOut" : 0.125,
+
+    # MOT_PWM_MIN / MOT_PWM_MAX
+    "pwmMin" : 1000,
+    "pwmMax" : 2000,
+
+    # MOT_SPIN_MIN / MOT_SPIN_MAX
+    "spin_min" : 0.01,
+    "spin_max" : 0.95,
+
+    # maximum motor slew rate, or zero to disable
+    "slew_max" : 0,
+
+    # total effective disc area in sq m for 4 x 5 inch diameter rotors
+    "disc_area" : 0.204,
+
+    # momentum drag coefficient
+    "mdrag_coef" : 0.10,
+
+    # number of motors
+    "num_motors" : 4
+}

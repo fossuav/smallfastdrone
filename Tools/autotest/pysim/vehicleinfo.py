@@ -251,6 +251,15 @@ class VehicleInfo(object):
                 "default_params_filename": "default_params/realflight-Rise255.parm",
                 "external": True,
             },
+            "Rise255": {
+                "model": "X:@ROMFS/models/Rise255.json",
+                "waf_target": "bin/arducopter",
+                "default_params_filename": [
+                    "default_params/copter.parm",
+                    "default_params/copter-X.parm",
+                    "models/Rise255.param",
+                ],
+            },
 
         },
     },
