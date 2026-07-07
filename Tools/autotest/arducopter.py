@@ -16247,6 +16247,9 @@ RTL_ALT_M 111
         )
         self.set_parameters({
             "LOG_BITMASK": 0x10FFFF,  # match the RealFlight run's full-rate log
+            # speedup 10 is safe here: the hover/drag/rotation metrics come out
+            # identical at speedup 1 and 10 (verified against the realtime
+            # RealFlight reference), so the fast run is apples-to-apples.
             "SIM_SPEEDUP": 10,
         })
         self.reboot_sitl()
