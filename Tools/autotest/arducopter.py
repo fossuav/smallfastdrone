@@ -16134,6 +16134,124 @@ RTL_ALT_M 111
         self.change_mode("LAND")
         self.wait_disarmed(timeout=120)
 
+    def characterise_model_profile(self):
+        '''
+        Fly a system-ID profile to calibrate a native SITL model
+        (Tools/autotest/models/<model>.json) against the real airframe. Each
+        phase isolates one physical parameter; the full-rate RCIN and MODE logs
+        self-segment the flight, so no in-air markers are needed. Fixed dwell
+        times are intentional here (not the usual event-waits): each phase must
+        hold a condition long enough to reach and sample steady state.
+
+          - hover: steady LOITER hold           -> hoverThrOut (T/W) from CTUN.ThO
+          - attitude/yaw doublets (ALT_HOLD)    -> rate-loop response / inertia
+          - forward-speed steps (ALT_HOLD)      -> refSpd / refAngle (drag curve)
+          - raised-rate vertical steps          -> vertical velocity tracking / drag
+
+        The doublets run in ALT_HOLD, not ACRO: ALT_HOLD auto-holds height (ACRO
+        free-throttles, which climbs away on a high-T/W craft), and roll/pitch
+        become self-levelling angle doublets while yaw stays a direct rate
+        doublet. The tune is identical in SITL and RealFlight, so the same stick
+        input still exposes any inertia/rate mismatch in RATE.* vs its demand.
+
+        Assumes the vehicle, model and LOG_BITMASK are already set up; shared by
+        RealFlightModelCharacterise (flightaxis) and AutoAcroCharacterise
+        (native Rise255). Offline extractor: ap_lua autoacro/analysis/characterise_model.py.
+        '''
+        self.wait_ready_to_arm()
+        self.change_mode("LOITER")
+        self.arm_vehicle()
+        # climb to a working altitude with headroom for the doublets and steps
+        self.set_rc(3, 2000)
+        self.wait_altitude(43, 47, relative=True)
+        self.set_rc(3, 1500)
+
+        # Phase 1: steady hover. LOITER holds position and altitude with auto
+        # throttle, so CTUN.ThO over this window is the hover throttle.
+        self.progress("CHARACTERISE: hover")
+        self.set_rc_from_map({1: 1500, 2: 1500, 4: 1500})
+        self.delay_sim_time(12)
+
+        # Phase 2: attitude/yaw doublets (+ then -, self-cancelling so the
+        # vehicle returns to level/heading) to excite the rate loop.
+        self.change_mode("ALT_HOLD")
+        for ch, label in [(1, "roll"), (2, "pitch"), (4, "yaw")]:
+            self.progress("CHARACTERISE: doublet %s" % label)
+            self.set_rc(ch, 1700)
+            self.delay_sim_time(0.5)
+            self.set_rc(ch, 1300)
+            self.delay_sim_time(0.5)
+            self.set_rc(ch, 1500)
+            self.delay_sim_time(2)
+
+        # Phase 3: forward-speed steps for the drag curve. ALT_HOLD holds height
+        # while pitch forward accelerates to a steady speed at a steady lean;
+        # two levels give two points on speed-vs-lean. Longer holds let the
+        # low-drag airframe approach terminal speed. Re-centre between to
+        # decelerate. (RC2 high = pitch forward, matching RealFlightHover.)
+        for pwm in (1700, 1900):
+            self.progress("CHARACTERISE: forward speed pwm=%u" % pwm)
+            self.set_rc(2, pwm)
+            self.delay_sim_time(10)
+            self.set_rc(2, 1500)
+            self.delay_sim_time(6)
+
+        # Phase 4: vertical steps. Raise the pilot climb/descent limits to their
+        # max (5 m/s) for this phase so the commanded rate is a meaningful step
+        # above the ~2.5 m/s default; the achieved climb vs command reflects
+        # thrust margin and the descent reflects vertical drag / tracking.
+        # Bounded to keep the subsequent LAND short. Scoped to this phase.
+        self.context_push()
+        self.set_parameters({"PILOT_SPD_UP": 5, "PILOT_SPD_DN": 5})
+        self.progress("CHARACTERISE: vertical steps")
+        self.set_rc(3, 2000)
+        self.delay_sim_time(2)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(2)
+        self.set_rc(3, 1000)
+        self.delay_sim_time(2)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(2)
+        self.context_pop()
+
+        self.change_mode("LAND")
+        self.wait_disarmed(timeout=180)
+
+    def RealFlightModelCharacterise(self, model, home):
+        '''
+        Run the model-characterisation profile in RealFlight, to calibrate the
+        native Rise255 SITL model against the real airframe. See
+        characterise_model_profile for the phase breakdown.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+
+        # full-rate attitude/rate logging for the PID Review Tool and offline fit
+        self.set_parameters({
+            "LOG_BITMASK": 0x10FFFF,
+        })
+        self.setup_RealFlight_vehicle(model, home)
+        self.characterise_model_profile()
+
+    def AutoAcroCharacterise(self):
+        '''
+        Run the model-characterisation profile on the NATIVE Rise255 model (no
+        RealFlight needed), to produce the SITL baseline that the RealFlight log
+        is diffed against. Regenerate this whenever the model file changes.
+        '''
+        self.customise_SITL_commandline(
+            [],
+            model="X:@ROMFS/models/Rise255.json",
+            defaults_filepath=self.model_defaults_filepath("Rise255"),
+            wipe=True,
+        )
+        self.set_parameters({
+            "LOG_BITMASK": 0x10FFFF,  # match the RealFlight run's full-rate log
+            "SIM_SPEEDUP": 10,
+        })
+        self.reboot_sitl()
+        self.characterise_model_profile()
+
     def LUAConfigProfile(self):
         '''test the config_profiles.lua example script'''
         self.customise_SITL_commandline(
@@ -16843,6 +16961,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightModelCharacterise, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             self.BrakeZ,
             self.MAV_CMD_DO_FLIGHTTERMINATION,
             self.MAV_CMD_DO_LAND_START,
@@ -16893,6 +17015,7 @@ return update, 1000
             self.ScriptingFlipOnASwitch,
             self.AutoAcroDisplay,
             self.AutoAcroSmoothness,
+            self.AutoAcroCharacterise,
         ])
         return ret
 
@@ -16977,6 +17100,7 @@ return update, 1000
         }
         if not self.realflight_address:
             ret["RealFlightHover"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightModelCharacterise"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
         return ret
 
 
