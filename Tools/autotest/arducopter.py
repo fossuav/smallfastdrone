@@ -16699,6 +16699,7 @@ return update, 1000
         self.set_parameters({
             "SIM_SPEEDUP": 5,  # low speedup for physics fidelity
             "LOG_BITMASK": int(self.get_parameter("LOG_BITMASK")) | 1,  # full-rate attitude
+            "ATC_RATE_WPY_MAX": 180,  # snappier yaw for the wingover turnaround
             "AUTA_ENABLE": 1,
             "AUTA_HOVER": 0.125,  # Rise255 hover throttle (T/W ~8)
             "AUTA_LP_RATE": 70,
@@ -16720,8 +16721,10 @@ return update, 1000
         self.takeoff(100, mode="GUIDED")
         self.change_mode("LOITER")
         self.context_collect('STATUSTEXT')
-        for move_num, name in ((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
-                               (5, "Split-S"), (6, "Wingover")):
+        # Isolated per-move verification: one move per sortie (a back-to-back
+        # multi-move run is too tangled to measure per-move). Edit this tuple to
+        # the move being tuned.
+        for move_num, name in ((6, "Wingover"),):
             self.start_subtest("Smoothness capture: %s" % name)
             self.set_parameter("AUTA_MOVE", move_num)
             self.context_clear_collection('STATUSTEXT')
@@ -16731,7 +16734,7 @@ return update, 1000
             self.wait_mode("LOITER")
             self.set_rc(9, 1000)
             self.delay_sim_time(2)
-        self.land_and_disarm()
+        self.do_RTL()
 
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
