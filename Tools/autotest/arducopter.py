@@ -16800,6 +16800,62 @@ return update, 1000
         self.set_rc(9, 1000)
         self.do_RTL()
 
+    def install_autoacro_scripts(self):
+        '''Enable scripting and install the autoacro applet plus its modules,
+        then reboot so they load. Shared by the native and RealFlight move runs.'''
+        self.set_parameters({"SCR_ENABLE": 1})
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
+        self.install_applet_script_context("autoacro.lua")
+        self.reboot_sitl()
+
+    def autoacro_display_params(self, hover):
+        '''AUTA_ move-geometry parameters shared by the native and RealFlight
+        runs. hover is the vehicle's TRUE hover throttle -- the throttle phases
+        are g-loads times hover, so this must be the measured hover.'''
+        return {
+            "ATC_RATE_WPY_MAX": 180,  # snappier yaw for the wingover turnaround
+            "AUTA_ENABLE": 1,
+            "AUTA_HOVER": hover,
+            "AUTA_LP_RATE": 70,
+            "AUTA_LP_ANG": 360,
+            "AUTA_LP_SPD": 20,  # reachable given the ~21 m/s drag-limited ceiling
+            "AUTA_LP_MODE": 1,
+            "AUTA_RL_RATE": 450,
+            "AUTA_RL_ANG": 360,
+            "AUTA_RL_DIR": 1,
+            "RC9_OPTION": 300,  # Scripting1
+        }
+
+    def fly_autoacro_moves(self, moves):
+        '''Take off, fly each (AUTA_MOVE, name) move in isolation -- bracketed by
+        LOITER and triggered on RC9 -- then RTL. Assumes the autoacro scripts are
+        installed and the AUTA_ params set. The dense full-rate log lets the
+        offline analysis/per_move_metrics.py measure each move's entry-vs-exit
+        geometry, and compare the native SITL and RealFlight trajectories.'''
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        # GUIDED takeoff climbs to the exact height (LOITER plateaus lower); then
+        # hand to LOITER for the sequencer.
+        self.takeoff(100, mode="GUIDED")
+        self.change_mode("LOITER")
+        self.context_collect('STATUSTEXT')
+        for move_num, name in moves:
+            self.start_subtest("AutoAcro move: %s" % name)
+            self.set_parameter("AUTA_MOVE", move_num)
+            self.context_clear_collection('STATUSTEXT')
+            self.set_rc(9, 2000)
+            self.wait_statustext("AutoAcro: move 1/1 %s" % name, check_context=True, timeout=15)
+            self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=60)
+            self.wait_mode("LOITER")
+            self.set_rc(9, 1000)
+            self.delay_sim_time(2)
+        # Finish by RTL. do_RTL polls GLOBAL_POSITION_INT, whose stream is
+        # throttled at low speedup / realtime under dense logging and flakily
+        # times out; wait on the heartbeat-based disarm instead.
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def AutoAcroSmoothness(self):
         '''Fly moves on the native Rise255 model at low speedup with dense logging'''
         # Relaunch on the retrofitted native Rise255 model (real Rise tune +
@@ -16811,60 +16867,33 @@ return update, 1000
             defaults_filepath=self.model_defaults_filepath("Rise255"),
             wipe=True,
         )
-        self.set_parameters({"SCR_ENABLE": 1})
-        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
-        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
-        self.install_applet_script_context("autoacro.lua")
-        self.reboot_sitl()
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.033)  # Rise255 true hover (ThO)
+        params["SIM_SPEEDUP"] = 5  # low speedup for physics fidelity
+        params["LOG_BITMASK"] = int(self.get_parameter("LOG_BITMASK")) | 1  # full-rate attitude
+        self.set_parameters(params)
+        # Edit this tuple to isolate a single move when tuning.
+        self.fly_autoacro_moves(((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
+                                 (5, "Split-S"), (6, "Wingover")))
 
-        self.set_parameters({
-            "SIM_SPEEDUP": 5,  # low speedup for physics fidelity
-            "LOG_BITMASK": int(self.get_parameter("LOG_BITMASK")) | 1,  # full-rate attitude
-            "ATC_RATE_WPY_MAX": 180,  # snappier yaw for the wingover turnaround
-            "AUTA_ENABLE": 1,
-            "AUTA_HOVER": 0.033,  # Rise255 TRUE hover throttle (ThO, measured by the
-            #                       characterisation flight); throttle phases are g-loads
-            #                       x hover, so this must be the real hover, not 0.125
-            "AUTA_LP_RATE": 70,
-            "AUTA_LP_ANG": 360,
-            "AUTA_LP_SPD": 20,  # reachable on the calibrated model (~21 m/s ceiling)
-            "AUTA_LP_MODE": 1,
-            "AUTA_RL_RATE": 450,
-            "AUTA_RL_ANG": 360,
-            "AUTA_RL_DIR": 1,
-            "RC9_OPTION": 300,  # Scripting1
-        })
-
-        # One sortie: take off once, fly each move back-to-back (returning to
-        # Loiter between), then land. Avoids a flaky per-move RTL at low speedup.
-        self.wait_ready_to_arm()
-        self.arm_vehicle()
-        # GUIDED takeoff climbs to the exact height (LOITER plateaus ~76 m);
-        # then hand to LOITER for the sequencer.
-        self.takeoff(100, mode="GUIDED")
-        self.change_mode("LOITER")
-        self.context_collect('STATUSTEXT')
-        # Per-move verification on the calibrated model. Each move is bracketed
-        # by LOITER and analysed by its relative entry-vs-exit metrics, so a
-        # back-to-back sortie is fine here; the order keeps altitude in a safe
-        # band (immelmann climbs, split-S descends). Edit this tuple to isolate
-        # a single move when tuning.
-        for move_num, name in ((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
-                               (5, "Split-S"), (6, "Wingover")):
-            self.start_subtest("Smoothness capture: %s" % name)
-            self.set_parameter("AUTA_MOVE", move_num)
-            self.context_clear_collection('STATUSTEXT')
-            self.set_rc(9, 2000)
-            self.wait_statustext("AutoAcro: move 1/1 %s" % name, check_context=True, timeout=15)
-            self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=60)
-            self.wait_mode("LOITER")
-            self.set_rc(9, 1000)
-            self.delay_sim_time(2)
-        # Finish by RTL. do_RTL polls GLOBAL_POSITION_INT, whose stream is
-        # throttled at this low speedup with dense logging and flakily times out;
-        # wait on the heartbeat-based disarm instead.
-        self.change_mode("RTL")
-        self.wait_disarmed(timeout=300)
+    def RealFlightAutoAcro(self, model, home):
+        '''
+        Fly the five display moves in RealFlight, to compare each trajectory
+        against the native-model SITL run (analysis/per_move_metrics.py segments
+        either log by the move statustext). The native model is calibrated and
+        its tune aligned to RealFlight, and the throttle phases are g-loads times
+        hover, so with AUTA_HOVER set to the RealFlight hover the moves should
+        reproduce the SITL trajectories.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.025)  # RealFlight hover (ThO)
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline trajectory compare
+        self.set_parameters(params)
+        self.fly_autoacro_moves(((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
+                                 (5, "Split-S"), (6, "Wingover")))
 
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
@@ -16974,6 +17003,10 @@ return update, 1000
                 'home': 'EliField'
             }),
             Test(self.RealFlightModelCharacterise, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
+            Test(self.RealFlightAutoAcro, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
@@ -17113,6 +17146,7 @@ return update, 1000
         if not self.realflight_address:
             ret["RealFlightHover"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightModelCharacterise"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightAutoAcro"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
         return ret
 
 
