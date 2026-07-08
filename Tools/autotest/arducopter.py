@@ -16820,7 +16820,7 @@ return update, 1000
             "ATC_RATE_WPY_MAX": 180,  # snappier yaw for the wingover turnaround
             "AUTA_ENABLE": 1,
             "AUTA_HOVER": hover,
-            "AUTA_LP_RATE": 70,
+            "AUTA_LP_RATE": 130,  # tighter loop/immelmann, nearer the pilot's ~130-160 dps
             "AUTA_LP_ANG": 360,
             "AUTA_LP_SPD": 20,  # reachable given the ~21 m/s drag-limited ceiling
             "AUTA_LP_MODE": 1,
