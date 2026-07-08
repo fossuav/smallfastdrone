@@ -16860,6 +16860,40 @@ return update, 1000
         self.change_mode("RTL")
         self.wait_disarmed(timeout=300)
 
+    def fly_autoacro_display(self, takeoff_alt=130, trigger_ch=9):
+        '''Fly the whole curated display chained (AUTA_MOVE=0), one trigger, then
+        RTL. Assumes scripts + AUTA_ params set. Takes off high because the set is
+        descent-heavy. Dense logging lets the offline analysis check the chained
+        flow -- does it complete, stay in an altitude band, and flow direction.'''
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(takeoff_alt, mode="GUIDED")
+        self.change_mode("LOITER")
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("AUTA_MOVE", 0)  # 0 = the whole curated display
+        self.set_rc(trigger_ch, 2000)
+        self.wait_statustext("AutoAcro: display starting", check_context=True, timeout=15)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=200)
+        self.wait_mode("LOITER")
+        self.set_rc(trigger_ch, 1000)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
+    def AutoAcroFullDisplay(self):
+        '''Fly the whole curated autoacro display chained on the native Rise255'''
+        self.customise_SITL_commandline(
+            [],
+            model="X:@ROMFS/models/Rise255.json",
+            defaults_filepath=self.model_defaults_filepath("Rise255"),
+            wipe=True,
+        )
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.033)  # Rise255 true hover
+        params["SIM_SPEEDUP"] = 5
+        params["LOG_BITMASK"] = int(self.get_parameter("LOG_BITMASK")) | 1
+        self.set_parameters(params)
+        self.fly_autoacro_display(130)
+
     def AutoAcroSmoothness(self):
         '''Fly moves on the native Rise255 model at low speedup with dense logging'''
         # Relaunch on the retrofitted native Rise255 model (real Rise tune +
@@ -17067,6 +17101,7 @@ return update, 1000
             self.ScriptingFlipOnASwitch,
             self.AutoAcroDisplay,
             self.AutoAcroSmoothness,
+            self.AutoAcroFullDisplay,
             self.AutoAcroCharacterise,
         ])
         return ret
