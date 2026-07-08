@@ -16822,7 +16822,9 @@ return update, 1000
             "LOG_BITMASK": int(self.get_parameter("LOG_BITMASK")) | 1,  # full-rate attitude
             "ATC_RATE_WPY_MAX": 180,  # snappier yaw for the wingover turnaround
             "AUTA_ENABLE": 1,
-            "AUTA_HOVER": 0.125,  # Rise255 hover throttle (T/W ~8)
+            "AUTA_HOVER": 0.033,  # Rise255 TRUE hover throttle (ThO, measured by the
+            #                       characterisation flight); throttle phases are g-loads
+            #                       x hover, so this must be the real hover, not 0.125
             "AUTA_LP_RATE": 70,
             "AUTA_LP_ANG": 360,
             "AUTA_LP_SPD": 20,  # reachable on the calibrated model (~21 m/s ceiling)
@@ -16858,7 +16860,11 @@ return update, 1000
             self.wait_mode("LOITER")
             self.set_rc(9, 1000)
             self.delay_sim_time(2)
-        self.do_RTL()
+        # Finish by RTL. do_RTL polls GLOBAL_POSITION_INT, whose stream is
+        # throttled at this low speedup with dense logging and flakily times out;
+        # wait on the heartbeat-based disarm instead.
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
 
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
