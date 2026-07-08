@@ -16936,6 +16936,24 @@ return update, 1000
         self.fly_autoacro_moves(((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
                                  (5, "Split-S"), (6, "Wingover")), trigger_ch=7)
 
+    def RealFlightFullDisplay(self, model, home):
+        '''
+        Fly the whole curated autoacro display chained in RealFlight (AUTA_MOVE=0),
+        to see the tightened on-a-line show on the RealFlight airframe. Mirrors
+        AutoAcroFullDisplay but on flightaxis with the RealFlight hover; the offline
+        analysis (analysis/display_box.py, display_traj.py) then checks the box and
+        flow the same way as the native run.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        # Scripting1 is on RC7 in the realflight-Rise255 tune (see RealFlightAutoAcro).
+        params = self.autoacro_display_params(0.025, trigger_ch=7)  # RealFlight hover (ThO)
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
+        self.set_parameters(params)
+        self.fly_autoacro_display(takeoff_alt=130, trigger_ch=7)
+
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
         ret = ([
@@ -17048,6 +17066,10 @@ return update, 1000
                 'home': 'EliField'
             }),
             Test(self.RealFlightAutoAcro, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
+            Test(self.RealFlightFullDisplay, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
@@ -17189,6 +17211,7 @@ return update, 1000
             ret["RealFlightHover"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightModelCharacterise"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcro"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
         return ret
 
 
