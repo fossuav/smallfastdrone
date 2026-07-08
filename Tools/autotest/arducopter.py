@@ -16824,7 +16824,7 @@ return update, 1000
             "AUTA_LP_ANG": 360,
             "AUTA_LP_SPD": 20,  # reachable given the ~21 m/s drag-limited ceiling
             "AUTA_LP_MODE": 1,
-            "AUTA_RL_RATE": 450,
+            "AUTA_RL_RATE": 700,  # ballistic roll fires at the apex, where a fast rate is reachable
             "AUTA_RL_ANG": 360,
             "AUTA_RL_DIR": 1,
             "RC%u_OPTION" % trigger_ch: 300,  # Scripting1
