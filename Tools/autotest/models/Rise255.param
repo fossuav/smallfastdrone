@@ -77,6 +77,18 @@ FRAME_CLASS,1
 FRAME_TYPE,1
 INS_ACCEL_FILTER,20
 INS_GYRO_FILTER,120
+# Harmonic notch from the real realflight-Rise255 tune, so the native SITL rate
+# loop sees the same gyro filtering (and phase lag) the ATC gains were tuned with.
+INS_HNTCH_ENABLE,1
+INS_HNTCH_MODE,1
+INS_HNTCH_FREQ,150
+INS_HNTCH_BW,75
+INS_HNTCH_ATT,40
+INS_HNTCH_HMNCS,3
+INS_HNTCH_REF,0.29
+INS_HNTC2_ENABLE,1
+INS_HNTC2_MODE,1
+INS_HNTC3_ENABLE,0
 MOT_BAT_CURR_MAX,0
 MOT_BAT_CURR_TC,5
 MOT_BAT_IDX,0
