@@ -16809,10 +16809,13 @@ return update, 1000
         self.install_applet_script_context("autoacro.lua")
         self.reboot_sitl()
 
-    def autoacro_display_params(self, hover):
+    def autoacro_display_params(self, hover, trigger_ch=9):
         '''AUTA_ move-geometry parameters shared by the native and RealFlight
         runs. hover is the vehicle's TRUE hover throttle -- the throttle phases
-        are g-loads times hover, so this must be the measured hover.'''
+        are g-loads times hover, so this must be the measured hover. trigger_ch
+        gets the Scripting1 (300) aux option the applet arms on; the RealFlight
+        tune already puts Scripting1 on RC7, so that run reuses it rather than
+        adding a second Scripting1 channel (a duplicate-aux-switch prearm fail).'''
         return {
             "ATC_RATE_WPY_MAX": 180,  # snappier yaw for the wingover turnaround
             "AUTA_ENABLE": 1,
@@ -16824,15 +16827,16 @@ return update, 1000
             "AUTA_RL_RATE": 450,
             "AUTA_RL_ANG": 360,
             "AUTA_RL_DIR": 1,
-            "RC9_OPTION": 300,  # Scripting1
+            "RC%u_OPTION" % trigger_ch: 300,  # Scripting1
         }
 
-    def fly_autoacro_moves(self, moves):
+    def fly_autoacro_moves(self, moves, trigger_ch=9):
         '''Take off, fly each (AUTA_MOVE, name) move in isolation -- bracketed by
-        LOITER and triggered on RC9 -- then RTL. Assumes the autoacro scripts are
-        installed and the AUTA_ params set. The dense full-rate log lets the
-        offline analysis/per_move_metrics.py measure each move's entry-vs-exit
-        geometry, and compare the native SITL and RealFlight trajectories.'''
+        LOITER and triggered on the Scripting1 channel trigger_ch -- then RTL.
+        Assumes the autoacro scripts are installed and the AUTA_ params set. The
+        dense full-rate log lets the offline analysis/per_move_metrics.py measure
+        each move's entry-vs-exit geometry, and compare the native SITL and
+        RealFlight trajectories.'''
         self.wait_ready_to_arm()
         self.arm_vehicle()
         # GUIDED takeoff climbs to the exact height (LOITER plateaus lower); then
@@ -16844,11 +16848,11 @@ return update, 1000
             self.start_subtest("AutoAcro move: %s" % name)
             self.set_parameter("AUTA_MOVE", move_num)
             self.context_clear_collection('STATUSTEXT')
-            self.set_rc(9, 2000)
+            self.set_rc(trigger_ch, 2000)
             self.wait_statustext("AutoAcro: move 1/1 %s" % name, check_context=True, timeout=15)
             self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=60)
             self.wait_mode("LOITER")
-            self.set_rc(9, 1000)
+            self.set_rc(trigger_ch, 1000)
             self.delay_sim_time(2)
         # Finish by RTL. do_RTL polls GLOBAL_POSITION_INT, whose stream is
         # throttled at low speedup / realtime under dense logging and flakily
@@ -16889,11 +16893,14 @@ return update, 1000
             raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
         self.setup_RealFlight_vehicle(model, home)
         self.install_autoacro_scripts()
-        params = self.autoacro_display_params(0.025)  # RealFlight hover (ThO)
+        # The realflight-Rise255 tune already has Scripting1 on RC7, so trigger
+        # there instead of adding RC9 (which duplicates the aux option and fails
+        # the prearm). The applet arms on the Scripting1 function, not a channel.
+        params = self.autoacro_display_params(0.025, trigger_ch=7)  # RealFlight hover (ThO)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline trajectory compare
         self.set_parameters(params)
         self.fly_autoacro_moves(((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
-                                 (5, "Split-S"), (6, "Wingover")))
+                                 (5, "Split-S"), (6, "Wingover")), trigger_ch=7)
 
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
