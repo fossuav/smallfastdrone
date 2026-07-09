@@ -16933,6 +16933,21 @@ return update, 1000
         self.set_parameters(params)
         self.fly_autoacro_moves(((7, "YawSpin"),))
 
+    def AutoAcroRewindFlick(self):
+        '''Fly the rewind and juicy flick (schedule moves 8, 9) on the native Rise255'''
+        self.customise_SITL_commandline(
+            [],
+            model="X:@ROMFS/models/Rise255.json",
+            defaults_filepath=self.model_defaults_filepath("Rise255"),
+            wipe=True,
+        )
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.033)  # Rise255 true hover (ThO)
+        params["SIM_SPEEDUP"] = 5
+        params["LOG_BITMASK"] = int(self.get_parameter("LOG_BITMASK")) | 1
+        self.set_parameters(params)
+        self.fly_autoacro_moves(((8, "Rewind"), (9, "JuicyFlick")))
+
     def RealFlightAutoAcro(self, model, home):
         '''
         Fly the five display moves in RealFlight, to compare each trajectory
@@ -17144,6 +17159,7 @@ return update, 1000
             self.AutoAcroSmoothness,
             self.AutoAcroFullDisplay,
             self.AutoAcroYawSpin,
+            self.AutoAcroRewindFlick,
             self.AutoAcroCharacterise,
         ])
         return ret
