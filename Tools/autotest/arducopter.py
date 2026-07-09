@@ -16821,9 +16821,10 @@ return update, 1000
             # Racing quad (~30:1 T/W): accelerate hard into moves. The guided entry
             # crept at 0.2 g because WP_ACC (the nav accel, m/s2) sat at its 2.5
             # default -- the config's WPNAV_ACCEL is a dead pre-rename name. Set the
-            # live param high; the 30 deg lean cap still bounds it to ~5.7 m/s2,
-            # which is 2x the run-up rate without letting nose-down moves dive.
+            # live param high and open the lean cap to 70 deg (a normal acro tilt on
+            # these copters) so the entry gets the ~50 deg lean 12 m/s2 needs.
             "WP_ACC": 12.0,
+            "ATC_ANGLE_MAX": 70,
             "AUTA_ENABLE": 1,
             "AUTA_HOVER": hover,
             "AUTA_LP_RATE": 130,  # tighter loop/immelmann, nearer the pilot's ~130-160 dps
