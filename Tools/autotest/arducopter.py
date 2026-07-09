@@ -16860,11 +16860,13 @@ return update, 1000
         self.change_mode("RTL")
         self.wait_disarmed(timeout=300)
 
-    def fly_autoacro_display(self, takeoff_alt=130, trigger_ch=9):
+    def fly_autoacro_display(self, takeoff_alt=72, trigger_ch=9):
         '''Fly the whole curated display chained (AUTA_MOVE=0), one trigger, then
-        RTL. Assumes scripts + AUTA_ params set. Takes off high because the set is
-        descent-heavy. Dense logging lets the offline analysis check the chained
-        flow -- does it complete, stay in an altitude band, and flow direction.'''
+        RTL. Assumes scripts + AUTA_ params set. Triggers low enough that the
+        ballistic toss (the display high point, ~14 m above the trigger altitude)
+        stays under the 100 m CAA display ceiling. Dense logging lets the offline
+        analysis check the chained flow -- does it complete, stay in an altitude
+        band, and flow direction.'''
         self.wait_ready_to_arm()
         self.arm_vehicle()
         self.takeoff(takeoff_alt, mode="GUIDED")
@@ -16892,7 +16894,7 @@ return update, 1000
         params["SIM_SPEEDUP"] = 5
         params["LOG_BITMASK"] = int(self.get_parameter("LOG_BITMASK")) | 1
         self.set_parameters(params)
-        self.fly_autoacro_display(130)
+        self.fly_autoacro_display(72)
 
     def AutoAcroSmoothness(self):
         '''Fly moves on the native Rise255 model at low speedup with dense logging'''
@@ -16952,7 +16954,7 @@ return update, 1000
         params = self.autoacro_display_params(0.025, trigger_ch=7)  # RealFlight hover (ThO)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
         self.set_parameters(params)
-        self.fly_autoacro_display(takeoff_alt=130, trigger_ch=7)
+        self.fly_autoacro_display(takeoff_alt=72, trigger_ch=7)
 
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
