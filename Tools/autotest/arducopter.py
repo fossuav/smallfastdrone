@@ -16806,7 +16806,9 @@ return update, 1000
         self.set_parameters({"SCR_ENABLE": 1})
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "crsf_helper.lua"), "crsf_helper.lua")
         self.install_applet_script_context("autoacro.lua")
+        self.install_applet_script_context("autoacro_menu.lua")
         self.reboot_sitl()
 
     def autoacro_display_params(self, hover, trigger_ch=9):
