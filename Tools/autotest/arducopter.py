@@ -16818,11 +16818,14 @@ return update, 1000
         adding a second Scripting1 channel (a duplicate-aux-switch prearm fail).'''
         return {
             "ATC_RATE_WPY_MAX": 180,  # snappier yaw for the wingover turnaround
-            # Racing quad (~30:1 T/W): accelerate hard into moves. The guided entry
-            # crept at 0.2 g because WP_ACC (the nav accel, m/s2) sat at its 2.5
-            # default -- the config's WPNAV_ACCEL is a dead pre-rename name. Set the
-            # live param high and open the lean cap to 70 deg (a normal acro tilt on
-            # these copters) so the entry gets the ~50 deg lean 12 m/s2 needs.
+            # WP_ACC (nav accel, m/s2) sits at its 2.5 default here -- the config's
+            # WPNAV_ACCEL is a dead pre-rename name (now WP_*) -- so the guided entry
+            # crept at 0.2 g. 12 with a 70 deg lean is what the Rise255 SITL model
+            # tracks cleanly (box ~43 m). NB the real vehicle (Marmott) runs WP_ACC=60,
+            # ANGLE_MAX 80, and a matched PSC_NE PID (FF 0.579) -- far more aggressive.
+            # That tune does NOT transfer to the Rise255 model (its PID is not matched
+            # to it, so it overshoots: box 76-95 m). SITL keeps its own clean tune and
+            # validates the choreography; the real vehicle flies it with its own.
             "WP_ACC": 12.0,
             "ATC_ANGLE_MAX": 70,
             "AUTA_ENABLE": 1,
