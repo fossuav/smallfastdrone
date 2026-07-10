@@ -2722,6 +2722,14 @@ function vehicle:set_target_angle_and_climbrate(roll_deg, pitch_deg, yaw_deg, cl
 ---@return boolean -- true if successful
 function vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, yaw_rate_dps, throttle) end
 
+-- Set vehicles roll, pitch, and yaw rates with a closed-loop climb rate in guided mode
+---@param roll_rate_dps number -- roll rate in degrees per second
+---@param pitch_rate_dps number -- pitch rate in degrees per second
+---@param yaw_rate_dps number -- yaw rate in degrees per second
+---@param climb_rate_ms number -- climb rate in meters per second
+---@return boolean -- true if successful
+function vehicle:set_target_rate_and_climbrate(roll_rate_dps, pitch_rate_dps, yaw_rate_dps, climb_rate_ms) end
+
 -- Set vehicle's roll, pitch, and yaw angles and rates with throttle in guided mode
 ---@param roll_deg number -- roll angle in degrees from -180 to 180
 ---@param pitch_deg number -- pitch angle in degrees from -90 to 90
