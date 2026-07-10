@@ -384,7 +384,7 @@ bool Copter::set_target_angle_and_climbrate(float roll_deg, float pitch_deg, flo
     Quaternion q;
     q.from_euler(radians(roll_deg),radians(pitch_deg),radians(yaw_deg));
 
-    mode_guided.set_angle(q, Vector3f{}, climb_rate_ms*100, false);
+    mode_guided.set_angle(q, Vector3f{}, climb_rate_ms, false);
     return true;
 }
 
@@ -406,6 +406,31 @@ bool Copter::set_target_rate_and_throttle(float roll_rate_dps, float pitch_rate_
 
     // Pass to guided mode
     mode_guided.set_angle(q, ang_vel_body, throttle, true);
+    return true;
+}
+
+// set target roll pitch and yaw rates with a climb rate (for use by scripting)
+// the vertical axis is closed-loop, so unlike set_target_rate_and_throttle the
+// caller does not have to model thrust: hover throttle, motor idle thrust and
+// the loss of rotor thrust with axial airspeed are all absorbed by the position
+// controller. Angle boost still zeroes the output beyond 90 degrees of tilt.
+bool Copter::set_target_rate_and_climbrate(float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float climb_rate_ms)
+{
+    // exit if vehicle is not in Guided mode or Auto-Guided mode
+    if (!flightmode->in_guided_mode()) {
+        return false;
+    }
+
+    // Zero quaternion indicates rate control
+    Quaternion q;
+    q.zero();
+
+    // Convert from degrees per second to radians per second
+    Vector3f ang_vel_body { roll_rate_dps, pitch_rate_dps, yaw_rate_dps };
+    ang_vel_body *= DEG_TO_RAD;
+
+    // Pass to guided mode
+    mode_guided.set_angle(q, ang_vel_body, climb_rate_ms, false);
     return true;
 }
 
