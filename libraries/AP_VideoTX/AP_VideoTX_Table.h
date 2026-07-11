@@ -115,6 +115,18 @@ public:
     // whether a usable table is loaded
     bool is_valid() const { return _num_bands > 0 && _num_channels > 0; }
 
+    // -- incremental setters (used by the MSP VTXTABLE ingest path; band and
+    //    index are zero-based). They grow the counts to cover what is written,
+    //    so callers need not pre-declare dimensions. Persist with save().
+    // set/clear table dimensions and wipe existing entries
+    void set_dims(uint8_t bands, uint8_t channels, uint8_t power_levels);
+    // define one band (name/label are byte buffers with an explicit length,
+    // not NUL terminated); false if band is out of range
+    bool set_band(uint8_t band, const char *name, uint8_t name_len, char letter,
+                  bool is_factory, const uint16_t *freq, uint8_t nfreq);
+    // define one power level; false if index is out of range
+    bool set_power_level(uint8_t index, uint16_t value, const char *label, uint8_t label_len);
+
 private:
     // serialize the model into buf (>= BLOB_MAX), returns bytes written
     uint16_t serialize(uint8_t *buf) const;

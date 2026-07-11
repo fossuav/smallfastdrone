@@ -71,6 +71,14 @@ static void set_fixed(char *dst, size_t dst_len, const char *src)
     strncpy(dst, src, dst_len);
 }
 
+// copy a byte buffer of explicit length (not NUL terminated) into a fixed,
+// zero-padded field, truncating to fit
+static void set_fixed_n(char *dst, size_t dst_len, const char *src, size_t src_len)
+{
+    memset(dst, 0, dst_len);
+    memcpy(dst, src, MIN(src_len, dst_len));
+}
+
 // copy a fixed, possibly non-NUL-terminated field out as a NUL-terminated string
 static void get_fixed(const char *src, size_t src_len, char *out, size_t out_len)
 {
@@ -177,6 +185,52 @@ void AP_VideoTX_Table::power_label(uint8_t index, char *out, size_t out_len) con
         return;
     }
     get_fixed(_power[index].label, POWER_LABEL_LEN, out, out_len);
+}
+
+// ---- incremental setters (MSP VTXTABLE ingest) ----
+
+void AP_VideoTX_Table::set_dims(uint8_t bands, uint8_t channels, uint8_t power_levels)
+{
+    memset(_bands, 0, sizeof(_bands));
+    memset(_power, 0, sizeof(_power));
+    _num_bands = MIN(bands, uint8_t(MAX_BANDS));
+    _num_channels = MIN(channels, uint8_t(MAX_CHANNELS));
+    _num_power_levels = MIN(power_levels, uint8_t(MAX_POWER_LEVELS));
+}
+
+bool AP_VideoTX_Table::set_band(uint8_t band, const char *name, uint8_t name_len, char letter,
+                                bool is_factory, const uint16_t *freq, uint8_t nfreq)
+{
+    if (band >= MAX_BANDS) {
+        return false;
+    }
+    nfreq = MIN(nfreq, uint8_t(MAX_CHANNELS));
+    set_fixed_n(_bands[band].name, BAND_NAME_LEN, name, name_len);
+    _bands[band].letter = letter;
+    _bands[band].is_factory = is_factory;
+    for (uint8_t c = 0; c < MAX_CHANNELS; c++) {
+        _bands[band].freq[c] = c < nfreq ? freq[c] : 0;
+    }
+    if (band + 1 > _num_bands) {
+        _num_bands = band + 1;
+    }
+    if (nfreq > _num_channels) {
+        _num_channels = nfreq;
+    }
+    return true;
+}
+
+bool AP_VideoTX_Table::set_power_level(uint8_t index, uint16_t value, const char *label, uint8_t label_len)
+{
+    if (index >= MAX_POWER_LEVELS) {
+        return false;
+    }
+    _power[index].value = value;
+    set_fixed_n(_power[index].label, POWER_LABEL_LEN, label, label_len);
+    if (index + 1 > _num_power_levels) {
+        _num_power_levels = index + 1;
+    }
+    return true;
 }
 
 // ---- persistence (compact little-endian binary blob + CRC32) ----
