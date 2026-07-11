@@ -17194,11 +17194,17 @@ return update, 1000
         # The realflight-Rise255 tune already has Scripting1 on RC7, so trigger
         # there instead of adding RC9 (which duplicates the aux option and fails
         # the prearm). The applet arms on the Scripting1 function, not a channel.
-        # 0.7 g of drag, measured through the arc on this model -- far draggier than
-        # the native Rise255 (0.2 g). It costs 10.4 g at the bottom, which is the
-        # whole of this airframe's usable thrust: the loop will say so if it clips.
+        # 0.2 g, back down from the 0.7 it was raised to. That budget was a workaround
+        # for thrust the arc was never getting: with angle boost left on, the loop lost
+        # its thrust at the vertical, fell through its own figure, and the only lever
+        # left was to throw more entry speed at it. The arc is powered past the vertical
+        # now, so it does not need the speed -- and it cannot afford the g. 0.7 costs
+        # 10.4 g at the bottom, which is 0.70 of throttle on this model, and there is
+        # then not enough mixer left to rotate: the body managed 69 dps of the 229 it
+        # was asked for, so 8 g of thrust went out nearly VERTICALLY and simply fired
+        # the vehicle upward. A zoom, not a loop.
         params = self.autoacro_display_params(0.025, trigger_ch=7,  # RealFlight hover (ThO)
-                                              loop_drag_g=0.7)
+                                              loop_drag_g=0.2)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline trajectory compare
         self.set_parameters(params)
         self.fly_autoacro_moves(((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
@@ -17217,11 +17223,17 @@ return update, 1000
         self.setup_RealFlight_vehicle(model, home)
         self.install_autoacro_scripts()
         # Scripting1 is on RC7 in the realflight-Rise255 tune (see RealFlightAutoAcro).
-        # 0.7 g of drag, measured through the arc on this model -- far draggier than
-        # the native Rise255 (0.2 g). It costs 10.4 g at the bottom, which is the
-        # whole of this airframe's usable thrust: the loop will say so if it clips.
+        # 0.2 g, back down from the 0.7 it was raised to. That budget was a workaround
+        # for thrust the arc was never getting: with angle boost left on, the loop lost
+        # its thrust at the vertical, fell through its own figure, and the only lever
+        # left was to throw more entry speed at it. The arc is powered past the vertical
+        # now, so it does not need the speed -- and it cannot afford the g. 0.7 costs
+        # 10.4 g at the bottom, which is 0.70 of throttle on this model, and there is
+        # then not enough mixer left to rotate: the body managed 69 dps of the 229 it
+        # was asked for, so 8 g of thrust went out nearly VERTICALLY and simply fired
+        # the vehicle upward. A zoom, not a loop.
         params = self.autoacro_display_params(0.025, trigger_ch=7,  # RealFlight hover (ThO)
-                                              loop_drag_g=0.7)
+                                              loop_drag_g=0.2)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
         self.set_parameters(params)
         self.fly_autoacro_display(takeoff_alt=20, trigger_ch=7)
