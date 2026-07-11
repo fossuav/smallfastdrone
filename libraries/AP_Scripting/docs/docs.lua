@@ -2719,8 +2719,9 @@ function vehicle:set_target_angle_and_climbrate(roll_deg, pitch_deg, yaw_deg, cl
 ---@param pitch_rate_dps number -- pitch rate in degrees per second
 ---@param yaw_rate_dps number -- yaw rate in degrees per second
 ---@param throttle number -- throttle demand 0.0 to 1.0
+---@param use_angle_boost boolean -- true to scale thrust by 1/cos(tilt) to hold altitude, and to cut it entirely past 90 degrees of tilt. False delivers the throttle as commanded at any attitude, including inverted, which is what an aerobatic arc needs.
 ---@return boolean -- true if successful
-function vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, yaw_rate_dps, throttle) end
+function vehicle:set_target_rate_and_throttle(roll_rate_dps, pitch_rate_dps, yaw_rate_dps, throttle, use_angle_boost) end
 
 -- Set vehicles roll, pitch, and yaw rates with a closed-loop climb rate in guided mode
 ---@param roll_rate_dps number -- roll rate in degrees per second

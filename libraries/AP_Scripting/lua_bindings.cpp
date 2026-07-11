@@ -1255,6 +1255,55 @@ int lua_AP_Vehicle_set_target_velocity_NED(lua_State *L)
     lua_pushboolean(L, data);
     return 1;
 }
+
+/*
+  set_target_rate_and_throttle, with an optional trailing use_angle_boost.
+
+  Angle boost divides the commanded thrust by cos(tilt) to hold altitude while
+  leaning, and zeroes it entirely past 90 degrees of tilt. That is the right law for
+  a vehicle asking to hold height and the wrong one for an aerobatic arc, which is
+  commanding thrust as a body force and needs it delivered while inverted -- the
+  motors push out of the top of the airframe, which over the top of a loop is the
+  centripetal direction. Optional and defaulting to true so existing scripts, which
+  are all asking to hold height, are unaffected.
+*/
+int lua_AP_Vehicle_set_target_rate_and_throttle(lua_State *L)
+{
+    const int args = lua_gettop(L);
+
+    if (args > 6) {
+        return luaL_argerror(L, args, "too many arguments");
+    } else if (args < 5) {
+        return luaL_argerror(L, args, "too few arguments");
+    }
+
+    AP_Vehicle * ud = check_AP_Vehicle(L);
+    const float roll_rate_dps = luaL_checknumber(L, 2);
+    const float pitch_rate_dps = luaL_checknumber(L, 3);
+    const float yaw_rate_dps = luaL_checknumber(L, 4);
+    const float throttle = luaL_checknumber(L, 5);
+
+    bool use_angle_boost = true;
+    if (args == 6) {
+        use_angle_boost = static_cast<bool>(lua_toboolean(L, 6));
+    }
+
+#if AP_SCHEDULER_ENABLED
+    AP::scheduler().get_semaphore().take_blocking();
+#endif
+    const bool data = static_cast<bool>(ud->set_target_rate_and_throttle(
+            roll_rate_dps,
+            pitch_rate_dps,
+            yaw_rate_dps,
+            throttle,
+            use_angle_boost));
+
+#if AP_SCHEDULER_ENABLED
+    AP::scheduler().get_semaphore().give();
+#endif
+    lua_pushboolean(L, data);
+    return 1;
+}
 #endif // AP_SCRIPTING_BINDING_VEHICLE_ENABLED
 
 #endif  // AP_SCRIPTING_ENABLED
