@@ -16994,13 +16994,19 @@ return update, 1000
         self.install_applet_script_context("autoacro_menu.lua")
         self.reboot_sitl()
 
-    def autoacro_display_params(self, hover, trigger_ch=9):
+    def autoacro_display_params(self, hover, trigger_ch=9, loop_drag_g=0.2):
         '''AUTA_ move-geometry parameters shared by the native and RealFlight
         runs. hover is the vehicle's TRUE hover throttle -- the throttle phases
         are g-loads times hover, so this must be the measured hover. trigger_ch
         gets the Scripting1 (300) aux option the applet arms on; the RealFlight
         tune already puts Scripting1 on RC7, so that run reuses it rather than
-        adding a second Scripting1 channel (a duplicate-aux-switch prearm fail).'''
+        adding a second Scripting1 channel (a duplicate-aux-switch prearm fail).
+
+        loop_drag_g is the drag the loop sizes its entry speed against, and it is
+        per-airframe: the bottom pull is 6 + 2*pi*drag, with no size term, so drag
+        makes a loop harder at every size and cannot be shrunk away. The Rise255
+        model wants ~0.2 g and cannot pull much more; the RealFlight model measures
+        nearer 0.7 g through the arc, which costs 10.4 g at the bottom.'''
         return {
             "ATC_RATE_WPY_MAX": 180,  # snappier yaw for the wingover turnaround
             # WP_ACC (nav accel, m/s2) sits at its 2.5 default here -- the config's
@@ -17031,6 +17037,7 @@ return update, 1000
             # rather than re-tune five moves to a number they have never seen.
             "AUTA_LP_SPD": 10,
             "AUTA_LP_SIZE": 12,  # the loop: entry speed, rate and g-load follow from this
+            "AUTA_LP_DRAG": loop_drag_g,
             "AUTA_LP_MODE": 1,
             "AUTA_RL_RATE": 700,  # ballistic roll fires at the apex, where a fast rate is reachable
             "AUTA_RL_ANG": 360,
@@ -17187,7 +17194,11 @@ return update, 1000
         # The realflight-Rise255 tune already has Scripting1 on RC7, so trigger
         # there instead of adding RC9 (which duplicates the aux option and fails
         # the prearm). The applet arms on the Scripting1 function, not a channel.
-        params = self.autoacro_display_params(0.025, trigger_ch=7)  # RealFlight hover (ThO)
+        # 0.7 g of drag, measured through the arc on this model -- far draggier than
+        # the native Rise255 (0.2 g). It costs 10.4 g at the bottom, which is the
+        # whole of this airframe's usable thrust: the loop will say so if it clips.
+        params = self.autoacro_display_params(0.025, trigger_ch=7,  # RealFlight hover (ThO)
+                                              loop_drag_g=0.7)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline trajectory compare
         self.set_parameters(params)
         self.fly_autoacro_moves(((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
@@ -17206,7 +17217,11 @@ return update, 1000
         self.setup_RealFlight_vehicle(model, home)
         self.install_autoacro_scripts()
         # Scripting1 is on RC7 in the realflight-Rise255 tune (see RealFlightAutoAcro).
-        params = self.autoacro_display_params(0.025, trigger_ch=7)  # RealFlight hover (ThO)
+        # 0.7 g of drag, measured through the arc on this model -- far draggier than
+        # the native Rise255 (0.2 g). It costs 10.4 g at the bottom, which is the
+        # whole of this airframe's usable thrust: the loop will say so if it clips.
+        params = self.autoacro_display_params(0.025, trigger_ch=7,  # RealFlight hover (ThO)
+                                              loop_drag_g=0.7)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
         self.set_parameters(params)
         self.fly_autoacro_display(takeoff_alt=20, trigger_ch=7)
