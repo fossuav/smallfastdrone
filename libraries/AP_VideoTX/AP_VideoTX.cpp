@@ -94,22 +94,9 @@ const AP_Param::GroupInfo AP_VideoTX::var_info[] = {
 
 extern const AP_HAL::HAL& hal;
 
-const char * AP_VideoTX::band_names[] = {"A","B","E","F","R","L","1G3_A","1G3_B","X","3G3_A","3G3_B"};
-
-const uint16_t AP_VideoTX::VIDEO_CHANNELS[AP_VideoTX::MAX_BANDS][VTX_MAX_CHANNELS] =
-{
-    { 5865, 5845, 5825, 5805, 5785, 5765, 5745, 5725}, /* Band A */
-    { 5733, 5752, 5771, 5790, 5809, 5828, 5847, 5866}, /* Band B */
-    { 5705, 5685, 5665, 5645, 5885, 5905, 5925, 5945}, /* Band E */
-    { 5740, 5760, 5780, 5800, 5820, 5840, 5860, 5880}, /* Airwave */
-    { 5658, 5695, 5732, 5769, 5806, 5843, 5880, 5917}, /* Race */
-    { 5362, 5399, 5436, 5473, 5510, 5547, 5584, 5621}, /* LO Race */
-    { 1080, 1120, 1160, 1200, 1240, 1280, 1320, 1360}, /* Band 1G3_A */
-    { 1080, 1120, 1160, 1200, 1258, 1280, 1320, 1360}, /* Band 1G3_B */
-    { 4990, 5020, 5050, 5080, 5110, 5140, 5170, 5200}, /* Band X */
-    { 3330, 3350, 3370, 3390, 3410, 3430, 3450, 3470}, /* Band 3G3_A */
-    { 3170, 3190, 3210, 3230, 3250, 3270, 3290, 3310}  /* Band 3G3_B */
-};
+// the historical hardcoded band/frequency grid and band-name list now live in
+// AP_VideoTX_Table (as the seeded defaults); band/channel -> frequency resolves
+// through the active table (see get_frequency_mhz / get_band_and_channel below).
 
 // mapping of power level to milliwatt to dbm
 // valid power levels from SmartAudio spec, the adjacent levels might be the actual values
@@ -137,6 +124,10 @@ AP_VideoTX::AP_VideoTX()
     singleton = this;
 
     AP_Param::setup_object_defaults(this, var_info);
+
+    // seed the band/frequency + power table with the historical defaults so
+    // band/channel lookups work before (and if no) a stored table is loaded
+    _table.load_defaults();
 }
 
 AP_VideoTX::~AP_VideoTX(void)
@@ -152,6 +143,12 @@ bool AP_VideoTX::init(void)
 
     // PARAMETER_CONVERSION - Added: Sept-2022
     _options.convert_parameter_width(AP_PARAM_INT16);
+
+    // load the stored band/frequency + power table, or persist the seeded
+    // defaults on first boot (falls back to RAM defaults on small-storage boards)
+    _table.init();
+    // seed the selectable power set from the table before resolving _power_mw
+    load_power_levels_from_table();
 
     // find the index into the power table
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
@@ -177,16 +174,24 @@ bool AP_VideoTX::init(void)
     return true;
 }
 
+// band/channel (zero-based) -> frequency in MHz via the active table
+uint16_t AP_VideoTX::get_frequency_mhz(uint8_t band, uint8_t channel)
+{
+    if (singleton == nullptr) {
+        return 0;
+    }
+    return singleton->_table.frequency(band, channel);
+}
+
 bool AP_VideoTX::get_band_and_channel(uint16_t freq, VideoBand& band, uint8_t& channel)
 {
-    for (uint8_t i = 0; i < AP_VideoTX::MAX_BANDS; i++) {
-        for (uint8_t j = 0; j < VTX_MAX_CHANNELS; j++) {
-            if (VIDEO_CHANNELS[i][j] == freq) {
-                band = VideoBand(i);
-                channel = j;
-                return true;
-            }
-        }
+    if (singleton == nullptr) {
+        return false;
+    }
+    uint8_t b;
+    if (singleton->_table.band_and_channel_for_frequency(freq, b, channel)) {
+        band = VideoBand(b);
+        return true;
     }
     return false;
 }
@@ -205,6 +210,55 @@ uint8_t AP_VideoTX::find_current_power() const
         }
     }
     return 0;
+}
+
+// SmartAudio v1 DAC value for the standard mW levels, 0xFF (unknown) otherwise
+static uint8_t dac_for_mw(uint16_t mw)
+{
+    switch (mw) {
+    case 25:  return 7;
+    case 200: return 16;
+    case 500: return 25;
+    case 800: return 40;
+    default:  return 0xFF;
+    }
+}
+
+// rebuild the selectable power set from the user-defined power table so the
+// existing per-protocol send paths (Tramp mW, SmartAudio level/dbm/dac) and the
+// 6-position switch all operate over the table's levels. The table "value" is
+// treated as mW (Tramp-native); dbm/dac are derived for SmartAudio.
+void AP_VideoTX::load_power_levels_from_table()
+{
+    const uint8_t n = _table.num_power_levels();
+    if (n == 0) {
+        return;  // no user power table: keep the compiled learned defaults
+    }
+    for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
+        if (i < n) {
+            const uint16_t mw = _table.power_value(i);
+            _power_levels[i].mw = mw;
+            _power_levels[i].dbm = mw > 0 ? uint8_t(roundf(10.0f * log10f(float(mw)))) : 0;
+            _power_levels[i].dac = dac_for_mw(mw);
+            _power_levels[i].level = i;
+            _power_levels[i].active = mw > 0 ? PowerActive::Active : PowerActive::Inactive;
+        } else {
+            _power_levels[i].active = PowerActive::Inactive;
+        }
+    }
+}
+
+void AP_VideoTX::on_table_updated()
+{
+    // the band/frequency side reads the table live, only the cached power set
+    // needs rebuilding when the table is replaced at runtime (via @VTX FTP)
+    load_power_levels_from_table();
+}
+
+void AP_VideoTX::get_power_label(uint8_t index, char *out, size_t out_len) const
+{
+    // index is one-based over the selectable levels, matching get_*_for_index
+    _table.power_label(index > 0 ? index - 1 : 0, out, out_len);
 }
 
 // set the power in dbm, rounding appropriately
@@ -581,8 +635,8 @@ bool AP_VideoTX::set_defaults()
 void AP_VideoTX::announce_vtx_settings() const
 {
     // Output a friendly message so the user knows the VTX has been detected
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "VTX: %s%d %dMHz, PWR: %dmW",
-        band_names[_band.get()], _channel.get() + 1, _frequency_mhz.get(),
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "VTX: %c%d %dMHz, PWR: %dmW",
+        _table.band_letter(_band.get()), _channel.get() + 1, _frequency_mhz.get(),
         has_option(VideoOptions::VTX_PITMODE) ? 0 : _power_mw.get());
 }
 

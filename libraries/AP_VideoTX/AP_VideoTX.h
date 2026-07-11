@@ -19,6 +19,7 @@
 #if AP_VIDEOTX_ENABLED
 
 #include <AP_Param/AP_Param.h>
+#include "AP_VideoTX_Table.h"
 
 #define VTX_MAX_CHANNELS 8
 #define VTX_MAX_POWER_LEVELS 10
@@ -52,8 +53,6 @@ public:
         VTX_SA_IGNORE_CRC     = (1 << 6),
         VTX_CRSF_IGNORE_STAT  = (1 << 7),
     };
-
-    static const char *band_names[];
 
     enum VideoBand {
         BAND_A,
@@ -93,10 +92,19 @@ public:
 
     static PowerLevel _power_levels[VTX_MAX_POWER_LEVELS];
 
-    static const uint16_t VIDEO_CHANNELS[MAX_BANDS][VTX_MAX_CHANNELS];
-
-    static uint16_t get_frequency_mhz(uint8_t band, uint8_t channel) { return VIDEO_CHANNELS[band][channel]; }
+    // band/channel -> frequency (MHz), resolved through the active VTX table.
+    // 0 if no VTX exists yet or the band/channel is out of range/disabled.
+    static uint16_t get_frequency_mhz(uint8_t band, uint8_t channel);
     static bool get_band_and_channel(uint16_t freq, VideoBand& band, uint8_t& channel);
+
+    // access the user-definable band/frequency + power table
+    AP_VideoTX_Table& table() { return _table; }
+    const AP_VideoTX_Table& table() const { return _table; }
+    // called after the table is replaced over @VTX FTP so cached state
+    // (the selectable power set) is rebuilt from the new table
+    void on_table_updated();
+    // display label for a one-based power index, empty if out of range
+    void get_power_label(uint8_t index, char *out, size_t out_len) const;
 
     void set_frequency_mhz(uint16_t freq) { _current_frequency = freq; }
     void set_configured_frequency_mhz(uint16_t freq) { _frequency_mhz.set_and_save_ifchanged(freq); }
@@ -204,6 +212,9 @@ public:
 
 private:
     uint8_t find_current_power() const;
+    // rebuild the selectable power set (_power_levels) from the table's
+    // user-defined power levels; no-op if the table defines no power levels
+    void load_power_levels_from_table();
     // channel frequency
     AP_Int16 _frequency_mhz;
     uint16_t _current_frequency;
@@ -240,6 +251,10 @@ private:
 
     // types of VTX providers
     uint8_t _types;
+
+    // user-definable band/frequency + power table (seeded with the historical
+    // defaults); the single source of truth for band/channel -> frequency
+    AP_VideoTX_Table _table;
 };
 
 namespace AP {
