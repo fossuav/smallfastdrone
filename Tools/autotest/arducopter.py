@@ -17012,12 +17012,25 @@ return update, 1000
             # to it, so it overshoots: box 76-95 m). SITL keeps its own clean tune and
             # validates the choreography; the real vehicle flies it with its own.
             "WP_ACC": 12.0,
+            # The guided entry is flown by the position controller, so this caps the
+            # speed any move can enter at -- and a sized loop's entry speed is what its
+            # SIZE buys (a 12 m loop wants 17 m/s). At the 10 m/s default the loop
+            # cannot reach the top of its own arc and falls inside it. Same family as
+            # the WP_ACC note above: a limit nobody set, quietly binding.
+            "WP_SPD": 25.0,
             "ATC_ANGLE_MAX": 70,
             "AUTA_ENABLE": 1,
             "AUTA_HOVER": hover,
             "AUTA_LP_RATE": 130,  # tighter loop/immelmann, nearer the pilot's ~130-160 dps
             "AUTA_LP_ANG": 360,
-            "AUTA_LP_SPD": 20,  # reachable given the ~21 m/s drag-limited ceiling
+            # 10, not the 20 this used to say. WP_SPD was capping the guided entry at
+            # its 10 m/s default, so every UNSIZED move has been flying half the entry
+            # speed its parameter claimed, and each was tuned against that. Raising
+            # WP_SPD for the loop's sake un-caps them, and at a genuine 20 m/s they fly
+            # twice as energetically and hit the ceiling. State what they actually fly
+            # rather than re-tune five moves to a number they have never seen.
+            "AUTA_LP_SPD": 10,
+            "AUTA_LP_SIZE": 12,  # the loop: entry speed, rate and g-load follow from this
             "AUTA_LP_MODE": 1,
             "AUTA_RL_RATE": 700,  # ballistic roll fires at the apex, where a fast rate is reachable
             "AUTA_RL_ANG": 360,
