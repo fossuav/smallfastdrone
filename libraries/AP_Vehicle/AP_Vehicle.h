@@ -195,7 +195,7 @@ public:
     virtual bool set_target_velocity_NED(const Vector3f& vel_ned_ms, bool align_yaw_to_target = false) { return false; }
     virtual bool set_target_velaccel_NED(const Vector3f& target_vel_ned_ms, const Vector3f& target_accel_ned_mss, bool use_yaw, float yaw_deg, bool use_yaw_rate, float yaw_rate_degs, bool yaw_relative) { return false; }
     virtual bool set_target_angle_and_climbrate(float roll_deg, float pitch_deg, float yaw_deg, float climb_rate_ms, bool use_yaw_rate, float yaw_rate_degs) { return false; }
-    virtual bool set_target_rate_and_throttle(float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float throttle) { return false; }
+    virtual bool set_target_rate_and_throttle(float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float throttle, bool use_angle_boost) { return false; }
     virtual bool set_target_rate_and_climbrate(float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float climb_rate_ms) { return false; }
     virtual bool set_target_angle_and_rate_and_throttle(float roll_deg, float pitch_deg, float yaw_deg, float roll_rate_degs, float pitch_rate_degs, float yaw_rate_degs, float throttle) { return false; }
 
