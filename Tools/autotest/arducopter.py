@@ -16679,6 +16679,10 @@ return update, 1000
             "AUTA_LP_RATE": 150,  # tuned from log271 reps
             "AUTA_LP_ANG": 360,
             "AUTA_LP_SPD": 20,    # tuned from log271 reps
+            # Unsized loop. This test flies the default SITL quad, which makes 2.9 g
+            # and so cannot pull the ~6 g a round loop needs at any size. The sizing
+            # law is exercised on the Rise255 racing model in AutoAcroLoopSizing.
+            "AUTA_LP_SIZE": 0,
             "AUTA_RL_RATE": 450,  # tuned from log271 reps
             "AUTA_RL_ANG": 360,
             "AUTA_RL_DIR": 1,
@@ -16793,12 +16797,137 @@ return update, 1000
         self.context_collect('STATUSTEXT')
         self.set_rc(9, 2000)
         self.wait_statustext("AutoAcro: move 1/1 Wingover", check_context=True, timeout=10)
-        # The guided wingover flies a velocity trajectory; "turning" marks the start
-        self.wait_statustext("Wingover: turning", check_context=True, timeout=15)
+        # Reaching the carve proves it rolled in and started the banked pull
+        self.wait_statustext("Wingover: carving", check_context=True, timeout=15)
         self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=30)
         self.wait_mode("LOITER")
         self.set_rc(9, 1000)
         self.do_RTL()
+
+    def AutoAcroLoopSizing(self):
+        '''Fly a loop sized by AUTA_LP_SIZE and check it comes back where it started.
+
+        On the Rise255 racing model, not the default quad: a round loop needs about
+        6.5 g at the bottom whatever its size (size buys speed and rotation rate,
+        not load), and the default SITL quad makes only 2.9 g. It cannot fly one at
+        any size, so it cannot tell us whether the sizing law works. The target
+        vehicle measures 9.9 g.
+        '''
+        self.customise_SITL_commandline(
+            [],
+            model="X:@ROMFS/models/Rise255.json",
+            defaults_filepath=self.model_defaults_filepath("Rise255"),
+            wipe=True,
+        )
+        self.set_parameters({
+            "WP_ACC": 5,
+            "WP_ACC_Z": 5,
+            "WP_JERK": 20,
+            # The entry is flown by the position controller, so this caps the entry
+            # speed -- and the entry speed is what the loop's size buys. 20 m/s is
+            # below what an 18 m loop asks for, and a loop entered under speed falls
+            # out of its own top.
+            "WP_SPD": 30,
+            "WP_SPD_DN": 10,
+            "WP_SPD_UP": 10,
+            "PSC_JERK_D": 40,
+            "PSC_JERK_NE": 40,
+            # The applet, the maneuver module and the CRSF menu together no longer
+            # fit the 200 KB default.
+            "SCR_HEAP_SIZE": 400000,
+        })
+        self.install_autoacro_scripts()
+
+        self.set_parameters({
+            "AUTA_ENABLE": 1,
+            "AUTA_MOVE": 2,          # the loop, in isolation
+            "AUTA_LP_ANG": 360,
+            "AUTA_TCAL": 1,          # measure the thrust map, as the vehicle does
+            "AUTA_HOVER": 0.125,
+            "RC9_OPTION": 300,       # Scripting1
+        })
+
+        # Two sizes, because the claim being tested is not "a loop closes" but "the
+        # size is the only input" -- one number should rescale the whole figure, and
+        # the height it comes out at should be the height that was asked for.
+        # Two sizes, because the claim being tested is not "a loop closes" but "size
+        # is the only input" -- one number should rescale the whole figure, and the
+        # height it comes out at should be the height that was asked for.
+        #
+        # Both sizes sit inside the band this airframe can actually fly, which is
+        # bounded at BOTH ends and is worth knowing about:
+        #
+        #  - too big and drag beats it. The energy sum the sizing law rests on has no
+        #    drag term, and drag goes as v^2 where the entry speed only goes as
+        #    sqrt(size). An 18 m loop flies its arc at 21 m/s, reaches the top below
+        #    sqrt(g*r), falls INSIDE its own arc and comes out 10 m low.
+        #  - too small and the rotation beats it. The rate a round loop needs is
+        #    sqrt(5g/r), which grows as the loop shrinks; an 8 m loop asks for 201 dps
+        #    while pulling 6 g, the body cannot hold that, it lags the flight path, and
+        #    thrust that is no longer perpendicular does work. The 8 m loop flies 12 m.
+        #
+        # Rise255's band is about 10-14 m. Testing at its edges would make this a drag
+        # experiment; what it is for is the parameterisation.
+        self.context_collect('STATUSTEXT')
+        for size in (10, 12):
+            self.set_parameter("AUTA_LP_SIZE", size)
+            self.set_rc(3, 1000)
+            self.takeoff(60, mode="LOITER")
+            self.context_clear_collection('STATUSTEXT')
+            self.set_rc(9, 2000)
+
+            self.wait_statustext("AutoAcro: move 1/1 Loop", check_context=True, timeout=30)
+            self.wait_statustext("Loop: looping", check_context=True, timeout=30)
+            entry_alt = self.get_altitude(relative=True)
+
+            # Track the arc as it flies: a loop that closes by climbing out and
+            # diving back is not a loop. That is exactly what the unsized version
+            # did -- 32 m of climb on the real vehicle for a figure meant to be 14 m
+            # tall -- and it closed the altitude books while doing it.
+            peak_alt = entry_alt
+            floor_alt = entry_alt
+            tstart = self.get_sim_time()
+            while not self.statustext_in_collections("Loop: recovered"):
+                if self.get_sim_time_cached() - tstart > 30:
+                    raise NotAchievedException("Loop did not recover")
+                alt = self.get_altitude(relative=True)
+                peak_alt = max(peak_alt, alt)
+                floor_alt = min(floor_alt, alt)
+            exit_alt = self.get_altitude(relative=True)
+
+            climb = peak_alt - entry_alt
+            drop = entry_alt - floor_alt
+            close = exit_alt - entry_alt
+            self.progress("Loop %um: climbed %.1fm, dropped %.1fm, closed %+.1fm" %
+                          (size, climb, drop, close))
+
+            # Closing where it started is the sharp invariant and the one that
+            # matters: it is what the +32 m power loop failed at, and it holds to a
+            # couple of metres every run. Height is the loose one -- the arc is the
+            # size asked for to within about a third, the scatter coming from the
+            # entry transient, so the bounds here are wide on purpose rather than
+            # tuned until green.
+            if abs(close) > size * 0.3:
+                raise NotAchievedException(
+                    "Loop %um closed %+.1fm from entry, want within %.1fm" %
+                    (size, close, size * 0.3))
+            if drop > size * 0.5:
+                raise NotAchievedException(
+                    "Loop %um dropped %.1fm below entry -- it fell out of the top" %
+                    (size, drop))
+            if climb > size * 1.7:
+                raise NotAchievedException(
+                    "Loop %um climbed %.1fm, want no more than %.1fm" %
+                    (size, climb, size * 1.7))
+            if climb < size * 0.6:
+                raise NotAchievedException(
+                    "Loop %um only climbed %.1fm -- it did not fly the size asked for" %
+                    (size, climb))
+
+            self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=30)
+            self.wait_mode("LOITER")
+            self.set_rc(9, 1000)
+            self.do_RTL()
 
     def install_autoacro_scripts(self):
         '''Enable scripting and install the autoacro applet plus its modules,
@@ -17183,6 +17312,7 @@ return update, 1000
             self.EKF3SRCPerCore,
             self.ScriptingFlipOnASwitch,
             self.AutoAcroDisplay,
+            self.AutoAcroLoopSizing,
             self.AutoAcroSmoothness,
             self.AutoAcroFullDisplay,
             self.AutoAcroYawSpin,
