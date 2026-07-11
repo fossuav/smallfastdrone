@@ -74,6 +74,12 @@
 #define AP_FILESYSTEM_MISSION_ENABLED AP_MISSION_ENABLED
 #endif
 
+// @VTX virtual mount exposing the VTX band/power table as a blob for MAVLink FTP
+#ifndef AP_FILESYSTEM_VTX_ENABLED
+#include <AP_VideoTX/AP_VideoTX_config.h>
+#define AP_FILESYSTEM_VTX_ENABLED AP_VIDEOTX_TABLE_ENABLED
+#endif
+
 #ifndef AP_FATFS_MAX_IO_SIZE
 #define AP_FATFS_MAX_IO_SIZE 4096
 #endif
