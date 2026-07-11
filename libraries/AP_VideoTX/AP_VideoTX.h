@@ -215,6 +215,18 @@ private:
     // rebuild the selectable power set (_power_levels) from the table's
     // user-defined power levels; no-op if the table defines no power levels
     void load_power_levels_from_table();
+    // whether the user @VTX table defines the authoritative selectable power
+    // set (has any non-zero power level). When true every power-index accessor
+    // resolves against the ordered table instead of the runtime-learned
+    // _power_levels[] ladder, so the selectable set is deterministic and
+    // matches the @VTX table (and the configurator) rather than whatever the
+    // VTX driver happens to have reported.
+    bool have_power_table() const;
+    // map a one-based selectable power index to the underlying @VTX table slot,
+    // skipping unused (0-value) entries so the index space matches the README
+    // contract ("i-th supported/non-zero level in table order"). false if the
+    // index is out of range.
+    bool table_power_slot(uint8_t index, uint8_t &slot) const;
     // channel frequency
     AP_Int16 _frequency_mhz;
     uint16_t _current_frequency;

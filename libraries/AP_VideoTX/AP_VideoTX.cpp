@@ -257,8 +257,17 @@ void AP_VideoTX::on_table_updated()
 
 void AP_VideoTX::get_power_label(uint8_t index, char *out, size_t out_len) const
 {
-    // index is one-based over the selectable levels, matching get_*_for_index
-    _table.power_label(index > 0 ? index - 1 : 0, out, out_len);
+    // index is one-based over the selectable levels, matching get_*_for_index:
+    // resolve through the same non-zero slot mapping so the label and the mW
+    // for a given index always refer to the same table entry
+    uint8_t slot;
+    if (table_power_slot(index, slot)) {
+        _table.power_label(slot, out, out_len);
+        return;
+    }
+    if (out_len > 0) {
+        out[0] = 0;
+    }
 }
 
 // set the power in dbm, rounding appropriately
@@ -353,9 +362,55 @@ void AP_VideoTX::update_power_mw(uint16_t power_mw, PowerActive active)
     slot.active = active;
 }
 
-// number of supported (active) power levels
+// whether the user @VTX table is the authoritative source of the selectable
+// power set. On this fork init() always seeds a default table, so this is
+// normally true; it only falls back to the learned ladder if the table somehow
+// defines no usable (non-zero) power level.
+bool AP_VideoTX::have_power_table() const
+{
+    for (uint8_t i = 0; i < _table.num_power_levels(); i++) {
+        if (_table.power_value(i) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// map a one based selectable index to a @VTX table slot, skipping unused
+// (0 mW) entries. This keeps every power-index accessor consistent with the
+// documented contract and the configurator: index i == the i-th NON-ZERO power
+// level in the order the table lists them.
+bool AP_VideoTX::table_power_slot(uint8_t index, uint8_t &slot) const
+{
+    uint8_t count = 0;
+    const uint8_t n = _table.num_power_levels();
+    for (uint8_t i = 0; i < n; i++) {
+        if (_table.power_value(i) == 0) {
+            continue;
+        }
+        if (++count == index) {
+            slot = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+// number of supported (selectable) power levels. Resolved against the ordered
+// @VTX table when one is defined, so it is deterministic and matches the
+// configurator; only when no table power levels exist does it reflect the
+// runtime-learned _power_levels[] ladder.
 uint8_t AP_VideoTX::get_num_power_levels() const
 {
+    if (have_power_table()) {
+        uint8_t count = 0;
+        for (uint8_t i = 0; i < _table.num_power_levels(); i++) {
+            if (_table.power_value(i) != 0) {
+                count++;
+            }
+        }
+        return count;
+    }
     uint8_t count = 0;
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
         if (_power_levels[i].active == PowerActive::Active) {
@@ -365,9 +420,15 @@ uint8_t AP_VideoTX::get_num_power_levels() const
     return count;
 }
 
-// mW for a one based index into the supported levels (ascending), 0 if unknown
+// mW for a one based index into the supported levels, 0 if unknown. Table
+// order when a user table is defined (index i -> i-th non-zero table entry),
+// otherwise the learned ladder.
 uint16_t AP_VideoTX::get_power_mw_for_index(uint8_t index) const
 {
+    if (have_power_table()) {
+        uint8_t slot;
+        return table_power_slot(index, slot) ? _table.power_value(slot) : 0;
+    }
     uint8_t count = 0;
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
         if (_power_levels[i].active == PowerActive::Active && ++count == index) {
@@ -377,9 +438,24 @@ uint16_t AP_VideoTX::get_power_mw_for_index(uint8_t index) const
     return 0;
 }
 
-// one based index into the supported levels for a mW value, 0 if not matched
+// one based index into the supported levels for a mW value, 0 if not matched.
+// Table order when a user table is defined, otherwise the learned ladder.
 uint8_t AP_VideoTX::get_power_index_for_mw(uint16_t power_mw) const
 {
+    if (have_power_table()) {
+        uint8_t count = 0;
+        for (uint8_t i = 0; i < _table.num_power_levels(); i++) {
+            const uint16_t v = _table.power_value(i);
+            if (v == 0) {
+                continue;
+            }
+            count++;
+            if (v == power_mw) {
+                return count;
+            }
+        }
+        return 0;
+    }
     uint8_t count = 0;
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
         if (_power_levels[i].active == PowerActive::Active) {
@@ -647,26 +723,27 @@ void AP_VideoTX::change_power(int8_t position)
     if (!_enabled || position < 0 || position > 5) {
         return;
     }
-    // first find out how many possible levels there are
+    // build the selectable set from the authoritative power levels (the ordered
+    // @VTX table when one is defined, otherwise the learned ladder) via the
+    // shared accessors, keeping only levels within the configured maximum. This
+    // keeps the low/mid/high position path consistent with the exact-index path
+    // and the OSD, all resolving against the same source of truth.
+    const uint8_t n = get_num_power_levels();
+    uint16_t levels[VTX_MAX_POWER_LEVELS];
     uint8_t num_active_levels = 0;
-    for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
-        if (_power_levels[i].active != PowerActive::Inactive && _power_levels[i].mw <= _max_power_mw) {
-            num_active_levels++;
+    for (uint8_t i = 1; i <= n && num_active_levels < VTX_MAX_POWER_LEVELS; i++) {
+        const uint16_t mw = get_power_mw_for_index(i);
+        if (mw != 0 && mw <= _max_power_mw) {
+            levels[num_active_levels++] = mw;
         }
     }
-    // iterate through to find the level
-    uint16_t level = constrain_int16(roundf((num_active_levels * (position + 1)/ 6.0f) - 1), 0, num_active_levels - 1);
-    debug("looking for pos %d power level %d from %d", position, level, num_active_levels);
+
     uint16_t power = 0;
-    for (uint8_t i = 0, j = 0; i < num_active_levels; i++, j++) {
-        while (j < VTX_MAX_POWER_LEVELS-1 && _power_levels[j].active == PowerActive::Inactive) {
-            j++;
-        }
-        if (i == level) {
-            power = _power_levels[j].mw;
-            debug("selected power %dmw", power);
-            break;
-        }
+    if (num_active_levels > 0) {
+        // map the 6 switch positions proportionally across the available levels
+        const uint16_t level = constrain_int16(roundf((num_active_levels * (position + 1) / 6.0f) - 1), 0, num_active_levels - 1);
+        power = levels[level];
+        debug("pos %d -> level %d/%d = %dmw", position, level, num_active_levels, power);
     }
 
     if (position == 5 && power < _max_power_mw) {
