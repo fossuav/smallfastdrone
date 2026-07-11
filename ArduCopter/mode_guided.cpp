@@ -19,6 +19,14 @@ struct {
     float climb_rate_ms;    // climb rate in ms.  Used if use_thrust is false
     float thrust_norm;      // thrust from -1 to 1.  Used if use_thrust is true
     bool use_thrust;
+    // Angle boost divides the commanded thrust by cos(tilt) to hold altitude while
+    // leaning, and zeroes it entirely past 90 degrees of tilt (see
+    // AC_AttitudeControl_Multi::get_throttle_boosted). Both are wrong for a maneuver
+    // that is commanding thrust as a body force rather than asking to hold height:
+    // an aerobatic arc needs its thrust delivered as asked, and it needs it INVERTED,
+    // where the motors still push out of the top of the airframe and that is exactly
+    // the direction the top of a loop requires. Flip and Acro already pass false here.
+    bool use_angle_boost;
 } static guided_angle_state;
 
 struct Guided_Limit {
@@ -679,7 +687,7 @@ bool ModeGuided::use_wpnav_for_position_control() const
 // climb_rate_ms_or_thrust: represents either the climb_rate (m/s) or thrust scaled from [0, 1], unitless
 // use_thrust: IF true: climb_rate_ms_or_thrust represents thrust
 //             IF false: climb_rate_ms_or_thrust represents climb_rate (m/s)
-void ModeGuided::set_angle(const Quaternion &attitude_quat, const Vector3f &ang_vel_body, float climb_rate_ms_or_thrust, bool use_thrust)
+void ModeGuided::set_angle(const Quaternion &attitude_quat, const Vector3f &ang_vel_body, float climb_rate_ms_or_thrust, bool use_thrust, bool use_angle_boost)
 {
     // check we are in velocity control mode
     if (guided_mode != SubMode::Angle) {
@@ -693,6 +701,7 @@ void ModeGuided::set_angle(const Quaternion &attitude_quat, const Vector3f &ang_
     guided_angle_state.ang_vel_body = ang_vel_body;
 
     guided_angle_state.use_thrust = use_thrust;
+    guided_angle_state.use_angle_boost = use_angle_boost;
     if (use_thrust) {
         guided_angle_state.thrust_norm = climb_rate_ms_or_thrust;
         guided_angle_state.climb_rate_ms = 0.0f;
@@ -1029,7 +1038,7 @@ void ModeGuided::angle_control_run()
 
     // call position controller
     if (guided_angle_state.use_thrust) {
-        attitude_control->set_throttle_out(guided_angle_state.thrust_norm, true, copter.g.throttle_filt);
+        attitude_control->set_throttle_out(guided_angle_state.thrust_norm, guided_angle_state.use_angle_boost, copter.g.throttle_filt);
     } else {
         pos_control->D_set_pos_target_from_climb_rate_ms(climb_rate_ms);
         pos_control->D_update_controller();
