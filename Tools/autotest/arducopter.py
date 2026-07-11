@@ -16866,7 +16866,13 @@ return update, 1000
             "AUTA_MOVE": 2,          # the loop, in isolation
             "AUTA_LP_ANG": 360,
             "AUTA_TCAL": 1,          # measure the thrust map, as the vehicle does
-            "AUTA_HOVER": 0.125,
+            # The Rise255's true hover. The calibration corrects the SLOPE of the
+            # thrust map, so a moderately wrong AUTA_HOVER washes out -- but it is
+            # also what the calibration settles at before probing, and four times
+            # hover means the vehicle is climbing hard when the idle probe fires.
+            # Drag is a specific force, so the accelerometer reads it, and the idle
+            # thrust comes back low (0.61 g against a true 0.70).
+            "AUTA_HOVER": 0.033,
             "RC9_OPTION": 300,       # Scripting1
         })
 
@@ -16963,7 +16969,11 @@ return update, 1000
     def install_autoacro_scripts(self):
         '''Enable scripting and install the autoacro applet plus its modules,
         then reboot so they load. Shared by the native and RealFlight move runs.'''
-        self.set_parameters({"SCR_ENABLE": 1})
+        # The applet, the maneuver module and the CRSF menu together no longer fit the
+        # 200 KB default heap. The failure does not look like a Lua problem: the
+        # scripts simply are not there, and the first thing to notice is the AUTA_
+        # parameters failing to set.
+        self.set_parameters({"SCR_ENABLE": 1, "SCR_HEAP_SIZE": 400000})
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "crsf_helper.lua"), "crsf_helper.lua")
