@@ -114,12 +114,11 @@ public:
     void update_configured_frequency();
     // get / set power level
     void set_power_mw(uint16_t power);
-    void set_power_level(uint8_t level, PowerActive active=PowerActive::Active);
-    void set_power_dbm(uint8_t power, PowerActive active=PowerActive::Active);
-    void set_power_dac(uint16_t power, PowerActive active=PowerActive::Active);
-    // add a new dbm setting to those supported
-    uint8_t update_power_dbm(uint8_t power, PowerActive active=PowerActive::Active);
-    void update_all_power_dbm(uint8_t nlevels, const uint8_t levels[]);
+    // sync the current-power cursor to what an analog VTX reports it is running;
+    // the selectable set is owned by the @VTX table, so nothing is learned here
+    void set_power_level(uint8_t level);
+    void set_power_dbm(uint8_t power);
+    void set_power_dac(uint16_t power);
     void set_configured_power_mw(uint16_t power);
     uint16_t get_configured_power_mw() const { return _power_mw; }
     uint16_t get_power_mw() const { return _power_levels[_current_power].mw; }
@@ -146,11 +145,8 @@ public:
         return _power_levels[find_current_power()].dac;
     }
 
-    // mark the power level matching the given mW as supported, learning it
-    // into the custom slot if it is not a standard value
-    void update_power_mw(uint16_t power_mw, PowerActive active = PowerActive::Active);
-    // a provider's power index is one based and refers to the supported (active)
-    // levels in ascending order, so index 1 is the lowest supported level
+    // a provider's power index is one based and refers to the selectable power
+    // levels (the @VTX table) in table order, so index 1 is the first level
     uint8_t get_num_power_levels() const;
     // mW for a one based power index, 0 if not known
     uint16_t get_power_mw_for_index(uint8_t index) const;

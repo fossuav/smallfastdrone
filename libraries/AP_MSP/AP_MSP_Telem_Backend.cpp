@@ -1590,11 +1590,9 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_in_vtxtable_powerlevel(sbuf_t
     if (level >= 1 && level <= AP_VideoTX_Table::MAX_POWER_LEVELS) {
         vtx.table().set_power_level(level - 1, value, label, label_copy);
         vtx.table().save();
+        // the table is the single source of truth for the selectable power set,
+        // so rebuilding the cached levels from it is all that is needed
         vtx.on_table_updated();
-    }
-    // keep the analog learned-power model in step (value is dBm for digital VTX)
-    if (value > 0) {
-        vtx.update_power_dbm(uint8_t(value));
     }
 
     return MSP_RESULT_ACK;
