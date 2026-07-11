@@ -527,6 +527,12 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_command(uint16_t cmd_msp,
         return msp_process_out_vtx_config(src, dst);
     case MSP_SET_VTX_CONFIG:
         return msp_process_in_vtx_config(src, dst);
+    case MSP_VTXTABLE_BAND:
+        return msp_process_out_vtxtable_band(src, dst);
+    case MSP_VTXTABLE_POWERLEVEL:
+        return msp_process_out_vtxtable_powerlevel(src, dst);
+    case MSP_SET_VTXTABLE_BAND:
+        return msp_process_in_vtxtable_band(src, dst);
     case MSP_SET_VTXTABLE_POWERLEVEL:
         return msp_process_in_vtxtable_powerlevel(src, dst);
 #endif
@@ -1288,6 +1294,23 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_in_vtx_config(sbuf_t *src, sb
         }
     }
 
+    // API 1.42 - trailing table geometry: [u8 bands][u8 channels][u8 powerLevels]
+    // then an optional [u8 clearTable]. A configurator writing a fresh table
+    // sends clearTable = 1 with the new dimensions, then re-uploads each band and
+    // power level via MSP_SET_VTXTABLE_BAND/POWERLEVEL. We wipe and resize only on
+    // the clear request; otherwise the counts are implied by the entries that
+    // follow (set_band/set_power_level grow them) so the fields are just consumed.
+    if (sbuf_bytes_remaining(src) >= 3) {
+        const uint8_t nbands = sbuf_read_u8(src);
+        const uint8_t nchannels = sbuf_read_u8(src);
+        const uint8_t npower = sbuf_read_u8(src);
+        if (sbuf_bytes_remaining(src) >= 1 && sbuf_read_u8(src) != 0) {
+            vtx.table().set_dims(nbands, nchannels, npower);
+            vtx.table().save();
+            vtx.on_table_updated();
+        }
+    }
+
     vtx.set_provider_enabled(AP_VideoTX::VTXType::MSP);
     // the VTX has pushed its own config, so the boot handshake is complete and
     // we may now advertise readiness and push config changes back to it
@@ -1358,6 +1381,12 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_vtx_config(sbuf_t *src, s
         return MSP_RESULT_ERROR;
     }
 
+    // advertise our user-definable table so the goggle/configurator knows to
+    // pull the per-band/per-power entries (MSP_VTXTABLE_BAND/POWERLEVEL). A
+    // table with no bands is treated as "no table" (table = 0)
+    const AP_VideoTX_Table& tbl = vtx.table();
+    const bool have_table = tbl.is_valid();
+
     // band/channel are one based on the wire (band == 0 means raw frequency),
     // zero based internally
     const uint8_t VTXDEV_MSP = 5;   // betaflight vtxDevType_e
@@ -1392,13 +1421,142 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_vtx_config(sbuf_t *src, s
         // betaflight FC (FC_VARIANT) that is not yet configured. Once it has
         // pushed its config to us we report ready so it honours our config pushes
         .deviceIsReady = _vtx_config_received ? uint8_t(1) : uint8_t(0),
-        .table = 0,
-        .table_bands = 0,
-        .table_channels = 0,
-        .table_powerLevels = 0
+        .table = have_table ? uint8_t(1) : uint8_t(0),
+        .table_bands = have_table ? tbl.num_bands() : uint8_t(0),
+        .table_channels = have_table ? tbl.num_channels() : uint8_t(0),
+        .table_powerLevels = have_table ? tbl.num_power_levels() : uint8_t(0)
     };
 
     sbuf_write_data(dst, &vtx_config, sizeof(vtx_config));
+    return MSP_RESULT_ACK;
+}
+
+// MSP_VTXTABLE_BAND (137): serve one band's name/letter/factory flag and its
+// channel frequency map so a goggle/configurator can read back our table.
+// request: [u8 band (one based)]
+// reply:   [u8 band][u8 nameLen][name...][u8 letter][u8 isFactory]
+//          [u8 channelCount][u16 freq × channelCount]
+MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_vtxtable_band(sbuf_t *src, sbuf_t *dst)
+{
+    AP_VideoTX& vtx = AP::vtx();
+    if (!vtx.get_enabled()) {
+        return MSP_RESULT_ERROR;
+    }
+    const AP_VideoTX_Table& tbl = vtx.table();
+    if (sbuf_bytes_remaining(src) < 1) {
+        return MSP_RESULT_ERROR;
+    }
+    const uint8_t band = sbuf_read_u8(src);   // one based
+    if (band < 1 || band > tbl.num_bands()) {
+        return MSP_RESULT_ERROR;
+    }
+    const uint8_t idx = band - 1;
+
+    char name[AP_VideoTX_Table::BAND_NAME_LEN + 1];
+    tbl.band_name(idx, name, sizeof(name));
+    const uint8_t name_len = AP_VideoTX_Table::BAND_NAME_LEN;
+    const uint8_t nchan = tbl.num_channels();
+
+    // assemble into a local buffer; sbuf has no scalar writers, only write_data
+    uint8_t buf[3 + AP_VideoTX_Table::BAND_NAME_LEN + 3 + AP_VideoTX_Table::MAX_CHANNELS * 2];
+    uint8_t *p = buf;
+    *p++ = band;
+    *p++ = name_len;
+    for (uint8_t i = 0; i < name_len; i++) {
+        // betaflight pads the fixed-width name field with spaces
+        *p++ = (name[i] != 0) ? uint8_t(name[i]) : uint8_t(' ');
+    }
+    *p++ = uint8_t(tbl.band_letter(idx));
+    *p++ = tbl.band_is_factory(idx) ? 1 : 0;
+    *p++ = nchan;
+    for (uint8_t c = 0; c < nchan; c++) {
+        const uint16_t f = tbl.frequency(idx, c);
+        *p++ = uint8_t(f & 0xFF);
+        *p++ = uint8_t(f >> 8);
+    }
+    sbuf_write_data(dst, buf, p - buf);
+    return MSP_RESULT_ACK;
+}
+
+// MSP_VTXTABLE_POWERLEVEL (138): serve one power level's protocol value and
+// display label.
+// request: [u8 powerLevel (one based)]
+// reply:   [u8 powerLevel][u16 value][u8 labelLen][label...]
+MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_vtxtable_powerlevel(sbuf_t *src, sbuf_t *dst)
+{
+    AP_VideoTX& vtx = AP::vtx();
+    if (!vtx.get_enabled()) {
+        return MSP_RESULT_ERROR;
+    }
+    const AP_VideoTX_Table& tbl = vtx.table();
+    if (sbuf_bytes_remaining(src) < 1) {
+        return MSP_RESULT_ERROR;
+    }
+    const uint8_t level = sbuf_read_u8(src);   // one based
+    if (level < 1 || level > tbl.num_power_levels()) {
+        return MSP_RESULT_ERROR;
+    }
+    const uint8_t idx = level - 1;
+
+    char label[AP_VideoTX_Table::POWER_LABEL_LEN + 1];
+    tbl.power_label(idx, label, sizeof(label));
+    const uint8_t label_len = AP_VideoTX_Table::POWER_LABEL_LEN;
+    const uint16_t value = tbl.power_value(idx);
+
+    uint8_t buf[4 + AP_VideoTX_Table::POWER_LABEL_LEN];
+    uint8_t *p = buf;
+    *p++ = level;
+    *p++ = uint8_t(value & 0xFF);
+    *p++ = uint8_t(value >> 8);
+    *p++ = label_len;
+    for (uint8_t i = 0; i < label_len; i++) {
+        *p++ = (label[i] != 0) ? uint8_t(label[i]) : uint8_t(' ');
+    }
+    sbuf_write_data(dst, buf, p - buf);
+    return MSP_RESULT_ACK;
+}
+
+// MSP_SET_VTXTABLE_BAND (227): ingest one band definition (name/letter/factory
+// flag + channel frequency map) into our table. Persisted so a configurator or
+// digital VTX (DJI/HDZero/Walksnail) can populate the table over MSP.
+// request: [u8 band (one based)][u8 nameLen][name...][u8 letter][u8 isFactory]
+//          [u8 channelCount][u16 freq × channelCount]
+MSPCommandResult AP_MSP_Telem_Backend::msp_process_in_vtxtable_band(sbuf_t *src, sbuf_t *dst)
+{
+    AP_VideoTX& vtx = AP::vtx();
+    if (!vtx.get_enabled()) {
+        return MSP_RESULT_ERROR;
+    }
+    if (sbuf_bytes_remaining(src) < 4) {
+        return MSP_RESULT_ERROR;
+    }
+    const uint8_t band = sbuf_read_u8(src);   // one based
+    if (band < 1 || band > AP_VideoTX_Table::MAX_BANDS) {
+        return MSP_RESULT_ERROR;
+    }
+    uint8_t name_len = sbuf_read_u8(src);
+    char name[AP_VideoTX_Table::BAND_NAME_LEN];
+    const uint8_t name_copy = MIN(name_len, uint8_t(sizeof(name)));
+    for (uint8_t i = 0; i < name_len; i++) {
+        const uint8_t ch = sbuf_read_u8(src);
+        if (i < name_copy) {
+            name[i] = char(ch);
+        }
+    }
+    const char letter = char(sbuf_read_u8(src));
+    const bool is_factory = sbuf_read_u8(src) != 0;
+    uint8_t nchan = sbuf_read_u8(src);
+    nchan = MIN(nchan, uint8_t(AP_VideoTX_Table::MAX_CHANNELS));
+    uint16_t freq[AP_VideoTX_Table::MAX_CHANNELS] {};
+    for (uint8_t c = 0; c < nchan; c++) {
+        freq[c] = sbuf_read_u16(src);
+    }
+
+    if (!vtx.table().set_band(band - 1, name, name_copy, letter, is_factory, freq, nchan)) {
+        return MSP_RESULT_ERROR;
+    }
+    vtx.table().save();
+    vtx.on_table_updated();
     return MSP_RESULT_ACK;
 }
 
@@ -1409,18 +1567,34 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_in_vtxtable_powerlevel(sbuf_t
         return MSP_RESULT_ERROR;
     }
 
-    // [u8 powerLevel (one based)][u16 power dBm][u8 label length][label...]; the
-    // index is implied by the dBm ordering and the label is display only, so
-    // both are ignored and only the supported power level is recorded. The value
-    // is dBm (betaflight stores power tables in dBm), not mW; a zero entry is an
-    // unused slot.
+    // [u8 powerLevel (one based)][u16 value][u8 labelLen][label...]. The value
+    // is the protocol value the VTX expects (betaflight sends dBm for digital
+    // VTX); it is stored verbatim in the table along with the display label so
+    // the exact-level selector and OSD can use them. A zero value is an unused
+    // slot. We also keep feeding the learned-power model for the analog path.
     if (sbuf_bytes_remaining(src) < 3) {
         return MSP_RESULT_ERROR;
     }
-    sbuf_read_u8(src);   // power level index, implied by ordering, ignored
-    const uint16_t power_dbm = sbuf_read_u16(src);
-    if (power_dbm > 0) {
-        vtx.update_power_dbm(uint8_t(power_dbm));
+    const uint8_t level = sbuf_read_u8(src);   // one based
+    const uint16_t value = sbuf_read_u16(src);
+    uint8_t label_len = (sbuf_bytes_remaining(src) > 0) ? sbuf_read_u8(src) : 0;
+    char label[AP_VideoTX_Table::POWER_LABEL_LEN];
+    const uint8_t label_copy = MIN(label_len, uint8_t(sizeof(label)));
+    for (uint8_t i = 0; i < label_len; i++) {
+        const uint8_t ch = sbuf_read_u8(src);
+        if (i < label_copy) {
+            label[i] = char(ch);
+        }
+    }
+
+    if (level >= 1 && level <= AP_VideoTX_Table::MAX_POWER_LEVELS) {
+        vtx.table().set_power_level(level - 1, value, label, label_copy);
+        vtx.table().save();
+        vtx.on_table_updated();
+    }
+    // keep the analog learned-power model in step (value is dBm for digital VTX)
+    if (value > 0) {
+        vtx.update_power_dbm(uint8_t(value));
     }
 
     return MSP_RESULT_ACK;
