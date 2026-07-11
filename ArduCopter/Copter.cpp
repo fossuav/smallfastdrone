@@ -389,7 +389,12 @@ bool Copter::set_target_angle_and_climbrate(float roll_deg, float pitch_deg, flo
 }
 
 // set target roll pitch and yaw rates with throttle (for use by scripting)
-bool Copter::set_target_rate_and_throttle(float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float throttle)
+// use_angle_boost false delivers the commanded throttle as-is, including past 90
+// degrees of tilt where angle boost otherwise zeroes it. An aerobatic arc wants its
+// thrust as a body force, not as a request to hold altitude, and it needs it while
+// inverted: the motors still push out of the top of the airframe, which over the top
+// of a loop is the centripetal direction. Flip and Acro already fly this way.
+bool Copter::set_target_rate_and_throttle(float roll_rate_dps, float pitch_rate_dps, float yaw_rate_dps, float throttle, bool use_angle_boost)
 {
     // exit if vehicle is not in Guided mode or Auto-Guided mode
     if (!flightmode->in_guided_mode()) {
@@ -405,7 +410,7 @@ bool Copter::set_target_rate_and_throttle(float roll_rate_dps, float pitch_rate_
     ang_vel_body *= DEG_TO_RAD;
 
     // Pass to guided mode
-    mode_guided.set_angle(q, ang_vel_body, throttle, true);
+    mode_guided.set_angle(q, ang_vel_body, throttle, true, use_angle_boost);
     return true;
 }
 
