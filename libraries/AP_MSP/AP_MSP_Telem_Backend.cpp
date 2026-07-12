@@ -1452,7 +1452,10 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_vtxtable_band(sbuf_t *src
     }
     const uint8_t idx = band - 1;
 
-    char name[AP_VideoTX_Table::BAND_NAME_LEN + 1];
+    // zero-initialise: band_name() only NUL-terminates, and the reply below
+    // emits the full fixed width, so bytes past the name must be a known value
+    // (0 -> space) rather than uninitialised stack
+    char name[AP_VideoTX_Table::BAND_NAME_LEN + 1] {};
     tbl.band_name(idx, name, sizeof(name));
     const uint8_t name_len = AP_VideoTX_Table::BAND_NAME_LEN;
     const uint8_t nchan = tbl.num_channels();
@@ -1498,7 +1501,10 @@ MSPCommandResult AP_MSP_Telem_Backend::msp_process_out_vtxtable_powerlevel(sbuf_
     }
     const uint8_t idx = level - 1;
 
-    char label[AP_VideoTX_Table::POWER_LABEL_LEN + 1];
+    // zero-initialise: power_label() only NUL-terminates but the reply emits
+    // the full fixed width, so bytes past the label must be 0 (-> space) not
+    // uninitialised stack
+    char label[AP_VideoTX_Table::POWER_LABEL_LEN + 1] {};
     tbl.power_label(idx, label, sizeof(label));
     const uint8_t label_len = AP_VideoTX_Table::POWER_LABEL_LEN;
     const uint16_t value = tbl.power_value(idx);
