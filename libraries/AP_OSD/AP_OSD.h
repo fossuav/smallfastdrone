@@ -29,6 +29,7 @@
 #include <AP_MSP/msp.h>
 #include <AP_Baro/AP_Baro.h>
 #include <AP_RPM/AP_RPM_config.h>
+#include "AP_OSD_Shorthand.h"
 #if HAL_GCS_ENABLED
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #endif
@@ -546,6 +547,9 @@ public:
     // init - perform required initialisation
     void init();
 
+    // user-definable OSD message shorthand table (edited over @OSD FTP)
+    AP_OSD_Shorthand &shorthand() { return _shorthand; }
+
     // User settable parameters
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -741,6 +745,7 @@ private:
     bool scripting_override;
     uint8_t override_count;
 #endif // AP_SCRIPTING_ENABLED
+    AP_OSD_Shorthand _shorthand;
     static AP_OSD *_singleton;
     // multi-thread access support
     HAL_Semaphore _sem;

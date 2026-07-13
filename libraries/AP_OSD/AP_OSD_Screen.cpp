@@ -1702,8 +1702,11 @@ void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
                 }
             }
 
-            // shorten common messages so they fit without scrolling
+            // shorten common messages so they fit without scrolling: the
+            // user-defined shorthand table is applied first (so it takes
+            // precedence), then the built-in dictionary fills in the rest
             if (osd->msg_abbreviate) {
+                osd->shorthand().apply(buffer, sizeof(buffer));
                 osd_abbreviate_message(buffer);
                 len = strnlen(buffer, sizeof(buffer));
             }

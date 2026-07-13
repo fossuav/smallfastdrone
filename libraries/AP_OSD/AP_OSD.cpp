@@ -311,6 +311,9 @@ AP_OSD::AP_OSD()
 
 void AP_OSD::init()
 {
+    // load the user message shorthand table from storage (empty if none)
+    _shorthand.init();
+
     const AP_OSD::osd_types types[OSD_MAX_INSTANCES] = {
         osd_types(osd_type.get()),
         osd_types(osd_type2.get())
