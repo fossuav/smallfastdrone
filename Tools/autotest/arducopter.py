@@ -16653,6 +16653,11 @@ return update, 1000
         '''Test the autoacro.lua display sequencer (M2: flip and loop moves)'''
         self.set_parameters({
             "SCR_ENABLE": 1,
+            # The maneuver module no longer fits the 200 KB default heap, the same way
+            # install_autoacro_scripts does not. It does not look like a Lua problem:
+            # the script is simply not there, and what you notice is the AUTA_
+            # parameters failing to set.
+            "SCR_HEAP_SIZE": 400000,
             "WP_ACC": 5,
             "WP_ACC_Z": 5,
             "WP_JERK": 20,
