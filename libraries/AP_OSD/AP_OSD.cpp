@@ -147,6 +147,13 @@ const AP_Param::GroupInfo AP_OSD::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("_MSG_TIME", 16, AP_OSD, msgtime_s, 10),
 
+    // @Param: _MSG_ABBR
+    // @DisplayName: Abbreviate OSD messages
+    // @Description: When enabled, applies a built-in shorthand dictionary to MESSAGE panel text (e.g. "PreArm:"->"PA:", "Arming motors"->"ARMED") so common messages are shorter and fit without scrolling.
+    // @Values: 0:Disabled,1:Enabled
+    // @User: Standard
+    AP_GROUPINFO("_MSG_ABBR", 37, AP_OSD, msg_abbreviate, 0),
+
     // @Param: _ARM_SCR
     // @DisplayName: Arm screen
     // @Description: Screen to be shown on Arm event. Zero to disable the feature.

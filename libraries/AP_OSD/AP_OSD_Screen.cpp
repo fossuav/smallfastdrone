@@ -1174,6 +1174,13 @@ const AP_Param::GroupInfo AP_OSD_Screen::var_info2[] = {
     AP_GROUPINFO("ESC_IDX", 10, AP_OSD_Screen, esc_index, 0),
 #endif
 
+    // @Param: MSG_LVL
+    // @DisplayName: OSD message severity level
+    // @Description: Least-severe MAVLink message severity shown in this screen's MESSAGE panel. Messages less severe than this are not displayed, letting you make one screen quiet (warnings only) and another verbose. Lower numbers are more severe.
+    // @Values: 0:Emergency,1:Alert,2:Critical,3:Error,4:Warning,5:Notice,6:Info,7:Debug
+    // @User: Standard
+    AP_GROUPINFO("MSG_LVL", 63, AP_OSD_Screen, msg_level, 7),
+
     AP_GROUPEND
 };
 
@@ -1617,12 +1624,68 @@ void AP_OSD_Screen::draw_batused(uint8_t x, uint8_t y)
 }
 #endif
 
+// replace every occurrence of `from` with `to` in buf, in place. Only used for
+// shortening replacements (to no longer than from) so the buffer never grows.
+static void osd_str_replace(char *buf, const char *from, const char *to)
+{
+    const size_t flen = strlen(from);
+    const size_t tlen = strlen(to);
+    if (flen == 0 || tlen > flen) {
+        return;
+    }
+    char *p = buf;
+    while ((p = strstr(p, from)) != nullptr) {
+        memmove(p + tlen, p + flen, strlen(p + flen) + 1);  // shift tail incl NUL
+        memcpy(p, to, tlen);
+        p += tlen;   // continue past the replacement so `to` is not re-matched
+    }
+}
+
+// built-in OSD message shorthand. Keys are UPPERCASE because the caller has
+// already upper-cased the message; most-specific phrases come first. Every
+// replacement is shorter than its key. A user-definable map (Phase 2) will layer
+// on top of this.
+static void osd_abbreviate_message(char *buf)
+{
+    static const struct { const char *from; const char *to; } table[] = {
+        { "DISARMING MOTORS", "DISARMED" },
+        { "ARMING MOTORS",    "ARMED" },
+        { "PREARM: ",         "PA:" },
+        { "PREARM:",          "PA:" },
+        { "NOT HEALTHY",      "BAD" },
+        { "UNHEALTHY",        "BAD" },
+        { "INCONSISTENT",     "INCONS" },
+        { "CALIBRATION",      "CAL" },
+        { "CALIBRATED",       "CAL" },
+        { "CALIBRATE",        "CAL" },
+        { "THROTTLE",         "THR" },
+        { "BATTERY",          "BAT" },
+        { "VOLTAGE",          "VOLT" },
+        { "COMPASS",          "MAG" },
+        { "POSITION",         "POS" },
+        { "ALTITUDE",         "ALT" },
+        { "AIRSPEED",         "ASPD" },
+        { "SATELLITES",       "SATS" },
+        { "FAILSAFE",         "FS" },
+        { "WAITING",          "WAIT" },
+        { "TERRAIN",          "TERR" },
+    };
+    for (uint8_t i = 0; i < ARRAY_SIZE(table); i++) {
+        osd_str_replace(buf, table[i].from, table[i].to);
+    }
+}
+
 //Autoscroll message is the same as in minimosd-extra.
 //Thanks to night-ghost for the approach.
 void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
 {
     AP_Notify * notify = AP_Notify::get_singleton();
     if (notify) {
+        // per-screen level filter: suppress messages less severe than this
+        // screen's threshold (MAV_SEVERITY is lower-is-more-severe)
+        if (notify->get_text_severity() > uint8_t(msg_level)) {
+            return;
+        }
         int32_t visible_time = AP_HAL::millis() - notify->get_text_updated_millis();
         if (visible_time < osd->msgtime_s *1000) {
             char buffer[NOTIFY_TEXT_BUFFER_SIZE];
@@ -1637,6 +1700,12 @@ void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
                 if (isspace(buffer[i])) {
                     buffer[i] = ' ';
                 }
+            }
+
+            // shorten common messages so they fit without scrolling
+            if (osd->msg_abbreviate) {
+                osd_abbreviate_message(buffer);
+                len = strnlen(buffer, sizeof(buffer));
             }
 
             int16_t start_position = 0;

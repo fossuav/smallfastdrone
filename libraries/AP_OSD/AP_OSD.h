@@ -263,6 +263,9 @@ private:
 #if HAL_WITH_ESC_TELEM
     AP_Int8 esc_index;
 #endif
+    // least-severe MAV_SEVERITY shown in this screen's MESSAGE panel
+    // (0=EMERGENCY .. 7=DEBUG); messages less severe than this are suppressed
+    AP_Int8 msg_level;
 
     void draw_altitude(uint8_t x, uint8_t y);
     void draw_bat_volt(uint8_t instance,VoltageType  type,uint8_t x, uint8_t y);
@@ -586,6 +589,7 @@ public:
     AP_Float warn_batvolt;
     AP_Float warn_bat2volt;
     AP_Int8 msgtime_s;
+    AP_Int8 msg_abbreviate;   // apply the built-in shorthand dictionary to MESSAGE panel text
     AP_Int8 arm_scr;
     AP_Int8 disarm_scr;
     AP_Int8 failsafe_scr;
