@@ -1,6 +1,7 @@
 #pragma once
 
 #include <AP_HAL/AP_HAL_Boards.h>
+#include <AP_OSD/AP_OSD_config.h>
 
 // used by LittleFS
 #define AP_FILESYSTEM_FLASH_JEDEC_NOR 1
@@ -38,6 +39,11 @@
 
 #ifndef AP_FILESYSTEM_SYS_ENABLED
 #define AP_FILESYSTEM_SYS_ENABLED 1
+#endif
+
+// @OSD virtual mount exposing the user message shorthand table for MAVLink FTP
+#ifndef AP_FILESYSTEM_OSD_ENABLED
+#define AP_FILESYSTEM_OSD_ENABLED OSD_ENABLED
 #endif
 
 #ifndef AP_FILESYSTEM_POSIX_MAP_FILENAME_ALLOC
