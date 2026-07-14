@@ -17021,20 +17021,18 @@ return update, 1000
         nearer 0.7 g through the arc, which costs 10.4 g at the bottom.'''
         return {
             "ATC_RATE_WPY_MAX": 180,  # snappier yaw for the wingover turnaround
-            # WP_ACC (nav accel, m/s2) sits at its 2.5 default here -- the config's
-            # WPNAV_ACCEL is a dead pre-rename name (now WP_*) -- so the guided entry
-            # crept at 0.2 g. 12 with a 70 deg lean is what the Rise255 SITL model
-            # tracks cleanly (box ~43 m). NB the real vehicle (Marmott) runs WP_ACC=60,
-            # ANGLE_MAX 80, and a matched PSC_NE PID (FF 0.579) -- far more aggressive.
-            # That tune does NOT transfer to the Rise255 model (its PID is not matched
-            # to it, so it overshoots: box 76-95 m). SITL keeps its own clean tune and
-            # validates the choreography; the real vehicle flies it with its own.
+            # WP_ACC (nav accel, m/s2) is what the guided entry accelerates at. Rise255.param
+            # asks for 20; 12 with a 70 deg lean is what the model tracks cleanly (box ~43 m).
+            # NB the real vehicle (Marmott) runs WP_ACC=60, ANGLE_MAX 80 and a matched PSC_NE
+            # PID (FF 0.579) -- far more aggressive. That tune does NOT transfer to the Rise255
+            # model (its PID is not matched to it, so it overshoots: box 76-95 m). SITL keeps
+            # its own clean tune and validates the choreography; the real vehicle flies it with
+            # its own.
             "WP_ACC": 12.0,
             # The guided entry is flown by the position controller, so this caps the
             # speed any move can enter at -- and a sized loop's entry speed is what its
-            # SIZE buys (a 12 m loop wants 17 m/s). At the 10 m/s default the loop
-            # cannot reach the top of its own arc and falls inside it. Same family as
-            # the WP_ACC note above: a limit nobody set, quietly binding.
+            # SIZE buys (a 12 m loop wants 17 m/s). Below about 20 the loop cannot reach
+            # the top of its own arc and falls inside it.
             "WP_SPD": 25.0,
             "ATC_ANGLE_MAX": 70,
             "AUTA_ENABLE": 1,
