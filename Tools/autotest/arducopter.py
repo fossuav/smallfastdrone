@@ -16688,6 +16688,13 @@ return update, 1000
             # and so cannot pull the ~6 g a round loop needs at any size. The sizing
             # law is exercised on the Rise255 racing model in AutoAcroLoopSizing.
             "AUTA_LP_SIZE": 0,
+            # And unsized immelmann, for the same reason and by the same law: a sized
+            # half-loop asks this airframe for 7.3 g and a 15.7 m/s arc. It cannot pull
+            # the one, and being angle-limited it cannot reach the other either -- the
+            # run-up gives up around 9 m/s. Left sized (the AUTA_IM_SIZE default is 8) the
+            # figure is simply not flyable here, and it only ever completed by lagging the
+            # flight path and manufacturing the energy it was short of.
+            "AUTA_IM_SIZE": 0,
             "AUTA_RL_RATE": 450,  # tuned from log271 reps
             "AUTA_RL_ANG": 360,
             "AUTA_RL_DIR": 1,
