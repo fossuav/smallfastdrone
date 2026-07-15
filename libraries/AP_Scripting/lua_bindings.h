@@ -39,3 +39,4 @@ int lua_DroneCAN_get_FlexDebug(lua_State *L);
 int lua_gps_inject_data(lua_State *L);
 int lua_AP_Vehicle_set_target_velocity_NED(lua_State *L);
 int lua_AP_Vehicle_set_target_rate_and_throttle(lua_State *L);
+int lua_AP_Vehicle_set_target_angle_and_rate_and_throttle(lua_State *L);
