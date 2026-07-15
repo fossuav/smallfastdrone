@@ -17096,6 +17096,12 @@ return update, 1000
         # GUIDED takeoff climbs to the exact height (LOITER plateaus lower); then
         # hand to LOITER for the sequencer.
         self.takeoff(100, mode="GUIDED")
+        # Centre the throttle stick before handing back: LOITER reads a
+        # stick-low channel as a full pilot descent (PILOT_SPEED_DN), so between
+        # moves the vehicle would sink ~2.5 m/s and a chained run walks itself
+        # into the ground. Neutral stick holds height while the applet flies in
+        # GUIDED (which ignores it).
+        self.set_rc(3, 1500)
         self.change_mode("LOITER")
         self.context_collect('STATUSTEXT')
         for move in moves:
