@@ -440,7 +440,10 @@ bool Copter::set_target_rate_and_climbrate(float roll_rate_dps, float pitch_rate
 }
 
 // set target roll pitch and yaw angles and roll pitch and yaw rates with throttle (for use by scripting)
-bool Copter::set_target_angle_and_rate_and_throttle(float roll_deg, float pitch_deg, float yaw_deg, float roll_rate_degs, float pitch_rate_degs, float yaw_rate_degs, float throttle)
+// use_angle_boost false delivers the commanded throttle as-is rather than scaled by
+// 1/cos(tilt) of the target: a phase holding a deliberately tilted attitude wants the
+// thrust it asked for, not an altitude-holding correction on top of it.
+bool Copter::set_target_angle_and_rate_and_throttle(float roll_deg, float pitch_deg, float yaw_deg, float roll_rate_degs, float pitch_rate_degs, float yaw_rate_degs, float throttle, bool use_angle_boost)
 {
     // exit if vehicle is not in Guided mode or Auto-Guided mode
     if (!flightmode->in_guided_mode()) {
@@ -454,7 +457,7 @@ bool Copter::set_target_angle_and_rate_and_throttle(float roll_deg, float pitch_
     Vector3f ang_vel_body_degs { roll_rate_degs, pitch_rate_degs, yaw_rate_degs };
     ang_vel_body_degs *= DEG_TO_RAD;
 
-    mode_guided.set_angle(q, ang_vel_body_degs, throttle, true);
+    mode_guided.set_angle(q, ang_vel_body_degs, throttle, true, use_angle_boost);
     return true;
 }
 
