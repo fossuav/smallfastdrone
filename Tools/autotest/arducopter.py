@@ -17188,6 +17188,42 @@ return update, 1000
         self.set_parameters(params)
         self.fly_autoacro_moves(((10, "PivotLoop"),))
 
+    def AutoAcroUnderSpeedRefusal(self):
+        '''An entry that cannot reach the sized arc's speed is refused, and the
+        abort hands back a flying vehicle in the mode it took it from'''
+        self.customise_SITL_commandline(
+            [],
+            model="X:@ROMFS/models/Rise255.json",
+            defaults_filepath=self.model_defaults_filepath("Rise255"),
+            wipe=True,
+        )
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.033)  # Rise255 true hover (ThO)
+        params["SIM_SPEEDUP"] = 5
+        # Cripple the guided entry: at 1 m/s2 the run-up cannot reach the 12 m
+        # loop's ~20 m/s inside its 9 s clock, so it gives up under-speed and the
+        # arc must REFUSE -- an under-speed arc is a descending one. This is the
+        # runtime half of the refusal; AutoAcroLoopSizing covers the plan-time
+        # WP_SPD clamp. The set_mode-failure branch of the abort stays uncovered
+        # here: forcing Loiter to refuse needs an EKF failure mid-flight.
+        params["WP_ACC"] = 1.0
+        self.set_parameters(params)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(100, mode="GUIDED")
+        self.change_mode("LOITER")
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("AUTA_MOVE", 2)  # the sized loop, in isolation
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: move 1/1 Loop", check_context=True, timeout=15)
+        self.wait_statustext("never reached speed", check_context=True, timeout=60)
+        self.wait_statustext("refusing", check_context=True, timeout=10)
+        self.wait_statustext("AutoAcro: aborted", check_context=True, timeout=10)
+        self.wait_mode("LOITER")
+        self.set_rc(9, 1000)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def RealFlightAutoAcro(self, model, home):
         '''
         Fly the five display moves in RealFlight, to compare each trajectory
@@ -17421,6 +17457,7 @@ return update, 1000
             self.AutoAcroYawSpin,
             self.AutoAcroRewindFlick,
             self.AutoAcroPivotLoop,
+            self.AutoAcroUnderSpeedRefusal,
             self.AutoAcroCharacterise,
         ])
         return ret
