@@ -17294,12 +17294,14 @@ return update, 1000
 
     def RealFlightAutoAcro(self, model, home):
         '''
-        Fly the five display moves in RealFlight, to compare each trajectory
+        Fly every move in the library in RealFlight, to compare each trajectory
         against the native-model SITL run (analysis/per_move_metrics.py segments
         either log by the move statustext). The native model is calibrated and
         its tune aligned to RealFlight, and the throttle phases are g-loads times
         hover, so with AUTA_HOVER set to the RealFlight hover the moves should
-        reproduce the SITL trajectories.
+        reproduce the SITL trajectories. Same per-move phase assertions as the
+        native AutoAcro* tests, so a move that fails to fly on flightaxis is caught
+        here, not just in the offline compare.
         '''
         if not self.realflight_address:
             raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
@@ -17321,8 +17323,18 @@ return update, 1000
                                               loop_drag_g=0.4)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline trajectory compare
         self.set_parameters(params)
-        self.fly_autoacro_moves(((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
-                                 (5, "Split-S"), (6, "Wingover")), trigger_ch=7)
+        self.fly_autoacro_moves((
+            (1, "Flip", ["Flipping"]),
+            (2, "Loop", ["Loop: looping", "Loop: over the top"]),
+            (3, "Roll", ["Roll: rolling", "Roll: inverted"]),
+            (4, "Immelmann", ["Immelmann: pulling up", "Immelmann: rolling upright"]),
+            (5, "Split-S", ["Split-S: rolling inverted", "Split-S: pulling through"]),
+            (6, "Wingover", ["Wingover: rolling in", "Wingover: carving"]),
+            (7, "YawSpin", ["YawSpin: spinning"]),
+            (8, "Rewind", ["Rewind: rewinding"]),
+            (9, "JuicyFlick", ["JuicyFlick: snap", "JuicyFlick: whip back"]),
+            (10, "PivotLoop", ["PivotLoop: pivot", "PivotLoop: looping"]),
+        ), trigger_ch=7)
 
     def RealFlightFullDisplay(self, model, home):
         '''
