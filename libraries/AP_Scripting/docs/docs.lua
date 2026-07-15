@@ -2739,8 +2739,9 @@ function vehicle:set_target_rate_and_climbrate(roll_rate_dps, pitch_rate_dps, ya
 ---@param pitch_rate_dps number -- pitch rate in degrees per second
 ---@param yaw_rate_dps number -- yaw rate in degrees per second
 ---@param throttle number -- throttle demand 0.0 to 1.0
+---@param use_angle_boost? boolean -- true (the default) scales thrust by 1/cos(tilt) of the target attitude to hold altitude. False delivers the throttle as commanded, which a phase holding a deliberately tilted attitude wants.
 ---@return boolean -- true on success
-function vehicle:set_target_angle_and_rate_and_throttle(roll_deg, pitch_deg, yaw_deg, roll_rate_dps, pitch_rate_dps, yaw_rate_dps, throttle) end
+function vehicle:set_target_angle_and_rate_and_throttle(roll_deg, pitch_deg, yaw_deg, roll_rate_dps, pitch_rate_dps, yaw_rate_dps, throttle, use_angle_boost) end
 
 -- Sets the target velocity using a Vector3f object in a guided mode.
 ---@param vel_ned Vector3f_ud -- North, East, Down meters / second
