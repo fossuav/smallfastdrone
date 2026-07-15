@@ -16650,7 +16650,10 @@ return update, 1000
         self.progress("Figure of Eight test complete")
 
     def AutoAcroDisplay(self):
-        '''Test the autoacro.lua display sequencer (M2: flip and loop moves)'''
+        '''Fly the six primitive moves (flip, loop, roll, immelmann, split-S,
+        wingover) in isolation on the stock SITL quad, unsized. Proves the
+        sequencer and the primitives work off the racing model; the sized figures
+        on the calibrated Rise255 are the per-move AutoAcro* tests.'''
         self.set_parameters({
             "SCR_ENABLE": 1,
             # The maneuver module no longer fits the 200 KB default heap, the same way
@@ -17055,13 +17058,39 @@ return update, 1000
             "RC%u_OPTION" % trigger_ch: 300,  # Scripting1
         }
 
+    def launch_autoacro_rise255(self, speedup=5, extra_params=None):
+        '''Relaunch on the retrofitted native Rise255 model (real Rise tune +
+        physics calibrated to the real drone), install the autoacro scripts, and
+        set the shared display geometry with full-rate attitude logging. Every
+        native per-move test starts here; extra_params overrides individual
+        values (e.g. a crippled WP_ACC for the under-speed refusal).'''
+        self.customise_SITL_commandline(
+            [],
+            model="X:@ROMFS/models/Rise255.json",
+            defaults_filepath=self.model_defaults_filepath("Rise255"),
+            wipe=True,
+        )
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.033)  # Rise255 true hover (ThO)
+        params["SIM_SPEEDUP"] = speedup
+        params["LOG_BITMASK"] = int(self.get_parameter("LOG_BITMASK")) | 1
+        if extra_params:
+            params.update(extra_params)
+        self.set_parameters(params)
+
     def fly_autoacro_moves(self, moves, trigger_ch=9):
-        '''Take off, fly each (AUTA_MOVE, name) move in isolation -- bracketed by
-        LOITER and triggered on the Scripting1 channel trigger_ch -- then RTL.
-        Assumes the autoacro scripts are installed and the AUTA_ params set. The
-        dense full-rate log lets the offline analysis/per_move_metrics.py measure
-        each move's entry-vs-exit geometry, and compare the native SITL and
-        RealFlight trajectories.'''
+        '''Take off, fly each move in isolation -- bracketed by LOITER and
+        triggered on the Scripting1 channel trigger_ch -- then RTL. Assumes the
+        autoacro scripts are installed and the AUTA_ params set. The dense
+        full-rate log lets the offline analysis/per_move_metrics.py measure each
+        move's entry-vs-exit geometry, and compare the native SITL and RealFlight
+        trajectories.
+
+        Each move is (AUTA_MOVE, name) or (AUTA_MOVE, name, phases). phases is an
+        ordered list of characteristic statustexts the move must emit before it
+        completes -- e.g. a loop must announce it reached the top -- so the test
+        proves the figure was actually flown, not merely that the sequencer
+        declared it done.'''
         self.wait_ready_to_arm()
         self.arm_vehicle()
         # GUIDED takeoff climbs to the exact height (LOITER plateaus lower); then
@@ -17069,12 +17098,16 @@ return update, 1000
         self.takeoff(100, mode="GUIDED")
         self.change_mode("LOITER")
         self.context_collect('STATUSTEXT')
-        for move_num, name in moves:
+        for move in moves:
+            move_num, name = move[0], move[1]
+            phases = move[2] if len(move) > 2 else ()
             self.start_subtest("AutoAcro move: %s" % name)
             self.set_parameter("AUTA_MOVE", move_num)
             self.context_clear_collection('STATUSTEXT')
             self.set_rc(trigger_ch, 2000)
             self.wait_statustext("AutoAcro: move 1/1 %s" % name, check_context=True, timeout=15)
+            for phase in phases:
+                self.wait_statustext(phase, check_context=True, timeout=60)
             self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=60)
             self.wait_mode("LOITER")
             self.set_rc(trigger_ch, 1000)
@@ -17110,104 +17143,139 @@ return update, 1000
 
     def AutoAcroFullDisplay(self):
         '''Fly the whole curated autoacro display chained on the native Rise255'''
-        self.customise_SITL_commandline(
-            [],
-            model="X:@ROMFS/models/Rise255.json",
-            defaults_filepath=self.model_defaults_filepath("Rise255"),
-            wipe=True,
-        )
-        self.install_autoacro_scripts()
-        params = self.autoacro_display_params(0.033)  # Rise255 true hover
-        params["SIM_SPEEDUP"] = 5
-        params["LOG_BITMASK"] = int(self.get_parameter("LOG_BITMASK")) | 1
-        self.set_parameters(params)
+        self.launch_autoacro_rise255()
         self.fly_autoacro_display(20)
 
     def AutoAcroSmoothness(self):
-        '''Fly moves on the native Rise255 model at low speedup with dense logging'''
-        # Relaunch on the retrofitted native Rise255 model (real Rise tune +
-        # physics calibrated to the real drone) so the aerobatic dynamics are
-        # realistic, then capture dense position/attitude for a spatial trace.
-        self.customise_SITL_commandline(
-            [],
-            model="X:@ROMFS/models/Rise255.json",
-            defaults_filepath=self.model_defaults_filepath("Rise255"),
-            wipe=True,
-        )
-        self.install_autoacro_scripts()
-        params = self.autoacro_display_params(0.033)  # Rise255 true hover (ThO)
-        params["SIM_SPEEDUP"] = 5  # low speedup for physics fidelity
-        params["LOG_BITMASK"] = int(self.get_parameter("LOG_BITMASK")) | 1  # full-rate attitude
-        self.set_parameters(params)
-        # Edit this tuple to isolate a single move when tuning.
+        '''Fly several moves back-to-back on the native Rise255 for a combined
+        spatial trace of the transitions between them.
+
+        DELIBERATELY NOT REGISTERED. Per-move pass/fail is covered by the dedicated
+        AutoAcroFlip/Loop/Roll/Immelmann/SplitS/Wingover tests, which log at the
+        same full rate; this stays as a dev tool for eyeballing the flow across a
+        chain. Edit the tuple to pick which moves to trace, and run it by name.'''
+        self.launch_autoacro_rise255()
         self.fly_autoacro_moves(((2, "Loop"), (3, "Roll"), (4, "Immelmann"),
                                  (5, "Split-S"), (6, "Wingover")))
 
+    def AutoAcroFlip(self):
+        '''Fly the ballistic flip (schedule move 1) in isolation on the native Rise255'''
+        self.launch_autoacro_rise255()
+        self.fly_autoacro_moves((
+            (1, "Flip", ["Flipping"]),
+        ))
+
+    def AutoAcroLoop(self):
+        '''Fly the sized loop (schedule move 2) in isolation on the native Rise255'''
+        # "over the top" only fires once the arc has rotated through inverted, so
+        # it proves the loop was flown round rather than falling out of its figure.
+        self.launch_autoacro_rise255()
+        self.fly_autoacro_moves((
+            (2, "Loop", ["Loop: looping", "Loop: over the top"]),
+        ))
+
+    def AutoAcroRoll(self):
+        '''Fly the ballistic roll (schedule move 3) in isolation on the native Rise255'''
+        # "inverted" proves the roll rotated past 180 rather than wobbling and
+        # righting.
+        self.launch_autoacro_rise255()
+        self.fly_autoacro_moves((
+            (3, "Roll", ["Roll: rolling", "Roll: inverted"]),
+        ))
+
+    def AutoAcroImmelmann(self):
+        '''Fly the immelmann (schedule move 4) in isolation on the native Rise255'''
+        # Both halves must run: the half-loop up, then the half-roll to upright.
+        self.launch_autoacro_rise255()
+        self.fly_autoacro_moves((
+            (4, "Immelmann", ["Immelmann: pulling up", "Immelmann: rolling upright"]),
+        ))
+
+    def AutoAcroSplitS(self):
+        '''Fly the split-S (schedule move 5) in isolation on the native Rise255'''
+        # "pulling through" only fires after the half-roll actually reaches inverted.
+        self.launch_autoacro_rise255()
+        self.fly_autoacro_moves((
+            (5, "Split-S", ["Split-S: rolling inverted", "Split-S: pulling through"]),
+        ))
+
+    def AutoAcroWingover(self):
+        '''Fly the wingover (schedule move 6) in isolation on the native Rise255.
+
+        Its statustexts prove nothing on their own -- the move can send every one
+        of them while tumbling out of the sky -- so this checks the geometry the
+        move exists to produce: a heading reversal that costs only bounded height.
+        A quad in a level banked turn has nothing but height to pay drag with.'''
+        self.launch_autoacro_rise255()
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(100, mode="GUIDED")
+        self.change_mode("LOITER")
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("AUTA_MOVE", 6)
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: move 1/1 Wingover", check_context=True, timeout=15)
+        self.wait_statustext("Wingover: rolling in", check_context=True, timeout=15)
+        entry_alt = self.get_altitude(relative=True)
+        entry_hdg = self.get_heading()
+        floor_alt = entry_alt
+        tstart = self.get_sim_time()
+        while not self.statustext_in_collections("Wingover: recovered"):
+            if self.get_sim_time_cached() - tstart > 30:
+                raise NotAchievedException("Wingover did not recover")
+            floor_alt = min(floor_alt, self.get_altitude(relative=True))
+        drop = entry_alt - floor_alt
+        turned = abs((self.get_heading() - entry_hdg + 180) % 360 - 180)
+        self.progress("Wingover: dropped %.1fm, reversed %.0fdeg" % (drop, turned))
+        if turned < 150:
+            raise NotAchievedException(
+                "Wingover only reversed %.0fdeg, want ~180" % turned)
+        # The Rise255 pulls 8.3 g at 80 deg of bank and reverses losing ~1.6 m; a
+        # wingover that instead fell out of its figure drops tens of metres. 12 m
+        # is well clear of the clean figure yet well inside the failure regime.
+        # (The default-quad unsized figure in AutoAcroDisplay, with less power to
+        # pay drag with, is held looser at 15 m.)
+        if drop > 12:
+            raise NotAchievedException(
+                "Wingover dropped %.1fm, want no more than 12m" % drop)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=30)
+        self.wait_mode("LOITER")
+        self.set_rc(9, 1000)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def AutoAcroYawSpin(self):
         '''Fly the yaw pirouette (schedule move 7) in isolation on the native Rise255'''
-        self.customise_SITL_commandline(
-            [],
-            model="X:@ROMFS/models/Rise255.json",
-            defaults_filepath=self.model_defaults_filepath("Rise255"),
-            wipe=True,
-        )
-        self.install_autoacro_scripts()
-        params = self.autoacro_display_params(0.033)  # Rise255 true hover (ThO)
-        params["SIM_SPEEDUP"] = 5
-        params["LOG_BITMASK"] = int(self.get_parameter("LOG_BITMASK")) | 1
-        self.set_parameters(params)
-        self.fly_autoacro_moves(((7, "YawSpin"),))
+        self.launch_autoacro_rise255()
+        self.fly_autoacro_moves((
+            (7, "YawSpin", ["YawSpin: spinning"]),
+        ))
 
     def AutoAcroRewindFlick(self):
         '''Fly the rewind and juicy flick (schedule moves 8, 9) on the native Rise255'''
-        self.customise_SITL_commandline(
-            [],
-            model="X:@ROMFS/models/Rise255.json",
-            defaults_filepath=self.model_defaults_filepath("Rise255"),
-            wipe=True,
-        )
-        self.install_autoacro_scripts()
-        params = self.autoacro_display_params(0.033)  # Rise255 true hover (ThO)
-        params["SIM_SPEEDUP"] = 5
-        params["LOG_BITMASK"] = int(self.get_parameter("LOG_BITMASK")) | 1
-        self.set_parameters(params)
-        self.fly_autoacro_moves(((8, "Rewind"), (9, "JuicyFlick")))
+        self.launch_autoacro_rise255()
+        self.fly_autoacro_moves((
+            (8, "Rewind", ["Rewind: rewinding"]),
+            (9, "JuicyFlick", ["JuicyFlick: snap", "JuicyFlick: whip back"]),
+        ))
 
     def AutoAcroPivotLoop(self):
         '''Fly the pivot loop (schedule move 10) in isolation on the native Rise255'''
-        self.customise_SITL_commandline(
-            [],
-            model="X:@ROMFS/models/Rise255.json",
-            defaults_filepath=self.model_defaults_filepath("Rise255"),
-            wipe=True,
-        )
-        self.install_autoacro_scripts()
-        params = self.autoacro_display_params(0.033)  # Rise255 true hover (ThO)
-        params["SIM_SPEEDUP"] = 5
-        params["LOG_BITMASK"] = int(self.get_parameter("LOG_BITMASK")) | 1
-        self.set_parameters(params)
-        self.fly_autoacro_moves(((10, "PivotLoop"),))
+        self.launch_autoacro_rise255()
+        self.fly_autoacro_moves((
+            (10, "PivotLoop", ["PivotLoop: pivot", "PivotLoop: looping"]),
+        ))
 
     def AutoAcroUnderSpeedRefusal(self):
         '''An entry that cannot reach the sized arc's speed is refused, and the
         abort hands back a flying vehicle in the mode it took it from'''
-        self.customise_SITL_commandline(
-            [],
-            model="X:@ROMFS/models/Rise255.json",
-            defaults_filepath=self.model_defaults_filepath("Rise255"),
-            wipe=True,
-        )
-        self.install_autoacro_scripts()
-        params = self.autoacro_display_params(0.033)  # Rise255 true hover (ThO)
-        params["SIM_SPEEDUP"] = 5
         # Cripple the guided entry: at 1 m/s2 the run-up cannot reach the 12 m
         # loop's ~20 m/s inside its 9 s clock, so it gives up under-speed and the
         # arc must REFUSE -- an under-speed arc is a descending one. This is the
         # runtime half of the refusal; AutoAcroLoopSizing covers the plan-time
         # WP_SPD clamp. The set_mode-failure branch of the abort stays uncovered
         # here: forcing Loiter to refuse needs an EKF failure mid-flight.
-        params["WP_ACC"] = 1.0
-        self.set_parameters(params)
+        self.launch_autoacro_rise255(extra_params={"WP_ACC": 1.0})
         self.wait_ready_to_arm()
         self.arm_vehicle()
         self.takeoff(100, mode="GUIDED")
@@ -17452,8 +17520,13 @@ return update, 1000
             self.EKF3SRCPerCore,
             self.ScriptingFlipOnASwitch,
             self.AutoAcroDisplay,
-            self.AutoAcroSmoothness,
             self.AutoAcroFullDisplay,
+            self.AutoAcroFlip,
+            self.AutoAcroLoop,
+            self.AutoAcroRoll,
+            self.AutoAcroImmelmann,
+            self.AutoAcroSplitS,
+            self.AutoAcroWingover,
             self.AutoAcroYawSpin,
             self.AutoAcroRewindFlick,
             self.AutoAcroPivotLoop,
