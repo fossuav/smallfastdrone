@@ -17298,6 +17298,39 @@ return update, 1000
         self.change_mode("RTL")
         self.wait_disarmed(timeout=300)
 
+    def AutoAcroAltitudeRefusal(self):
+        '''A descending move triggered too low to clear the ground is refused
+        before it commands anything, and the vehicle is left flying in Loiter'''
+        # The split-S drops ~12 m, so its floor is 18 m AGL. Trigger it at 15 and
+        # it must refuse at once, before the "move 1/1" announce -- the check is at
+        # the top of run_sequence. TCAL 0 skips the thrust probe so the refusal is
+        # the first thing that happens; on the Marmott a juicy flick (same 18 m
+        # floor) triggered at 9 m went 2 m below the takeoff datum, which is the
+        # failure this gate exists to stop.
+        self.launch_autoacro_rise255(extra_params={"AUTA_TCAL": 0})
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        # 10 m (the helper attains ~12) is well below the 18 m floor and well above
+        # the ground, so the refusal is unambiguous either way.
+        self.takeoff(10, mode="GUIDED")
+        # Hold the height: a stick-low LOITER would sink at PILOT_SPEED_DN.
+        self.set_rc(3, 1500)
+        self.change_mode("LOITER")
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("AUTA_MOVE", 5)  # the split-S, a descender
+        self.set_rc(9, 2000)
+        self.wait_statustext("Split-S: needs 18 m AGL", check_context=True, timeout=15)
+        self.wait_statustext("AutoAcro: aborted", check_context=True, timeout=10)
+        self.wait_mode("LOITER")
+        # The refusal precedes any command, so the descent never happened: the
+        # unflown split-S would have lost ~12 m, to near the ground.
+        alt = self.get_altitude(relative=True)
+        if alt < 8:
+            raise NotAchievedException("refused move still lost height: %.1f m" % alt)
+        self.set_rc(9, 1000)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def RealFlightAutoAcro(self, model, home):
         '''
         Fly every move in the library in RealFlight, to compare each trajectory
@@ -17549,6 +17582,7 @@ return update, 1000
             self.AutoAcroRewindFlick,
             self.AutoAcroPivotLoop,
             self.AutoAcroUnderSpeedRefusal,
+            self.AutoAcroAltitudeRefusal,
             self.AutoAcroCharacterise,
         ])
         return ret
