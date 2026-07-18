@@ -17406,17 +17406,11 @@ return update, 1000
         # The realflight-Rise255 tune already has Scripting1 on RC7, so trigger
         # there instead of adding RC9 (which duplicates the aux option and fails
         # the prearm). The applet arms on the Scripting1 function, not a channel.
-        # 0.4 g: the drag this model actually MEASURES through the arc, which is the
-        # number the loop exists to report. Both ends of the range were wrong, for
-        # opposite reasons. 0.7 costs 10.4 g, which is 0.83 of throttle here and leaves
-        # nothing for the mixer -- the body managed 69 dps of the 229 asked, so 8 g went
-        # out nearly vertically and fired the vehicle upward. 0.2 costs only 7.3 g and
-        # rotates fine, but buys 19.2 m/s where 0.45 g of real drag over the climb needs
-        # 21.4: the speed died at 2.9 m/s over the top and the arc flattened into an
-        # ellipse. 0.4 asks 8.5 g at 0.67 throttle, which is energy enough with a third
-        # of the range left to turn with.
+        # 0.5 g: the arc drag this airframe measured on RealFlight (0.51 g), so the
+        # sizing law's run-up matches what the loop actually costs. 0.4 under-budgeted
+        # it -- too little entry speed, and the loop pinched at the top.
         params = self.autoacro_display_params(0.025, trigger_ch=7,  # RealFlight hover (ThO)
-                                              loop_drag_g=0.4)
+                                              loop_drag_g=0.5)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline trajectory compare
         self.set_parameters(params)
         self.fly_autoacro_moves((
@@ -17445,17 +17439,11 @@ return update, 1000
         self.setup_RealFlight_vehicle(model, home)
         self.install_autoacro_scripts()
         # Scripting1 is on RC7 in the realflight-Rise255 tune (see RealFlightAutoAcro).
-        # 0.4 g: the drag this model actually MEASURES through the arc, which is the
-        # number the loop exists to report. Both ends of the range were wrong, for
-        # opposite reasons. 0.7 costs 10.4 g, which is 0.83 of throttle here and leaves
-        # nothing for the mixer -- the body managed 69 dps of the 229 asked, so 8 g went
-        # out nearly vertically and fired the vehicle upward. 0.2 costs only 7.3 g and
-        # rotates fine, but buys 19.2 m/s where 0.45 g of real drag over the climb needs
-        # 21.4: the speed died at 2.9 m/s over the top and the arc flattened into an
-        # ellipse. 0.4 asks 8.5 g at 0.67 throttle, which is energy enough with a third
-        # of the range left to turn with.
+        # 0.5 g: the arc drag this airframe measured on RealFlight (0.51 g), so the
+        # sizing law's run-up matches what the loop actually costs. 0.4 under-budgeted
+        # it -- too little entry speed, and the loop pinched at the top.
         params = self.autoacro_display_params(0.025, trigger_ch=7,  # RealFlight hover (ThO)
-                                              loop_drag_g=0.4)
+                                              loop_drag_g=0.5)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
         self.set_parameters(params)
         self.fly_autoacro_display(takeoff_alt=20, trigger_ch=7)
