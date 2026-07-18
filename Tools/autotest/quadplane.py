@@ -3876,18 +3876,14 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         src_arm_to_tdone = (src_tdone - src_arm) if (src_arm and src_tdone) else 45.0
         self.progress(f"Source arm-to-transition: {src_arm_to_tdone:.1f}s")
 
-        # Video sync. The video runs ~0.8% slower than the log
-        # (measured from GPS coordinate matching). The base offset
-        # between video arm and log arm is ~1.1s (video is ahead).
-        # Cue the video to 1s before the THROTTLE ARMED frame and
-        # press play at PLAY!. The time warp factor corrects for
-        # the video's slightly slower playback rate.
+        # Video sync. Cue the video to 1s before the THROTTLE ARMED
+        # frame and press play at PLAY!. The 1.1s lead compensates
+        # for the delay between PLAY and actual arm.
         import time
-        video_time_warp = 1.008  # video is 0.8% slower than log
-        video_arm_lead = 1.1    # video arm is 1.1s ahead of log
+        video_arm_lead = 1.1    # seconds from PLAY to actual arm
 
         self.progress("=== VIDEO SYNC ===")
-        self.progress("Cue video to 1s BEFORE the THROTTLE ARMED frame.")
+        self.progress("Cue video to the THROTTLE ARMED frame.")
         self.progress("Press play when countdown reaches PLAY!")
         time.sleep(5)
         for i in range(5, 0, -1):
@@ -3921,6 +3917,13 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         if first_fw_mode in (5, 6):
             self.wait_statustext('Transition done', timeout=120)
 
+        # Resync wallclock to match where the source log would be
+        # at this point. The Titan Cobra's arm-to-transition-done
+        # differs from the source, so reset arm_wall so that
+        # post-transition events align with the video.
+        actual_elapsed = time.time() - arm_wall
+        arm_wall = time.time() - src_arm_to_tdone
+
         # Start RC replay from arm time in the source log, not from
         # first_fw_time. Skip to current wallclock position so we
         # pick up from where we are in the timeline.
@@ -3939,8 +3942,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
 
         while rc_idx < len(rc_inputs):
             log_time = rc_inputs[rc_idx][0] - arm_time  # time since arm in source
-            # Apply time warp: video runs slightly slower than log
-            wall_elapsed = (time.time() - arm_wall) / video_time_warp
+            wall_elapsed = time.time() - arm_wall
 
             if disarm_time and rc_inputs[rc_idx][0] > disarm_time:
                 break
@@ -3950,19 +3952,27 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
                 time.sleep(min(log_time - wall_elapsed, 0.01))
                 continue
 
-            # Apply mode changes (rare, MAVLink is fine)
+            # Apply mode changes. Compensate for the blocking time
+            # of change_mode by shifting arm_wall forward so the
+            # replay clock doesn't fall behind.
             while mode_idx < len(mode_changes) and mode_changes[mode_idx][0] <= rc_inputs[rc_idx][0]:
                 mn = mode_changes[mode_idx][1]
                 if mn in PLANE_MODES:
                     self.progress(f"Replay +{mode_changes[mode_idx][0] - arm_time:.0f}s: mode {PLANE_MODES[mn]}")
+                    t_before = time.time()
                     self.change_mode(PLANE_MODES[mn])
+                    blocking_time = time.time() - t_before
+                    arm_wall += blocking_time  # absorb blocking delay
                 mode_idx += 1
 
-            # Apply source set changes (rare)
+            # Apply source set changes. Same blocking compensation.
             while src_idx < len(source_changes) and source_changes[src_idx][0] <= rc_inputs[rc_idx][0]:
                 src = source_changes[src_idx][1]
                 self.progress(f"Replay +{source_changes[src_idx][0] - arm_time:.0f}s: source set {src}")
+                t_before = time.time()
                 self.set_parameter("SIM_GPS_DISABLE", 1 if src >= 2 else 0)
+                blocking_time = time.time() - t_before
+                arm_wall += blocking_time
                 src_idx += 1
 
             # Skip to latest RC sample at current wallclock time
