@@ -17189,6 +17189,36 @@ return update, 1000
             (3, "Roll", ["Roll: rolling", "Roll: inverted"]),
         ))
 
+    def assert_immelmann_braked_before_handover(self, max_roll_rate_dps=300):
+        '''The half-roll must brake the roll upright BEFORE handing to the recover,
+        not coast past it. Scan the just-flown log: at the "Immelmann: recovering"
+        message the roll rate (RATE.R, deg/s) must be low. The open-loop roll this
+        replaced switched to the recover at 180 deg of accumulated gyro while still
+        rolling ~760 dps, so the vehicle coasted ~140 deg past upright; the fixed
+        half-roll hands over only once the attitude controller has braked it, so the
+        rate at handover is an order of magnitude lower (~80 dps here).'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        rec_us = None
+        rates = []
+        while True:
+            m = dfreader.recv_match(type=['MSG', 'RATE'])
+            if m is None:
+                break
+            if m.get_type() == 'MSG':
+                if 'Immelmann: recovering' in str(m.Message):
+                    rec_us = m.TimeUS
+            else:
+                rates.append((m.TimeUS, m.R))
+        if rec_us is None:
+            raise NotAchievedException("no Immelmann recovering message in log")
+        near_us, roll_rate = min(rates, key=lambda tr: abs(tr[0] - rec_us))
+        roll_rate = abs(roll_rate)
+        self.progress("Immelmann roll rate at handover: %.0f dps" % roll_rate)
+        if roll_rate > max_roll_rate_dps:
+            raise NotAchievedException(
+                "Immelmann handed to recover still rolling %.0f dps (max %.0f): "
+                "not braked upright" % (roll_rate, max_roll_rate_dps))
+
     def AutoAcroImmelmann(self):
         '''Fly the immelmann (schedule move 4) in isolation on the native Rise255'''
         # Both halves must run: the half-loop up, then the half-roll to upright.
@@ -17196,6 +17226,7 @@ return update, 1000
         self.fly_autoacro_moves((
             (4, "Immelmann", ["Immelmann: pulling up", "Immelmann: rolling upright"]),
         ))
+        self.assert_immelmann_braked_before_handover()
 
     def AutoAcroSplitS(self):
         '''Fly the split-S (schedule move 5) in isolation on the native Rise255'''
