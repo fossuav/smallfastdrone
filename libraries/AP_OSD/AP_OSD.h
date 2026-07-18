@@ -594,6 +594,8 @@ public:
     AP_Float warn_bat2volt;
     AP_Int8 msgtime_s;
     AP_Int8 msg_abbreviate;   // apply the built-in shorthand dictionary to MESSAGE panel text
+    AP_Int32 msg_categories;  // MESSAGE panel category allow-list (AP_OSD_Msg::Category bits); 0 = show all
+    AP_Int8 msg_style;        // MESSAGE panel severity styling: 0 = off, 1 = blink severe messages
     AP_Int8 arm_scr;
     AP_Int8 disarm_scr;
     AP_Int8 failsafe_scr;

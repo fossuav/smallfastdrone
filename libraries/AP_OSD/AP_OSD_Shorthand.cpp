@@ -17,6 +17,7 @@
 
 #if OSD_ENABLED
 
+#include "AP_OSD_Message.h"
 #include <AP_Math/AP_Math.h>
 #include <AP_Math/crc.h>
 #include <StorageManager/StorageManager.h>
@@ -44,23 +45,12 @@ void AP_OSD_Shorthand::apply(char *buf, size_t size) const
         char uto[TO_LEN];
         to_upper_copy(ufrom, _entries[i].from, sizeof(ufrom));
         to_upper_copy(uto, _entries[i].to, sizeof(uto));
-        const size_t flen = strlen(ufrom);
-        const size_t tlen = strlen(uto);
-        // this is a *shorthand* table: only ever shorten (or keep length). A
-        // replacement longer than its key is ignored, which makes the message
-        // length monotonically non-increasing - it can never grow or overflow,
-        // regardless of what a ground station uploads.
-        if (flen == 0 || tlen > flen) {
-            continue;
-        }
-        char *p = buf;
-        while ((p = strstr(p, ufrom)) != nullptr) {
-            memmove(p + tlen, p + flen, strlen(p + flen) + 1);  // shift tail incl NUL
-            memcpy(p, uto, tlen);
-            p += tlen;   // continue past the replacement so `to` is not re-matched
-        }
-        (void)size;
+        // str_replace() is shorten-only: a replacement longer than its key is
+        // ignored, so the message length is monotonically non-increasing and can
+        // never grow or overflow buf, regardless of what a ground station uploads.
+        AP_OSD_Msg::str_replace(buf, ufrom, uto);
     }
+    (void)size;
 }
 
 uint16_t AP_OSD_Shorthand::serialize(uint8_t *buf) const

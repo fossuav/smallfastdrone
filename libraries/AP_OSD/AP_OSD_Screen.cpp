@@ -25,6 +25,7 @@
 
 #include "AP_OSD.h"
 #include "AP_OSD_Backend.h"
+#include "AP_OSD_Message.h"
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/Util.h>
@@ -1624,70 +1625,15 @@ void AP_OSD_Screen::draw_batused(uint8_t x, uint8_t y)
 }
 #endif
 
-// replace every occurrence of `from` with `to` in buf, in place. Only used for
-// shortening replacements (to no longer than from) so the buffer never grows.
-static void osd_str_replace(char *buf, const char *from, const char *to)
-{
-    const size_t flen = strlen(from);
-    const size_t tlen = strlen(to);
-    if (flen == 0 || tlen > flen) {
-        return;
-    }
-    char *p = buf;
-    while ((p = strstr(p, from)) != nullptr) {
-        memmove(p + tlen, p + flen, strlen(p + flen) + 1);  // shift tail incl NUL
-        memcpy(p, to, tlen);
-        p += tlen;   // continue past the replacement so `to` is not re-matched
-    }
-}
-
-// built-in OSD message shorthand. Keys are UPPERCASE because the caller has
-// already upper-cased the message; most-specific phrases come first. Every
-// replacement is shorter than its key. A user-definable map (Phase 2) will layer
-// on top of this.
-static void osd_abbreviate_message(char *buf)
-{
-    static const struct { const char *from; const char *to; } table[] = {
-        { "DISARMING MOTORS", "DISARMED" },
-        { "ARMING MOTORS",    "ARMED" },
-        { "PREARM: ",         "PA:" },
-        { "PREARM:",          "PA:" },
-        { "NOT HEALTHY",      "BAD" },
-        { "UNHEALTHY",        "BAD" },
-        { "INCONSISTENT",     "INCONS" },
-        { "CALIBRATION",      "CAL" },
-        { "CALIBRATED",       "CAL" },
-        { "CALIBRATE",        "CAL" },
-        { "THROTTLE",         "THR" },
-        { "BATTERY",          "BAT" },
-        { "VOLTAGE",          "VOLT" },
-        { "COMPASS",          "MAG" },
-        { "POSITION",         "POS" },
-        { "ALTITUDE",         "ALT" },
-        { "AIRSPEED",         "ASPD" },
-        { "SATELLITES",       "SATS" },
-        { "FAILSAFE",         "FS" },
-        { "WAITING",          "WAIT" },
-        { "TERRAIN",          "TERR" },
-    };
-    for (uint8_t i = 0; i < ARRAY_SIZE(table); i++) {
-        osd_str_replace(buf, table[i].from, table[i].to);
-    }
-}
-
 //Autoscroll message is the same as in minimosd-extra.
 //Thanks to night-ghost for the approach.
 void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
 {
     AP_Notify * notify = AP_Notify::get_singleton();
     if (notify) {
-        // per-screen level filter: suppress messages less severe than this
-        // screen's threshold (MAV_SEVERITY is lower-is-more-severe)
-        if (notify->get_text_severity() > uint8_t(msg_level)) {
-            return;
-        }
         int32_t visible_time = AP_HAL::millis() - notify->get_text_updated_millis();
         if (visible_time < osd->msgtime_s *1000) {
+            const uint8_t severity = notify->get_text_severity();
             char buffer[NOTIFY_TEXT_BUFFER_SIZE];
             strncpy(buffer, notify->get_text(), sizeof(buffer));
             int16_t len = strnlen(buffer, sizeof(buffer));
@@ -1702,14 +1648,29 @@ void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
                 }
             }
 
+            // classify on the raw (upper-cased) text, before abbreviation
+            // shortens the keywords, then apply the per-screen severity level
+            // filter and the global category allow-list. CRITICAL-or-worse
+            // messages are always shown as a safety net. Only classify when a
+            // category allow-list is actually configured.
+            const uint16_t category = osd->msg_categories ? AP_OSD_Msg::classify(buffer) : 0;
+            if (!AP_OSD_Msg::should_show(severity, category, uint32_t(osd->msg_categories),
+                                         uint8_t(msg_level), AP_OSD_Msg::SEV_CRITICAL)) {
+                return;
+            }
+
             // shorten common messages so they fit without scrolling: the
             // user-defined shorthand table is applied first (so it takes
             // precedence), then the built-in dictionary fills in the rest
             if (osd->msg_abbreviate) {
                 osd->shorthand().apply(buffer, sizeof(buffer));
-                osd_abbreviate_message(buffer);
+                AP_OSD_Msg::abbreviate(buffer);
                 len = strnlen(buffer, sizeof(buffer));
             }
+
+            // emphasise urgent messages if severity styling is enabled
+            const AP_OSD_Msg::Style style = osd->msg_style ? AP_OSD_Msg::style_for(severity)
+                                                           : AP_OSD_Msg::Style{};
 
             int16_t start_position = 0;
             //scroll if required
@@ -1738,7 +1699,7 @@ void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
                 buffer[end_position] = 0;
             }
 
-            backend->write(x, y, buffer + start_position);
+            backend->write_styled(x, y, style, buffer + start_position);
         }
     }
 }

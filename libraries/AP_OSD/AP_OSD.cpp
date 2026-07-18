@@ -154,6 +154,20 @@ const AP_Param::GroupInfo AP_OSD::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("_MSG_ABBR", 37, AP_OSD, msg_abbreviate, 0),
 
+    // @Param: _MSG_CAT
+    // @DisplayName: OSD message category filter
+    // @Description: Allow-list of message categories shown in the MESSAGE panel. When zero, all messages are shown (subject to each screen's MSG_LVL). When non-zero, only messages matching an enabled category are shown - except messages of CRITICAL severity or worse, which are always shown as a safety net. Categories are matched by keyword against the message text.
+    // @Bitmask: 0:PreArm,1:EKF/AHRS,2:GPS,3:Battery/Power,4:Compass,5:RC/Failsafe,6:Vibration,7:Gyro/Accel/IMU,8:Calibration,9:Arm/Disarm
+    // @User: Standard
+    AP_GROUPINFO("_MSG_CAT", 38, AP_OSD, msg_categories, 0),
+
+    // @Param: _MSG_STYLE
+    // @DisplayName: OSD message severity styling
+    // @Description: When enabled, styles the MESSAGE panel by message severity so urgent messages stand out. CRITICAL-and-worse messages blink; ERROR/WARNING messages are shown inverted (analog). Has no effect on message content or filtering.
+    // @Values: 0:Disabled,1:Style by severity
+    // @User: Standard
+    AP_GROUPINFO("_MSG_STYLE", 39, AP_OSD, msg_style, 0),
+
     // @Param: _ARM_SCR
     // @DisplayName: Arm screen
     // @Description: Screen to be shown on Arm event. Zero to disable the feature.
