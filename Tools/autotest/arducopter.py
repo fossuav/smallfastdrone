@@ -17331,6 +17331,63 @@ return update, 1000
         self.change_mode("RTL")
         self.wait_disarmed(timeout=300)
 
+    def AutoAcroEKFRecovery(self):
+        '''A GPS/EKF degradation mid-display stops maneuvering and flies a benign
+        level line; it resumes when the estimate recovers, and hands back safely
+        if it does not.'''
+        # The rule: a high-g clip alone is a non-event (the EKF heals it from GPS),
+        # but if GPS itself glitches under acro the EKF has no good reference and the
+        # estimate runs away -- so the applet stops maneuvering and flies a level line
+        # until it settles, resuming if it recovers and aborting if it does not.
+        #
+        # Isolate that watch from the firmware EKF failsafe: FS_EKF_ACTION default
+        # (LAND) would change mode out from under the applet on a sustained outage,
+        # which the applet reads as a pilot takeover. FS_EKF_ACTION=0 leaves the
+        # applet's own watch (which trips on gps:status/variance directly, not just
+        # has_ekf_failsafed) as the thing under test.
+        self.launch_autoacro_rise255(extra_params={"FS_EKF_ACTION": 0})
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(30, mode="GUIDED")
+        # Neutral throttle stick so LOITER holds height (a low stick sinks at
+        # PILOT_SPEED_DN); the applet flies in GUIDED and ignores it.
+        self.set_rc(3, 1500)
+        self.change_mode("LOITER")
+        self.context_collect('STATUSTEXT')
+
+        self.start_subtest("transient GPS loss: recover the level line, then resume")
+        self.set_parameter("AUTA_MOVE", 0)  # the whole curated display
+        self.set_rc(9, 2000)
+        # Let the display get past the thrust cal into a move, then drop GPS: the fix
+        # falls below 3D, the watch trips after HEALTH_TRIP_MS and flies the level line.
+        self.wait_statustext("AutoAcro: move 1/5 Loop", check_context=True, timeout=30)
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_statustext("EKF/GPS degraded, recovering", check_context=True, timeout=15)
+        # Restore GPS; once healthy for HEALTH_CLEAR_MS the watch resumes the schedule.
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_statustext("EKF/GPS recovered, resuming", check_context=True, timeout=30)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=200)
+        self.wait_mode("LOITER")
+        self.set_rc(9, 1000)
+
+        self.start_subtest("sustained GPS loss: recovery times out and hands back")
+        self.context_clear_collection('STATUSTEXT')
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: move 1/5 Loop", check_context=True, timeout=30)
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_statustext("EKF/GPS degraded, recovering", check_context=True, timeout=15)
+        # GPS never returns: the level line runs its RECOVER_MAX_MS clock out and the
+        # applet hands the vehicle back rather than maneuvering on dead nav.
+        self.wait_statustext("recovery timed out", check_context=True, timeout=30)
+        self.wait_statustext("AutoAcro: aborted", check_context=True, timeout=10)
+        self.set_rc(9, 1000)
+        # Restore GPS and bring it home once the EKF has a solution again.
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_ekf_happy()
+        self.change_mode("LOITER")
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def RealFlightAutoAcro(self, model, home):
         '''
         Fly every move in the library in RealFlight, to compare each trajectory
@@ -17583,6 +17640,7 @@ return update, 1000
             self.AutoAcroPivotLoop,
             self.AutoAcroUnderSpeedRefusal,
             self.AutoAcroAltitudeRefusal,
+            self.AutoAcroEKFRecovery,
             self.AutoAcroCharacterise,
         ])
         return ret
