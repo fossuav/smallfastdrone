@@ -17303,15 +17303,20 @@ return update, 1000
             (10, "PivotLoop", ["PivotLoop: pivot", "PivotLoop: looping"]),
         ))
 
-    def AutoAcroUnderSpeedRefusal(self):
-        '''An entry that cannot reach the sized arc's speed is refused, and the
-        abort hands back a flying vehicle in the mode it took it from'''
+    def AutoAcroLowEnergyCompletes(self):
+        '''An arc that cannot hold its circle completes on rotation instead of
+        refusing, and hands back a flying, upright vehicle'''
         # Cripple the guided entry: at 1 m/s2 the run-up cannot reach the 12 m
-        # loop's ~20 m/s inside its 9 s clock, so it gives up under-speed and the
-        # arc must REFUSE -- an under-speed arc is a descending one. This is the
-        # runtime half of the refusal; AutoAcroLoopSizing covers the plan-time
-        # WP_SPD clamp. The set_mode-failure branch of the abort stays uncovered
-        # here: forcing Loiter to refuse needs an EKF failure mid-flight.
+        # loop's ~20 m/s inside its 9 s clock, so the arc starts far under the
+        # speed its radius needs. It used to REFUSE here, and that was the wrong
+        # rule: a quad can rotate through the figure at any speed, so only flying
+        # a given RADIUS is energy-limited and completing never is. Holding the
+        # circle with the energy gone is exactly what put the vehicle inverted at
+        # 30 m with thrust commanded to zero on 2026-07-19.
+        #
+        # AutoAcroLoopSizing covers the plan-time WP_SPD clamp. The AGL floor --
+        # the one refusal that stays, being the one rotation cannot recover from
+        # -- is AutoAcroAltitudeRefusal.
         self.launch_autoacro_rise255(extra_params={"WP_ACC": 1.0})
         self.wait_ready_to_arm()
         self.arm_vehicle()
@@ -17322,9 +17327,17 @@ return update, 1000
         self.set_rc(9, 2000)
         self.wait_statustext("AutoAcro: move 1/1 Loop", check_context=True, timeout=15)
         self.wait_statustext("never reached speed", check_context=True, timeout=60)
-        self.wait_statustext("refusing", check_context=True, timeout=10)
-        self.wait_statustext("AutoAcro: aborted", check_context=True, timeout=10)
+        # Says the arc is under-speed, then drops the circle rather than flying
+        # it round on energy it does not have.
+        self.wait_statustext("low energy, completing on rate", check_context=True, timeout=30)
+        # The half that matters, and the half the old test could not have caught:
+        # the figure COMPLETES rather than aborting part-flown.
+        self.wait_statustext("AutoAcro: move 1 complete", check_context=True, timeout=30)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=15)
         self.wait_mode("LOITER")
+        # Upright at the handback. The failure being replaced ended inverted, so
+        # "it finished" is not enough on its own.
+        self.wait_attitude(desroll=0, despitch=0, tolerance=25, timeout=20)
         self.set_rc(9, 1000)
         self.change_mode("RTL")
         self.wait_disarmed(timeout=300)
@@ -17657,7 +17670,7 @@ return update, 1000
             self.AutoAcroYawSpin,
             self.AutoAcroRewindFlick,
             self.AutoAcroPivotLoop,
-            self.AutoAcroUnderSpeedRefusal,
+            self.AutoAcroLowEnergyCompletes,
             self.AutoAcroAltitudeRefusal,
             self.AutoAcroEKFRecovery,
             self.AutoAcroCharacterise,
