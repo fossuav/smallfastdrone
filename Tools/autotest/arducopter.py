@@ -17236,6 +17236,69 @@ return update, 1000
             (5, "Split-S", ["Split-S: rolling inverted", "Split-S: pulling through"]),
         ))
 
+    def AutoAcroReversalPair(self):
+        """Immelmann then split-S, repeated: does the pair hold its altitude?
+
+        The two are the same figure flown opposite ways -- half-loop then roll
+        gains height, roll then half-loop loses it -- and both reverse heading
+        180. If they are sized alike they should cancel, leaving a vehicle that
+        can reverse indefinitely without walking up or down. Both are sized now
+        (that was not true when the display's comment concluded the immelmann was
+        "too small to climb"), so this measures whether the pair actually closes.
+
+        Run in ISOLATION rather than as a display: the sequencer's reposition step
+        restores altitude to the display start between moves, which would correct
+        the very drift being measured.
+        """
+        self.launch_autoacro_rise255(extra_params={
+            "AUTA_IM_SIZE": 12, "AUTA_SS_SIZE": 12,
+        })
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(100, mode="GUIDED")
+        self.change_mode("LOITER")
+        self.set_rc(3, 1500)
+
+        results = []
+        for cycle in range(2):
+            for move, name in ((4, "Immelmann"), (5, "Split-S")):
+                # context_collect ACCUMULATES; without clearing, the next
+                # iteration's "display complete" matches the previous one's
+                # instantly and the switch drops mid-move ("cancelled by switch").
+                self.context_collect('STATUSTEXT')
+                self.context_clear_collection('STATUSTEXT')
+                self.set_parameter("AUTA_MOVE", move)
+                start_alt = self.get_altitude(relative=True)
+                start_hdg = self.get_heading()
+                self.set_rc(9, 2000)
+                self.wait_statustext("AutoAcro: move 1/1 %s" % name,
+                                     check_context=True, timeout=20)
+                self.wait_statustext("AutoAcro: display complete",
+                                     check_context=True, timeout=40)
+                self.set_rc(9, 1000)
+                # Let the handback settle before reading, so the number is the
+                # move's cost and not the recover still converging.
+                self.delay_sim_time(5)
+                end_alt = self.get_altitude(relative=True)
+                end_hdg = self.get_heading()
+                dh = (end_hdg - start_hdg + 540) % 360 - 180
+                results.append((cycle, name, start_alt, end_alt,
+                                end_alt - start_alt, dh))
+                self.progress("PAIR %d %-10s alt %6.1f -> %6.1f (%+6.1f m)  "
+                              "heading %+.0f deg" %
+                              (cycle, name, start_alt, end_alt,
+                               end_alt - start_alt, dh))
+                self.delay_sim_time(3)
+
+        net = results[-1][3] - results[0][2]
+        per_pair = [results[i][4] + results[i + 1][4] for i in (0, 2)]
+        self.progress("=== net over %d pairs: %+.1f m   per pair: %s" %
+                      (len(per_pair), net,
+                       ", ".join("%+.1f" % p for p in per_pair)))
+        self.set_rc(9, 1000)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def AutoAcroWingover(self):
         '''Fly the wingover (schedule move 6) in isolation on the native Rise255.
 
@@ -17683,6 +17746,7 @@ return update, 1000
             self.AutoAcroRewindFlick,
             self.AutoAcroPivotLoop,
             self.AutoAcroLowEnergyCompletes,
+            self.AutoAcroReversalPair,
             self.AutoAcroAltitudeRefusal,
             self.AutoAcroEKFRecovery,
             self.AutoAcroCharacterise,
