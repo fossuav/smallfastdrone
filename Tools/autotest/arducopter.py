@@ -17329,7 +17329,7 @@ return update, 1000
         self.wait_statustext("never reached speed", check_context=True, timeout=60)
         # Says the arc is under-speed, then drops the circle rather than flying
         # it round on energy it does not have.
-        self.wait_statustext("too slow to finish, tightening", check_context=True, timeout=30)
+        self.wait_statustext("behind plan", check_context=True, timeout=30)
         # The half that matters, and the half the old test could not have caught:
         # the figure COMPLETES rather than aborting part-flown.
         self.wait_statustext("AutoAcro: move 1 complete", check_context=True, timeout=30)
