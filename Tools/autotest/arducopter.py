@@ -17219,6 +17219,30 @@ return update, 1000
                 "Immelmann handed to recover still rolling %.0f dps (max %.0f): "
                 "not braked upright" % (roll_rate, max_roll_rate_dps))
 
+    def AutoAcroImmelmannJerk(self):
+        '''Probe: the arc onset's vertical jerk, with IMU logging fast enough to see it.
+
+        The default log config writes IMU at ~23 Hz, which is about six samples
+        across a 0.25 s onset -- enough to produce a jerk number and not enough
+        for it to mean anything (p95 came out equal to the peak). MASK_LOG_IMU_FAST
+        is bit 18. Unregistered: it exists to be run by hand when the onset
+        crossfade is being traded against the energy it costs.'''
+        self.launch_autoacro_rise255(extra_params={
+            "LOG_BITMASK": 65535 | (1 << 18),
+        })
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(100, mode="GUIDED")
+        self.change_mode("LOITER")
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("AUTA_MOVE", 4)
+        self.set_rc(9, 2000)
+        self.wait_statustext("Immelmann: pulling up", check_context=True, timeout=20)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=40)
+        self.set_rc(9, 1000)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def AutoAcroImmelmann(self):
         '''Fly the immelmann (schedule move 4) in isolation on the native Rise255'''
         # Both halves must run: the half-loop up, then the half-roll to upright.
@@ -17747,6 +17771,7 @@ return update, 1000
             self.AutoAcroPivotLoop,
             self.AutoAcroLowEnergyCompletes,
             self.AutoAcroReversalPair,
+            self.AutoAcroImmelmannJerk,
             self.AutoAcroAltitudeRefusal,
             self.AutoAcroEKFRecovery,
             self.AutoAcroCharacterise,
