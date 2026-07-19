@@ -17363,7 +17363,7 @@ return update, 1000
         self.context_collect('STATUSTEXT')
         self.set_parameter("AUTA_MOVE", 5)  # the split-S, a descender
         self.set_rc(9, 2000)
-        self.wait_statustext("Split-S: needs 18 m AGL", check_context=True, timeout=15)
+        self.wait_statustext("Split-S: needs 18.0 m AGL", check_context=True, timeout=15)
         self.wait_statustext("AutoAcro: aborted", check_context=True, timeout=10)
         self.wait_mode("LOITER")
         # The refusal precedes any command, so the descent never happened: the
