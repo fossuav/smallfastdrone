@@ -17345,17 +17345,17 @@ return update, 1000
     def AutoAcroAltitudeRefusal(self):
         '''A descending move triggered too low to clear the ground is refused
         before it commands anything, and the vehicle is left flying in Loiter'''
-        # The split-S drops ~12 m, so its floor is 18 m AGL. Trigger it at 15 and
-        # it must refuse at once, before the "move 1/1" announce -- the check is at
+        # The floor is AUTA_MIN_ALT of clearance PLUS what the move spends, so a
+        # 12 m split-S at 1.1x wants 10 + 13.2 = 23.2 m. Trigger it at ~12 and it
+        # must refuse at once, before the "move 1/1" announce -- the check is at
         # the top of run_sequence. TCAL 0 skips the thrust probe so the refusal is
-        # the first thing that happens; on the Marmott a juicy flick (same 18 m
-        # floor) triggered at 9 m went 2 m below the takeoff datum, which is the
-        # failure this gate exists to stop.
-        self.launch_autoacro_rise255(extra_params={"AUTA_TCAL": 0})
+        # the first thing that happens; on the Marmott a juicy flick triggered at
+        # 9 m went 2.35 m below the takeoff datum, which is what this gate stops.
+        self.launch_autoacro_rise255(extra_params={"AUTA_TCAL": 0, "AUTA_MIN_ALT": 10})
         self.wait_ready_to_arm()
         self.arm_vehicle()
-        # 10 m (the helper attains ~12) is well below the 18 m floor and well above
-        # the ground, so the refusal is unambiguous either way.
+        # 10 m (the helper attains ~12) is well below the floor and well above the
+        # ground, so the refusal is unambiguous either way.
         self.takeoff(10, mode="GUIDED")
         # Hold the height: a stick-low LOITER would sink at PILOT_SPEED_DN.
         self.set_rc(3, 1500)
@@ -17363,7 +17363,19 @@ return update, 1000
         self.context_collect('STATUSTEXT')
         self.set_parameter("AUTA_MOVE", 5)  # the split-S, a descender
         self.set_rc(9, 2000)
-        self.wait_statustext("Split-S: needs 18.0 m AGL", check_context=True, timeout=15)
+        self.wait_statustext("Split-S: needs 23.2 m AGL", check_context=True, timeout=15)
+        self.wait_statustext("AutoAcro: aborted", check_context=True, timeout=10)
+        self.wait_mode("LOITER")
+        # The floor must TRACK the clearance, not sit at a constant -- that is the
+        # whole point of AUTA_MIN_ALT, and a test that only saw one value would pass
+        # with the sizing deleted. Same move, clearance raised, floor must follow.
+        self.set_parameter("AUTA_MIN_ALT", 20)
+        self.context_clear_collection('STATUSTEXT')
+        self.set_rc(9, 1000)
+        # The abort arms a cooldown; a re-trigger inside it is ignored.
+        self.delay_sim_time(6)
+        self.set_rc(9, 2000)
+        self.wait_statustext("Split-S: needs 33.2 m AGL", check_context=True, timeout=15)
         self.wait_statustext("AutoAcro: aborted", check_context=True, timeout=10)
         self.wait_mode("LOITER")
         # The refusal precedes any command, so the descent never happened: the
