@@ -17667,7 +17667,12 @@ return update, 1000
                                               loop_drag_g=0.5)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
         self.set_parameters(params)
-        self.fly_autoacro_display(takeoff_alt=20, trigger_ch=7)
+        # 60 m, matching the native display: the figures own the vertical now, so the
+        # show needs room for the descenders' AGL floors -- 20 m for the juicy flick and
+        # 21 m for the size-10 split-S, each AUTA_MIN_ALT plus what that move spends.
+        # Flown from 20 the first time, the split-S refused at 17.4 m and the display
+        # aborted with five of seven moves in, having held its band perfectly well.
+        self.fly_autoacro_display(takeoff_alt=60, trigger_ch=7)
 
     def RealFlightAutoAcroReversalPair(self, model, home):
         '''
