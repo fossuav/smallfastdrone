@@ -17152,6 +17152,56 @@ return update, 1000
         self.launch_autoacro_rise255()
         self.fly_autoacro_display(20)
 
+    def fly_autoacro_reversal_pair(self, cycles=2, trigger_ch=9):
+        '''Fly immelmann/split-S alternately in isolation and report the drift.
+
+        Assumes the vehicle is already airborne in LOITER with the scripts
+        installed and AUTA_IM_SIZE/AUTA_SS_SIZE set. Returns the per-move rows
+        so the caller can assert on them; the pair is measured move-by-move
+        rather than as a display because the sequencer's reposition step would
+        restore altitude between moves and correct the very drift being read.'''
+        results = []
+        for cycle in range(cycles):
+            for move, name in ((4, "Immelmann"), (5, "Split-S")):
+                # context_collect ACCUMULATES; without clearing, the next
+                # iteration's "display complete" matches the previous one's
+                # instantly and the switch drops mid-move ("cancelled by switch").
+                self.context_collect('STATUSTEXT')
+                self.context_clear_collection('STATUSTEXT')
+                self.set_parameter("AUTA_MOVE", move)
+                start_alt = self.get_altitude(relative=True)
+                start_hdg = self.get_heading()
+                self.set_rc(trigger_ch, 2000)
+                self.wait_statustext("AutoAcro: move 1/1 %s" % name,
+                                     check_context=True, timeout=20)
+                self.wait_statustext("AutoAcro: display complete",
+                                     check_context=True, timeout=40)
+                self.set_rc(trigger_ch, 1000)
+                # No event marks "the recover has finished converging" -- the
+                # move reports complete while it is still settling -- so this
+                # waits out the handback to read the move's cost, not the
+                # recover mid-flight.
+                self.delay_sim_time(5)
+                end_alt = self.get_altitude(relative=True)
+                end_hdg = self.get_heading()
+                dh = (end_hdg - start_hdg + 540) % 360 - 180
+                results.append((cycle, name, start_alt, end_alt,
+                                end_alt - start_alt, dh))
+                self.progress("PAIR %d %-10s alt %6.1f -> %6.1f (%+6.1f m)  "
+                              "heading %+.0f deg" %
+                              (cycle, name, start_alt, end_alt,
+                               end_alt - start_alt, dh))
+                self.delay_sim_time(3)
+
+        net = results[-1][3] - results[0][2]
+        per_pair = [results[i][4] + results[i + 1][4]
+                    for i in range(0, len(results), 2)]
+        self.progress("=== net over %d pairs: %+.1f m   per pair: %s" %
+                      (len(per_pair), net,
+                       ", ".join("%+.1f" % p for p in per_pair)))
+        self.set_rc(trigger_ch, 1000)
+        return results
+
     def AutoAcroSmoothness(self):
         '''Fly several moves back-to-back on the native Rise255 for a combined
         spatial trace of the transitions between them.
@@ -17277,49 +17327,10 @@ return update, 1000
         self.launch_autoacro_rise255(extra_params={
             "AUTA_IM_SIZE": 12, "AUTA_SS_SIZE": 12,
         })
-        self.wait_ready_to_arm()
-        self.arm_vehicle()
         self.takeoff(100, mode="GUIDED")
         self.change_mode("LOITER")
         self.set_rc(3, 1500)
-
-        results = []
-        for cycle in range(2):
-            for move, name in ((4, "Immelmann"), (5, "Split-S")):
-                # context_collect ACCUMULATES; without clearing, the next
-                # iteration's "display complete" matches the previous one's
-                # instantly and the switch drops mid-move ("cancelled by switch").
-                self.context_collect('STATUSTEXT')
-                self.context_clear_collection('STATUSTEXT')
-                self.set_parameter("AUTA_MOVE", move)
-                start_alt = self.get_altitude(relative=True)
-                start_hdg = self.get_heading()
-                self.set_rc(9, 2000)
-                self.wait_statustext("AutoAcro: move 1/1 %s" % name,
-                                     check_context=True, timeout=20)
-                self.wait_statustext("AutoAcro: display complete",
-                                     check_context=True, timeout=40)
-                self.set_rc(9, 1000)
-                # Let the handback settle before reading, so the number is the
-                # move's cost and not the recover still converging.
-                self.delay_sim_time(5)
-                end_alt = self.get_altitude(relative=True)
-                end_hdg = self.get_heading()
-                dh = (end_hdg - start_hdg + 540) % 360 - 180
-                results.append((cycle, name, start_alt, end_alt,
-                                end_alt - start_alt, dh))
-                self.progress("PAIR %d %-10s alt %6.1f -> %6.1f (%+6.1f m)  "
-                              "heading %+.0f deg" %
-                              (cycle, name, start_alt, end_alt,
-                               end_alt - start_alt, dh))
-                self.delay_sim_time(3)
-
-        net = results[-1][3] - results[0][2]
-        per_pair = [results[i][4] + results[i + 1][4] for i in (0, 2)]
-        self.progress("=== net over %d pairs: %+.1f m   per pair: %s" %
-                      (len(per_pair), net,
-                       ", ".join("%+.1f" % p for p in per_pair)))
-        self.set_rc(9, 1000)
+        self.fly_autoacro_reversal_pair()
         self.change_mode("RTL")
         self.wait_disarmed(timeout=300)
 
@@ -17591,6 +17602,33 @@ return update, 1000
         self.set_parameters(params)
         self.fly_autoacro_display(takeoff_alt=20, trigger_ch=7)
 
+    def RealFlightAutoAcroReversalPair(self, model, home):
+        '''
+        Fly the immelmann/split-S pair in RealFlight, the airframe the pair's
+        imbalance was measured on. Mirrors AutoAcroReversalPair but on
+        flightaxis with the RealFlight hover and drag, so the two arms are
+        directly comparable; the native model exits its arcs at 8-10 m/s where
+        the handover costs tenths of a metre, and RealFlight at 14 where the
+        same geometry costs metres.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        # Scripting1 is on RC7 in the realflight-Rise255 tune, and 0.5 g is the
+        # arc drag this airframe measured on RealFlight (see RealFlightAutoAcro).
+        params = self.autoacro_display_params(0.025, trigger_ch=7,
+                                              loop_drag_g=0.5)
+        params.update({"AUTA_IM_SIZE": 12, "AUTA_SS_SIZE": 12})
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate ANG/RATE for the offline compare
+        self.set_parameters(params)
+        self.takeoff(100, mode="GUIDED")
+        self.change_mode("LOITER")
+        self.set_rc(3, 1500)
+        self.fly_autoacro_reversal_pair(trigger_ch=7)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
         ret = ([
@@ -17707,6 +17745,10 @@ return update, 1000
                 'home': 'EliField'
             }),
             Test(self.RealFlightFullDisplay, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
+            Test(self.RealFlightAutoAcroReversalPair, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
@@ -17862,6 +17904,8 @@ return update, 1000
             ret["RealFlightModelCharacterise"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcro"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightAutoAcroReversalPair"] = \
+                "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
         return ret
 
 
