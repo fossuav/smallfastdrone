@@ -17152,14 +17152,47 @@ return update, 1000
         self.launch_autoacro_rise255()
         self.fly_autoacro_display(20)
 
+    def fly_autoacro_reversal_pair_chained(self, trigger_ch=9):
+        '''Fly the immelmann/split-S pair CHAINED (AUTA_MOVE=-1) and report the walk.
+
+        Assumes the vehicle is already airborne in LOITER with the scripts
+        installed and AUTA_IM_SIZE/AUTA_SS_SIZE set.
+
+        Chained rather than move-by-move because isolation distorts the answer:
+        a move flown alone is handed no exit speed, so its recover has to stop
+        from the arc speed and arrest the drop at once, which cost the immelmann
+        9.3 m against the 5.7 the same recover costs chained. The applet's -1
+        schedule frees the vertical for this reason too -- the reposition
+        normally restores the display's start altitude between moves, which
+        would null the very drift being measured. Cross-track is still held.'''
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("AUTA_MOVE", -1)
+        start_alt = self.get_altitude(relative=True)
+        self.set_rc(trigger_ch, 2000)
+        self.wait_statustext("AutoAcro: reversal pair", check_context=True, timeout=20)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=120)
+        self.set_rc(trigger_ch, 1000)
+        # No event marks "the last recover has finished converging" -- the
+        # display reports complete while it is still settling -- so this waits
+        # out the handback to read the pair's cost, not the recover mid-flight.
+        self.delay_sim_time(5)
+        end_alt = self.get_altitude(relative=True)
+        self.progress("=== chained pair: alt %.1f -> %.1f (%+.1f m over 2 pairs, "
+                      "%+.1f m per pair)" %
+                      (start_alt, end_alt, end_alt - start_alt,
+                       (end_alt - start_alt) / 2.0))
+        return start_alt, end_alt
+
     def fly_autoacro_reversal_pair(self, cycles=2, trigger_ch=9):
         '''Fly immelmann/split-S alternately in isolation and report the drift.
 
         Assumes the vehicle is already airborne in LOITER with the scripts
         installed and AUTA_IM_SIZE/AUTA_SS_SIZE set. Returns the per-move rows
-        so the caller can assert on them; the pair is measured move-by-move
-        rather than as a display because the sequencer's reposition step would
-        restore altitude between moves and correct the very drift being read.'''
+        so the caller can assert on them. Isolation makes each recover stop from
+        the arc speed rather than hand over, which costs the immelmann ~3.6 m
+        more than it does chained -- see fly_autoacro_reversal_pair_chained,
+        which is the one to reach for when the question is the pair's balance
+        rather than a single move's cost.'''
         results = []
         for cycle in range(cycles):
             for move, name in ((4, "Immelmann"), (5, "Split-S")):
@@ -17320,9 +17353,9 @@ return update, 1000
         (that was not true when the display's comment concluded the immelmann was
         "too small to climb"), so this measures whether the pair actually closes.
 
-        Run in ISOLATION rather than as a display: the sequencer's reposition step
-        restores altitude to the display start between moves, which would correct
-        the very drift being measured.
+        Run in ISOLATION, which isolates each move's own cost but makes every
+        recover stop from the arc speed rather than hand over. See
+        AutoAcroReversalPairChained for the same pair with realistic handovers.
         """
         self.launch_autoacro_rise255(extra_params={
             "AUTA_IM_SIZE": 12, "AUTA_SS_SIZE": 12,
@@ -17331,6 +17364,33 @@ return update, 1000
         self.change_mode("LOITER")
         self.set_rc(3, 1500)
         self.fly_autoacro_reversal_pair()
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
+    def AutoAcroReversalPairChained(self):
+        """The immelmann/split-S pair chained through the sequencer.
+
+        The isolated arm above answers "what does each move cost", but it costs
+        the immelmann ~3.6 m more than reality because a move flown alone gets
+        no exit speed handed to it and its recover has to stop from the arc
+        speed. This runs the applet's AUTA_MOVE=-1 schedule, where each move
+        hands the next its entry speed, and where the reposition leaves the
+        vertical free so the pair's walk is not corrected away between moves.
+
+        Asserts the pair reverses and stays inside a bound the recover residual
+        is expected to fit in, rather than that it balances -- it does not yet.
+        """
+        self.launch_autoacro_rise255(extra_params={
+            "AUTA_IM_SIZE": 12, "AUTA_SS_SIZE": 12,
+        })
+        self.takeoff(100, mode="GUIDED")
+        self.change_mode("LOITER")
+        self.set_rc(3, 1500)
+        start_alt, end_alt = self.fly_autoacro_reversal_pair_chained()
+        walk = end_alt - start_alt
+        if walk < -60:
+            raise NotAchievedException(
+                "chained pair walked down %.1f m over 2 pairs" % walk)
         self.change_mode("RTL")
         self.wait_disarmed(timeout=300)
 
@@ -17625,7 +17685,7 @@ return update, 1000
         self.takeoff(100, mode="GUIDED")
         self.change_mode("LOITER")
         self.set_rc(3, 1500)
-        self.fly_autoacro_reversal_pair(trigger_ch=7)
+        self.fly_autoacro_reversal_pair_chained(trigger_ch=7)
         self.change_mode("RTL")
         self.wait_disarmed(timeout=300)
 
@@ -17813,6 +17873,7 @@ return update, 1000
             self.AutoAcroPivotLoop,
             self.AutoAcroLowEnergyCompletes,
             self.AutoAcroReversalPair,
+            self.AutoAcroReversalPairChained,
             self.AutoAcroImmelmannJerk,
             self.AutoAcroAltitudeRefusal,
             self.AutoAcroEKFRecovery,
