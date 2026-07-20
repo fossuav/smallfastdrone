@@ -17150,7 +17150,14 @@ return update, 1000
     def AutoAcroFullDisplay(self):
         '''Fly the whole curated autoacro display chained on the native Rise255'''
         self.launch_autoacro_rise255()
-        self.fly_autoacro_display(20)
+        # 60 m, not 20. The display's figures own the vertical now (the reposition no
+        # longer restores the start altitude between moves), so the show needs room for
+        # two things: the descenders' AGL floors -- 20 m for the juicy flick, 21 m for the
+        # size-10 split-S, each being AUTA_MIN_ALT plus what that move spends -- and the
+        # fact that the native Rise255 loop does not net out. Its arc hands the recover
+        # 12.7 m/s of sink and the recover pays v^2/2g, so it costs ~10 m a pass here;
+        # the same loop on RealFlight comes out +3.5 m, so this headroom is for the model.
+        self.fly_autoacro_display(60)
 
     def fly_autoacro_reversal_pair_chained(self, trigger_ch=9):
         '''Fly the immelmann/split-S pair CHAINED (AUTA_MOVE=-1) and report the walk.
