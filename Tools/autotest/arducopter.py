@@ -17569,7 +17569,12 @@ return update, 1000
         self.launch_autoacro_rise255(extra_params={"FS_EKF_ACTION": 0})
         self.wait_ready_to_arm()
         self.arm_vehicle()
-        self.takeoff(30, mode="GUIDED")
+        # 60 m for the same reason AutoAcroFullDisplay takes off at 60: the 7-move
+        # display owns its own vertical and its descenders carry 20-21 m AGL floors,
+        # and here the opener loop is additionally sacrificed to the GPS cut, so the
+        # resumed schedule is net-descending. At 30 m the rewind was correctly
+        # refused at 2.2 m AGL and the display never completed.
+        self.takeoff(60, mode="GUIDED")
         # Neutral throttle stick so LOITER holds height (a low stick sinks at
         # PILOT_SPEED_DN); the applet flies in GUIDED and ignores it.
         self.set_rc(3, 1500)
@@ -17581,7 +17586,7 @@ return update, 1000
         self.set_rc(9, 2000)
         # Let the display get past the thrust cal into a move, then drop GPS: the fix
         # falls below 3D, the watch trips after HEALTH_TRIP_MS and flies the level line.
-        self.wait_statustext("AutoAcro: move 1/5 Loop", check_context=True, timeout=30)
+        self.wait_statustext("AutoAcro: move 1/7 Loop", check_context=True, timeout=30)
         self.set_parameter("SIM_GPS1_ENABLE", 0)
         self.wait_statustext("EKF/GPS degraded, recovering", check_context=True, timeout=15)
         # Restore GPS; once healthy for HEALTH_CLEAR_MS the watch resumes the schedule.
@@ -17594,7 +17599,7 @@ return update, 1000
         self.start_subtest("sustained GPS loss: recovery times out and hands back")
         self.context_clear_collection('STATUSTEXT')
         self.set_rc(9, 2000)
-        self.wait_statustext("AutoAcro: move 1/5 Loop", check_context=True, timeout=30)
+        self.wait_statustext("AutoAcro: move 1/7 Loop", check_context=True, timeout=30)
         self.set_parameter("SIM_GPS1_ENABLE", 0)
         self.wait_statustext("EKF/GPS degraded, recovering", check_context=True, timeout=15)
         # GPS never returns: the level line runs its RECOVER_MAX_MS clock out and the
