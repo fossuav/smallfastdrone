@@ -17647,6 +17647,33 @@ return update, 1000
             (10, "PivotLoop", ["PivotLoop: pivot", "PivotLoop: looping"]),
         ), trigger_ch=7)
 
+    def RealFlightAutoAcroRewind(self, model, home):
+        '''Fly the rewind (schedule move 8) in isolation on RealFlight.
+
+        The rewind is entered at its SIZED speed here, which the chained display
+        does not deliver -- the display feeds it off the split-S at ~14.7 m/s
+        against a sized ~12, so it reaches the vertical apex at 11.4 m/s where the
+        sizing wants ~4 and the stall-turn come-down cannot arrest it (2026-07-21).
+        In isolation the run-up establishes the sized entry, so this is where the
+        stall-turn come-down is validated on the floaty airframe SITL cannot show.
+
+        The phase list runs past "rewinding" to "recovered": the come-down and its
+        handback are the part under test, not just that the climb happened.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        # Scripting1 on RC7, RealFlight hover and 0.5 g arc drag, as RealFlightAutoAcro.
+        params = self.autoacro_display_params(0.025, trigger_ch=7, loop_drag_g=0.5)
+        params["AUTA_RW_SIZE"] = 12
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate ANG for the come-down analysis
+        self.set_parameters(params)
+        self.fly_autoacro_moves((
+            (8, "Rewind", ["Rewind: pitching up", "Rewind: rewinding",
+                           "Rewind: recovering", "Rewind: recovered"]),
+        ), trigger_ch=7)
+
     def RealFlightFullDisplay(self, model, home):
         '''
         Fly the whole curated autoacro display chained in RealFlight (AUTA_MOVE=0),
@@ -17816,6 +17843,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightAutoAcroRewind, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             Test(self.RealFlightFullDisplay, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
@@ -17976,6 +18007,8 @@ return update, 1000
             ret["RealFlightHover"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightModelCharacterise"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcro"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightAutoAcroRewind"] = \
+                "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
