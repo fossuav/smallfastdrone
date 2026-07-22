@@ -37,6 +37,18 @@
     # approximate maximum yaw rate in deg/sec
     "refRotRate" : 700,
 
+    # Per-motor yaw torque factor (CCW +, CW -), scaled up from the +-1 default to
+    # calibrate the yaw authority to the real airframe. The native model ties yaw torque
+    # to thrust (rotor_torque = 0.05*diagonal*motor_thrust*yaw_factor, SIM_Motor.cpp), so
+    # at low throttle it under-yaws ~4x: the default gave 167 dps where the RealFlight and
+    # real Marmott do 679 dps at 0.059 throttle upright (log 00000142). x4 matches it.
+    # yaw_factor scales only the yaw axis; thrust and roll/pitch (position % thrust) are
+    # untouched. Motor order is quad_x: 1,2 CCW / 3,4 CW.
+    "motor1_yaw" : 4.0,
+    "motor2_yaw" : 4.0,
+    "motor3_yaw" : -4.0,
+    "motor4_yaw" : -4.0,
+
     # hover throttle from 0 to 1 (T/W ~8)
     "hoverThrOut" : 0.125,
 
