@@ -17477,6 +17477,15 @@ return update, 1000
             (11, "InvYaw", ["InvYaw: spinning", "InvYaw: half", "InvYaw: rolling upright"]),
         ))
 
+    def AutoAcroFloatLoop(self):
+        '''Fly the float loop (schedule move 12) in isolation on the native Rise255'''
+        self.launch_autoacro_rise255()
+        # "over the top" only fires once it has reached the ballistic apex, so it is the
+        # assertion a figure that pinched or fell through cannot satisfy.
+        self.fly_autoacro_moves((
+            (12, "FloatLoop", ["FloatLoop: looping", "FloatLoop: over the top"]),
+        ))
+
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
         refusing, and hands back a flying, upright vehicle'''
@@ -17929,6 +17938,7 @@ return update, 1000
             self.AutoAcroRewindFlick,
             self.AutoAcroPivotLoop,
             self.AutoAcroInvertedYaw,
+            self.AutoAcroFloatLoop,
             self.AutoAcroLowEnergyCompletes,
             self.AutoAcroReversalPair,
             self.AutoAcroReversalPairChained,
