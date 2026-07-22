@@ -17486,6 +17486,15 @@ return update, 1000
             (12, "FloatLoop", ["FloatLoop: looping", "FloatLoop: over the top"]),
         ))
 
+    def AutoAcroLoopSpin(self):
+        '''Fly the loop-spin (float loop + apex yaw 360, schedule move 13) on the Rise255'''
+        self.launch_autoacro_rise255()
+        # "half" fires only once the apex yaw has actually turned 180, and "pulling out" only
+        # once the spin completed -- the pair a degraded run cannot fake.
+        self.fly_autoacro_moves((
+            (13, "LoopSpin", ["LoopSpin: spinning", "LoopSpin: half", "LoopSpin: pulling out"]),
+        ))
+
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
         refusing, and hands back a flying, upright vehicle'''
@@ -17939,6 +17948,7 @@ return update, 1000
             self.AutoAcroPivotLoop,
             self.AutoAcroInvertedYaw,
             self.AutoAcroFloatLoop,
+            self.AutoAcroLoopSpin,
             self.AutoAcroLowEnergyCompletes,
             self.AutoAcroReversalPair,
             self.AutoAcroReversalPairChained,
