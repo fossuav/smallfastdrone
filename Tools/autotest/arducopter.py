@@ -17468,6 +17468,15 @@ return update, 1000
             (10, "PivotLoop", ["PivotLoop: pivot", "PivotLoop: looping"]),
         ))
 
+    def AutoAcroInvertedYaw(self):
+        '''Fly the inverted yaw 360 (schedule move 11) in isolation on the native Rise255'''
+        self.launch_autoacro_rise255()
+        # "half" only fires once the yaw has actually turned 180 while inverted, so it is the
+        # assertion the degraded (barely-spinning) path cannot satisfy.
+        self.fly_autoacro_moves((
+            (11, "InvYaw", ["InvYaw: spinning", "InvYaw: half", "InvYaw: rolling upright"]),
+        ))
+
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
         refusing, and hands back a flying, upright vehicle'''
@@ -17919,6 +17928,7 @@ return update, 1000
             self.AutoAcroYawSpin,
             self.AutoAcroRewindFlick,
             self.AutoAcroPivotLoop,
+            self.AutoAcroInvertedYaw,
             self.AutoAcroLowEnergyCompletes,
             self.AutoAcroReversalPair,
             self.AutoAcroReversalPairChained,
