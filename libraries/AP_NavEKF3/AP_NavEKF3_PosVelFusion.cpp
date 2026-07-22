@@ -305,7 +305,7 @@ bool NavEKF3_core::setLatLng(const Location &loc, float posAccuracy, uint32_t ti
         const uint32_t timeoutThreshold = (uint32_t)MAX(((int32_t)frontend->posRetryTimeNoVel_ms-(int32_t)1000),1000);
         const bool gpsVelTimeout = (imuSampleTime_ms - lastVelPassTime_ms) > timeoutThreshold;
         const bool gpsPosTimeout = (imuSampleTime_ms - lastPosPassTime_ms) > timeoutThreshold;
-        useSetLatLngAsMeasurement = gpsVelTimeout || gpsPosTimeout || (imuSampleTime_ms - lastTimeGpsReceived_ms) > 1000;
+        useSetLatLngAsMeasurement = (posxy_source_last != AP_NavEKF_Source::SourceXY::GPS) || gpsVelTimeout || gpsPosTimeout || (imuSampleTime_ms - lastTimeGpsReceived_ms) > 1000;
         if (frontend->_options & (int32_t)NavEKF3::Options::JammingExpected) {
             useSetLatLngAsMeasurement = useSetLatLngAsMeasurement || !gpsGoodToAlign;
         }
