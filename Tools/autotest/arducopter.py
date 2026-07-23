@@ -17706,6 +17706,33 @@ return update, 1000
                            "Rewind: recovering", "Rewind: recovered"]),
         ), trigger_ch=7)
 
+    def RealFlightAutoAcroLoopSpin(self, model, home):
+        '''Fly the loop-spin (schedule move 13) in isolation on RealFlight.
+
+        The loop-spin has only ever flown on the native Rise255, where its
+        come-down runs hot -- a marginal-arc regime the notes warn not to tune
+        the loop against. In native SITL the come-down drifts ~18 m of cross
+        (the body is left rolled by a spin about a tilted axis) and, with the
+        vertical-axis fix, runs away downward. RealFlight is the draggier,
+        falsifiable airframe: this is where we learn whether the drift and the
+        run-away are real or SITL artifacts, which decides the vertical-axis
+        fix. The phase list runs to "recovering" so the come-down completing is
+        what is asserted, not just that the spin happened; pull the log and run
+        analysis/per_move_metrics.py for the cross-track and altitude numbers.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        # Scripting1 on RC7, RealFlight hover and 0.5 g arc drag, as RealFlightAutoAcro.
+        params = self.autoacro_display_params(0.025, trigger_ch=7, loop_drag_g=0.5)
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate ANG for the come-down analysis
+        self.set_parameters(params)
+        self.fly_autoacro_moves((
+            (13, "LoopSpin", ["LoopSpin: spinning", "LoopSpin: half",
+                              "LoopSpin: pulling out", "LoopSpin: recovering"]),
+        ), trigger_ch=7)
+
     def RealFlightFullDisplay(self, model, home):
         '''
         Fly the whole curated autoacro display chained in RealFlight (AUTA_MOVE=0),
@@ -17879,6 +17906,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightAutoAcroLoopSpin, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             Test(self.RealFlightFullDisplay, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
@@ -18043,6 +18074,8 @@ return update, 1000
             ret["RealFlightModelCharacterise"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcro"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroRewind"] = \
+                "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightAutoAcroLoopSpin"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
