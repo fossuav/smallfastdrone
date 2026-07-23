@@ -17733,6 +17733,28 @@ return update, 1000
                               "LoopSpin: pulling out", "LoopSpin: recovering"]),
         ), trigger_ch=7)
 
+    def RealFlightAutoAcroFloatLoop(self, model, home):
+        '''Fly the float loop (schedule move 12) in isolation on RealFlight.
+
+        The loop-spin's come-down IS the float loop's back half. On RealFlight
+        the loop-spin come-down over-pulls at the bottom and zooms +24 m (the
+        throttle pins at max as the nose levels). This isolates whether that is
+        the float-loop back half itself, or the loop-spin's spin-and-settle sink
+        making the arc enter too hot. Phases run to "recovering" so the come-down
+        completing is what is asserted.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.025, trigger_ch=7, loop_drag_g=0.5)
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate ANG for the come-down analysis
+        self.set_parameters(params)
+        self.fly_autoacro_moves((
+            (12, "FloatLoop", ["FloatLoop: looping", "FloatLoop: over the top",
+                               "FloatLoop: recovering"]),
+        ), trigger_ch=7)
+
     def RealFlightFullDisplay(self, model, home):
         '''
         Fly the whole curated autoacro display chained in RealFlight (AUTA_MOVE=0),
@@ -17910,6 +17932,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightAutoAcroFloatLoop, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             Test(self.RealFlightFullDisplay, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
@@ -18076,6 +18102,8 @@ return update, 1000
             ret["RealFlightAutoAcroRewind"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroLoopSpin"] = \
+                "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightAutoAcroFloatLoop"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
