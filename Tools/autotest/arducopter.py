@@ -17495,6 +17495,16 @@ return update, 1000
             (13, "LoopSpin", ["LoopSpin: spinning", "LoopSpin: half", "LoopSpin: pulling out"]),
         ))
 
+    def AutoAcroKnifeEdgeSpin(self):
+        '''Fly the knife edge spin (schedule move 14) in isolation on the native Rise255'''
+        self.launch_autoacro_rise255()
+        # "spinning" is the pivot on the knife edge; "rolling out" only fires once the heading
+        # has actually reversed ~180, so the pair is what a stalled or wrong-way pivot cannot fake.
+        self.fly_autoacro_moves((
+            (14, "KnifeEdgeSpin", ["KnifeEdgeSpin: knife edge", "KnifeEdgeSpin: spinning",
+                                   "KnifeEdgeSpin: rolling out"]),
+        ))
+
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
         refusing, and hands back a flying, upright vehicle'''
@@ -17780,6 +17790,29 @@ return update, 1000
                                "PivotLoop: recovering"]),
         ), trigger_ch=7)
 
+    def RealFlightAutoAcroKnifeEdgeSpin(self, model, home):
+        '''Fly the knife edge spin (schedule move 14) in isolation on RealFlight.
+
+        The pilot's real pivot loop, read off log271: roll to knife-edge, hold
+        it, sweep the heading ~180 with a body pitch (a half-loop flown sideways
+        so the reversal stays flat), roll out reversed, descending. Flown at
+        18 m/s, the speed the pilot held through it. Native SITL sinks ~2x the
+        pilot's 15 m on the marginal model, so this is where the real descent
+        and the flat reversal get judged. Phases run to recovering.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.025, trigger_ch=7, loop_drag_g=0.5)
+        params["AUTA_LP_SPD"] = 18  # the speed the pilot held through the pivot (log271)
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate ANG for the reversal analysis
+        self.set_parameters(params)
+        self.fly_autoacro_moves((
+            (14, "KnifeEdgeSpin", ["KnifeEdgeSpin: knife edge", "KnifeEdgeSpin: spinning",
+                                   "KnifeEdgeSpin: rolling out", "KnifeEdgeSpin: recovering"]),
+        ), trigger_ch=7)
+
     def RealFlightFullDisplay(self, model, home):
         '''
         Fly the whole curated autoacro display chained in RealFlight (AUTA_MOVE=0),
@@ -17965,6 +17998,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightAutoAcroKnifeEdgeSpin, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             Test(self.RealFlightFullDisplay, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
@@ -18035,6 +18072,7 @@ return update, 1000
             self.AutoAcroInvertedYaw,
             self.AutoAcroFloatLoop,
             self.AutoAcroLoopSpin,
+            self.AutoAcroKnifeEdgeSpin,
             self.AutoAcroLowEnergyCompletes,
             self.AutoAcroReversalPair,
             self.AutoAcroReversalPairChained,
@@ -18135,6 +18173,8 @@ return update, 1000
             ret["RealFlightAutoAcroFloatLoop"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroPivotLoop"] = \
+                "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightAutoAcroKnifeEdgeSpin"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
