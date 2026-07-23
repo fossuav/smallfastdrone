@@ -17150,14 +17150,14 @@ return update, 1000
     def AutoAcroFullDisplay(self):
         '''Fly the whole curated autoacro display chained on the native Rise255'''
         self.launch_autoacro_rise255()
-        # 60 m, not 20. The display's figures own the vertical now (the reposition no
+        # 70 m, not 20. The display's figures own the vertical now (the reposition no
         # longer restores the start altitude between moves), so the show needs room for
-        # two things: the descenders' AGL floors -- 20 m for the juicy flick, 21 m for the
-        # size-10 split-S, each being AUTA_MIN_ALT plus what that move spends -- and the
-        # fact that the native Rise255 loop does not net out. Its arc hands the recover
-        # 12.7 m/s of sink and the recover pays v^2/2g, so it costs ~10 m a pass here;
-        # the same loop on RealFlight comes out +3.5 m, so this headroom is for the model.
-        self.fly_autoacro_display(60)
+        # three things: the descenders' AGL floors -- 20 m for the juicy flick, 21 m for
+        # the size-10 split-S, each being AUTA_MIN_ALT plus what that move spends -- the
+        # M7 dive lines' ~10-12 m of height-for-speed spend, and the native pivot loop's
+        # ~14 m walk-down (a model artifact; RealFlight recovers it to +2). The loop
+        # itself nets ~0 now that the opener dive line hands it a clean entry.
+        self.fly_autoacro_display(70)
 
     def fly_autoacro_reversal_pair_chained(self, trigger_ch=9):
         '''Fly the immelmann/split-S pair CHAINED (AUTA_MOVE=-1) and report the walk.
@@ -17606,12 +17606,13 @@ return update, 1000
         self.launch_autoacro_rise255(extra_params={"FS_EKF_ACTION": 0})
         self.wait_ready_to_arm()
         self.arm_vehicle()
-        # 60 m for the same reason AutoAcroFullDisplay takes off at 60: the 7-move
-        # display owns its own vertical and its descenders carry 20-21 m AGL floors,
-        # and here the opener loop is additionally sacrificed to the GPS cut, so the
-        # resumed schedule is net-descending. At 30 m the rewind was correctly
-        # refused at 2.2 m AGL and the display never completed.
-        self.takeoff(60, mode="GUIDED")
+        # 70 m for the same reason AutoAcroFullDisplay takes off at 70: the display
+        # owns its own vertical, its descenders carry 20-21 m AGL floors and the M7
+        # dive lines spend height for speed, and here the opener loop is additionally
+        # sacrificed to the GPS cut, so the resumed schedule is net-descending. At
+        # 30 m the rewind was correctly refused at 2.2 m AGL and the display never
+        # completed.
+        self.takeoff(70, mode="GUIDED")
         # Neutral throttle stick so LOITER holds height (a low stick sinks at
         # PILOT_SPEED_DN); the applet flies in GUIDED and ignores it.
         self.set_rc(3, 1500)
@@ -17623,7 +17624,7 @@ return update, 1000
         self.set_rc(9, 2000)
         # Let the display get past the thrust cal into a move, then drop GPS: the fix
         # falls below 3D, the watch trips after HEALTH_TRIP_MS and flies the level line.
-        self.wait_statustext("AutoAcro: move 1/7 Loop", check_context=True, timeout=30)
+        self.wait_statustext(r"AutoAcro: move \d+/\d+ Loop", regex=True, check_context=True, timeout=30)
         self.set_parameter("SIM_GPS1_ENABLE", 0)
         self.wait_statustext("EKF/GPS degraded, recovering", check_context=True, timeout=15)
         # Restore GPS; once healthy for HEALTH_CLEAR_MS the watch resumes the schedule.
@@ -17636,7 +17637,7 @@ return update, 1000
         self.start_subtest("sustained GPS loss: recovery times out and hands back")
         self.context_clear_collection('STATUSTEXT')
         self.set_rc(9, 2000)
-        self.wait_statustext("AutoAcro: move 1/7 Loop", check_context=True, timeout=30)
+        self.wait_statustext(r"AutoAcro: move \d+/\d+ Loop", regex=True, check_context=True, timeout=30)
         self.set_parameter("SIM_GPS1_ENABLE", 0)
         self.wait_statustext("EKF/GPS degraded, recovering", check_context=True, timeout=15)
         # GPS never returns: the level line runs its RECOVER_MAX_MS clock out and the
@@ -17833,12 +17834,13 @@ return update, 1000
                                               loop_drag_g=0.5)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
         self.set_parameters(params)
-        # 60 m, matching the native display: the figures own the vertical now, so the
+        # 70 m, matching the native display: the figures own the vertical now, so the
         # show needs room for the descenders' AGL floors -- 20 m for the juicy flick and
-        # 21 m for the size-10 split-S, each AUTA_MIN_ALT plus what that move spends.
-        # Flown from 20 the first time, the split-S refused at 17.4 m and the display
-        # aborted with five of seven moves in, having held its band perfectly well.
-        self.fly_autoacro_display(takeoff_alt=60, trigger_ch=7)
+        # 21 m for the size-10 split-S, each AUTA_MIN_ALT plus what that move spends --
+        # plus the M7 dive lines' height-for-speed spend. Flown from 20 the first time,
+        # the split-S refused at 17.4 m and the display aborted with five of seven moves
+        # in, having held its band perfectly well.
+        self.fly_autoacro_display(takeoff_alt=70, trigger_ch=7)
 
     def RealFlightAutoAcroReversalPair(self, model, home):
         '''
