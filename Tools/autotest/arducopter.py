@@ -17727,6 +17727,7 @@ return update, 1000
         # Scripting1 on RC7, RealFlight hover and 0.5 g arc drag, as RealFlightAutoAcro.
         params = self.autoacro_display_params(0.025, trigger_ch=7, loop_drag_g=0.5)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate ANG for the come-down analysis
+        self.set_parameter("AUTA_LS_CD", 2)
         self.set_parameters(params)
         self.fly_autoacro_moves((
             (13, "LoopSpin", ["LoopSpin: spinning", "LoopSpin: half",
@@ -17753,6 +17754,30 @@ return update, 1000
         self.fly_autoacro_moves((
             (12, "FloatLoop", ["FloatLoop: looping", "FloatLoop: over the top",
                                "FloatLoop: recovering"]),
+        ), trigger_ch=7)
+
+    def RealFlightAutoAcroPivotLoop(self, model, home):
+        '''Fly the pivot loop (schedule move 10) in isolation on RealFlight.
+
+        The pivot loop was reworked to the canonical shape read off log271
+        (segments 4-7): a fast ROLLING reversal (roll+yaw together, nose-low)
+        into a ballistic FLIP (throttle cut over the top), translating along
+        the line -- the pilot's "linear yaw spin and flip", not the old slow
+        flat pivot into a big powered loop. Entered at 20 m/s (AUTA_LP_SPD),
+        the reversal speed the pilot flew it at, so the flip is full-scale.
+        Phases run to "recovering" so the whole move is asserted.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.025, trigger_ch=7, loop_drag_g=0.5)
+        params["AUTA_LP_SPD"] = 20  # the reversal entry speed the pilot flew (log271)
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate RATE/ANG for the reversal analysis
+        self.set_parameters(params)
+        self.fly_autoacro_moves((
+            (10, "PivotLoop", ["PivotLoop: pivot", "PivotLoop: looping",
+                               "PivotLoop: recovering"]),
         ), trigger_ch=7)
 
     def RealFlightFullDisplay(self, model, home):
@@ -17936,6 +17961,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightAutoAcroPivotLoop, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             Test(self.RealFlightFullDisplay, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
@@ -18104,6 +18133,8 @@ return update, 1000
             ret["RealFlightAutoAcroLoopSpin"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroFloatLoop"] = \
+                "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightAutoAcroPivotLoop"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
