@@ -17844,6 +17844,11 @@ return update, 1000
         params = self.autoacro_display_params(0.025, trigger_ch=7,  # RealFlight hover (ThO)
                                               loop_drag_g=0.5)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
+        # The split-S drop is airframe-specific: RealFlight flies its arc tight and
+        # measured 14.4 m on size 10 (2026-07-23 log) where the native model spends
+        # 22-27. The default 2.2x declaration over-declared by ~8 m here and refused
+        # the split-S at 29.0 of 32.0 with the show flying fine.
+        params["AUTA_SS_DROP"] = 15
         self.set_parameters(params)
         # 98 m, matching the native display. At RealFlight's ~25 m/s asks the ballistic
         # budgets are v^2/2g bigger than the native ones (opener ~37 m, loop->immelmann
