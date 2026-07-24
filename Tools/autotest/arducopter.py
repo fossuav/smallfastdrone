@@ -17149,21 +17149,21 @@ return update, 1000
 
     def AutoAcroFullDisplay(self):
         '''Fly the whole curated autoacro display chained on the native Rise255'''
-        self.launch_autoacro_rise255()
-        # 98 m, not 20. The display's figures own the vertical now (the reposition no
-        # longer restores the start altitude between moves), so the show needs room for
-        # the descenders' AGL floors -- 20 m for the juicy flick and the size-10
-        # split-S's measured 22 m (2.2x, recover included), each AUTA_MIN_ALT plus what
-        # that move spends -- the native pivot loop's ~14-24 m walk-down (a model
-        # artifact with ~8 m of run-to-run spread; RealFlight recovers it to +2), and
-        # the M7 ballistic dives, which buy their delivery speed entirely from height
-        # ((v1^2-v0^2)/2g each, ~38 m for the opener and loop->immelmann pair). From 95
-        # a bad pivot mood left the split-S 0.5 m under its floor; 98 covers the
-        # observed spread and the takeoff hover -- the band's ceiling -- stays under
-        # the show's 100 m. A deep-tail mood still refuses a late move safely rather
-        # than flying it short of sky; that is the floor system working, not a bug.
-        # The loop itself nets ~0 now that the opener dive hands it a clean entry.
-        self.fly_autoacro_display(98)
+        # The display band constraint (2026-07-24) is 10..50 m AGL -- a show at 100 m
+        # is invisible from the ground -- which is why the dives are the mechanical 1a
+        # lines (a ballistic conversion costs (v1^2-v0^2)/2g of band, 26-37 m at the
+        # current asks, and the whole show has 40) and why the two descender budgets
+        # shrink: JF_DROP 6 here and the schedule's split-S pinned to size 8 buy back
+        # the ~8 m the untrimmed show overruns the band by. RealFlight flies the real
+        # 10..50 (52 commanded, ~50 attained); the native model cannot -- its pivot
+        # walks down 12-24 with ~8 m of mood spread and its split-S spends 2.2x
+        # against RealFlight's 1.4x, ~15 m of model artifact -- so native CI flies
+        # the same choreography from 65 and validates the choreography, not the
+        # band's absolute placement (its window measures ~50 m, band + artifact).
+        # From 50 the native split-S found 19.4 m against its 32 m floor; from 60 a
+        # pivot mood left the rewind 0.8 m short.
+        self.launch_autoacro_rise255(extra_params={"AUTA_JF_DROP": 6})
+        self.fly_autoacro_display(65)
 
     def fly_autoacro_reversal_pair_chained(self, trigger_ch=9):
         '''Fly the immelmann/split-S pair CHAINED (AUTA_MOVE=-1) and report the walk.
@@ -17844,21 +17844,17 @@ return update, 1000
         params = self.autoacro_display_params(0.025, trigger_ch=7,  # RealFlight hover (ThO)
                                               loop_drag_g=0.5)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
-        # The split-S drop is airframe-specific: RealFlight flies its arc tight and
-        # measured 14.4 m on size 10 (2026-07-23 log) where the native model spends
-        # 22-27. The default 2.2x declaration over-declared by ~8 m here and refused
-        # the split-S at 29.0 of 32.0 with the show flying fine.
-        params["AUTA_SS_DROP"] = 15
+        # The display band constraint is 10..50 m AGL (2026-07-24). 52 commanded
+        # attains ~50 (the RealFlight takeoff undershoots ~2 and the thrust cal's
+        # idle probe sags ~4), which is the band top. The untrimmed show overran the
+        # band by ~8 m, bought back by the two descender budgets: JF_DROP 6 and the
+        # schedule's split-S pinned to size 8. The split-S drop is airframe-specific
+        # -- RealFlight flies its arc tight, 1.44x measured against the native 2.2x
+        # -- so SS_DROP declares the measured spend for the size-8 figure.
+        params["AUTA_JF_DROP"] = 6
+        params["AUTA_SS_DROP"] = 12
         self.set_parameters(params)
-        # 98 m, matching the native display. At RealFlight's ~25 m/s asks the ballistic
-        # budgets are v^2/2g bigger than the native ones (opener ~37 m, loop->immelmann
-        # ~20 m, both measured exact on 2026-07-24), and from 70 the two dives consumed
-        # 57 m of a ~63 m attained band and the juicy flick refused at 18.9 of 20. Note
-        # the run-time degrade did NOT catch that: it guards the DIVE's own budget, and
-        # the dive had exactly enough for itself -- the show's remaining floors are the
-        # per-move refusals, and the fix is sky, not a smarter dive. Flown from 20
-        # originally, the split-S refused at 17.4 m with five of seven moves in.
-        self.fly_autoacro_display(takeoff_alt=98, trigger_ch=7)
+        self.fly_autoacro_display(takeoff_alt=52, trigger_ch=7)
 
     def RealFlightAutoAcroReversalPair(self, model, home):
         '''
