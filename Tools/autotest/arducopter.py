@@ -17510,6 +17510,50 @@ return update, 1000
             (14, "KnifeEdgeSpin", ["KnifeEdgeSpin: knife edge", "KnifeEdgeSpin: spinning",
                                    "KnifeEdgeSpin: rolling out"]),
         ))
+        # The phase list passed while the held-bank build flew a level wingover (2026-07-24),
+        # so assert the profile itself from the log: the bank peaks, unwinds before the
+        # roll-out fires, and the figure FALLS through the reversal.
+        dfreader = self.dfreader_for_current_onboard_log()
+        spin_us = rollout_us = done_us = None
+        peak_bank = 0
+        rollout_bank = None
+        alt_spin = alt_min = None
+        while done_us is None:
+            m = dfreader.recv_match(type=["MSG", "ANG", "CTUN"])
+            if m is None:
+                break
+            mtype = m.get_type()
+            if mtype == "MSG":
+                # exact matches only: the harness echoes its want=(...) lines back through
+                # the GCS, and a long echo's continuation chunk can contain the phase text
+                # without the SRC= prefix
+                if m.Message == "KnifeEdgeSpin: spinning":
+                    spin_us = m.TimeUS
+                elif m.Message == "KnifeEdgeSpin: rolling out":
+                    rollout_us = m.TimeUS
+                elif m.Message == "AutoAcro: display complete" and spin_us is not None:
+                    done_us = m.TimeUS
+            elif spin_us is None:
+                continue
+            elif mtype == "ANG" and rollout_us is None:
+                rollout_bank = abs(m.Roll)
+                peak_bank = max(peak_bank, rollout_bank)
+            elif mtype == "CTUN":
+                if alt_spin is None:
+                    alt_spin = m.Alt
+                if alt_min is None or m.Alt < alt_min:
+                    alt_min = m.Alt
+        if rollout_us is None or alt_spin is None:
+            raise NotAchievedException("did not find knife edge phases in the log")
+        descent = alt_spin - alt_min
+        self.progress("KnifeEdgeSpin profile: peak bank %.1f, bank at roll-out %.1f, descent %.1fm" %
+                      (peak_bank, rollout_bank, descent))
+        if peak_bank < 80:
+            raise NotAchievedException("bank never peaked (%.1f < 80)" % peak_bank)
+        if rollout_bank > 55:
+            raise NotAchievedException("bank did not unwind before the roll-out (%.1f > 55)" % rollout_bank)
+        if descent < 5 or descent > 35:
+            raise NotAchievedException("did not fall through the reversal (%.1fm)" % descent)
 
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
