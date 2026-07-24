@@ -17845,16 +17845,15 @@ return update, 1000
                                               loop_drag_g=0.5)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
         self.set_parameters(params)
-        # 70 m (the native display flies from 85): the figures own the vertical now, so
-        # the show needs room for the descenders' AGL floors -- 20 m for the juicy flick
-        # and 21 m for the size-10 split-S, each AUTA_MIN_ALT plus what that move spends
-        # -- plus the M7 dives' height-for-speed spend. At RealFlight's ~26 m/s asks the
-        # ballistic budgets are v^2/2g bigger than the native ones, so from 70 only the
-        # opener goes ballistic and the mid-display dives degrade to mechanical lines on
-        # their own AGL check -- deliberate: it shows the per-airframe fallback. Flown
-        # from 20 the first time, the split-S refused at 17.4 m and the display aborted
-        # with five of seven moves in, having held its band perfectly well.
-        self.fly_autoacro_display(takeoff_alt=70, trigger_ch=7)
+        # 98 m, matching the native display. At RealFlight's ~25 m/s asks the ballistic
+        # budgets are v^2/2g bigger than the native ones (opener ~37 m, loop->immelmann
+        # ~20 m, both measured exact on 2026-07-24), and from 70 the two dives consumed
+        # 57 m of a ~63 m attained band and the juicy flick refused at 18.9 of 20. Note
+        # the run-time degrade did NOT catch that: it guards the DIVE's own budget, and
+        # the dive had exactly enough for itself -- the show's remaining floors are the
+        # per-move refusals, and the fix is sky, not a smarter dive. Flown from 20
+        # originally, the split-S refused at 17.4 m with five of seven moves in.
+        self.fly_autoacro_display(takeoff_alt=98, trigger_ch=7)
 
     def RealFlightAutoAcroReversalPair(self, model, home):
         '''
