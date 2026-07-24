@@ -17150,14 +17150,20 @@ return update, 1000
     def AutoAcroFullDisplay(self):
         '''Fly the whole curated autoacro display chained on the native Rise255'''
         self.launch_autoacro_rise255()
-        # 70 m, not 20. The display's figures own the vertical now (the reposition no
+        # 98 m, not 20. The display's figures own the vertical now (the reposition no
         # longer restores the start altitude between moves), so the show needs room for
-        # three things: the descenders' AGL floors -- 20 m for the juicy flick, 21 m for
-        # the size-10 split-S, each being AUTA_MIN_ALT plus what that move spends -- the
-        # M7 dive lines' ~10-12 m of height-for-speed spend, and the native pivot loop's
-        # ~14 m walk-down (a model artifact; RealFlight recovers it to +2). The loop
-        # itself nets ~0 now that the opener dive line hands it a clean entry.
-        self.fly_autoacro_display(70)
+        # the descenders' AGL floors -- 20 m for the juicy flick and the size-10
+        # split-S's measured 22 m (2.2x, recover included), each AUTA_MIN_ALT plus what
+        # that move spends -- the native pivot loop's ~14-24 m walk-down (a model
+        # artifact with ~8 m of run-to-run spread; RealFlight recovers it to +2), and
+        # the M7 ballistic dives, which buy their delivery speed entirely from height
+        # ((v1^2-v0^2)/2g each, ~38 m for the opener and loop->immelmann pair). From 95
+        # a bad pivot mood left the split-S 0.5 m under its floor; 98 covers the
+        # observed spread and the takeoff hover -- the band's ceiling -- stays under
+        # the show's 100 m. A deep-tail mood still refuses a late move safely rather
+        # than flying it short of sky; that is the floor system working, not a bug.
+        # The loop itself nets ~0 now that the opener dive hands it a clean entry.
+        self.fly_autoacro_display(98)
 
     def fly_autoacro_reversal_pair_chained(self, trigger_ch=9):
         '''Fly the immelmann/split-S pair CHAINED (AUTA_MOVE=-1) and report the walk.
@@ -17548,9 +17554,9 @@ return update, 1000
         '''A descending move triggered too low to clear the ground is refused
         before it commands anything, and the vehicle is left flying in Loiter'''
         # The floor is AUTA_MIN_ALT of clearance PLUS what the move spends, so a
-        # 12 m split-S at 1.1x wants 10 + 13.2 = 23.2 m. Trigger it at ~12 and it
-        # must refuse at once, before the "move 1/1" announce -- the check is at
-        # the top of run_sequence. TCAL 0 skips the thrust probe so the refusal is
+        # 12 m split-S at its measured 2.2x wants 10 + 26.4 = 36.4 m. Trigger it
+        # at ~12 and it must refuse at once, before the "move 1/1" announce --
+        # the check is at the top of run_sequence. TCAL 0 skips the thrust probe so the refusal is
         # the first thing that happens; on the Marmott a juicy flick triggered at
         # 9 m went 2.35 m below the takeoff datum, which is what this gate stops.
         self.launch_autoacro_rise255(extra_params={"AUTA_TCAL": 0, "AUTA_MIN_ALT": 10})
@@ -17565,7 +17571,7 @@ return update, 1000
         self.context_collect('STATUSTEXT')
         self.set_parameter("AUTA_MOVE", 5)  # the split-S, a descender
         self.set_rc(9, 2000)
-        self.wait_statustext("Split-S: needs 23.2 m AGL", check_context=True, timeout=15)
+        self.wait_statustext("Split-S: needs 36.4 m AGL", check_context=True, timeout=15)
         self.wait_statustext("AutoAcro: aborted", check_context=True, timeout=10)
         self.wait_mode("LOITER")
         # The floor must TRACK the clearance, not sit at a constant -- that is the
@@ -17577,7 +17583,7 @@ return update, 1000
         # The abort arms a cooldown; a re-trigger inside it is ignored.
         self.delay_sim_time(6)
         self.set_rc(9, 2000)
-        self.wait_statustext("Split-S: needs 33.2 m AGL", check_context=True, timeout=15)
+        self.wait_statustext("Split-S: needs 46.4 m AGL", check_context=True, timeout=15)
         self.wait_statustext("AutoAcro: aborted", check_context=True, timeout=10)
         self.wait_mode("LOITER")
         # The refusal precedes any command, so the descent never happened: the
@@ -17606,9 +17612,9 @@ return update, 1000
         self.launch_autoacro_rise255(extra_params={"FS_EKF_ACTION": 0})
         self.wait_ready_to_arm()
         self.arm_vehicle()
-        # 70 m for the same reason AutoAcroFullDisplay takes off at 70: the display
-        # owns its own vertical, its descenders carry 20-21 m AGL floors and the M7
-        # dive lines spend height for speed, and here the opener loop is additionally
+        # 70 m: the display owns its own vertical, its descenders carry AGL floors
+        # and the M7 dives spend height for speed (the native FullDisplay flies from
+        # 98 for the full ballistic band), and here the opener loop is additionally
         # sacrificed to the GPS cut, so the resumed schedule is net-descending. At
         # 30 m the rewind was correctly refused at 2.2 m AGL and the display never
         # completed.
@@ -17633,6 +17639,11 @@ return update, 1000
         self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=200)
         self.wait_mode("LOITER")
         self.set_rc(9, 1000)
+        # The 1b ballistic opener spends its speed budget from height, so the first
+        # display ends too low to fund a second one -- the re-trigger's opening dive
+        # would refuse its floor. Climb back before the second subtest.
+        self.change_alt(70)
+        self.set_rc(3, 1500)
 
         self.start_subtest("sustained GPS loss: recovery times out and hands back")
         self.context_clear_collection('STATUSTEXT')
@@ -17834,12 +17845,15 @@ return update, 1000
                                               loop_drag_g=0.5)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
         self.set_parameters(params)
-        # 70 m, matching the native display: the figures own the vertical now, so the
-        # show needs room for the descenders' AGL floors -- 20 m for the juicy flick and
-        # 21 m for the size-10 split-S, each AUTA_MIN_ALT plus what that move spends --
-        # plus the M7 dive lines' height-for-speed spend. Flown from 20 the first time,
-        # the split-S refused at 17.4 m and the display aborted with five of seven moves
-        # in, having held its band perfectly well.
+        # 70 m (the native display flies from 85): the figures own the vertical now, so
+        # the show needs room for the descenders' AGL floors -- 20 m for the juicy flick
+        # and 21 m for the size-10 split-S, each AUTA_MIN_ALT plus what that move spends
+        # -- plus the M7 dives' height-for-speed spend. At RealFlight's ~26 m/s asks the
+        # ballistic budgets are v^2/2g bigger than the native ones, so from 70 only the
+        # opener goes ballistic and the mid-display dives degrade to mechanical lines on
+        # their own AGL check -- deliberate: it shows the per-airframe fallback. Flown
+        # from 20 the first time, the split-S refused at 17.4 m and the display aborted
+        # with five of seven moves in, having held its band perfectly well.
         self.fly_autoacro_display(takeoff_alt=70, trigger_ch=7)
 
     def RealFlightAutoAcroReversalPair(self, model, home):
