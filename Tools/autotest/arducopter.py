@@ -17562,8 +17562,9 @@ return update, 1000
         # only once the sweep gate closes, so the pair is what a flat or stalled zoom
         # cannot fake.
         self.fly_autoacro_moves((
-            (15, "SteveSnap", ["SteveSnap: zooming", "SteveSnap: snapping",
-                               "SteveSnap: diving out", "SteveSnap: pulling out"]),
+            (15, "SteveSnap", ["SteveSnap: sideways", "SteveSnap: zooming",
+                               "SteveSnap: snapping", "SteveSnap: diving out",
+                               "SteveSnap: pulling out"]),
         ))
         # Phase lists can lie (the knife edge lesson), so assert the profile from the
         # log: the zoom actually climbed, the snap ran at snap rate, and the heading
