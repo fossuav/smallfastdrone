@@ -17571,7 +17571,7 @@ return update, 1000
         # came out reversed.
         dfreader = self.dfreader_for_current_onboard_log()
         zoom_us = snap_us = dive_us = done_us = None
-        yaw_zoom = yaw_done = None
+        yaw_zoom = yaw_dive = yaw_done = None
         alt_zoom = None
         alt_peak = None
         peak_pitch_dps = 0
@@ -17599,6 +17599,10 @@ return update, 1000
                 last_yaw = m.Yaw
                 if yaw_zoom is None:
                     yaw_zoom = m.Yaw
+                # sample the swept beat 1s into the dive, once the unwind has the
+                # wings level enough for Euler yaw to be honest
+                if dive_us is not None and yaw_dive is None and m.TimeUS > dive_us + 1000000:
+                    yaw_dive = m.Yaw
             elif mtype == "RATE" and snap_us is not None and dive_us is None:
                 peak_pitch_dps = max(peak_pitch_dps, abs(m.P))
             elif mtype == "CTUN":
@@ -17606,19 +17610,27 @@ return update, 1000
                     alt_zoom = m.Alt
                 if snap_us is not None and (alt_peak is None or m.Alt > alt_peak):
                     alt_peak = m.Alt
-        if dive_us is None or alt_zoom is None or alt_peak is None:
+        if dive_us is None or alt_zoom is None or alt_peak is None or yaw_dive is None:
             raise NotAchievedException("did not find SteveSnap phases in the log")
+
+        def swing(a, b):
+            d = abs(a - b) % 360
+            return min(d, 360 - d)
+        snap_sweep = swing(yaw_dive, yaw_zoom)
+        exit_off = swing(yaw_done, yaw_zoom)
         climb = alt_peak - alt_zoom
-        rev = abs(yaw_done - yaw_zoom) % 360
-        rev = min(rev, 360 - rev)
-        self.progress("SteveSnap profile: climb %.1fm, snap peak %.0f dps, heading swung %.0f deg" %
-                      (climb, peak_pitch_dps, rev))
+        self.progress("SteveSnap profile: climb %.1fm, snap peak %.0f dps, "
+                      "nose swept %.0f, exit %.0f off the zoom heading" %
+                      (climb, peak_pitch_dps, snap_sweep, exit_off))
         if climb < 8:
             raise NotAchievedException("zoom did not climb (%.1fm < 8)" % climb)
         if peak_pitch_dps < 400:
             raise NotAchievedException("snap never reached rate (%.0f < 400 dps)" % peak_pitch_dps)
-        if rev < 130:
-            raise NotAchievedException("heading did not reverse (%.0f deg)" % rev)
+        if snap_sweep < 130:
+            raise NotAchievedException("snap did not sweep the nose (%.0f deg)" % snap_sweep)
+        # forward is 90 from the sideways zoom heading: the exit must face it
+        if exit_off < 60 or exit_off > 120:
+            raise NotAchievedException("exit not facing forward (%.0f off zoom heading)" % exit_off)
 
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
