@@ -17975,14 +17975,15 @@ return update, 1000
         pays gravity per revolution at n = pi/sin(W), any roll rate).
         RealFlight is the honest airframe for whether the pulsed line holds
         level against real drag and thrust lapse; the native model's idle and
-        thrust map flatter it. Entered at 18 m/s.
+        thrust map flatter it. Entered at 15 m/s: at 18 the lapse ran the
+        trim into the thrust clamp and the line still walked down ~1.4 m/s.
         '''
         if not self.realflight_address:
             raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
         self.setup_RealFlight_vehicle(model, home)
         self.install_autoacro_scripts()
         params = self.autoacro_display_params(0.025, trigger_ch=7, loop_drag_g=0.5)
-        params["AUTA_LP_SPD"] = 18
+        params["AUTA_LP_SPD"] = 15
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate RATE/ANG for the pulse-phase analysis
         self.set_parameters(params)
         self.fly_autoacro_moves((
