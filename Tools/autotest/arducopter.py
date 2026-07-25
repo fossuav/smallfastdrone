@@ -17967,6 +17967,29 @@ return update, 1000
                                "PivotLoop: recovering"]),
         ), trigger_ch=7)
 
+    def RealFlightAutoAcroDrill(self, model, home):
+        '''Fly the drill (schedule move 16) in isolation on RealFlight.
+
+        The machine move: consecutive rolls travelling along the line with
+        thrust pulsed in a window about upright (an n-g pulse across |roll|<W
+        pays gravity per revolution at n = pi/sin(W), any roll rate).
+        RealFlight is the honest airframe for whether the pulsed line holds
+        level against real drag and thrust lapse; the native model's idle and
+        thrust map flatter it. Entered at 18 m/s.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.025, trigger_ch=7, loop_drag_g=0.5)
+        params["AUTA_LP_SPD"] = 18
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate RATE/ANG for the pulse-phase analysis
+        self.set_parameters(params)
+        self.fly_autoacro_moves((
+            (16, "Drill", ["Drill: drilling", "Drill: leveling",
+                           "Drill: recovering"]),
+        ), trigger_ch=7)
+
     def RealFlightAutoAcroKnifeEdgeSpin(self, model, home):
         '''Fly the knife edge spin (schedule move 14) in isolation on RealFlight.
 
@@ -18183,6 +18206,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightAutoAcroDrill, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             Test(self.RealFlightFullDisplay, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
@@ -18358,6 +18385,8 @@ return update, 1000
             ret["RealFlightAutoAcroPivotLoop"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroKnifeEdgeSpin"] = \
+                "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightAutoAcroDrill"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
