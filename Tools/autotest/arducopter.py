@@ -17632,6 +17632,50 @@ return update, 1000
         if exit_off < 60 or exit_off > 120:
             raise NotAchievedException("exit not facing forward (%.0f off zoom heading)" % exit_off)
 
+    def AutoAcroDrill(self):
+        '''Fly the drill (schedule move 16) in isolation on the native Rise255'''
+        self.launch_autoacro_rise255()
+        self.fly_autoacro_moves((
+            (16, "Drill", ["Drill: drilling", "Drill: leveling"]),
+        ))
+        # The figure is a LEVEL line under a continuous roll -- assert both from
+        # the log: the roll ran at rate, and the pulsed line neither climbed nor
+        # sank while it rolled.
+        dfreader = self.dfreader_for_current_onboard_log()
+        drill_us = level_us = done_us = None
+        alt_start = alt_min = alt_max = None
+        peak_roll_dps = 0
+        while done_us is None:
+            m = dfreader.recv_match(type=["MSG", "RATE", "CTUN"])
+            if m is None:
+                break
+            mtype = m.get_type()
+            if mtype == "MSG":
+                if m.Message == "Drill: drilling":
+                    drill_us = m.TimeUS
+                elif m.Message == "Drill: leveling":
+                    level_us = m.TimeUS
+                elif m.Message == "Drill: recovered" and drill_us is not None:
+                    done_us = m.TimeUS
+            elif drill_us is None or level_us is not None:
+                continue
+            elif mtype == "RATE":
+                peak_roll_dps = max(peak_roll_dps, abs(m.R))
+            elif mtype == "CTUN":
+                if alt_start is None:
+                    alt_start = alt_min = alt_max = m.Alt
+                alt_min = min(alt_min, m.Alt)
+                alt_max = max(alt_max, m.Alt)
+        if level_us is None or alt_start is None:
+            raise NotAchievedException("did not find Drill phases in the log")
+        self.progress("Drill profile: roll peak %.0f dps, line %.1fm to +%.1fm about entry" %
+                      (peak_roll_dps, alt_min - alt_start, alt_max - alt_start))
+        if peak_roll_dps < 300:
+            raise NotAchievedException("roll never reached rate (%.0f < 300 dps)" % peak_roll_dps)
+        if alt_start - alt_min > 5 or alt_max - alt_start > 5:
+            raise NotAchievedException("line did not hold level (%.1f/+%.1fm)" %
+                                       (alt_min - alt_start, alt_max - alt_start))
+
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
         refusing, and hands back a flying, upright vehicle'''
@@ -18211,6 +18255,7 @@ return update, 1000
             self.AutoAcroLoopSpin,
             self.AutoAcroKnifeEdgeSpin,
             self.AutoAcroSteveSnap,
+            self.AutoAcroDrill,
             self.AutoAcroLowEnergyCompletes,
             self.AutoAcroReversalPair,
             self.AutoAcroReversalPairChained,
