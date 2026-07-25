@@ -17555,6 +17555,70 @@ return update, 1000
         if descent < 5 or descent > 35:
             raise NotAchievedException("did not fall through the reversal (%.1fm)" % descent)
 
+    def AutoAcroSteveSnap(self):
+        '''Fly Steve's snap (schedule move 15) in isolation on the native Rise255'''
+        self.launch_autoacro_rise255()
+        # "snapping" only fires once the zoom's ballistic budget is met, and "diving out"
+        # only once the sweep gate closes, so the pair is what a flat or stalled zoom
+        # cannot fake.
+        self.fly_autoacro_moves((
+            (15, "SteveSnap", ["SteveSnap: zooming", "SteveSnap: snapping",
+                               "SteveSnap: diving out", "SteveSnap: pulling out"]),
+        ))
+        # Phase lists can lie (the knife edge lesson), so assert the profile from the
+        # log: the zoom actually climbed, the snap ran at snap rate, and the heading
+        # came out reversed.
+        dfreader = self.dfreader_for_current_onboard_log()
+        zoom_us = snap_us = dive_us = done_us = None
+        yaw_zoom = yaw_done = None
+        alt_zoom = None
+        alt_peak = None
+        peak_pitch_dps = 0
+        last_yaw = None
+        while done_us is None:
+            m = dfreader.recv_match(type=["MSG", "ANG", "RATE", "CTUN"])
+            if m is None:
+                break
+            mtype = m.get_type()
+            if mtype == "MSG":
+                # exact matches only: the harness echoes its want=(...) lines back
+                # through the GCS without the SRC= prefix
+                if m.Message == "SteveSnap: zooming":
+                    zoom_us = m.TimeUS
+                elif m.Message == "SteveSnap: snapping":
+                    snap_us = m.TimeUS
+                elif m.Message == "SteveSnap: diving out":
+                    dive_us = m.TimeUS
+                elif m.Message == "SteveSnap: recovered" and zoom_us is not None:
+                    done_us = m.TimeUS
+                    yaw_done = last_yaw
+            elif zoom_us is None:
+                continue
+            elif mtype == "ANG":
+                last_yaw = m.Yaw
+                if yaw_zoom is None:
+                    yaw_zoom = m.Yaw
+            elif mtype == "RATE" and snap_us is not None and dive_us is None:
+                peak_pitch_dps = max(peak_pitch_dps, abs(m.P))
+            elif mtype == "CTUN":
+                if alt_zoom is None:
+                    alt_zoom = m.Alt
+                if snap_us is not None and (alt_peak is None or m.Alt > alt_peak):
+                    alt_peak = m.Alt
+        if dive_us is None or alt_zoom is None or alt_peak is None:
+            raise NotAchievedException("did not find SteveSnap phases in the log")
+        climb = alt_peak - alt_zoom
+        rev = abs(yaw_done - yaw_zoom) % 360
+        rev = min(rev, 360 - rev)
+        self.progress("SteveSnap profile: climb %.1fm, snap peak %.0f dps, heading swung %.0f deg" %
+                      (climb, peak_pitch_dps, rev))
+        if climb < 8:
+            raise NotAchievedException("zoom did not climb (%.1fm < 8)" % climb)
+        if peak_pitch_dps < 400:
+            raise NotAchievedException("snap never reached rate (%.0f < 400 dps)" % peak_pitch_dps)
+        if rev < 130:
+            raise NotAchievedException("heading did not reverse (%.0f deg)" % rev)
+
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
         refusing, and hands back a flying, upright vehicle'''
@@ -18133,6 +18197,7 @@ return update, 1000
             self.AutoAcroFloatLoop,
             self.AutoAcroLoopSpin,
             self.AutoAcroKnifeEdgeSpin,
+            self.AutoAcroSteveSnap,
             self.AutoAcroLowEnergyCompletes,
             self.AutoAcroReversalPair,
             self.AutoAcroReversalPairChained,
