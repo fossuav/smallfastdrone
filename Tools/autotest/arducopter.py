@@ -17632,13 +17632,15 @@ return update, 1000
         if exit_off < 60 or exit_off > 120:
             raise NotAchievedException("exit not facing forward (%.0f off zoom heading)" % exit_off)
 
-    def drill_log_profile(self, want):
+    def drill_log_profile(self, want, alt_from_announce=False):
         '''Roll peak and the altitude band about entry between "drilling" and
         "leveling", from the latest log. The log may hold several drills (one
         per re-flown config), so episodes are keyed on the start announcement
         -- want is its config suffix, e.g. "D6m ang0" -- and the LAST matching
         one is returned (the MSG stream is what disambiguates flights, not
-        file boundaries).'''
+        file boundaries). alt_from_announce widens the ALTITUDE window to the
+        whole move (the up drill's climb lives in its PULL, before
+        "drilling"); the roll window stays drilling-to-leveling.'''
         dfreader = self.dfreader_for_current_onboard_log()
         announced = collecting = False
         alt_start = alt_min = alt_max = None
@@ -17653,10 +17655,14 @@ return update, 1000
                 if m.Message.startswith("Drill: ") and "rolls at" in m.Message:
                     announced = m.Message.endswith(want)
                     collecting = False
+                    if alt_from_announce and announced:
+                        alt_start = None
+                        peak_roll_dps = 0
                 elif m.Message == "Drill: drilling" and announced:
                     collecting = True
-                    alt_start = None
-                    peak_roll_dps = 0
+                    if not alt_from_announce:
+                        alt_start = None
+                        peak_roll_dps = 0
                 elif m.Message == "Drill: leveling" and collecting:
                     collecting = False
                     announced = False
@@ -17664,15 +17670,15 @@ return update, 1000
                         profile = (peak_roll_dps,
                                    alt_min - alt_start,
                                    alt_max - alt_start)
-            elif not collecting:
-                continue
             elif mtype == "RATE":
-                peak_roll_dps = max(peak_roll_dps, abs(m.R))
+                if collecting:
+                    peak_roll_dps = max(peak_roll_dps, abs(m.R))
             elif mtype == "CTUN":
-                if alt_start is None:
-                    alt_start = alt_min = alt_max = m.Alt
-                alt_min = min(alt_min, m.Alt)
-                alt_max = max(alt_max, m.Alt)
+                if collecting or (alt_from_announce and announced):
+                    if alt_start is None:
+                        alt_start = alt_min = alt_max = m.Alt
+                    alt_min = min(alt_min, m.Alt)
+                    alt_max = max(alt_max, m.Alt)
         if profile is None:
             raise NotAchievedException(
                 "did not find Drill (%s) phases in the log" % want)
@@ -17755,6 +17761,31 @@ return update, 1000
             raise NotAchievedException("vertical fall off its plan (%.1fm)" % lo)
         if hi > 2:
             raise NotAchievedException("vertical drill climbed (+%.1fm)" % hi)
+
+        # The VERTICAL UP drill: the climb is bought with entry speed
+        # (gravity bleeds it at 1 g, the pulses are ~0), so it enters FAST
+        # and the apex gate ends the rolls when the axial speed dies -- from
+        # 20 m/s that is ~2 of the 3 asked and ~20 m of climb.
+        self.set_rc(3, 1000)
+        self.change_mode("STABILIZE")
+        self.set_parameter("AUTA_LP_SPD", 20)
+        self.set_parameter("AUTA_DR_ANG", 90)
+        self.fly_autoacro_moves(((16, "Drill", phases),))
+        # The climb lives in the PULL as well as the rolls, so the altitude
+        # window is the whole move.
+        peak, lo, hi = self.drill_log_profile("D3m ang89", alt_from_announce=True)
+        self.progress("Drill vertical-up: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
+                      (peak, lo, hi))
+        if peak < 300:
+            raise NotAchievedException("roll never reached rate (%.0f < 300 dps)" % peak)
+        # ~11 m measured of the drag-free 20: the pull pays ~4-5 m of drag
+        # and the level-off bleeds the rest.
+        if hi < 8:
+            raise NotAchievedException("up drill did not climb (+%.1fm)" % hi)
+        if hi > 32:
+            raise NotAchievedException("up drill overshot its energy (+%.1fm)" % hi)
+        if lo < -5:
+            raise NotAchievedException("up drill descended (%.1fm)" % lo)
 
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
@@ -18096,6 +18127,17 @@ return update, 1000
                                 takeoff_alt=150)
         self.progress("RF drill vertical: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
                       self.drill_log_profile("D3m ang-89"))
+
+        # Vertical UP: entered fast (the climb is the entry speed's energy,
+        # ~11 m from 15 m/s), apex-gated -- the config where the lapse has
+        # nothing to eat on the way up either.
+        self.set_rc(3, 1000)
+        self.change_mode("STABILIZE")
+        self.set_parameter("AUTA_LP_SPD", 15)
+        self.set_parameter("AUTA_DR_ANG", 90)
+        self.fly_autoacro_moves(((16, "Drill", phases),), trigger_ch=7)
+        self.progress("RF drill vertical-up: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
+                      self.drill_log_profile("D3m ang89"))
 
     def RealFlightAutoAcroKnifeEdgeSpin(self, model, home):
         '''Fly the knife edge spin (schedule move 14) in isolation on RealFlight.
