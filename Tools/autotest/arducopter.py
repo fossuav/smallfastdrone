@@ -17007,7 +17007,20 @@ return update, 1000
         # wrongly. The Marmott has 500k (Andy, 2026-07-27), which is what this is
         # now, and 450k had already stopped fitting once the inverted-yaw and drill
         # work landed the same day.
-        self.set_parameters({"SCR_ENABLE": 1, "SCR_HEAP_SIZE": 500000})
+        # DEBUG_OPTS bit 3 logs each script's memory use to the SCR message.
+        # The heap pin above is only half the instrument: it says the set FITS,
+        # not by how much, and the headroom has been unmeasured through two
+        # ceiling surprises. With this every autoacro log carries the number.
+        #
+        # MEASURED 2026-07-27, with the orbit and lookback in: steady-state
+        # SCR.Total_mem 402-408 KB, and the LOAD-TIME peak -- which is the one
+        # that decides whether the set appears at all, and is higher -- sits
+        # between 450k (fails, AUTA_ params absent) and 475k (loads). So the
+        # Marmott's 500k carries 25-50 KB of headroom, and the module split in
+        # ap_lua/autoacro/REFACTOR_MODULE_SPLIT.md is the live constraint on
+        # the next move rather than a future one.
+        self.set_parameters({"SCR_ENABLE": 1, "SCR_HEAP_SIZE": 500000,
+                             "SCR_DEBUG_OPTS": 8})
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "crsf_helper.lua"), "crsf_helper.lua")
@@ -17848,6 +17861,162 @@ return update, 1000
         if lo < -5:
             raise NotAchievedException("up drill descended (%.1fm)" % lo)
 
+    def AutoAcroOrbit(self):
+        '''Fly the orbit (schedule move 17) in isolation on the native Rise255:
+        a coordinated circle flown nose-in, which is what makes it a funnel
+        rather than a banked turn'''
+        self.launch_autoacro_rise255()
+        diameter = 13
+        self.set_parameters({"AUTA_OR_SIZE": diameter, "AUTA_OR_LAPS": 2})
+        self.fly_autoacro_moves((
+            (17, "Orbit", ["Orbit: aiming", "Orbit: orbiting", "Orbit: recovering"]),
+        ))
+        # The phase list cannot tell a funnel from a vehicle that gave up and
+        # flew straight on: both reach "orbiting" and both eventually recover.
+        # So measure the figure -- did it go round, was the circle the size
+        # asked for, did it hold its height, and above all was the NOSE POINTED
+        # AT THE CENTRE. The last one is the move: at 90 deg it is the
+        # wingover's banked turn, at 180 it is flying backwards round a circle.
+        dfreader = self.dfreader_for_current_onboard_log()
+        start_us = end_us = None
+        last_yaw = None
+        samples = []
+        alt_lo = alt_hi = alt_entry = None
+        while end_us is None:
+            m = dfreader.recv_match(type=["MSG", "ANG", "XKF1", "CTUN"])
+            if m is None:
+                break
+            mtype = m.get_type()
+            if mtype == "MSG":
+                if m.Message == "Orbit: orbiting":
+                    start_us = m.TimeUS
+                elif m.Message.startswith("Orbit: ") and "laps" in m.Message:
+                    end_us = m.TimeUS
+            elif mtype == "ANG":
+                last_yaw = m.Yaw
+            elif start_us is None:
+                continue
+            elif mtype == "XKF1" and m.C == 0 and last_yaw is not None:
+                samples.append((m.PN, m.PE, last_yaw))
+            elif mtype == "CTUN":
+                if alt_entry is None:
+                    alt_entry = m.Alt
+                alt_lo = m.Alt if alt_lo is None else min(alt_lo, m.Alt)
+                alt_hi = m.Alt if alt_hi is None else max(alt_hi, m.Alt)
+        if end_us is None or len(samples) < 20:
+            raise NotAchievedException("did not find an Orbit episode in the log")
+
+        # Centroid of a whole number of laps is the centre of the circle.
+        cn = sum(s[0] for s in samples) / len(samples)
+        ce = sum(s[1] for s in samples) / len(samples)
+        radii = [math.sqrt((s[0] - cn) ** 2 + (s[1] - ce) ** 2) for s in samples]
+        radius = sum(radii) / len(radii)
+        nose_err = []
+        swept = 0.0
+        prev = None
+        for pn, pe, yaw in samples:
+            bearing = math.degrees(math.atan2(ce - pe, cn - pn))
+            nose_err.append(abs((yaw - bearing + 180) % 360 - 180))
+            about = math.degrees(math.atan2(pe - ce, pn - cn))
+            if prev is not None:
+                swept += abs((about - prev + 180) % 360 - 180)
+            prev = about
+        nose = sum(nose_err) / len(nose_err)
+        band = alt_hi - alt_lo
+        self.progress("Orbit: radius %.1f of %.1f m, swept %.0f deg, "
+                      "nose %.0f deg off the centre, alt band %.1f m" %
+                      (radius, diameter / 2.0, swept, nose, band))
+        if swept < 600:
+            raise NotAchievedException("did not fly two laps (%.0f deg)" % swept)
+        # Half to 1.5x the ask. The first cut of this move flew 1.9x and still
+        # passed a looser bound, so the bound is set from what the servoed
+        # version actually delivers (1.18x) rather than from what looks safe:
+        # speed sets the radius as v^2, so an open-loop lead that over-pays the
+        # drag by hundredths of a g opens the circle without limit.
+        if radius < diameter * 0.25 or radius > diameter * 0.75:
+            raise NotAchievedException("circle is not the size asked (%.1f m of %.1f)" %
+                                       (radius, diameter / 2.0))
+        # The funnel's whole character. Tangential would read ~90.
+        if nose > 45:
+            raise NotAchievedException("nose not pointed at the centre (%.0f deg off)" % nose)
+        if band > 6:
+            raise NotAchievedException("orbit did not hold level (%.1f m band)" % band)
+
+    def AutoAcroLookback(self):
+        '''Fly the inverse lookback (schedule move 18) in isolation on the
+        native Rise255: a 360 of pitch split by an inverted hang, flown without
+        turning the track'''
+        self.launch_autoacro_rise255()
+        self.fly_autoacro_moves((
+            (18, "Lookback", ["Lookback: zooming", "Lookback: snapping at",
+                              "Lookback: looking back", "Lookback: hung",
+                              "Lookback: pulling out"]),
+        ))
+        # What the phases cannot prove: that the vehicle was actually INVERTED
+        # through the hang, that the snap ran at rate, and that the TRACK never
+        # turned -- the last is what separates a lookback from a flip, and the
+        # pilot's four reps hold their velocity heading to within 4 deg.
+        dfreader = self.dfreader_for_current_onboard_log()
+        zoom_us = hang_us = snap2_us = pull_us = None
+        peak_pitch_dps = 0
+        inverted_roll = 0.0
+        vel_in = vel_out = None
+        alt_entry = alt_exit = alt_lo = None
+        while pull_us is None:
+            m = dfreader.recv_match(type=["MSG", "ANG", "RATE", "XKF1", "CTUN"])
+            if m is None:
+                break
+            mtype = m.get_type()
+            if mtype == "MSG":
+                if m.Message == "Lookback: zooming":
+                    zoom_us = m.TimeUS
+                elif m.Message == "Lookback: looking back":
+                    hang_us = m.TimeUS
+                elif m.Message.startswith("Lookback: hung"):
+                    snap2_us = m.TimeUS
+                elif m.Message.startswith("Lookback: recovering"):
+                    pull_us = m.TimeUS
+            elif zoom_us is None:
+                continue
+            elif mtype == "ANG":
+                # Euler roll is honest here because the hang holds pitch near
+                # level; it is only through the snaps that it folds.
+                if hang_us is not None and snap2_us is None:
+                    inverted_roll = max(inverted_roll, abs(m.Roll))
+            elif mtype == "RATE":
+                peak_pitch_dps = max(peak_pitch_dps, abs(m.P))
+            elif mtype == "XKF1" and m.C == 0:
+                if vel_in is None:
+                    vel_in = math.degrees(math.atan2(m.VE, m.VN))
+                vel_out = math.degrees(math.atan2(m.VE, m.VN))
+            elif mtype == "CTUN":
+                if alt_entry is None:
+                    alt_entry = m.Alt
+                alt_lo = m.Alt if alt_lo is None else min(alt_lo, m.Alt)
+                alt_exit = m.Alt
+        if pull_us is None or vel_in is None or alt_entry is None:
+            raise NotAchievedException("did not find the Lookback phases in the log")
+
+        track_turn = abs((vel_out - vel_in + 180) % 360 - 180)
+        net = alt_exit - alt_entry
+        dip = alt_entry - alt_lo
+        self.progress("Lookback: snap peak %.0f dps, hang roll %.0f deg, "
+                      "track turned %.0f deg, net %+.1f m, dip %.1f m" %
+                      (peak_pitch_dps, inverted_roll, track_turn, net, dip))
+        if peak_pitch_dps < 400:
+            raise NotAchievedException("snap never reached rate (%.0f < 400 dps)" % peak_pitch_dps)
+        if inverted_roll < 140:
+            raise NotAchievedException("never went inverted through the hang (%.0f deg roll)" %
+                                       inverted_roll)
+        # The defining property: the nose reverses, the track does not.
+        if track_turn > 45:
+            raise NotAchievedException("the track turned (%.0f deg) -- that is a flip, not a lookback" %
+                                       track_turn)
+        # The straddle is what makes the figure altitude-neutral; declaring
+        # DROP.LOOKBACK_M 15 is only honest while the dip stays inside it.
+        if dip > 15:
+            raise NotAchievedException("dipped past its declared drop (%.1f m > 15)" % dip)
+
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
         refusing, and hands back a flying, upright vehicle'''
@@ -18200,6 +18369,144 @@ return update, 1000
         self.progress("RF drill vertical-up: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
                       self.drill_log_profile("D3m ang89"))
 
+    def RealFlightAutoAcroOrbit(self, model, home):
+        '''Fly the orbit (schedule move 17) on RealFlight: the default 13 m
+        funnel, a wider shallower one, and the pilot's own 23 m geometry.
+
+        RealFlight is the honest airframe for this move because the figure has
+        NO thrust along its own track -- thrust sits in the vertical-radial
+        plane -- so drag is unopposed and speed is the only thing setting the
+        radius. The native model flatters that: the open-loop first cut opened
+        its circle to 2.3x on SITL and would open further on the draggier
+        airframe. What is under test is the speed servo on the nose lead and
+        the vertical servo on the load, so the numbers to read are the radius
+        against the ask, the nose angle to the fitted centre, and the band.
+
+        Flown from 40 m, not the pilot's 3-13. The figure is meant to be flown
+        low and that is where the look is, but a first pass on a new move that
+        holds 60 deg of nose-down wants the sky; drop it once the band here is
+        known to be the 1.2 m the native run measured.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.025, trigger_ch=7, loop_drag_g=0.5)
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate ANG for the nose-vs-centre analysis
+        params["AUTA_OR_SIZE"] = 13
+        params["AUTA_OR_TILT"] = 60
+        params["AUTA_OR_LAPS"] = 2
+        self.set_parameters(params)
+        phases = ["Orbit: aiming", "Orbit: orbiting", "Orbit: recovering"]
+        self.fly_autoacro_moves(((17, "Orbit", phases),), trigger_ch=7,
+                                takeoff_alt=40)
+        self.progress("RF orbit 13m/60: %s" % self.orbit_log_profile())
+
+        # Wider and shallower: tilt is the look knob and it sets the speed
+        # (v = sqrt(r g tan tilt)), so this is the slow end of the range.
+        # Boot state back before re-arming, as the drill does.
+        self.set_rc(3, 1000)
+        self.change_mode("STABILIZE")
+        self.set_parameters({"AUTA_OR_SIZE": 20, "AUTA_OR_TILT": 45})
+        self.fly_autoacro_moves(((17, "Orbit", phases),), trigger_ch=7,
+                                takeoff_alt=40)
+        self.progress("RF orbit 20m/45: %s" % self.orbit_log_profile())
+
+        # The pilot's rep 1 geometry (r 11.6, tilt 65, 15.6 m/s), so the
+        # trajectory can be diffed against his directly.
+        self.set_rc(3, 1000)
+        self.change_mode("STABILIZE")
+        self.set_parameters({"AUTA_OR_SIZE": 23, "AUTA_OR_TILT": 65})
+        self.fly_autoacro_moves(((17, "Orbit", phases),), trigger_ch=7,
+                                takeoff_alt=40)
+        self.progress("RF orbit 23m/65 (the pilot's): %s" % self.orbit_log_profile())
+
+    def orbit_log_profile(self):
+        '''Radius flown, nose angle to the fitted centre, angle swept and the
+        altitude band, from the last orbit episode in the latest log. Printed
+        for the look pass rather than gated -- AutoAcroOrbit carries the hard
+        bands on the native model.'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        start_us = None
+        last_yaw = None
+        samples = []
+        alt_lo = alt_hi = None
+        while True:
+            m = dfreader.recv_match(type=["MSG", "ANG", "XKF1", "CTUN"])
+            if m is None:
+                break
+            mtype = m.get_type()
+            if mtype == "MSG":
+                if m.Message == "Orbit: orbiting":
+                    # a re-flown config: keep only the latest episode
+                    start_us = m.TimeUS
+                    samples = []
+                    alt_lo = alt_hi = None
+                elif m.Message.startswith("Orbit: ") and "laps" in m.Message:
+                    start_us = None
+            elif mtype == "ANG":
+                last_yaw = m.Yaw
+            elif start_us is None:
+                continue
+            elif mtype == "XKF1" and m.C == 0 and last_yaw is not None:
+                samples.append((m.PN, m.PE, last_yaw))
+            elif mtype == "CTUN":
+                alt_lo = m.Alt if alt_lo is None else min(alt_lo, m.Alt)
+                alt_hi = m.Alt if alt_hi is None else max(alt_hi, m.Alt)
+        if len(samples) < 20:
+            return "no orbit episode found in the log"
+        cn = sum(s[0] for s in samples) / len(samples)
+        ce = sum(s[1] for s in samples) / len(samples)
+        radius = sum(math.sqrt((s[0] - cn) ** 2 + (s[1] - ce) ** 2)
+                     for s in samples) / len(samples)
+        nose = []
+        swept = 0.0
+        prev = None
+        for pn, pe, yaw in samples:
+            nose.append(abs((yaw - math.degrees(math.atan2(ce - pe, cn - pn))
+                             + 180) % 360 - 180))
+            about = math.degrees(math.atan2(pe - ce, pn - cn))
+            if prev is not None:
+                swept += abs((about - prev + 180) % 360 - 180)
+            prev = about
+        return ("radius %.1f m, nose %.0f deg off the centre, swept %.0f deg, "
+                "band %.1f m" % (radius, sum(nose) / len(nose), swept,
+                                 (alt_hi or 0) - (alt_lo or 0)))
+
+    def RealFlightAutoAcroLookback(self, model, home):
+        '''Fly the inverse lookback (schedule move 18) on RealFlight, at the
+        default hang and at a long one.
+
+        The straddle that makes this figure altitude-neutral is priced off the
+        MEASURED idle thrust, and RealFlight has the highest of the three
+        airframes (0.83 g against the Marmott's 0.20 and the native model's
+        0.67). Inverted, idle IS the fall, so this is the airframe that asks
+        the zoom for the fastest climb at the cut -- around 10 m/s against the
+        pilot's 7.6 -- and the one where a straddle built on the wrong number
+        would show first. Read the net altitude and the hang the mirror gate
+        actually delivered against the one asked for.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        params = self.autoacro_display_params(0.025, trigger_ch=7, loop_drag_g=0.5)
+        params["LOG_BITMASK"] = 0x10FFFF  # full-rate RATE/ANG for the snap gates
+        params["AUTA_LB_HANG"] = 0.8
+        self.set_parameters(params)
+        phases = ["Lookback: zooming", "Lookback: snapping at",
+                  "Lookback: looking back", "Lookback: hung",
+                  "Lookback: pulling out", "Lookback: recovering"]
+        self.fly_autoacro_moves(((18, "Lookback", phases),), trigger_ch=7)
+
+        # The long look. The hang is the only knob and it re-prices the zoom:
+        # a longer hang needs a faster climb at the cut, so this is also the
+        # config that asks the most of the straddle.
+        self.set_rc(3, 1000)
+        self.change_mode("STABILIZE")
+        self.set_parameter("AUTA_LB_HANG", 1.2)
+        self.fly_autoacro_moves(((18, "Lookback", phases),), trigger_ch=7)
+
     def RealFlightAutoAcroKnifeEdgeSpin(self, model, home):
         '''Fly the knife edge spin (schedule move 14) in isolation on RealFlight.
 
@@ -18416,6 +18723,14 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightAutoAcroOrbit, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
+            Test(self.RealFlightAutoAcroLookback, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             Test(self.RealFlightAutoAcroDrill, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
@@ -18493,6 +18808,8 @@ return update, 1000
             self.AutoAcroKnifeEdgeSpin,
             self.AutoAcroSteveSnap,
             self.AutoAcroDrill,
+            self.AutoAcroOrbit,
+            self.AutoAcroLookback,
             self.AutoAcroLowEnergyCompletes,
             self.AutoAcroReversalPair,
             self.AutoAcroReversalPairChained,
@@ -18597,6 +18914,10 @@ return update, 1000
             ret["RealFlightAutoAcroKnifeEdgeSpin"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroDrill"] = \
+                "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightAutoAcroOrbit"] = \
+                "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightAutoAcroLookback"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
