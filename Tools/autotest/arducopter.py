@@ -17012,13 +17012,15 @@ return update, 1000
         # not by how much, and the headroom has been unmeasured through two
         # ceiling surprises. With this every autoacro log carries the number.
         #
-        # MEASURED 2026-07-27, with the orbit and lookback in: steady-state
-        # SCR.Total_mem 402-408 KB, and the LOAD-TIME peak -- which is the one
-        # that decides whether the set appears at all, and is higher -- sits
-        # between 450k (fails, AUTA_ params absent) and 475k (loads). So the
-        # Marmott's 500k carries 25-50 KB of headroom, and the module split in
-        # ap_lua/autoacro/REFACTOR_MODULE_SPLIT.md is the live constraint on
-        # the next move rather than a future one.
+        # MEASURED 2026-07-27, with the orbit and lookback in and their four
+        # menu items: steady-state SCR.Total_mem 406-412 KB, and the LOAD-TIME
+        # peak -- which is the one that decides whether the set appears at all,
+        # and is higher -- sits between 462k (fails, AUTA_ params absent) and
+        # 475k (loads). So the Marmott's 500k carries 25-38 KB of headroom, and
+        # the module split in ap_lua/autoacro/REFACTOR_MODULE_SPLIT.md is the
+        # live constraint on the next move rather than a future one. The four
+        # menu items alone moved the cliff 450k -> 462k, which is why the menu
+        # is not the cheap place to add things it looks like.
         self.set_parameters({"SCR_ENABLE": 1, "SCR_HEAP_SIZE": 500000,
                              "SCR_DEBUG_OPTS": 8})
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
