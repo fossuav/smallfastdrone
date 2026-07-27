@@ -17078,7 +17078,7 @@ return update, 1000
             params.update(extra_params)
         self.set_parameters(params)
 
-    def fly_autoacro_moves(self, moves, trigger_ch=9):
+    def fly_autoacro_moves(self, moves, trigger_ch=9, takeoff_alt=100):
         '''Take off, fly each move in isolation -- bracketed by LOITER and
         triggered on the Scripting1 channel trigger_ch -- then RTL. Assumes the
         autoacro scripts are installed and the AUTA_ params set. The dense
@@ -17095,7 +17095,7 @@ return update, 1000
         self.arm_vehicle()
         # GUIDED takeoff climbs to the exact height (LOITER plateaus lower); then
         # hand to LOITER for the sequencer.
-        self.takeoff(100, mode="GUIDED")
+        self.takeoff(takeoff_alt, mode="GUIDED")
         # Centre the throttle stick before handing back: LOITER reads a
         # stick-low channel as a full pilot descent (PILOT_SPEED_DN), so between
         # moves the vehicle would sink ~2.5 m/s and a chained run walks itself
@@ -17632,6 +17632,52 @@ return update, 1000
         if exit_off < 60 or exit_off > 120:
             raise NotAchievedException("exit not facing forward (%.0f off zoom heading)" % exit_off)
 
+    def drill_log_profile(self, want):
+        '''Roll peak and the altitude band about entry between "drilling" and
+        "leveling", from the latest log. The log may hold several drills (one
+        per re-flown config), so episodes are keyed on the start announcement
+        -- want is its config suffix, e.g. "D6m ang0" -- and the LAST matching
+        one is returned (the MSG stream is what disambiguates flights, not
+        file boundaries).'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        announced = collecting = False
+        alt_start = alt_min = alt_max = None
+        peak_roll_dps = 0
+        profile = None
+        while True:
+            m = dfreader.recv_match(type=["MSG", "RATE", "CTUN"])
+            if m is None:
+                break
+            mtype = m.get_type()
+            if mtype == "MSG":
+                if m.Message.startswith("Drill: ") and "rolls at" in m.Message:
+                    announced = m.Message.endswith(want)
+                    collecting = False
+                elif m.Message == "Drill: drilling" and announced:
+                    collecting = True
+                    alt_start = None
+                    peak_roll_dps = 0
+                elif m.Message == "Drill: leveling" and collecting:
+                    collecting = False
+                    announced = False
+                    if alt_start is not None:
+                        profile = (peak_roll_dps,
+                                   alt_min - alt_start,
+                                   alt_max - alt_start)
+            elif not collecting:
+                continue
+            elif mtype == "RATE":
+                peak_roll_dps = max(peak_roll_dps, abs(m.R))
+            elif mtype == "CTUN":
+                if alt_start is None:
+                    alt_start = alt_min = alt_max = m.Alt
+                alt_min = min(alt_min, m.Alt)
+                alt_max = max(alt_max, m.Alt)
+        if profile is None:
+            raise NotAchievedException(
+                "did not find Drill (%s) phases in the log" % want)
+        return profile
+
     def AutoAcroDrill(self):
         '''Fly the drill (schedule move 16) in isolation on the native Rise255:
         the level line, the phase-locked barrel (AUTA_DR_DIA) and the
@@ -17639,55 +17685,9 @@ return update, 1000
         self.launch_autoacro_rise255()
         phases = ["Drill: drilling", "Drill: leveling"]
 
-        def drill_profile(want):
-            # Roll peak and the altitude band about entry between "drilling"
-            # and "leveling", from the latest log. The log may hold several
-            # drills (one per re-flown config), so episodes are keyed on the
-            # start announcement -- want is its config suffix, e.g. "D6m ang0"
-            # -- and the LAST matching one is returned (the MSG stream is what
-            # disambiguates flights, not file boundaries).
-            dfreader = self.dfreader_for_current_onboard_log()
-            announced = collecting = False
-            alt_start = alt_min = alt_max = None
-            peak_roll_dps = 0
-            profile = None
-            while True:
-                m = dfreader.recv_match(type=["MSG", "RATE", "CTUN"])
-                if m is None:
-                    break
-                mtype = m.get_type()
-                if mtype == "MSG":
-                    if m.Message.startswith("Drill: ") and "rolls at" in m.Message:
-                        announced = m.Message.endswith(want)
-                        collecting = False
-                    elif m.Message == "Drill: drilling" and announced:
-                        collecting = True
-                        alt_start = None
-                        peak_roll_dps = 0
-                    elif m.Message == "Drill: leveling" and collecting:
-                        collecting = False
-                        announced = False
-                        if alt_start is not None:
-                            profile = (peak_roll_dps,
-                                       alt_min - alt_start,
-                                       alt_max - alt_start)
-                elif not collecting:
-                    continue
-                elif mtype == "RATE":
-                    peak_roll_dps = max(peak_roll_dps, abs(m.R))
-                elif mtype == "CTUN":
-                    if alt_start is None:
-                        alt_start = alt_min = alt_max = m.Alt
-                    alt_min = min(alt_min, m.Alt)
-                    alt_max = max(alt_max, m.Alt)
-            if profile is None:
-                raise NotAchievedException(
-                    "did not find Drill (%s) phases in the log" % want)
-            return profile
-
         # The LEVEL LINE: rolls at the asked 400 and neither climbs nor sinks.
         self.fly_autoacro_moves(((16, "Drill", phases),))
-        peak, lo, hi = drill_profile("D0m ang0")
+        peak, lo, hi = self.drill_log_profile("D0m ang0")
         self.progress("Drill line: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
                       (peak, lo, hi))
         if peak < 300:
@@ -17703,7 +17703,7 @@ return update, 1000
         self.change_mode("STABILIZE")
         self.set_parameter("AUTA_DR_DIA", 6)
         self.fly_autoacro_moves(((16, "Drill", phases),))
-        peak, lo, hi = drill_profile("D6m ang0")
+        peak, lo, hi = self.drill_log_profile("D6m ang0")
         self.progress("Drill barrel: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
                       (peak, lo, hi))
         if peak > 260:
@@ -17723,7 +17723,7 @@ return update, 1000
         self.set_parameter("AUTA_DR_DIA", 0)
         self.set_parameter("AUTA_DR_ANG", -30)
         self.fly_autoacro_moves(((16, "Drill", phases),))
-        peak, lo, hi = drill_profile("D0m ang-30")
+        peak, lo, hi = self.drill_log_profile("D0m ang-30")
         self.progress("Drill down-30: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
                       (peak, lo, hi))
         if peak < 300:
@@ -17732,6 +17732,26 @@ return update, 1000
             raise NotAchievedException("down-30 did not descend (%.1fm)" % lo)
         if lo < -28:
             raise NotAchievedException("down-30 overspent its budget (%.1fm)" % lo)
+
+        # The VERTICAL 3 m drill (the RealFlight look flight's config): slow
+        # entry (the planner prices it as axial), 150 m for the fall-and-
+        # arrest budget (~96 m declared). It free-falls the drill (~38 m at
+        # zero real axial entry) and must never climb.
+        self.set_rc(3, 1000)
+        self.change_mode("STABILIZE")
+        self.set_parameter("AUTA_LP_SPD", 3)
+        self.set_parameter("AUTA_DR_DIA", 3)
+        self.set_parameter("AUTA_DR_ANG", -90)
+        self.fly_autoacro_moves(((16, "Drill", phases),), takeoff_alt=150)
+        peak, lo, hi = self.drill_log_profile("D3m ang-89")
+        self.progress("Drill vertical: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
+                      (peak, lo, hi))
+        if peak < 300:
+            raise NotAchievedException("roll never reached rate (%.0f < 300 dps)" % peak)
+        if lo > -25 or lo < -50:
+            raise NotAchievedException("vertical fall off its plan (%.1fm)" % lo)
+        if hi > 2:
+            raise NotAchievedException("vertical drill climbed (+%.1fm)" % hi)
 
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
@@ -18025,7 +18045,8 @@ return update, 1000
         ), trigger_ch=7)
 
     def RealFlightAutoAcroDrill(self, model, home):
-        '''Fly the drill (schedule move 16) in isolation on RealFlight.
+        '''Fly the drill (schedule move 16) on RealFlight: the line, a 3 m
+        barrel, and a 3 m vertical (straight-down) drill.
 
         The machine move: consecutive rolls travelling along the line with
         thrust pulsed in a window about upright (an n-g pulse across |roll|<W
@@ -18034,6 +18055,13 @@ return update, 1000
         level against real drag and thrust lapse; the native model's idle and
         thrust map flatter it. Entered at 15 m/s: at 18 the lapse ran the
         trim into the thrust clamp and the line still walked down ~1.4 m/s.
+
+        The barrel and the vertical drill are the look pass for the two shape
+        knobs. Profiles are printed, not gated -- the native test carries the
+        hard bands; here the judge is the eye plus the numbers. The vertical
+        drill enters slow (the planner prices the entry speed as axial) and
+        from 150 m: its fall-and-arrest budget is ~95-130 m depending on the
+        roll rate the thrust calibration solves.
         '''
         if not self.realflight_address:
             raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
@@ -18043,10 +18071,28 @@ return update, 1000
         params["AUTA_LP_SPD"] = 15
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate RATE/ANG for the pulse-phase analysis
         self.set_parameters(params)
-        self.fly_autoacro_moves((
-            (16, "Drill", ["Drill: drilling", "Drill: leveling",
-                           "Drill: recovering"]),
-        ), trigger_ch=7)
+        phases = ["Drill: drilling", "Drill: leveling", "Drill: recovering"]
+        self.fly_autoacro_moves(((16, "Drill", phases),), trigger_ch=7)
+        self.progress("RF drill line: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
+                      self.drill_log_profile("D0m ang0"))
+
+        # Boot state back before re-arming (RTL is not armable; the helper
+        # leaves the throttle stick centred, which STABILIZE arming refuses).
+        self.set_rc(3, 1000)
+        self.change_mode("STABILIZE")
+        self.set_parameter("AUTA_DR_DIA", 3)
+        self.fly_autoacro_moves(((16, "Drill", phases),), trigger_ch=7)
+        self.progress("RF drill barrel: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
+                      self.drill_log_profile("D3m ang0"))
+
+        self.set_rc(3, 1000)
+        self.change_mode("STABILIZE")
+        self.set_parameter("AUTA_LP_SPD", 3)
+        self.set_parameter("AUTA_DR_ANG", -90)
+        self.fly_autoacro_moves(((16, "Drill", phases),), trigger_ch=7,
+                                takeoff_alt=150)
+        self.progress("RF drill vertical: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
+                      self.drill_log_profile("D3m ang-89"))
 
     def RealFlightAutoAcroKnifeEdgeSpin(self, model, home):
         '''Fly the knife edge spin (schedule move 14) in isolation on RealFlight.
