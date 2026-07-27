@@ -17486,6 +17486,61 @@ return update, 1000
         self.fly_autoacro_moves((
             (11, "InvYaw", ["InvYaw: spinning", "InvYaw: half", "InvYaw: rolling upright"]),
         ))
+        # Those phases all fired on the build that handed the roll-out a body still yawing at
+        # full spin rate (2026-07-27 field): the composed roll and yaw threw the nose 62 deg
+        # up while the vehicle fell at 18 m/s. Assert the handover itself -- the spin's brake
+        # lead must have stopped the yaw BEFORE the roll-out, and the figure must stay inside
+        # the height it declares.
+        dfreader = self.dfreader_for_current_onboard_log()
+        inv_us = rollout_us = done_us = None
+        yaw_at_rollout = 0
+        peak_pitch = 0
+        alt_entry = alt_min = None
+        while done_us is None:
+            m = dfreader.recv_match(type=["MSG", "ANG", "RATE", "CTUN"])
+            if m is None:
+                break
+            mtype = m.get_type()
+            if mtype == "MSG":
+                # exact matches only: the harness echoes its want=(...) lines back through the
+                # GCS, and a continuation chunk can carry the phase text without the SRC=
+                if m.Message == "InvYaw: rolling inverted":
+                    inv_us = m.TimeUS
+                elif m.Message == "InvYaw: rolling upright":
+                    rollout_us = m.TimeUS
+                elif m.Message == "AutoAcro: display complete" and inv_us is not None:
+                    done_us = m.TimeUS
+            elif inv_us is None:
+                continue
+            elif mtype == "RATE" and rollout_us is not None and yaw_at_rollout == 0:
+                yaw_at_rollout = abs(m.Y)
+            elif mtype == "ANG" and rollout_us is not None:
+                peak_pitch = max(peak_pitch, abs(m.Pitch))
+            elif mtype == "CTUN":
+                if alt_entry is None:
+                    alt_entry = m.Alt
+                if alt_min is None or m.Alt < alt_min:
+                    alt_min = m.Alt
+        if rollout_us is None or alt_entry is None:
+            raise NotAchievedException("did not find inverted yaw phases in the log")
+        drop = alt_entry - alt_min
+        self.progress("InvYaw profile: yaw at roll-out %.0f dps, peak pitch %.0f, drop %.1fm" %
+                      (yaw_at_rollout, peak_pitch, drop))
+        # The spin runs at 700 dps and hands over at IY.YAW_SETTLE_DPS (200), so a roll-out
+        # handed a live spin reads several hundred above this.
+        if yaw_at_rollout > 300:
+            raise NotAchievedException(
+                "roll-out began on a live spin (%.0f dps)" % yaw_at_rollout)
+        # The residual yaw error the roll-out rolls onto the pitch axis: 62 deg on the field
+        # build, 30 here. This is the assertion the phase list could not make.
+        if peak_pitch > 40:
+            raise NotAchievedException(
+                "nose tumbled through the roll-out (pitch %.0f)" % peak_pitch)
+        # Whole figure including the recover's arrest, which on this model is most of it (the
+        # 0.70 g idle points at the ground while inverted). The Marmott flies the same figure
+        # in ~22 m; this bound only has to catch an arrest that never happened.
+        if drop > 75:
+            raise NotAchievedException("fell %.1fm, the recover did not arrest" % drop)
 
     def AutoAcroFloatLoop(self):
         '''Fly the float loop (schedule move 12) in isolation on the native Rise255'''
