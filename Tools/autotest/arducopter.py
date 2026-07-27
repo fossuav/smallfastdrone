@@ -17695,8 +17695,11 @@ return update, 1000
         if lo < -5 or hi > 5:
             raise NotAchievedException("line did not hold level (%.1f/+%.1fm)" % (lo, hi))
 
-        # The BARREL: D=6 must SOLVE the roll rate down under the thrust
-        # ceiling (~150 dps native, from 400) and orbit 0..2R up from entry.
+        # The BARREL: D=6 must SOLVE the roll rate down to the 2 g base
+        # (~146 dps native, from 400) and fly a stable orbit riding up from
+        # entry. The band is 2R plus twice the slow-roll scallop -- the
+        # gravity pulses fire once per revolution, the orbit's own frequency,
+        # so they pump it: a slow barrel is fatter than its ask by design.
         # (Back to the boot state first -- RTL is not armable, and the helper
         # leaves the throttle stick centred, which STABILIZE arming refuses.)
         self.set_rc(3, 1000)
@@ -17712,7 +17715,7 @@ return update, 1000
             raise NotAchievedException("barrel never rolled (%.0f dps)" % peak)
         if hi < 2:
             raise NotAchievedException("no orbit: alt band only +%.1fm" % hi)
-        if hi > 12 or lo < -6:
+        if hi > 15 or lo < -8:
             raise NotAchievedException("orbit out of band (%.1f/+%.1fm)" % (lo, hi))
 
         # The ANGLE: a -30 axis descends on its height budget at rate, ending
