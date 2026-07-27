@@ -17000,8 +17000,10 @@ return update, 1000
         # The applet, the maneuver module and the CRSF menu together no longer fit the
         # 200 KB default heap. The failure does not look like a Lua problem: the
         # scripts simply are not there, and the first thing to notice is the AUTA_
-        # parameters failing to set.
-        self.set_parameters({"SCR_ENABLE": 1, "SCR_HEAP_SIZE": 400000})
+        # parameters failing to set. 500k, not 400k: the drill's barrel/angle work
+        # plus two menu items tipped the set over 400k (2026-07-27) -- the same
+        # symptom, found by the menu smoke test. Match on the real vehicle.
+        self.set_parameters({"SCR_ENABLE": 1, "SCR_HEAP_SIZE": 500000})
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "crsf_helper.lua"), "crsf_helper.lua")
