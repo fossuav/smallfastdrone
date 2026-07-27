@@ -17633,48 +17633,105 @@ return update, 1000
             raise NotAchievedException("exit not facing forward (%.0f off zoom heading)" % exit_off)
 
     def AutoAcroDrill(self):
-        '''Fly the drill (schedule move 16) in isolation on the native Rise255'''
+        '''Fly the drill (schedule move 16) in isolation on the native Rise255:
+        the level line, the phase-locked barrel (AUTA_DR_DIA) and the
+        descending axis (AUTA_DR_ANG)'''
         self.launch_autoacro_rise255()
-        self.fly_autoacro_moves((
-            (16, "Drill", ["Drill: drilling", "Drill: leveling"]),
-        ))
-        # The figure is a LEVEL line under a continuous roll -- assert both from
-        # the log: the roll ran at rate, and the pulsed line neither climbed nor
-        # sank while it rolled.
-        dfreader = self.dfreader_for_current_onboard_log()
-        drill_us = level_us = done_us = None
-        alt_start = alt_min = alt_max = None
-        peak_roll_dps = 0
-        while done_us is None:
-            m = dfreader.recv_match(type=["MSG", "RATE", "CTUN"])
-            if m is None:
-                break
-            mtype = m.get_type()
-            if mtype == "MSG":
-                if m.Message == "Drill: drilling":
-                    drill_us = m.TimeUS
-                elif m.Message == "Drill: leveling":
-                    level_us = m.TimeUS
-                elif m.Message == "Drill: recovered" and drill_us is not None:
-                    done_us = m.TimeUS
-            elif drill_us is None or level_us is not None:
-                continue
-            elif mtype == "RATE":
-                peak_roll_dps = max(peak_roll_dps, abs(m.R))
-            elif mtype == "CTUN":
-                if alt_start is None:
-                    alt_start = alt_min = alt_max = m.Alt
-                alt_min = min(alt_min, m.Alt)
-                alt_max = max(alt_max, m.Alt)
-        if level_us is None or alt_start is None:
-            raise NotAchievedException("did not find Drill phases in the log")
-        self.progress("Drill profile: roll peak %.0f dps, line %.1fm to +%.1fm about entry" %
-                      (peak_roll_dps, alt_min - alt_start, alt_max - alt_start))
-        if peak_roll_dps < 300:
-            raise NotAchievedException("roll never reached rate (%.0f < 300 dps)" % peak_roll_dps)
-        if alt_start - alt_min > 5 or alt_max - alt_start > 5:
-            raise NotAchievedException("line did not hold level (%.1f/+%.1fm)" %
-                                       (alt_min - alt_start, alt_max - alt_start))
+        phases = ["Drill: drilling", "Drill: leveling"]
+
+        def drill_profile(want):
+            # Roll peak and the altitude band about entry between "drilling"
+            # and "leveling", from the latest log. The log may hold several
+            # drills (one per re-flown config), so episodes are keyed on the
+            # start announcement -- want is its config suffix, e.g. "D6m ang0"
+            # -- and the LAST matching one is returned (the MSG stream is what
+            # disambiguates flights, not file boundaries).
+            dfreader = self.dfreader_for_current_onboard_log()
+            announced = collecting = False
+            alt_start = alt_min = alt_max = None
+            peak_roll_dps = 0
+            profile = None
+            while True:
+                m = dfreader.recv_match(type=["MSG", "RATE", "CTUN"])
+                if m is None:
+                    break
+                mtype = m.get_type()
+                if mtype == "MSG":
+                    if m.Message.startswith("Drill: ") and "rolls at" in m.Message:
+                        announced = m.Message.endswith(want)
+                        collecting = False
+                    elif m.Message == "Drill: drilling" and announced:
+                        collecting = True
+                        alt_start = None
+                        peak_roll_dps = 0
+                    elif m.Message == "Drill: leveling" and collecting:
+                        collecting = False
+                        announced = False
+                        if alt_start is not None:
+                            profile = (peak_roll_dps,
+                                       alt_min - alt_start,
+                                       alt_max - alt_start)
+                elif not collecting:
+                    continue
+                elif mtype == "RATE":
+                    peak_roll_dps = max(peak_roll_dps, abs(m.R))
+                elif mtype == "CTUN":
+                    if alt_start is None:
+                        alt_start = alt_min = alt_max = m.Alt
+                    alt_min = min(alt_min, m.Alt)
+                    alt_max = max(alt_max, m.Alt)
+            if profile is None:
+                raise NotAchievedException(
+                    "did not find Drill (%s) phases in the log" % want)
+            return profile
+
+        # The LEVEL LINE: rolls at the asked 400 and neither climbs nor sinks.
+        self.fly_autoacro_moves(((16, "Drill", phases),))
+        peak, lo, hi = drill_profile("D0m ang0")
+        self.progress("Drill line: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
+                      (peak, lo, hi))
+        if peak < 300:
+            raise NotAchievedException("roll never reached rate (%.0f < 300 dps)" % peak)
+        if lo < -5 or hi > 5:
+            raise NotAchievedException("line did not hold level (%.1f/+%.1fm)" % (lo, hi))
+
+        # The BARREL: D=6 must SOLVE the roll rate down under the thrust
+        # ceiling (~150 dps native, from 400) and orbit 0..2R up from entry.
+        # (Back to the boot state first -- RTL is not armable, and the helper
+        # leaves the throttle stick centred, which STABILIZE arming refuses.)
+        self.set_rc(3, 1000)
+        self.change_mode("STABILIZE")
+        self.set_parameter("AUTA_DR_DIA", 6)
+        self.fly_autoacro_moves(((16, "Drill", phases),))
+        peak, lo, hi = drill_profile("D6m ang0")
+        self.progress("Drill barrel: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
+                      (peak, lo, hi))
+        if peak > 260:
+            raise NotAchievedException("barrel did not solve the rate down (%.0f dps)" % peak)
+        if peak < 100:
+            raise NotAchievedException("barrel never rolled (%.0f dps)" % peak)
+        if hi < 2:
+            raise NotAchievedException("no orbit: alt band only +%.1fm" % hi)
+        if hi > 12 or lo < -6:
+            raise NotAchievedException("orbit out of band (%.1f/+%.1fm)" % (lo, hi))
+
+        # The ANGLE: a -30 axis descends on its height budget at rate, ending
+        # short rather than dipping (entry 10 m/s: fall plans ~22m, drag pays
+        # some of it back).
+        self.set_rc(3, 1000)
+        self.change_mode("STABILIZE")
+        self.set_parameter("AUTA_DR_DIA", 0)
+        self.set_parameter("AUTA_DR_ANG", -30)
+        self.fly_autoacro_moves(((16, "Drill", phases),))
+        peak, lo, hi = drill_profile("D0m ang-30")
+        self.progress("Drill down-30: roll peak %.0f dps, %.1fm to +%.1fm about entry" %
+                      (peak, lo, hi))
+        if peak < 300:
+            raise NotAchievedException("roll never reached rate (%.0f < 300 dps)" % peak)
+        if lo > -10:
+            raise NotAchievedException("down-30 did not descend (%.1fm)" % lo)
+        if lo < -28:
+            raise NotAchievedException("down-30 overspent its budget (%.1fm)" % lo)
 
     def AutoAcroLowEnergyCompletes(self):
         '''An arc that cannot hold its circle completes on rotation instead of
