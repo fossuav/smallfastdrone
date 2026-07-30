@@ -17093,7 +17093,15 @@ return update, 1000
         physics calibrated to the real drone), install the autoacro scripts, and
         set the shared display geometry with full-rate attitude logging. Every
         native per-move test starts here; extra_params overrides individual
-        values (e.g. a crippled WP_ACC for the under-speed refusal).'''
+        values (e.g. a crippled WP_ACC for the under-speed refusal).
+
+        Serve terrain, because the trigger-time AGL floor asks for it and fails
+        CLOSED when terrain is enabled and unavailable. Nothing supplies it in
+        SITL otherwise -- there is no GCS in the loop and the checked-in CMAC
+        tile is empty -- so every move refused before commanding anything, and
+        the whole autoacro suite went red the moment the floor started using
+        the terrain database.'''
+        self.install_terrain_handlers_context()
         self.customise_SITL_commandline(
             [],
             model="X:@ROMFS/models/Rise255.json",
