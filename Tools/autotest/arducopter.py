@@ -16861,6 +16861,15 @@ return update, 1000
         A gate that fails two runs in three teaches people to ignore failures. This
         stays a tool until the thrust map is tight enough to gate on.
 
+        What this test was reaching for -- that the sizing law and its drag profile
+        stay self-consistent -- now has a deterministic guard that does not need an
+        airframe at all: ap_lua/autoacro/analysis/test_drag_profile.lua asserts
+        D(pi) = pi*d, d = 0 reproducing the no-drag plan, continuity and periodicity
+        across 360, the apex landing on m^2*g*r, and sizing/n_bot being bit-for-bit
+        identical shaped against uniform. Those are arithmetic and a flight cannot
+        fail them closed; this one measures what the plans DO to a vehicle, which is
+        a different question.
+
         The default SITL quad is no use here either: it makes 2.9 g and so cannot fly
         a round loop at any size. The target vehicle measures 9.9 g.
         '''
