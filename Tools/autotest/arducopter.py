@@ -18562,11 +18562,20 @@ return update, 1000
         self.setup_RealFlight_vehicle(model, home)
         self.install_autoacro_scripts()
         # Scripting1 is on RC7 in the realflight-Rise255 tune (see RealFlightAutoAcro).
-        # 0.5 g: the arc drag this airframe measured on RealFlight (0.51 g), so the
-        # sizing law's run-up matches what the loop actually costs. 0.4 under-budgeted
-        # it -- too little entry speed, and the loop pinched at the top.
+        # 0.40 g, measured 2026-07-30 (n=2 each at 0.40 / 0.50 / 0.65). The budget
+        # over the climb is pi*d*g*r, so 92 J/kg at 0.50, and the arc pays 68 --
+        # 0.50 over-funded it by a quarter. 0.40 costs 30 m less display box with
+        # the climb unchanged, the top back from 1.30x to 1.19x of sqrt(g*r), and
+        # no under-speed warning or corrector trip; 0.65 costs 90 m MORE and makes
+        # the climb worse, because this airframe's apex is idle-thrust-capped and
+        # more speed only over-pulls it. The comment this replaces said 0.4
+        # under-budgeted the arc and pinched its top -- that was recorded while the
+        # arc's entry seed was donating ~71 J/kg a figure, which made the arc's own
+        # energy ledger unreadable, and it does not survive the seed being fixed.
+        # RealFlightAutoAcro keeps 0.5: isolation entries are a different regime and
+        # this was not measured there.
         params = self.autoacro_display_params(0.025, trigger_ch=7,  # RealFlight hover (ThO)
-                                              loop_drag_g=0.5)
+                                              loop_drag_g=0.40)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
         # The display band constraint is 10..50 m AGL (2026-07-24). 52 commanded
         # attains ~50 (the RealFlight takeoff undershoots ~2 and the thrust cal's
