@@ -16659,8 +16659,11 @@ return update, 1000
             # The maneuver module no longer fits the 200 KB default heap, the same way
             # install_autoacro_scripts does not. It does not look like a Lua problem:
             # the script is simply not there, and what you notice is the AUTA_
-            # parameters failing to set.
-            "SCR_HEAP_SIZE": 400000,
+            # parameters failing to set. Pinned at the vehicle's 500k for the same
+            # reason install_autoacro_scripts is: growth that will not fit fails here
+            # rather than silently in the air. 400k was left behind when the other
+            # sites moved on 07-27 and the module has since outgrown it.
+            "SCR_HEAP_SIZE": 500000,
             "WP_ACC": 5,
             "WP_ACC_Z": 5,
             "WP_JERK": 20,
@@ -16893,8 +16896,9 @@ return update, 1000
             "PSC_JERK_D": 40,
             "PSC_JERK_NE": 40,
             # The applet, the maneuver module and the CRSF menu together no longer
-            # fit the 200 KB default.
-            "SCR_HEAP_SIZE": 400000,
+            # fit the 200 KB default. install_autoacro_scripts below re-pins this at
+            # the vehicle's 500k; kept in step so the two do not disagree.
+            "SCR_HEAP_SIZE": 500000,
         })
         self.install_autoacro_scripts()
 
@@ -17024,12 +17028,19 @@ return update, 1000
         # MEASURED 2026-07-27, with the orbit and lookback in and their four
         # menu items: steady-state SCR.Total_mem 406-412 KB, and the LOAD-TIME
         # peak -- which is the one that decides whether the set appears at all,
-        # and is higher -- sits between 462k (fails, AUTA_ params absent) and
-        # 475k (loads). So the Marmott's 500k carries 25-38 KB of headroom, and
-        # the module split in ap_lua/autoacro/REFACTOR_MODULE_SPLIT.md is the
-        # live constraint on the next move rather than a future one. The four
-        # menu items alone moved the cliff 450k -> 462k, which is why the menu
-        # is not the cheap place to add things it looks like.
+        # and is higher -- sat between 462k (fails, AUTA_ params absent) and
+        # 475k (loads). The four menu items alone moved the cliff 450k -> 462k,
+        # which is why the menu is not the cheap place to add things it looks
+        # like.
+        #
+        # RE-MEASURED 2026-08-10, after the 07-29/30 work (the arc's entry seed
+        # and lag print, the momentum shaping, the float coast rate, the param
+        # table 36 -> 40): 475k now FAILS and 481k loads. So the cliff moved
+        # ~15 KB in a fortnight and the Marmott's 500k is down to 19-25 KB of
+        # headroom, against 25-38 before. The module split in
+        # ap_lua/autoacro/REFACTOR_MODULE_SPLIT.md is the live constraint on the
+        # next move. Steady-state was not re-read (the SCR message is absent
+        # from these logs), so the 406-412 KB above is the 07-27 number.
         self.set_parameters({"SCR_ENABLE": 1, "SCR_HEAP_SIZE": 500000,
                              "SCR_DEBUG_OPTS": 8})
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
