@@ -358,6 +358,18 @@ public:
     // switch to a new lane
     void switchLane(uint8_t new_lane_index);
 
+    // request the primary lane. Only honoured when the ManualLaneSwitch
+    // option is enabled; returns false if unavailable or lane is invalid
+    bool requestLaneSwitch(uint8_t lane_index);
+
+    // get horizontal (NE) velocity and position differences between a lane
+    // and the current primary. Returns false if the lane is invalid,
+    // unallocated or is the primary
+    bool getLaneDivergence(uint8_t lane_index, float &vel_diff_mps, float &pos_diff_m) const;
+
+    // get health and filter status of a specific lane
+    bool getLaneStatus(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const;
+
     /*
       Request a reset of the EKF yaw. This is called when the vehicle code is about to
       trigger an EKF failsafe, and it would like to avoid that.
@@ -410,6 +422,7 @@ private:
 
     uint8_t num_cores; // number of allocated cores
     uint8_t primary;   // current primary core
+    int8_t requested_lane_override = -1; // vehicle-commanded lane under ManualLaneSwitch, -1 to follow EK3_PRIMARY
     NavEKF3_core *core = nullptr;
 
     uint32_t _frameTimeUsec;        // time per IMU frame

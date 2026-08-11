@@ -724,7 +724,7 @@ const AP_Param::GroupInfo NavEKF3::var_info2[] = {
 
     // @Param: PRIMARY
     // @DisplayName: Primary core number
-    // @Description: The core number (index in IMU mask) that will be used as the primary EKF core on startup. While disarmed the EKF will force the use of this core. A value of 0 corresponds to the first IMU in EK3_IMU_MASK.
+    // @Description: The core number (index in IMU mask) that will be used as the primary EKF core on startup. While disarmed the EKF will force the use of this core. A value of 0 corresponds to the first IMU in EK3_IMU_MASK. When the ManualLaneSwitch option is enabled the vehicle may command a different lane at runtime, which overrides this selection until reboot.
     // @Range: 0 2
     // @Increment: 1
     // @User: Advanced
@@ -912,6 +912,7 @@ bool NavEKF3::InitialiseFilter(void)
 
     // Set the primary initially to be users selected primary
     primary = uint8_t(_primary_core) < num_cores? _primary_core : 0;
+    requested_lane_override = -1;
 
     // invalidate shared origin
     common_origin_valid = false;
@@ -998,7 +999,10 @@ void NavEKF3::UpdateFilter(void)
         runCoreSelection = (imuSampleTime_us - lastUnhealthyTime_us) > 1E7;
     }
 
-    const uint8_t user_primary = uint8_t(_primary_core) < num_cores? _primary_core : 0;
+    uint8_t user_primary = uint8_t(_primary_core) < num_cores? _primary_core : 0;
+    if (requested_lane_override >= 0 && requested_lane_override < num_cores) {
+        user_primary = requested_lane_override;
+    }
     bool lane_switching_enabled = true;
     if (option_is_enabled(Option::ManualLaneSwitch)) {
         lane_switching_enabled = false;
@@ -1192,6 +1196,49 @@ void NavEKF3::setPosVelYawSourceSet(uint8_t source_set_idx)
         dal.log_event3(AP_DAL::Event(uint8_t(AP_DAL::Event::setSourceSet0)+source_set_idx));
     }
     sources.setPosVelYawSourceSet((AP_NavEKF_Source::SourceSetSelection)source_set_idx);
+}
+
+// request the primary lane, honoured only under the ManualLaneSwitch option
+bool NavEKF3::requestLaneSwitch(uint8_t lane_index)
+{
+    if (lane_index < MAX_EKF_CORES) {
+        dal.log_event3(AP_DAL::Event(uint8_t(AP_DAL::Event::requestLaneSwitch0)+lane_index));
+    }
+    if (!option_is_enabled(Option::ManualLaneSwitch) || core == nullptr || lane_index >= num_cores) {
+        return false;
+    }
+    requested_lane_override = lane_index;
+    return true;
+}
+
+// get horizontal (NE) velocity and position differences between a lane and the current primary
+bool NavEKF3::getLaneDivergence(uint8_t lane_index, float &vel_diff_mps, float &pos_diff_m) const
+{
+    if (core == nullptr || lane_index >= num_cores || lane_index == primary) {
+        return false;
+    }
+    Vector3f vel_lane, vel_primary;
+    core[lane_index].getVelNED(vel_lane);
+    core[primary].getVelNED(vel_primary);
+
+    Vector2p pos_lane, pos_primary;
+    if (!core[lane_index].getPosNE(pos_lane) || !core[primary].getPosNE(pos_primary)) {
+        return false;
+    }
+    vel_diff_mps = (vel_lane.xy() - vel_primary.xy()).length();
+    pos_diff_m = (pos_lane - pos_primary).tofloat().length();
+    return true;
+}
+
+// get health and filter status of a specific lane
+bool NavEKF3::getLaneStatus(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const
+{
+    if (core == nullptr || lane_index >= num_cores) {
+        return false;
+    }
+    lane_healthy = core[lane_index].healthy();
+    core[lane_index].getFilterStatus(status);
+    return true;
 }
 
 // Check basic filter health metrics and return a consolidated health status
