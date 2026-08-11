@@ -1,12 +1,13 @@
 # SRCF field test log - session 1
 
-Branch `SmallFastDrone-4.7.0-gps-optflow-fallback` @ `432aba9209`.
-Vehicle SmallFastDronev1. Logs 326-330, 2026-08-11.
+Branch `SmallFastDrone-4.7.0-gps-optflow-fallback`. Vehicle
+SmallFastDronev1. Logs 326-330, 2026-08-11. Flights flown against
+`432aba9209`; the code changes at the end are `ee39611791..62d8f804bc`.
 
 Outcome: Flight 1 passed. Flight 2 passed on the second attempt after
 a false spoof trip caused by flying above the rangefinder ceiling.
 Flights 3-5 not yet flown. Two config errors found and fixed on the
-day; one detector design issue found that needs a code change.
+day, and one detector design issue that has since been fixed in code.
 
 ## Config errors found
 
@@ -182,36 +183,71 @@ at 15 m. `SRCF_POSR_THR=0.5` is too tight for this airframe's flow
 lane; it is a permanent low-level contributor to the vote rather than
 a discriminator.
 
-## Design change proposed
+## Design change - implemented same evening
 
 Rejected first: gating the detector on rangefinder freshness. It
 would have suppressed the log329 trip but caps the operating
 envelope, and altitude operation is a requirement.
 
-Proposed instead, a sigma-normalised divergence test:
-`VD / sqrt(P_vel_0 + P_vel_1) > SRCF_VEL_NSIG`, same shape for the
-position-rate test. This is height-adaptive for free, because the
-flow lane's covariance grows with height for the same reason its
-velocity degrades, and it never reads a rangefinder. It also adapts
-to flow quality, speed and GPS quality.
+Implemented instead, in `ee39611791..62d8f804bc`:
 
-Work required:
+- `AP_NavEKF3` logs state variances for every core rather than the
+  primary only, and exposes a lane's NE velocity variance plus a
+  frontend helper for the combined 1-sigma of a lane and the primary.
+  `getVariances()` returns innovation test ratios, a different
+  quantity, and was the only thing reachable before.
+- `AP_AHRS` passes that through as `get_lane_divergence_sigma()`.
+- `Copter` splits the vote integrator into one counter per signal, so
+  a decaying signal can no longer hand over to a rising one, and adds
+  `SRCF_NSIGMA`: a divergence must clear the fixed threshold *and*
+  that many combined-lane sigmas. Recovery is judged against the same
+  gates, else at altitude the flow lane's own imprecision blocks it
+  indefinitely.
+- `Copter` pre-arm now names `EK3_SRC2_YAW` when it is left at None.
 
-- Per-core accessor for the P diagonal. `getVariances()` returns
-  innovation test ratios, not state covariance, and no accessor
-  exists today. `XKV1` logging already reads `P[4][4]` etc. directly
-  inside the core, so the pattern is established.
-- Split the vote counter per signal, or require one signal to hold
-  for `SRCF_CNF_TIME`. Independent of the above and would have
-  blocked the log329 trip on its own.
-- Verify separation against `SRCFGPSSpoof` in SITL and pick `NSIG`
-  from the measured gap between a real spoof and the log329 case
-  rather than guessing. The whole design rests on a real spoof giving
-  a much larger sigma ratio, and that is not yet measured.
-- Log `XKV1` for all cores, not just the primary, so the flow lane's
-  covariance is measurable before a switch.
-- Decide parameter compatibility: `SRCF_VEL_THR` and `SRCF_POSR_THR`
-  would change units from m/s to sigma.
+The existing parameters keep their meaning: `SRCF_NSIGMA` is an
+additional gate, not a redefinition, and 0 restores the old behaviour.
+
+### What the verification changed
+
+`SRCF_NSIGMA` was first set to 4. `SRCFGPSSpoof` then **failed** - the
+gate suppressed real detection too. Measured rather than guessed:
+
+| | divergence | combined sigma | ratio |
+|---|---|---|---|
+| SITL spoof, 1.5 m/s walk | VD 1.87, PR 1.92 | 0.50-0.64 | 2.9-3.9 sigma |
+| Field false trip (log329) | VD 1.07, PR 0.58 | 0.615 | 1.7 sigma |
+
+2.5 clears both and is what shipped. 7/7 SITL tests green: the three
+SRCF tests plus EKFSourceSetFailsafe, OpticalFlowGPSLossAiding,
+EKF3SRCPerCore and OpticalFlow.
+
+The separation is a factor of under two, not the clean margin the
+proposal assumed. A spoof slower than 1.5 m/s scales down with it into
+the same range as the false trip, and the slowest detectable spoof
+gets slower as the flow lane's uncertainty grows. The gate buys
+altitude immunity at a real cost in spoof sensitivity. Two data points
+is not a calibration - every `SRCF_ENABLE=1` flight should add its
+`VSig` range to the picture.
+
+### SRCF is invisible in SITL autotest logs
+
+Pre-existing, not caused by the log format change. The autotest suite
+sets `LOG_FILE_RATEMAX=10`
+(`Tools/autotest/vehicle_test_suite.py:3213`) while the vehicle runs
+0. `SRCF` is written by `WriteStreaming` at exactly 10 Hz, so
+`should_log_streaming` (`AP_Logger_Backend.cpp:745`) drops it on any
+jitter, and with no data write the `FMT` never lands either.
+
+Consequence: the SITL tests can only assert on statustexts, never on
+detector internals. Worth fixing if `VVot`/`PVot`/`VSig` are to be
+regression-tested rather than eyeballed in field logs.
+
+### Log field rename
+
+`SRCF.Vote` is gone, replaced by `SRCF.VVot` and `SRCF.PVot`, and
+`SRCF.VSig` is new. The analysis of logs 326-330 above predates the
+rename and refers to `Vote`.
 
 ## Vehicle state at end of session
 
@@ -228,6 +264,9 @@ SRCF_CNF_TIME   = 2.0
 SRCF_RECOV_TIME = 10.0
 LOG_REPLAY      = 1
 ```
+
+The vehicle still carries the session-1 firmware. Reflashing to
+`62d8f804bc` adds `SRCF_NSIGMA`, default 2.5.
 
 ## Next session
 
@@ -250,27 +289,31 @@ LOG_REPLAY      = 1
 5. Keep a Flight 3 log for the Replay check of the
    `requestLaneSwitch` DAL events.
 
-### Code work, in priority order
+### Code work
 
-1. Split vote counters (small, independent, blocks the observed
-   failure).
-2. Pre-arm: check `EK3_SRC2_YAW != NONE`, and run the lane-config
-   validation whenever `EK3_SRC_OPTIONS` bit3 is set rather than only
-   when `SRCF_ENABLE > 0`.
-3. All-core `XKV1` logging, so the next flight measures what the
-   sigma test needs.
-4. Sigma-normalised divergence test, with SITL verification against
-   `SRCFGPSSpoof`.
+Done in `ee39611791..62d8f804bc`: split vote counters, `SRCF_NSIGMA`
+significance gate, all-core `XKV1` logging, pre-arm `EK3_SRC2_YAW`
+check. Flash before the next session.
 
-### Amendments the plan needs
+Still open:
 
-- Bench checklist must verify `EK3_SRC2_YAW=1` explicitly, and
-  confirm `EKF3 IMU1 MAG0 initial yaw alignment complete` appears
-  alongside IMU0 before leaving.
-- Add the altitude note: fly by rangefinder AGL, not GCS altitude,
-  and state the 15 m sensor ceiling.
-- Flight 2 has no written action for a trip that actually occurs;
-  add one.
-- Flight 5's precondition is confirmed unmet at `EK3_OPTIONS=126`.
-- Drop or qualify the claim that the SRCF pre-arm validates the whole
-  lane config until it does.
+1. `SRCF` cannot be logged in SITL autotest, so no test asserts on
+   `VVot`/`PVot`/`VSig`. Either raise `LOG_FILE_RATEMAX` for the SRCF
+   tests or write `SRCF` at a rate below the cap.
+2. `SRCF_NSIGMA=2.5` rests on two data points. Widen that with field
+   `VSig` ranges before treating it as calibrated.
+3. The pre-arm still only validates while `SRCF_ENABLE > 0`. A lane
+   whose yaw source is None is a latent arming blocker under per-core
+   source sets regardless of SRCF, so the general check belongs in
+   `NavEKF3::pre_arm_check` next to the existing MAG_CAL/SRC1_YAW
+   one - conditioned on the compass being used for yaw, else a
+   no-compass vehicle is falsely rejected.
+
+### Plan amendments
+
+All applied to `SRCF_FLIGHT_TEST_PLAN.md` in the same revision as this
+document: bench checks for `EK3_SRC2_YAW` and the IMU1 yaw-alignment
+message, the rangefinder-AGL altitude note and 15 m ceiling, a written
+action for a Flight 2 trip, the confirmed-unmet Flight 5 precondition,
+the qualified pre-arm claim, `SRCF_NSIGMA` in the parameter table, and
+the `VVot`/`PVot`/`VSig` field names throughout.
