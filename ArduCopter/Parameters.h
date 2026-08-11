@@ -516,6 +516,15 @@ public:
     AP_Float valt_pos_expo;    // VALT stick-to-position-authority blend expo (0 = hard cutoff)
 #endif
 
+#if AP_OPTICALFLOW_ENABLED
+    // EKF source fallback monitor (source_fallback.cpp)
+    AP_Int8  srcf_enable;
+    AP_Float srcf_vel_thr;     // cross-lane velocity divergence threshold (m/s)
+    AP_Float srcf_posr_thr;    // cross-lane position divergence rate threshold (m/s)
+    AP_Float srcf_cnf_time;    // spoof confirmation window (s)
+    AP_Float srcf_recov_time;  // GPS recovery hold time (s)
+#endif
+
     // ground effect compensation enable/disable
     AP_Int8 gndeffect_comp_enabled;
 

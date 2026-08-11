@@ -1252,6 +1252,47 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     AP_GROUPINFO("VALT_POS_EXPO", 30, ParametersG2, valt_pos_expo, 0),
 #endif
 
+#if AP_OPTICALFLOW_ENABLED
+    // @Param: SRCF_ENABLE
+    // @DisplayName: EKF source fallback enable
+    // @Description: Enables the navigation source fallback monitor. Requires EK3_SRC_OPTIONS bit 3 (per-core source sets) with EK3_SRC1 configured for GPS and EK3_SRC2 for optical flow, EK3_OPTIONS bit 1 (manual lane switching) and two EKF lanes. On GPS loss or detected GPS spoofing the monitor moves the primary EKF lane to the optical flow lane without triggering the EKF failsafe, and if neither lane can provide position while in Loiter the vehicle changes to AltHold. GPS loss recovers automatically; a spoof detection latches GPS as untrusted until disarm or a pilot source set change.
+    // @Values: 0:Disabled, 1:Enabled
+    // @User: Advanced
+    AP_GROUPINFO("SRCF_ENABLE", 31, ParametersG2, srcf_enable, 0),
+
+    // @Param: SRCF_VEL_THR
+    // @DisplayName: EKF source fallback velocity divergence threshold
+    // @Description: Horizontal velocity difference between the GPS and optical flow EKF lanes above which GPS spoofing is suspected
+    // @Units: m/s
+    // @Range: 0.2 3
+    // @User: Advanced
+    AP_GROUPINFO("SRCF_VEL_THR", 32, ParametersG2, srcf_vel_thr, 0.8),
+
+    // @Param: SRCF_POSR_THR
+    // @DisplayName: EKF source fallback position divergence rate threshold
+    // @Description: Rate of growth of the horizontal position difference between the GPS and optical flow EKF lanes above which GPS spoofing is suspected. Catches a spoofer whose reported velocity is consistent with its position walk
+    // @Units: m/s
+    // @Range: 0.1 2
+    // @User: Advanced
+    AP_GROUPINFO("SRCF_POSR_THR", 33, ParametersG2, srcf_posr_thr, 0.5),
+
+    // @Param: SRCF_CNF_TIME
+    // @DisplayName: EKF source fallback spoof confirmation time
+    // @Description: Time the cross-lane divergence must persist before GPS is declared spoofed
+    // @Units: s
+    // @Range: 0.5 10
+    // @User: Advanced
+    AP_GROUPINFO("SRCF_CNF_TIME", 34, ParametersG2, srcf_cnf_time, 2),
+
+    // @Param: SRCF_RECOV_TIME
+    // @DisplayName: EKF source fallback GPS recovery hold time
+    // @Description: Time the GPS lane must be continuously healthy and consistent with the optical flow lane before the monitor returns to it after a plain GPS loss
+    // @Units: s
+    // @Range: 2 60
+    // @User: Advanced
+    AP_GROUPINFO("SRCF_RECOV_TIME", 35, ParametersG2, srcf_recov_time, 10),
+#endif
+
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 
     AP_GROUPEND

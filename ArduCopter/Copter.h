@@ -814,6 +814,12 @@ private:
     void failsafe_ekf_recheck();
     void check_ekf_reset();
     void reset_ekf_check_gate();
+
+#if AP_OPTICALFLOW_ENABLED
+    // source_fallback.cpp
+    void source_fallback_update();
+    bool source_fallback_command_lane(uint8_t lane);
+#endif
     void check_vibration();
 
     // esc_calibration.cpp

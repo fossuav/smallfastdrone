@@ -234,6 +234,37 @@ bool AP_Arming_Copter::parameter_checks(bool display_failure)
             return false;
         }
 
+#if AP_OPTICALFLOW_ENABLED
+        // source fallback monitor requires the per-core GPS/flow lane setup
+        if (copter.g2.srcf_enable > 0) {
+            enum ap_var_type ptype;
+            AP_Param *src_options = AP_Param::find("EK3_SRC_OPTIONS", &ptype);
+            const bool per_core = (src_options != nullptr) && (((uint32_t)src_options->cast_to_float(ptype)) & (1U<<3));
+            AP_Param *ek3_options = AP_Param::find("EK3_OPTIONS", &ptype);
+            const bool manual_lane = (ek3_options != nullptr) && (((uint32_t)ek3_options->cast_to_float(ptype)) & (1U<<1));
+            if (!per_core || !manual_lane) {
+                check_failed(Check::PARAMETERS, display_failure, "SRCF: bad EK3_SRC_OPTIONS/EK3_OPTIONS");
+                return false;
+            }
+            AP_Param *imu_mask = AP_Param::find("EK3_IMU_MASK", &ptype);
+            if (imu_mask == nullptr || __builtin_popcount((uint32_t)imu_mask->cast_to_float(ptype)) < 2) {
+                check_failed(Check::PARAMETERS, display_failure, "SRCF: need 2 lanes in EK3_IMU_MASK");
+                return false;
+            }
+            AP_Param *src1_posxy = AP_Param::find("EK3_SRC1_POSXY", &ptype);
+            AP_Param *src2_velxy = AP_Param::find("EK3_SRC2_VELXY", &ptype);
+            if (src1_posxy == nullptr || (uint8_t)src1_posxy->cast_to_float(ptype) != 3 ||
+                src2_velxy == nullptr || (uint8_t)src2_velxy->cast_to_float(ptype) != 5) {
+                check_failed(Check::PARAMETERS, display_failure, "SRCF: need SRC1 GPS, SRC2 flow");
+                return false;
+            }
+            if (!copter.optflow.enabled()) {
+                check_failed(Check::PARAMETERS, display_failure, "SRCF: optical flow disabled");
+                return false;
+            }
+        }
+#endif
+
         #if FRAME_CONFIG == HELI_FRAME
         char fail_msg[100]{};
         // check input manager parameters

@@ -1,0 +1,272 @@
+#include "Copter.h"
+
+#if AP_OPTICALFLOW_ENABLED
+
+/*
+ * Navigation source fallback monitor.
+ *
+ * With per-core EKF source sets (EK3_SRC_OPTIONS bit 3) lane 0 runs the
+ * GPS sources (EK3_SRC1) and lane 1 the optical flow sources (EK3_SRC2),
+ * and automatic lane selection is disabled (EK3_OPTIONS bit 1). This
+ * monitor commands the primary lane instead: on GPS loss or detected GPS
+ * spoofing it moves flight onto the flow lane before the EKF failsafe can
+ * trip, returns to GPS after a plain loss recovers, and if neither lane
+ * can provide position while in Loiter changes the vehicle to AltHold.
+ *
+ * Spoofing is detected by comparing the two lanes: a spoofed GPS drags
+ * the GPS lane's states while the flow lane keeps measuring real motion,
+ * so their velocity solutions diverge (position-only spoofer) or their
+ * positions diverge at a sustained rate (a spoofer whose reported
+ * velocity is consistent with its position walk). Quality-based GPS
+ * checks cannot see either case. A spoof detection latches GPS as
+ * untrusted until disarm or a pilot source set change.
+ */
+
+#define SRCF_GPS_BAD_ITERATIONS     3       // 0.3s at 10hz to confirm GPS loss
+#define SRCF_FLOW_BAD_ITERATIONS    5       // 0.5s at 10hz to confirm flow loss
+#define SRCF_POST_SWITCH_MUTE_MS    5000    // divergence detector mute after a lane change
+#define SRCF_POS_RATE_WINDOW        20      // position divergence rate baseline, 2s at 10hz
+
+static const uint8_t SRCF_GPS_LANE = 0;     // lane running EK3_SRC1 (GPS)
+static const uint8_t SRCF_FLOW_LANE = 1;    // lane running EK3_SRC2 (optical flow)
+
+enum class LaneState : uint8_t {
+    GPS_PRIMARY = 0,    // flying on the GPS lane
+    FLOW_LOSS = 1,      // on the flow lane after GPS loss, may auto-recover
+    FLOW_SPOOF = 2,     // on the flow lane after spoof detection, latched
+};
+
+static struct {
+    LaneState lane_state;
+    bool gps_untrusted;         // spoof latch, cleared on disarm or pilot source set change
+    bool switch_warned;         // lane switch command failed warning sent
+    uint8_t gps_bad_count;
+    uint8_t flow_bad_count;
+    uint16_t spoof_vote;
+    float pos_div_hist[SRCF_POS_RATE_WINDOW];   // ring buffer of position divergence
+    uint8_t hist_idx;
+    uint8_t hist_count;
+    uint32_t recovery_start_ms; // time GPS recovery conditions first held
+    uint32_t last_lane_cmd_ms;  // time of last commanded lane change
+    uint8_t last_source_set;    // detects a pilot source set change
+} srcf_state;
+
+// reset the transient detectors, keeping the latches
+static void srcf_reset_detectors()
+{
+    srcf_state.gps_bad_count = 0;
+    srcf_state.flow_bad_count = 0;
+    srcf_state.spoof_vote = 0;
+    srcf_state.hist_idx = 0;
+    srcf_state.hist_count = 0;
+    srcf_state.recovery_start_ms = 0;
+}
+
+// command the EKF primary lane and arm the failsafe holdoff
+bool Copter::source_fallback_command_lane(uint8_t lane)
+{
+    if (!ahrs.set_ekf_primary_lane(lane)) {
+        if (!srcf_state.switch_warned) {
+            srcf_state.switch_warned = true;
+            gcs().send_text(MAV_SEVERITY_WARNING, "SRCF: lane switch unavailable");
+        }
+        return false;
+    }
+    srcf_state.last_lane_cmd_ms = AP_HAL::millis();
+    srcf_reset_detectors();
+    reset_ekf_check_gate();
+    return true;
+}
+
+// monitor navigation sources and manage the GPS -> flow -> AltHold ladder
+// called at 10hz, ahead of ekf_check() so holdoffs land the same tick
+void Copter::source_fallback_update()
+{
+    if (g2.srcf_enable <= 0) {
+        return;
+    }
+
+    const uint32_t now_ms = AP_HAL::millis();
+
+    if (!motors->armed()) {
+        // restore the GPS lane and clear latches for the next flight
+        if (srcf_state.lane_state != LaneState::GPS_PRIMARY) {
+            ahrs.set_ekf_primary_lane(SRCF_GPS_LANE);
+            srcf_state.lane_state = LaneState::GPS_PRIMARY;
+        }
+        srcf_state.gps_untrusted = false;
+        srcf_state.switch_warned = false;
+        srcf_reset_detectors();
+        srcf_state.last_source_set = ahrs.get_posvelyaw_source_set();
+        return;
+    }
+
+    // per-lane health; inert until both EKF lanes are allocated
+    bool gps_lane_healthy = false;
+    bool flow_lane_healthy = false;
+    nav_filter_status gps_lane_status {};
+    nav_filter_status flow_lane_status {};
+    if (!ahrs.get_lane_status(SRCF_GPS_LANE, gps_lane_healthy, gps_lane_status) ||
+        !ahrs.get_lane_status(SRCF_FLOW_LANE, flow_lane_healthy, flow_lane_status)) {
+        return;
+    }
+
+    // a pilot source set change is inert under per-core sources, so reuse
+    // it as the explicit "trust GPS again" action after a spoof latch
+    const uint8_t source_set = ahrs.get_posvelyaw_source_set();
+    if (source_set != srcf_state.last_source_set) {
+        srcf_state.last_source_set = source_set;
+        if (srcf_state.gps_untrusted) {
+            srcf_state.gps_untrusted = false;
+            if (srcf_state.lane_state == LaneState::FLOW_SPOOF) {
+                srcf_state.lane_state = LaneState::FLOW_LOSS;
+            }
+            gcs().send_text(MAV_SEVERITY_INFO, "SRCF: GPS trust reset");
+        }
+    }
+
+    // GPS receiver loss, confirmed over SRCF_GPS_BAD_ITERATIONS
+    const bool gps_bad_now = (gps.status() < AP_GPS::GPS_OK_FIX_3D) ||
+                             (now_ms - gps.last_message_time_ms() > 1000);
+    srcf_state.gps_bad_count = gps_bad_now ? MIN(srcf_state.gps_bad_count + 1, SRCF_GPS_BAD_ITERATIONS) : 0;
+    const bool gps_bad = srcf_state.gps_bad_count >= SRCF_GPS_BAD_ITERATIONS;
+
+    // flow lane usability: healthy, providing relative position, sensor alive
+    const bool flow_usable = flow_lane_healthy && flow_lane_status.flags.horiz_pos_rel && optflow.healthy();
+    srcf_state.flow_bad_count = flow_usable ? 0 : MIN(srcf_state.flow_bad_count + 1, SRCF_FLOW_BAD_ITERATIONS);
+    const bool flow_bad = srcf_state.flow_bad_count >= SRCF_FLOW_BAD_ITERATIONS;
+
+    // GPS lane usability: healthy and fusing GPS with absolute position
+    const bool gps_lane_usable = gps_lane_healthy && gps_lane_status.flags.horiz_pos_abs && !gps_bad_now;
+
+    // cross-lane divergence against whichever lane is not primary. The
+    // detector is muted after a lane change while divergence changes meaning
+    const int8_t primary = ahrs.get_primary_core_index();
+    const uint8_t other_lane = (primary == SRCF_GPS_LANE) ? SRCF_FLOW_LANE : SRCF_GPS_LANE;
+    const bool muted = (srcf_state.last_lane_cmd_ms != 0) &&
+                       (now_ms - srcf_state.last_lane_cmd_ms < SRCF_POST_SWITCH_MUTE_MS);
+    float vel_div = 0.0f;
+    float pos_div = 0.0f;
+    float pos_rate = 0.0f;
+    bool pos_rate_valid = false;
+    const bool div_ok = !muted && ahrs.get_lane_divergence(other_lane, vel_div, pos_div);
+    if (div_ok) {
+        if (srcf_state.hist_count >= SRCF_POS_RATE_WINDOW) {
+            const float oldest = srcf_state.pos_div_hist[srcf_state.hist_idx];
+            pos_rate = (pos_div - oldest) / (SRCF_POS_RATE_WINDOW * 0.1f);
+            pos_rate_valid = true;
+        }
+        srcf_state.pos_div_hist[srcf_state.hist_idx] = pos_div;
+        srcf_state.hist_idx = (srcf_state.hist_idx + 1) % SRCF_POS_RATE_WINDOW;
+        if (srcf_state.hist_count < SRCF_POS_RATE_WINDOW) {
+            srcf_state.hist_count++;
+        }
+    } else {
+        srcf_state.hist_idx = 0;
+        srcf_state.hist_count = 0;
+    }
+
+    // spoof vote integrator: divergence must persist for SRCF_CNF_TIME.
+    // Only meaningful while flying on the GPS lane with a live receiver
+    const uint16_t vote_max = MAX(1, (int)(g2.srcf_cnf_time * 10));
+    const bool diverged = div_ok && !gps_bad_now && (primary == SRCF_GPS_LANE) &&
+                          ((vel_div > g2.srcf_vel_thr) || (pos_rate_valid && pos_rate > g2.srcf_posr_thr));
+    if (diverged) {
+        srcf_state.spoof_vote = MIN(srcf_state.spoof_vote + 1, vote_max);
+    } else if (srcf_state.spoof_vote > 0) {
+        srcf_state.spoof_vote--;
+    }
+
+    bool demote_needed = false;
+
+    switch (srcf_state.lane_state) {
+    case LaneState::GPS_PRIMARY: {
+        const bool spoof_confirmed = srcf_state.spoof_vote >= vote_max;
+        if ((spoof_confirmed || gps_bad) && flow_usable) {
+            if (source_fallback_command_lane(SRCF_FLOW_LANE)) {
+                if (spoof_confirmed) {
+                    srcf_state.gps_untrusted = true;
+                    srcf_state.lane_state = LaneState::FLOW_SPOOF;
+                    gcs().send_text(MAV_SEVERITY_CRITICAL, "SRCF: GPS spoof suspected, using flow lane");
+                } else {
+                    srcf_state.lane_state = LaneState::FLOW_LOSS;
+                    gcs().send_text(MAV_SEVERITY_CRITICAL, "SRCF: GPS lost, using flow lane");
+                }
+            }
+        } else if (gps_bad && !flow_usable) {
+            demote_needed = true;
+        }
+        break;
+    }
+    case LaneState::FLOW_LOSS:
+    case LaneState::FLOW_SPOOF:
+        if (flow_bad) {
+            // flow lane lost while it carries the vehicle: return to a
+            // usable, trusted GPS lane immediately, else give up position
+            if (gps_lane_usable && !srcf_state.gps_untrusted) {
+                if (source_fallback_command_lane(SRCF_GPS_LANE)) {
+                    srcf_state.lane_state = LaneState::GPS_PRIMARY;
+                    gcs().send_text(MAV_SEVERITY_CRITICAL, "SRCF: flow lost, back on GPS lane");
+                }
+            } else {
+                demote_needed = true;
+            }
+            break;
+        }
+        if (srcf_state.lane_state == LaneState::FLOW_LOSS) {
+            // auto-recovery: GPS lane must be continuously usable and
+            // consistent with the flow lane for SRCF_RECOV_TIME
+            const bool recovery_ok = gps_lane_usable && pos_rate_valid &&
+                                     (vel_div < g2.srcf_vel_thr) && (fabsf(pos_rate) < g2.srcf_posr_thr);
+            if (recovery_ok) {
+                if (srcf_state.recovery_start_ms == 0) {
+                    srcf_state.recovery_start_ms = now_ms;
+                }
+                if (now_ms - srcf_state.recovery_start_ms > (uint32_t)(g2.srcf_recov_time * 1000)) {
+                    if (source_fallback_command_lane(SRCF_GPS_LANE)) {
+                        srcf_state.lane_state = LaneState::GPS_PRIMARY;
+                        gcs().send_text(MAV_SEVERITY_INFO, "SRCF: GPS recovered");
+                    }
+                }
+            } else {
+                srcf_state.recovery_start_ms = 0;
+            }
+        }
+        break;
+    }
+
+    // final rung: no lane can provide position. Only Loiter is demoted;
+    // the holdoff stops the EKF failsafe pre-empting the mode change
+    if (demote_needed && flightmode->mode_number() == Mode::Number::LOITER) {
+        reset_ekf_check_gate();
+        if (set_mode(Mode::Number::ALT_HOLD, ModeReason::SOURCE_FALLBACK)) {
+            gcs().send_text(MAV_SEVERITY_CRITICAL, "SRCF: no nav source, AltHold");
+        }
+    }
+
+#if HAL_LOGGING_ENABLED
+    // @LoggerMessage: SRCF
+    // @Description: Navigation source fallback monitor state
+    // @Field: TimeUS: Time since system startup
+    // @Field: St: lane state, 0:GPS primary 1:flow after GPS loss 2:flow after spoof
+    // @Field: GU: GPS untrusted latch
+    // @Field: VD: cross-lane horizontal velocity difference
+    // @Field: PD: cross-lane horizontal position difference
+    // @Field: PR: cross-lane position difference growth rate
+    // @Field: Vote: spoof confirmation vote count
+    // @Field: GpsB: GPS receiver loss confirmed
+    // @Field: FlwU: flow lane usable
+    // @Field: GpsL: GPS lane usable
+    AP::logger().WriteStreaming("SRCF", "TimeUS,St,GU,VD,PD,PR,Vote,GpsB,FlwU,GpsL", "QBBfffHBBB",
+                                AP_HAL::micros64(),
+                                (uint8_t)srcf_state.lane_state,
+                                (uint8_t)srcf_state.gps_untrusted,
+                                (double)vel_div, (double)pos_div, (double)pos_rate,
+                                (uint16_t)srcf_state.spoof_vote,
+                                (uint8_t)gps_bad,
+                                (uint8_t)flow_usable,
+                                (uint8_t)gps_lane_usable);
+#endif
+}
+
+#endif  // AP_OPTICALFLOW_ENABLED
