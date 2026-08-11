@@ -3519,7 +3519,37 @@ uint8_t AP_AHRS::get_posvelyaw_source_set() const
     return EKF3.get_active_source_set();
 #else
     return 0;
-#endif   
+#endif
+}
+
+// command the EKF3 primary lane, honoured only under the ManualLaneSwitch option
+bool AP_AHRS::set_ekf_primary_lane(uint8_t lane_index)
+{
+#if HAL_NAVEKF3_AVAILABLE
+    return EKF3.requestLaneSwitch(lane_index);
+#else
+    return false;
+#endif
+}
+
+// get horizontal velocity and position differences between an EKF3 lane and the current primary
+bool AP_AHRS::get_lane_divergence(uint8_t lane_index, float &vel_diff_mps, float &pos_diff_m) const
+{
+#if HAL_NAVEKF3_AVAILABLE
+    return EKF3.getLaneDivergence(lane_index, vel_diff_mps, pos_diff_m);
+#else
+    return false;
+#endif
+}
+
+// get health and filter status of a specific EKF3 lane
+bool AP_AHRS::get_lane_status(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const
+{
+#if HAL_NAVEKF3_AVAILABLE
+    return EKF3.getLaneStatus(lane_index, lane_healthy, status);
+#else
+    return false;
+#endif
 }
 
 void AP_AHRS::Log_Write()

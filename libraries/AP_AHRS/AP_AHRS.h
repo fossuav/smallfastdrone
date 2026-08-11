@@ -448,6 +448,17 @@ public:
     //returns index of active source set used, 0=primary, 1=secondary, 2=tertiary
     uint8_t get_posvelyaw_source_set() const;
 
+    // command the EKF3 primary lane. Only honoured when the EKF3
+    // ManualLaneSwitch option is enabled; returns false if unavailable
+    bool set_ekf_primary_lane(uint8_t lane_index);
+
+    // get horizontal velocity and position differences between an EKF3 lane
+    // and the current primary lane (EKF3 only)
+    bool get_lane_divergence(uint8_t lane_index, float &vel_diff_mps, float &pos_diff_m) const;
+
+    // get health and filter status of a specific EKF3 lane
+    bool get_lane_status(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const;
+
     void Log_Write();
 
     // check if non-compass sensor is providing yaw.  Allows compass pre-arm checks to be bypassed
