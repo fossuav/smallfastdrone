@@ -64,6 +64,9 @@ public:
         setSourceSet0             = 13,
         setSourceSet1             = 14,
         setSourceSet2             = 15,
+        requestLaneSwitch0        = 16,
+        requestLaneSwitch1        = 17,
+        requestLaneSwitch2        = 18,
     };
 
     // must remain the same as AP_AHRS_VehicleClass numbers-wise
