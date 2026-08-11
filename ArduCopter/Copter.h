@@ -813,6 +813,7 @@ private:
     void failsafe_ekf_off_event(void);
     void failsafe_ekf_recheck();
     void check_ekf_reset();
+    void reset_ekf_check_gate();
     void check_vibration();
 
     // esc_calibration.cpp

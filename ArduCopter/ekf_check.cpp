@@ -65,20 +65,7 @@ void Copter::ekf_check()
     const uint8_t current_source_set = ahrs.get_posvelyaw_source_set();
     if (current_source_set != ekf_check_state.last_source_set) {
         ekf_check_state.last_source_set = current_source_set;
-        ekf_check_state.has_ever_passed = false;
-        ekf_check_state.fail_count = 0;
-        ekf_check_state.source_switch_ms = AP_HAL::millis();
-        // Clear a latched failsafe too. Without this, fail_count is
-        // zeroed above and the recovery path at the bottom of this
-        // function (gated on fail_count > 0) can never fire to clear
-        // bad_variance, so failsafe.ekf would stay set forever and
-        // position_ok() would reject subsequent mode changes that
-        // require position.
-        if (ekf_check_state.bad_variance) {
-            ekf_check_state.bad_variance = false;
-            LOGGER_WRITE_ERROR(LogErrorSubsystem::EKFCHECK, LogErrorCode::EKFCHECK_VARIANCE_CLEARED);
-            failsafe_ekf_off_event();
-        }
+        reset_ekf_check_gate();
     }
 
     // suppress check during source transition holdoff
@@ -155,6 +142,26 @@ void Copter::ekf_check()
 #endif
 
     // To-Do: add ekf variances to extended status
+}
+
+// Reset the failsafe gate after an intentional navigation source change
+// (source set switch or commanded lane switch), arming the holdoff so the
+// failsafe does not trip while the new source establishes itself
+void Copter::reset_ekf_check_gate()
+{
+    ekf_check_state.has_ever_passed = false;
+    ekf_check_state.fail_count = 0;
+    ekf_check_state.source_switch_ms = AP_HAL::millis();
+    // Clear a latched failsafe too. Without this, fail_count is zeroed
+    // above and the recovery path in ekf_check() (gated on
+    // fail_count > 0) can never fire to clear bad_variance, so
+    // failsafe.ekf would stay set forever and position_ok() would
+    // reject subsequent mode changes that require position.
+    if (ekf_check_state.bad_variance) {
+        ekf_check_state.bad_variance = false;
+        LOGGER_WRITE_ERROR(LogErrorSubsystem::EKFCHECK, LogErrorCode::EKFCHECK_VARIANCE_CLEARED);
+        failsafe_ekf_off_event();
+    }
 }
 
 // ekf_over_threshold - returns true if the ekf's variance are over the tolerance
