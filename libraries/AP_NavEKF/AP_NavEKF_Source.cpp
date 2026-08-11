@@ -361,6 +361,14 @@ void AP_NavEKF_Source::mark_configured()
 bool AP_NavEKF_Source::pre_arm_check(bool requires_position, char *failure_msg, uint8_t failure_msg_len) const
 {
     auto &dal = AP::dal();
+
+    // FUSE_ALL_VELOCITIES ORs velocity sources across all source sets, which
+    // defeats the per-core source isolation provided by SRC_PER_CORE
+    if (option_is_set(SourceOptions::FUSE_ALL_VELOCITIES) && option_is_set(SourceOptions::SRC_PER_CORE)) {
+        hal.util->snprintf(failure_msg, failure_msg_len, "EK3_SRC_OPTIONS fuse-all-vel conflicts with per-core");
+        return false;
+    }
+
     bool baro_required = false;
     bool beacon_required = false;
     bool compass_required = false;
