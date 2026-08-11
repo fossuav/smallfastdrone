@@ -367,6 +367,11 @@ public:
     // unallocated or is the primary
     bool getLaneDivergence(uint8_t lane_index, float &vel_diff_mps, float &pos_diff_m) const;
 
+    // get the combined 1-sigma horizontal velocity uncertainty of a lane and
+    // the current primary, the scale a divergence between them is significant
+    // against. Same validity rules as getLaneDivergence
+    bool getLaneDivergenceSigma(uint8_t lane_index, float &vel_sigma_mps) const;
+
     // get health and filter status of a specific lane
     bool getLaneStatus(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const;
 

@@ -392,11 +392,8 @@ void NavEKF3_core::Log_Write_BodyOdom(uint64_t time_us)
 
 void NavEKF3_core::Log_Write_State_Variances(uint64_t time_us)
 {
-    if (core_index != frontend->primary) {
-        // log only primary instance for now
-        return;
-    }
-
+    // logged for every core: comparing a non-primary lane's covariance
+    // against the primary is how cross-lane divergence is judged
     if (AP::dal().millis() - lastEkfStateVarLogTime_ms > 490) {
         lastEkfStateVarLogTime_ms = AP::dal().millis();
         const struct log_XKV pktv1{

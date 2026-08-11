@@ -1230,6 +1230,19 @@ bool NavEKF3::getLaneDivergence(uint8_t lane_index, float &vel_diff_mps, float &
     return true;
 }
 
+bool NavEKF3::getLaneDivergenceSigma(uint8_t lane_index, float &vel_sigma_mps) const
+{
+    if (core == nullptr || lane_index >= num_cores || lane_index == primary) {
+        return false;
+    }
+    const float var = core[lane_index].getVelVarianceNE() + core[primary].getVelVarianceNE();
+    if (!is_positive(var)) {
+        return false;
+    }
+    vel_sigma_mps = sqrtf(var);
+    return true;
+}
+
 // get health and filter status of a specific lane
 bool NavEKF3::getLaneStatus(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const
 {

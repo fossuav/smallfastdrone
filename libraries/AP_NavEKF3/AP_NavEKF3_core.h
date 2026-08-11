@@ -168,6 +168,11 @@ public:
     // return NED velocity in m/s
     void getVelNED(Vector3f &vel) const;
 
+    // return the sum of the North and East velocity state variances in (m/s)^2.
+    // This is the filter's own confidence in its horizontal velocity, unlike
+    // getVariances() which reports innovation consistency test ratios
+    float getVelVarianceNE() const;
+
     // return estimate of true airspeed vector in body frame in m/s
     // returns false if estimate is unavailable
     bool getAirSpdVec(Vector3f &vel) const;

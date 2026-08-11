@@ -531,6 +531,11 @@ void NavEKF3_core::getSynthAirDataInnovations(Vector2f &dragInnov, float &betaIn
 #endif
 }
 
+float NavEKF3_core::getVelVarianceNE() const
+{
+    return float(P[4][4] + P[5][5]);
+}
+
 // return the innovation consistency test ratios for the velocity, position, magnetometer and true airspeed measurements
 // this indicates the amount of margin available when tuning the various error traps
 // also return the delta in position due to the last position reset
