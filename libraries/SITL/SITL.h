@@ -339,6 +339,9 @@ public:
         AP_Int8 jam; // jamming simulation enable
         AP_Float heading_offset; // heading offset in degrees
         AP_Int32 options; // GPS options bitmask
+        AP_Int8 spoof; // spoofing simulation: 0:off 1:position walk 2:position+velocity walk
+        AP_Float spoof_rate; // spoof position walk rate (m/s)
+        AP_Float spoof_bearing; // spoof position walk bearing (deg)
     };
     GPSParms gps[AP_SIM_MAX_GPS_SENSORS];
 

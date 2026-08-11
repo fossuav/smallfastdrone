@@ -154,6 +154,27 @@ const AP_Param::GroupInfo SIM::GPSParms::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("OPTIONS",  18, GPSParms, options, 0),
 
+    // @Param: SPOOF
+    // @DisplayName: GPS spoofing enable
+    // @Description: Enable simulated GPS spoofing, a slow position walk with healthy reported accuracy and satellite count. Mode 1 walks the position while reporting truthful velocity; mode 2 also adds the walk rate to the reported velocity so position and velocity are consistent
+    // @Values: 0:Disabled, 1:PositionWalk, 2:PositionVelocityWalk
+    // @User: Advanced
+    AP_GROUPINFO("SPOOF",    19, GPSParms, spoof, 0),
+
+    // @Param: SPOOF_R
+    // @DisplayName: GPS spoof walk rate
+    // @Description: Rate the spoofed GPS position walks away from the true position
+    // @Units: m/s
+    // @User: Advanced
+    AP_GROUPINFO("SPOOF_R",  20, GPSParms, spoof_rate, 1.0),
+
+    // @Param: SPOOF_D
+    // @DisplayName: GPS spoof walk bearing
+    // @Description: Bearing of the spoofed GPS position walk
+    // @Units: deg
+    // @User: Advanced
+    AP_GROUPINFO("SPOOF_D",  21, GPSParms, spoof_bearing, 45),
+
     AP_GROUPEND
 };
 }
@@ -559,6 +580,28 @@ void GPS::update()
     d.latitude += glitch_offsets.x;
     d.longitude += glitch_offsets.y;
     d.altitude += glitch_offsets.z;
+
+    if (params.spoof > 0) {
+        // slow position walk with healthy reported accuracy, unlike jamming
+        if (spoof_last_ms != 0) {
+            const float dt = (now_ms - spoof_last_ms) * 0.001f;
+            const float bearing_rad = radians(params.spoof_bearing);
+            spoof_ofs_n_m += params.spoof_rate * dt * cosf(bearing_rad);
+            spoof_ofs_e_m += params.spoof_rate * dt * sinf(bearing_rad);
+        }
+        double const earth_rad_inv = 1.569612305760477e-7; // use Authalic/Volumetric radius
+        d.latitude += degrees(spoof_ofs_n_m * earth_rad_inv);
+        d.longitude += degrees(spoof_ofs_e_m * earth_rad_inv / cos(radians(d.latitude)));
+        if (params.spoof == 2) {
+            const float bearing_rad = radians(params.spoof_bearing);
+            d.speedN += params.spoof_rate * cosf(bearing_rad);
+            d.speedE += params.spoof_rate * sinf(bearing_rad);
+        }
+    } else {
+        spoof_ofs_n_m = 0;
+        spoof_ofs_e_m = 0;
+    }
+    spoof_last_ms = now_ms;
 
     if (params.jam == 1) {
         simulate_jamming(d);

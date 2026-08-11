@@ -167,6 +167,11 @@ private:
     bool _gps_has_basestation_position;
     GPS_Data _gps_basestation_data;
 
+    // state of spoofing simulation
+    float spoof_ofs_n_m;       // accumulated north spoof position offset
+    float spoof_ofs_e_m;       // accumulated east spoof position offset
+    uint32_t spoof_last_ms;
+
     void simulate_jamming(GPS_Data &d);
 
     // get delayed data
