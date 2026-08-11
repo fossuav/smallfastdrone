@@ -3832,15 +3832,23 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_collect('STATUSTEXT')
 
         self.takeoff(10, mode='LOITER')
-        loc = self.mav.location()
+        sim_start = self.sim_location()
 
         self.progress("Killing GPS")
         self.set_parameter("SIM_GPS1_ENABLE", 0)
         self.wait_statustext("SRCF: GPS lost, using flow lane", timeout=15, check_context=True)
         self.wait_statustext("EKF3 lane switch 1", timeout=10, check_context=True)
 
+        # do not use mav.location()/wait_location here: mavutil gates them
+        # on a GPS fix, which is exactly what this test has removed.
+        # SIMSTATE is ground truth and frame-independent.
         self.progress("Verifying position hold on the flow lane")
-        self.wait_location(loc, accuracy=3, height_accuracy=None, minimum_duration=10, timeout=60)
+        tstart = self.get_sim_time()
+        while self.get_sim_time_cached() - tstart < 10:
+            self.delay_sim_time(1)
+            dist = self.get_distance(sim_start, self.sim_location())
+            if dist > 5:
+                raise NotAchievedException("drifted %.1fm holding on flow lane" % dist)
         if self.statustext_in_collections("EKF variance"):
             raise NotAchievedException("EKF failsafe fired during GPS-to-flow fallback")
 
