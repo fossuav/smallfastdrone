@@ -18,6 +18,7 @@
 
 #include <AP_HAL/HAL.h>
 #include <AP_OSD/AP_OSD.h>
+#include <AP_OSD/AP_OSD_Message.h>
 #include <AP_Filesystem/AP_Filesystem.h>
 
 
@@ -33,6 +34,12 @@ public:
 
     //draw given text to framebuffer
     virtual void write(uint8_t x, uint8_t y, const char* text) = 0;
+
+    //draw given text to framebuffer with a display Style (blink/invert/colour).
+    //Writes the text verbatim - no format_string_for_osd(), so no decimal-packing
+    //and no fixed-size truncation of the caller's string. Handles blink here (one
+    //place) and defers the rest to emit_styled(), which each backend specialises.
+    void write_styled(uint8_t x, uint8_t y, const AP_OSD_Msg::Style& style, const char* text);
 
     //draw formatted text to framebuffer
     virtual void write(uint8_t x, uint8_t y, bool blink, const char *fmt, ...) FMT_PRINTF(5, 6);
@@ -78,6 +85,17 @@ public:
 
 protected:
     AP_OSD& _osd;
+
+    // apply backend-specific style attributes and draw text at (x,y). blink is
+    // already handled by write_styled(), so this only needs to honour the
+    // attributes the backend supports (analog: invert; HD: colour page). The
+    // default backend supports neither and draws plain text.
+    virtual void emit_styled(uint8_t x, uint8_t y, bool invert, uint8_t page, const char* text)
+    {
+        (void)invert;
+        (void)page;
+        write(x, y, text);
+    }
 
     // get font choice
     uint8_t get_font_num(void) const
