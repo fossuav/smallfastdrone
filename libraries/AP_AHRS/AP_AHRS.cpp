@@ -3542,6 +3542,16 @@ bool AP_AHRS::get_lane_divergence(uint8_t lane_index, float &vel_diff_mps, float
 #endif
 }
 
+// get the combined 1-sigma horizontal velocity uncertainty of a lane and the primary
+bool AP_AHRS::get_lane_divergence_sigma(uint8_t lane_index, float &vel_sigma_mps) const
+{
+#if HAL_NAVEKF3_AVAILABLE
+    return EKF3.getLaneDivergenceSigma(lane_index, vel_sigma_mps);
+#else
+    return false;
+#endif
+}
+
 // get health and filter status of a specific EKF3 lane
 bool AP_AHRS::get_lane_status(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const
 {

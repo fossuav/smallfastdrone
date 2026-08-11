@@ -456,6 +456,10 @@ public:
     // and the current primary lane (EKF3 only)
     bool get_lane_divergence(uint8_t lane_index, float &vel_diff_mps, float &pos_diff_m) const;
 
+    // get the combined 1-sigma horizontal velocity uncertainty of an EKF3 lane
+    // and the primary, the scale a divergence between them is significant against
+    bool get_lane_divergence_sigma(uint8_t lane_index, float &vel_sigma_mps) const;
+
     // get health and filter status of a specific EKF3 lane
     bool get_lane_status(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const;
 
