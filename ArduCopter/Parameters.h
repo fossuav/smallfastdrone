@@ -523,6 +523,7 @@ public:
     AP_Float srcf_posr_thr;    // cross-lane position divergence rate threshold (m/s)
     AP_Float srcf_cnf_time;    // spoof confirmation window (s)
     AP_Float srcf_recov_time;  // GPS recovery hold time (s)
+    AP_Float srcf_nsigma;      // divergence significance, in combined lane sigmas
 #endif
 
     // ground effect compensation enable/disable

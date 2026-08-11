@@ -42,7 +42,8 @@ static struct {
     bool switch_warned;         // lane switch command failed warning sent
     uint8_t gps_bad_count;
     uint8_t flow_bad_count;
-    uint16_t spoof_vote;
+    uint16_t vel_vote;          // velocity divergence confirmation vote
+    uint16_t pos_vote;          // position divergence rate confirmation vote
     float pos_div_hist[SRCF_POS_RATE_WINDOW];   // ring buffer of position divergence
     uint8_t hist_idx;
     uint8_t hist_count;
@@ -56,7 +57,8 @@ static void srcf_reset_detectors()
 {
     srcf_state.gps_bad_count = 0;
     srcf_state.flow_bad_count = 0;
-    srcf_state.spoof_vote = 0;
+    srcf_state.vel_vote = 0;
+    srcf_state.pos_vote = 0;
     srcf_state.hist_idx = 0;
     srcf_state.hist_count = 0;
     srcf_state.recovery_start_ms = 0;
@@ -166,22 +168,42 @@ void Copter::source_fallback_update()
         srcf_state.hist_count = 0;
     }
 
-    // spoof vote integrator: divergence must persist for SRCF_CNF_TIME.
+    // A divergence only means something measured against how well the two
+    // lanes claim to know their own velocity. The flow lane's velocity comes
+    // from flow rate times height, so its uncertainty grows with height and a
+    // fixed threshold that suits a low hover reads as a spoof at altitude.
+    // The same scale applies to the position rate: it is a position
+    // difference differenced over time, so it is a velocity, and the lanes'
+    // unbounded position uncertainty is not the scale to judge it against.
+    float vel_sigma = 0.0f;
+    const bool sigma_valid = is_positive(g2.srcf_nsigma) &&
+                             ahrs.get_lane_divergence_sigma(other_lane, vel_sigma);
+    const float sig_gate = sigma_valid ? (g2.srcf_nsigma * vel_sigma) : 0.0f;
+    const float vel_gate = MAX(g2.srcf_vel_thr.get(), sig_gate);
+    const float pos_gate = MAX(g2.srcf_posr_thr.get(), sig_gate);
+
+    // one vote integrator per signal: a divergence must persist on the same
+    // signal for SRCF_CNF_TIME. A single counter fed by both lets a decaying
+    // signal hand over to a rising one and confirm on neither alone.
     // Only meaningful while flying on the GPS lane with a live receiver
     const uint16_t vote_max = MAX(1, (int)(g2.srcf_cnf_time * 10));
-    const bool diverged = div_ok && !gps_bad_now && (primary == SRCF_GPS_LANE) &&
-                          ((vel_div > g2.srcf_vel_thr) || (pos_rate_valid && pos_rate > g2.srcf_posr_thr));
-    if (diverged) {
-        srcf_state.spoof_vote = MIN(srcf_state.spoof_vote + 1, vote_max);
-    } else if (srcf_state.spoof_vote > 0) {
-        srcf_state.spoof_vote--;
+    const bool can_vote = div_ok && !gps_bad_now && (primary == SRCF_GPS_LANE);
+    if (can_vote && (vel_div > vel_gate)) {
+        srcf_state.vel_vote = MIN(srcf_state.vel_vote + 1, vote_max);
+    } else if (srcf_state.vel_vote > 0) {
+        srcf_state.vel_vote--;
+    }
+    if (can_vote && pos_rate_valid && (pos_rate > pos_gate)) {
+        srcf_state.pos_vote = MIN(srcf_state.pos_vote + 1, vote_max);
+    } else if (srcf_state.pos_vote > 0) {
+        srcf_state.pos_vote--;
     }
 
     bool demote_needed = false;
 
     switch (srcf_state.lane_state) {
     case LaneState::GPS_PRIMARY: {
-        const bool spoof_confirmed = srcf_state.spoof_vote >= vote_max;
+        const bool spoof_confirmed = (srcf_state.vel_vote >= vote_max) || (srcf_state.pos_vote >= vote_max);
         if ((spoof_confirmed || gps_bad) && flow_usable) {
             if (source_fallback_command_lane(SRCF_FLOW_LANE)) {
                 if (spoof_confirmed) {
@@ -215,9 +237,11 @@ void Copter::source_fallback_update()
         }
         if (srcf_state.lane_state == LaneState::FLOW_LOSS) {
             // auto-recovery: GPS lane must be continuously usable and
-            // consistent with the flow lane for SRCF_RECOV_TIME
+            // consistent with the flow lane for SRCF_RECOV_TIME. Judged
+            // against the same gates as the outbound trip, else at altitude
+            // the flow lane's own imprecision blocks recovery indefinitely
             const bool recovery_ok = gps_lane_usable && pos_rate_valid &&
-                                     (vel_div < g2.srcf_vel_thr) && (fabsf(pos_rate) < g2.srcf_posr_thr);
+                                     (vel_div < vel_gate) && (fabsf(pos_rate) < pos_gate);
             if (recovery_ok) {
                 if (srcf_state.recovery_start_ms == 0) {
                     srcf_state.recovery_start_ms = now_ms;
@@ -253,16 +277,20 @@ void Copter::source_fallback_update()
     // @Field: VD: cross-lane horizontal velocity difference
     // @Field: PD: cross-lane horizontal position difference
     // @Field: PR: cross-lane position difference growth rate
-    // @Field: Vote: spoof confirmation vote count
+    // @Field: VVot: velocity divergence confirmation vote count
+    // @Field: PVot: position divergence rate confirmation vote count
+    // @Field: VSig: combined 1-sigma horizontal velocity uncertainty of both lanes
     // @Field: GpsB: GPS receiver loss confirmed
     // @Field: FlwU: flow lane usable
     // @Field: GpsL: GPS lane usable
-    AP::logger().WriteStreaming("SRCF", "TimeUS,St,GU,VD,PD,PR,Vote,GpsB,FlwU,GpsL", "QBBfffHBBB",
+    AP::logger().WriteStreaming("SRCF", "TimeUS,St,GU,VD,PD,PR,VVot,PVot,VSig,GpsB,FlwU,GpsL", "QBBfffHHfBBB",
                                 AP_HAL::micros64(),
                                 (uint8_t)srcf_state.lane_state,
                                 (uint8_t)srcf_state.gps_untrusted,
                                 (double)vel_div, (double)pos_div, (double)pos_rate,
-                                (uint16_t)srcf_state.spoof_vote,
+                                (uint16_t)srcf_state.vel_vote,
+                                (uint16_t)srcf_state.pos_vote,
+                                (double)vel_sigma,
                                 (uint8_t)gps_bad,
                                 (uint8_t)flow_usable,
                                 (uint8_t)gps_lane_usable);

@@ -1291,6 +1291,13 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Range: 2 60
     // @User: Advanced
     AP_GROUPINFO("SRCF_RECOV_TIME", 35, ParametersG2, srcf_recov_time, 10),
+
+    // @Param: SRCF_NSIGMA
+    // @DisplayName: EKF source fallback divergence significance
+    // @Description: Number of standard deviations the cross-lane divergence must exceed, in addition to SRCF_VEL_THR and SRCF_POSR_THR, before GPS spoofing is suspected. The deviation is the two lanes' combined horizontal velocity uncertainty, so the effective threshold widens as the optical flow lane loses precision with height. Set to 0 to test against the fixed thresholds alone.
+    // @Range: 0 10
+    // @User: Advanced
+    AP_GROUPINFO("SRCF_NSIGMA", 36, ParametersG2, srcf_nsigma, 2.5),
 #endif
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
