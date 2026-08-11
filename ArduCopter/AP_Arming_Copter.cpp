@@ -258,6 +258,14 @@ bool AP_Arming_Copter::parameter_checks(bool display_failure)
                 check_failed(Check::PARAMETERS, display_failure, "SRCF: need SRC1 GPS, SRC2 flow");
                 return false;
             }
+            // without a yaw source the flow lane never aligns yaw, so it sits
+            // at its startup heading and the AHRS attitude consistency check
+            // rejects arming with a difference that can never converge
+            AP_Param *src2_yaw = AP_Param::find("EK3_SRC2_YAW", &ptype);
+            if (src2_yaw == nullptr || (uint8_t)src2_yaw->cast_to_float(ptype) == 0) {
+                check_failed(Check::PARAMETERS, display_failure, "SRCF: set EK3_SRC2_YAW");
+                return false;
+            }
             if (!copter.optflow.enabled()) {
                 check_failed(Check::PARAMETERS, display_failure, "SRCF: optical flow disabled");
                 return false;
