@@ -3796,6 +3796,169 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException(
                 "EKF did not fall back to AID_RELATIVE after GPS-to-flow switch")
 
+    def configure_source_fallback_per_core(self):
+        '''per-core EKF lanes for the source fallback monitor: lane 0 runs
+        EK3_SRC1 (GPS defaults), lane 1 runs EK3_SRC2 (optical flow)'''
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 3,
+            "EK3_IMU_MASK": 3,      # two lanes
+            "EK3_SRC_OPTIONS": 8,   # per-core source sets
+            "EK3_OPTIONS": 2,       # manual lane switching
+            "EK3_PRIMARY": 0,       # boot on the GPS lane
+            "EK3_SRC2_POSXY": 0,    # none
+            "EK3_SRC2_VELXY": 5,    # optical flow
+            "EK3_SRC2_POSZ": 1,     # baro
+            "EK3_SRC2_VELZ": 0,     # none
+            "EK3_SRC2_YAW": 1,      # compass
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_TERRAIN": 0,
+            "SRCF_ENABLE": 1,
+        })
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+
+    def SRCFGPSLossLadder(self):
+        '''GPS loss in Loiter falls to the flow lane and holds, GPS return recovers, losing both demotes to AltHold, all without EKF failsafe'''
+        # The monitor confirms GPS loss in 0.3s and commands the flow lane
+        # well inside the ~7s the GPS lane dead-reckons before posTimeout and
+        # the 1s ekf_check failsafe window.  Each commanded switch re-arms the
+        # ekf_check source-switch holdoff, so "EKF variance" must never
+        # appear.  Recovery needs the GPS lane healthy and consistent with
+        # the flow lane for SRCF_RECOV_TIME.  With both sources dead the
+        # Loiter rung drops to AltHold via ModeReason::SOURCE_FALLBACK
+        # instead of the EKF failsafe.
+        self.configure_source_fallback_per_core()
+        self.context_collect('STATUSTEXT')
+
+        self.takeoff(10, mode='LOITER')
+        loc = self.mav.location()
+
+        self.progress("Killing GPS")
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_statustext("SRCF: GPS lost, using flow lane", timeout=15, check_context=True)
+        self.wait_statustext("EKF3 lane switch 1", timeout=10, check_context=True)
+
+        self.progress("Verifying position hold on the flow lane")
+        self.wait_location(loc, accuracy=3, height_accuracy=None, minimum_duration=10, timeout=60)
+        if self.statustext_in_collections("EKF variance"):
+            raise NotAchievedException("EKF failsafe fired during GPS-to-flow fallback")
+
+        self.progress("Restoring GPS, expecting auto-recovery")
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_statustext("SRCF: GPS recovered", timeout=90, check_context=True)
+
+        self.progress("Killing GPS and flow, expecting AltHold demotion")
+        self.set_parameters({
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_FLOW_ENABLE": 0,
+        })
+        self.wait_statustext("SRCF: no nav source, AltHold", timeout=30, check_context=True)
+        self.wait_mode('ALT_HOLD')
+        self.delay_sim_time(15)  # holdoff expires; the failsafe must still not fire
+        self.assert_mode('ALT_HOLD')
+        if self.statustext_in_collections("EKF variance"):
+            raise NotAchievedException("EKF failsafe fired instead of graceful demotion")
+
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+
+        # the flow lane must have carried the vehicle in relative aiding and
+        # been primary; PI is the primary lane, C=1/AID=2 the flow lane aiding
+        dfreader = self.dfreader_for_current_onboard_log()
+        saw_flow_primary = False
+        saw_flow_relative = False
+        while True:
+            m = dfreader.recv_match(type='XKF4')
+            if m is None:
+                break
+            if m.PI == 1:
+                saw_flow_primary = True
+            if m.C == 1 and m.AID == 2:
+                saw_flow_relative = True
+        if not saw_flow_primary:
+            raise NotAchievedException("flow lane never became primary")
+        if not saw_flow_relative:
+            raise NotAchievedException("flow lane never reached AID_RELATIVE")
+
+    def SRCFGPSSpoof(self):
+        '''a healthy-looking slow GPS spoof is detected by cross-lane comparison; the vehicle stays put on the flow lane and GPS stays untrusted'''
+        # SIM_GPS1_SPOOF walks the reported position while accuracy and sat
+        # count stay healthy, so no quality-based check can see it.  Mode 2
+        # (consistent reported velocity) drags the GPS lane's states while
+        # the flow lane keeps measuring real motion: the lanes' positions
+        # diverge at the walk rate, tripping the SRCF_POSR_THR detector.
+        # Mode 1 (truthful velocity) drags the GPS lane's velocity solution
+        # apart from the flow lane's, tripping SRCF_VEL_THR.  Without the
+        # monitor, Loiter chases the walk and the vehicle is dragged
+        # away at SIM_GPS1_SPOOF_R indefinitely.
+        self.configure_source_fallback_per_core()
+        self.context_collect('STATUSTEXT')
+
+        self.takeoff(10, mode='LOITER')
+        sim_start = self.sim_location()
+
+        self.progress("Starting velocity-consistent GPS spoof")
+        self.set_parameters({
+            "SIM_GPS1_SPOOF": 2,
+            "SIM_GPS1_SPOOF_R": 1.5,
+        })
+        self.wait_statustext("SRCF: GPS spoof suspected", timeout=60, check_context=True)
+
+        self.progress("Verifying physical position stays bounded on the flow lane")
+        tstart = self.get_sim_time()
+        while self.get_sim_time_cached() - tstart < 15:
+            self.delay_sim_time(1)
+            dist = self.get_distance(sim_start, self.sim_location())
+            self.progress("distance from start %.1fm" % dist)
+            if dist > 15:
+                raise NotAchievedException("vehicle dragged %.1fm by spoofed GPS" % dist)
+
+        self.progress("Stopping spoof; GPS must stay latched untrusted")
+        self.set_parameter("SIM_GPS1_SPOOF", 0)
+        self.delay_sim_time(25)  # well past SRCF_RECOV_TIME
+        if self.statustext_in_collections("SRCF: GPS recovered"):
+            raise NotAchievedException("GPS was re-trusted after spoof detection")
+        if self.statustext_in_collections("EKF variance"):
+            raise NotAchievedException("EKF failsafe fired during spoof fallback")
+
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+
+        self.start_subtest("position-only spoofer trips the velocity detector")
+        self.takeoff(10, mode='LOITER')
+        self.set_parameters({
+            "SIM_GPS1_SPOOF": 1,
+            "SIM_GPS1_SPOOF_R": 1.5,
+        })
+        # new statustext only - the phase 1 message is already in the context
+        self.wait_statustext("SRCF: GPS spoof suspected", timeout=60)
+        self.set_parameter("SIM_GPS1_SPOOF", 0)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+
+    def SRCFDisabledRegression(self):
+        '''with SRCF_ENABLE=0 the monitor is inert and GPS loss trips the stock EKF failsafe'''
+        # Negative half of the fallback invariant: identical per-core lane
+        # configuration, monitor disabled.  GPS loss must produce the stock
+        # outcome - posTimeout after ~7s, then ekf_check fails for 1s and
+        # fires the EKF failsafe - and no SRCF action of any kind.
+        self.configure_source_fallback_per_core()
+        self.set_parameter("SRCF_ENABLE", 0)
+        self.context_collect('STATUSTEXT')
+
+        self.takeoff(10, mode='LOITER')
+
+        self.progress("Killing GPS, expecting stock EKF failsafe")
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_statustext("EKF variance", timeout=30, check_context=True)
+        if self.statustext_in_collections("SRCF:"):
+            raise NotAchievedException("disabled monitor took action")
+
+        # FS_EKF_ACTION default lands the vehicle
+        self.wait_mode('LAND')
+        self.wait_disarmed(timeout=120)
+
     def LoiterFlowBrakeOvershoot(self):
         '''Forward-jab overshoot in optical-flow Loiter at low height'''
         # Optical flow, no GPS, low height: the EKF flow speed limit is small,
@@ -17923,6 +18086,9 @@ return update, 1000
             self.PLDNoParameters,
             self.PeriphMultiUARTTunnel,
             self.EKF3SRCPerCore,
+            self.SRCFGPSLossLadder,
+            self.SRCFGPSSpoof,
+            self.SRCFDisabledRegression,
         ])
         return ret
 
