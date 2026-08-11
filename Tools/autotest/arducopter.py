@@ -16676,6 +16676,13 @@ return update, 1000
         })
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
+        # The nine moves the curated display does not fly (2026-08-11 split). It is
+        # installed unconditionally but the applet only requires it when a
+        # configuration selects one of those moves, so a display run never compiles
+        # it -- which is where the heap saving comes from. Installing it anyway is
+        # deliberate: the isolation tests pick those moves by parameter, and an
+        # absent module would surface as a missing move rather than a missing file.
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_extras.lua"), "autoacro_extras.lua")
         self.install_applet_script_context("autoacro.lua")
         self.reboot_sitl()
 
@@ -17045,6 +17052,13 @@ return update, 1000
                              "SCR_DEBUG_OPTS": 8})
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
+        # The nine moves the curated display does not fly (2026-08-11 split). It is
+        # installed unconditionally but the applet only requires it when a
+        # configuration selects one of those moves, so a display run never compiles
+        # it -- which is where the heap saving comes from. Installing it anyway is
+        # deliberate: the isolation tests pick those moves by parameter, and an
+        # absent module would surface as a missing move rather than a missing file.
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_extras.lua"), "autoacro_extras.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "crsf_helper.lua"), "crsf_helper.lua")
         self.install_applet_script_context("autoacro.lua")
         self.install_applet_script_context("autoacro_menu.lua")
