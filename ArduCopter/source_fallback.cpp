@@ -26,6 +26,12 @@
 #define SRCF_FLOW_BAD_ITERATIONS    5       // 0.5s at 10hz to confirm flow loss
 #define SRCF_POST_SWITCH_MUTE_MS    5000    // divergence detector mute after a lane change
 #define SRCF_POS_RATE_WINDOW        20      // position divergence rate baseline, 2s at 10hz
+// Sigma bound on the cross-lane position offset before recovery is allowed.
+// Field logs 332-335 put honest recoveries under 1.8 sigma and the worst
+// flow-lane drift, 32m over 171s, at 4.0; a 500m capture is about 125. Loose
+// on purpose - it separates tens of metres from hundreds, and blocking a
+// legitimate recovery is worse than missing a small static offset.
+#define SRCF_RECOV_POS_NSIGMA       6.0f
 
 static const uint8_t SRCF_GPS_LANE = 0;     // lane running EK3_SRC1 (GPS)
 static const uint8_t SRCF_FLOW_LANE = 1;    // lane running EK3_SRC2 (optical flow)
@@ -236,11 +242,23 @@ void Copter::source_fallback_update()
             break;
         }
         if (srcf_state.lane_state == LaneState::FLOW_LOSS) {
+            // A receiver captured onto a static spoof reports a fixed
+            // position with no motion, so it presents neither a velocity
+            // difference nor a divergence rate and passes both gates above
+            // while sitting an arbitrary distance away. Bound the offset
+            // itself against how far the two lanes could honestly be apart,
+            // which is their combined position uncertainty: that grows as
+            // the flow lane dead reckons, so a fixed metre limit would block
+            // legitimate recovery on a long outage.
+            float pos_sigma = 0.0f;
+            const bool offset_ok = ahrs.get_lane_divergence_pos_sigma(other_lane, pos_sigma) &&
+                                   (pos_div < SRCF_RECOV_POS_NSIGMA * pos_sigma);
+
             // auto-recovery: GPS lane must be continuously usable and
             // consistent with the flow lane for SRCF_RECOV_TIME. Judged
             // against the same gates as the outbound trip, else at altitude
             // the flow lane's own imprecision blocks recovery indefinitely
-            const bool recovery_ok = gps_lane_usable && pos_rate_valid &&
+            const bool recovery_ok = gps_lane_usable && pos_rate_valid && offset_ok &&
                                      (vel_div < vel_gate) && (fabsf(pos_rate) < pos_gate);
             if (recovery_ok) {
                 if (srcf_state.recovery_start_ms == 0) {
