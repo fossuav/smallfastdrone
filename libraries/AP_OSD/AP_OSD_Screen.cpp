@@ -1068,6 +1068,22 @@ const AP_Param::GroupInfo AP_OSD_Screen::var_info2[] = {
     // @Range: 0 21
     AP_SUBGROUPINFO(link_quality, "LINK_Q", 1, AP_OSD_Screen, AP_OSD_Setting),
 
+    // @Param: EKFLANE_EN
+    // @DisplayName: EKFLANE_EN
+    // @Description: Displays which EKF lane is providing the navigation solution. Only meaningful with more than one lane allocated, where a change means the vehicle is navigating on different sensors than it booted on
+    // @Values: 0:Disabled,1:Enabled
+
+    // @Param: EKFLANE_X
+    // @DisplayName: EKFLANE_X
+    // @Description: Horizontal position on screen
+    // @Range: 0 59
+
+    // @Param: EKFLANE_Y
+    // @DisplayName: EKFLANE_Y
+    // @Description: Vertical position on screen
+    // @Range: 0 21
+    AP_SUBGROUPINFO(ekflane, "EKFLANE", 11, AP_OSD_Screen, AP_OSD_Setting),
+
 #if HAL_WITH_MSP_DISPLAYPORT
     // @Param: TXT_RES
     // @DisplayName: Sets the overlay text resolution (MSP DisplayPort only)
@@ -1586,6 +1602,19 @@ void AP_OSD_Screen::draw_fltmode(uint8_t x, uint8_t y)
     if (notify) {
         backend->write(x, y, false, "%s%c", notify->get_flight_mode_str(), arm);
     }
+}
+
+// which EKF lane is flying the vehicle. Deliberately reports the lane rather
+// than naming a sensor: what a lane means is set by that lane's source set,
+// so only the operator knows whether lane 1 is a spare IMU or a flow lane
+void AP_OSD_Screen::draw_ekflane(uint8_t x, uint8_t y)
+{
+    const int8_t lane = AP::ahrs().get_primary_core_index();
+    if (lane < 0) {
+        backend->write(x, y, false, "EKF-");
+        return;
+    }
+    backend->write(x, y, false, "EKF%d", lane);
 }
 
 void AP_OSD_Screen::draw_sats(uint8_t x, uint8_t y)
@@ -2646,6 +2675,7 @@ void AP_OSD_Screen::draw(void)
     DRAW_SETTING(eff);
     DRAW_SETTING(callsign);
     DRAW_SETTING(current2);
+    DRAW_SETTING(ekflane);
 
 #if AP_OSD_EXTENDED_LNK_STATS
     DRAW_SETTING(rc_tx_power);

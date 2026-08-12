@@ -236,6 +236,7 @@ private:
     AP_OSD_Setting pluscode;
 #endif
     AP_OSD_Setting sidebars{false, 4, 5};
+    AP_OSD_Setting ekflane{false, 2, 3};
 
 #if AP_OSD_EXTENDED_LNK_STATS
     // Extended link stats data panels
@@ -284,6 +285,7 @@ private:
     void draw_home(uint8_t x, uint8_t y);
     void draw_throttle(uint8_t x, uint8_t y);
     void draw_heading(uint8_t x, uint8_t y);
+    void draw_ekflane(uint8_t x, uint8_t y);
 #if AP_RPM_ENABLED
     void draw_rrpm(uint8_t x, uint8_t y);
 #endif
