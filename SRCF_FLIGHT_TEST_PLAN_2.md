@@ -35,6 +35,10 @@ can only show the detector staying quiet when it should.
       predates every code change below.
 - [ ] Confirm `SRCF_NSIGMA` exists and reads 2.5. If the parameter is
       absent the flash did not take.
+- [ ] Confirm `SRCF_POSR_THR` reads 0.9. The default changed after
+      session 1 (PR crossed 0.5 on every flight as a permanent vote
+      contributor); the vehicle never stored an override so the new
+      default applies on reflash.
 - [ ] Confirm the rest of the lane block still matches the session-1
       table, in particular `EK3_SRC2_YAW=1` and `EK3_OPTIONS=126`.
 - [ ] Pre-arm negative test, five minutes and worth it. With
@@ -92,10 +96,12 @@ brisk translations, hard stops, fast yaw, and a low pass at ~2 m.
 - Pass: zero `SRCF:` statustexts, `VVot` and `PVot` both well under
   20.
 - Record: `VSig` range, `VD` and `PR` peaks. Session 1 at this height
-  gave `VD` max 0.774 and `PR` max 0.566 with the old code.
-- If `PVot` climbs while `VVot` stays quiet, that is the session-1
-  pattern - `PR` is the noisy signal on this airframe. Raise
-  `SRCF_POSR_THR` to 0.9 before continuing, not `SRCF_VEL_THR`.
+  gave `VD` max 0.774 and `PR` max 0.566 with the old code, against
+  the raised `SRCF_POSR_THR` default of 0.9.
+- If `PVot` still climbs at 0.9 with `VVot` quiet, stop and pull the
+  log rather than raising further - 0.9 is already 1.6x the worst
+  benign peak observed, and a higher value starts eating into the
+  velocity-consistent spoofer's detection band.
 - Abort: any trip with GPS healthy means the gate is not doing its
   job at the design altitude. Land, pull the log, stop for the day.
 

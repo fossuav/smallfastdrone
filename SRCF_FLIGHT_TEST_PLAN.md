@@ -49,7 +49,7 @@ optionally exercised at the end.
 | `EK3_OPTIONS`           | current \| 2  | add bit1 manual lane switch (e.g. 24->26, 56->58); keep existing bits |
 | `EK3_SRC1_*`            | GPS set       | POSXY=3 VELXY=3 VELZ=3, POSZ/YAW as currently flown |
 | `EK3_SRC2_*`            | flow set      | POSXY=0 VELXY=5 VELZ=0 **YAW=1**, POSZ same as SRC1. YAW=0 blocks arming |
-| `SRCF_ENABLE`           | per flight    | thresholds stay default: VEL_THR 0.8, POSR_THR 0.5, CNF 2 s, RECOV 10 s |
+| `SRCF_ENABLE`           | per flight    | thresholds stay default: VEL_THR 0.8, POSR_THR 0.9, CNF 2 s, RECOV 10 s |
 | `SRCF_NSIGMA`           | 2.5           | divergence must also be this many combined-lane sigmas. 0 tests the fixed thresholds alone |
 | `RCx_OPTION`            | 65            | GPS Disable - the reversible field lever for GPS loss |
 | `FS_EKF_ACTION/_THRESH` | stock         | the EKF failsafe stays live as backstop       |
@@ -107,9 +107,10 @@ whole card: session 1's 72 s attempt was too short to count as a soak.
   `VSig` is the combined lane sigma the `SRCF_NSIGMA` gate scales -
   note its range, it is the number that sets the effective threshold.
 - Session 1 measured `PR` crossing 0.5 on every flight at every
-  altitude while `VD` never crossed 0.8 below 10 m. If `PVot` peaks
-  above ~10 with `VVot` quiet, raise `SRCF_POSR_THR` to 0.9 rather
-  than touching `SRCF_VEL_THR`.
+  altitude while `VD` never crossed 0.8 below 10 m, so the
+  `SRCF_POSR_THR` default is now 0.9 (about 1.6x the worst benign
+  peak). Leave `SRCF_VEL_THR` at 0.8 - it has behaved sensibly at
+  8 m.
 - If a trip does occur with GPS healthy: it is a false positive, the
   spoof state latches until disarm and will not auto-recover. The
   vehicle stays flyable on the flow lane - fly it home on the lane it
