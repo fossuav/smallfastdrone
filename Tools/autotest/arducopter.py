@@ -3967,6 +3967,19 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_mode('LAND')
         self.wait_disarmed(timeout=120)
 
+    def wait_horizontal_position_lost(self, timeout=30):
+        '''wait for the primary EKF lane to stop claiming any horizontal
+        position. position_ok() tracks these filter status flags, which
+        outlive the sensors by the dead-reckoning window'''
+        pos_bits = mavutil.mavlink.EKF_POS_HORIZ_ABS | mavutil.mavlink.EKF_POS_HORIZ_REL
+        tstart = self.get_sim_time()
+        while True:
+            if self.get_sim_time_cached() - tstart > timeout:
+                raise AutoTestTimeoutException("EKF kept a horizontal position estimate")
+            m = self.assert_receive_message('EKF_STATUS_REPORT', timeout=10)
+            if (m.flags & pos_bits) == 0:
+                return
+
     def SRCFRCFailsafeDrift(self):
         '''RC failsafe without a position estimate drifts in AltHold with the new option, then lands after FS_ALTH_TMO'''
         # With no position estimate the Brake/Land RC failsafe cannot enter
@@ -3992,8 +4005,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.wait_statustext("SRCF: no nav source, AltHold", timeout=30, check_context=True)
         self.wait_mode('ALT_HOLD')
+        # position_ok() outlives the sensors: the lanes dead-reckon for
+        # several seconds and Brake would still be entered on that stale
+        # estimate. Wait for the estimate to actually expire.
+        self.wait_horizontal_position_lost()
         self.progress("Triggering RC failsafe")
         self.set_parameter("SIM_RC_FAIL", 1)
+        self.wait_statustext("Trying Land Mode", timeout=10, check_context=True)
         self.wait_mode('LAND', timeout=10)
         self.wait_disarmed(timeout=120)
         self.set_parameters({
@@ -4014,8 +4032,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.wait_statustext("SRCF: no nav source, AltHold", timeout=30, check_context=False)
         self.wait_mode('ALT_HOLD')
+        # as in phase 1, let the stale position estimate expire so the
+        # failsafe cannot enter Brake
+        self.wait_horizontal_position_lost()
         self.progress("Triggering RC failsafe, expecting altitude-holding drift")
         self.set_parameter("SIM_RC_FAIL", 1)
+        self.wait_statustext("Failsafe: AltHold, no position", timeout=10, check_context=True)
         # must hold AltHold and altitude through most of the 15s timeout,
         # not descend into a landing
         self.wait_altitude(7, 13, relative=True, minimum_duration=8, timeout=20)
@@ -4054,6 +4076,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "SIM_FLOW_ENABLE": 0,
         })
         self.wait_statustext("SRCF: no nav source, AltHold", timeout=30, check_context=True)
+        # until the stale estimate expires the drift supervisor may bounce
+        # the vehicle back into Brake; wait for it to settle
+        self.wait_horizontal_position_lost()
         self.wait_mode('ALT_HOLD')
         if self.statustext_in_collections("EKF Failsafe"):
             raise NotAchievedException("EKF failsafe landed the vehicle instead of drifting")
