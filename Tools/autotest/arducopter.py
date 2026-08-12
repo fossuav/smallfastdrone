@@ -3814,9 +3814,36 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "FLOW_TYPE": 10,
             "SIM_TERRAIN": 0,
             "SRCF_ENABLE": 1,
+            # SRCF is written by WriteStreaming at exactly 10Hz, so the
+            # suite-wide LOG_FILE_RATEMAX of 10 drops it on any jitter and
+            # the FMT never lands either. Without this the detector fields
+            # are absent from the log and cannot be asserted on.
+            "LOG_FILE_RATEMAX": 0,
         })
         self.set_analog_rangefinder_parameters()
         self.reboot_sitl()
+
+    def srcf_vote_peaks(self):
+        '''peak VVot/PVot since the most recent arm, to show which detector
+        confirmed a spoof rather than only that one did. The counters reset
+        on disarm and one onboard log spans several arm/disarm cycles, so an
+        unscoped scan reports an earlier phase's peaks'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        arm_us = 0
+        samples = []
+        while True:
+            m = dfreader.recv_match(type=['ARM', 'SRCF'])
+            if m is None:
+                break
+            if m.get_type() == 'ARM':
+                if m.ArmState == 1:
+                    arm_us = m.TimeUS
+                continue
+            samples.append((m.TimeUS, m.VVot, m.PVot))
+        scoped = [s for s in samples if s[0] >= arm_us]
+        if len(scoped) == 0:
+            raise NotAchievedException("no SRCF messages after arming; check LOG_FILE_RATEMAX")
+        return max(s[1] for s in scoped), max(s[2] for s in scoped)
 
     def SRCFGPSLossLadder(self):
         '''GPS loss in Loiter falls to the flow lane and holds, GPS return recovers, losing both demotes to AltHold, all without EKF failsafe'''
@@ -3893,14 +3920,26 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         '''a healthy-looking slow GPS spoof is detected by cross-lane comparison; the vehicle stays put on the flow lane and GPS stays untrusted'''
         # SIM_GPS1_SPOOF walks the reported position while accuracy and sat
         # count stay healthy, so no quality-based check can see it.  Mode 2
-        # (consistent reported velocity) drags the GPS lane's states while
-        # the flow lane keeps measuring real motion: the lanes' positions
-        # diverge at the walk rate, tripping the SRCF_POSR_THR detector.
-        # Mode 1 (truthful velocity) drags the GPS lane's velocity solution
-        # apart from the flow lane's, tripping SRCF_VEL_THR.  Without the
-        # monitor, Loiter chases the walk and the vehicle is dragged
-        # away at SIM_GPS1_SPOOF_R indefinitely.
+        # adds the walk rate to the reported velocity (SIM_GPS.cpp:595-599)
+        # and drags the GPS lane's velocity solution away from the flow
+        # lane's, so SRCF_VEL_THR fires.  Mode 1 reports truthful velocity
+        # and only walks position, so the lanes separate as a position rate
+        # and SRCF_POSR_THR fires instead.  Without the monitor, Loiter
+        # chases the walk and the vehicle is dragged away at
+        # SIM_GPS1_SPOOF_R indefinitely.
+        #
+        # Each phase asserts which counter confirmed the spoof, not merely
+        # that one did.  Under the old flat 0.8 velocity threshold the mode
+        # 1 walk cleared SRCF_VEL_THR by 0.01m/s; when SRCF_NSIGMA raised
+        # that gate the phase carried on passing on the position detector
+        # while its name still claimed the velocity one.
         self.configure_source_fallback_per_core()
+        # pin the thresholds the walk rates below are chosen against, so a
+        # default change cannot silently alter what this test covers
+        self.set_parameters({
+            "SRCF_VEL_THR": 1.6,
+            "SRCF_POSR_THR": 1.9,
+        })
         self.context_collect('STATUSTEXT')
 
         self.takeoff(10, mode='LOITER')
@@ -3933,17 +3972,36 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.change_mode('LAND')
         self.wait_disarmed(timeout=120)
 
-        self.start_subtest("position-only spoofer trips the velocity detector")
+        vvot, pvot = self.srcf_vote_peaks()
+        self.progress("velocity-consistent spoof: VVot peak %u PVot peak %u" % (vvot, pvot))
+        if vvot < 15:
+            raise NotAchievedException(
+                "velocity-consistent spoof did not confirm on the velocity detector (VVot peak %u)" % vvot)
+
+        self.start_subtest("position-only spoofer trips the position-rate detector")
         self.takeoff(10, mode='LOITER')
+        # the walk must outrun SRCF_POSR_THR to be separable from ordinary
+        # flight; a slower position-only walk sits inside the envelope the
+        # two lanes cover in normal manoeuvring and is deliberately missed
         self.set_parameters({
             "SIM_GPS1_SPOOF": 1,
-            "SIM_GPS1_SPOOF_R": 1.5,
+            "SIM_GPS1_SPOOF_R": 2.5,
         })
         # new statustext only - the phase 1 message is already in the context
         self.wait_statustext("SRCF: GPS spoof suspected", timeout=60)
         self.set_parameter("SIM_GPS1_SPOOF", 0)
         self.change_mode('LAND')
         self.wait_disarmed(timeout=120)
+
+        vvot, pvot = self.srcf_vote_peaks()
+        self.progress("position-only spoof: VVot peak %u PVot peak %u" % (vvot, pvot))
+        if pvot < 15:
+            raise NotAchievedException(
+                "position-only spoof did not confirm on the position-rate detector (PVot peak %u)" % pvot)
+        if vvot >= 15:
+            raise NotAchievedException(
+                "position-only spoof also drove the velocity detector (VVot peak %u); "
+                "the two phases no longer exercise distinct detectors" % vvot)
 
     def SRCFDisabledRegression(self):
         '''with SRCF_ENABLE=0 the monitor is inert and GPS loss trips the stock EKF failsafe'''
