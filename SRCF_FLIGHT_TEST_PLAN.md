@@ -3,7 +3,7 @@
 GPS -> optical-flow -> AltHold fallback with cross-lane monitoring:
 first flights.
 
-Branch: `SmallFastDrone-4.7.0-gps-optflow-fallback` @ `62d8f804bc`.
+Branch: `SmallFastDrone-4.7.0-gps-optflow-fallback` @ `c6fe00f4f0`.
 SITL status: 3/3 feature tests + 4/4 regression tests green
 (SRCFGPSLossLadder, SRCFGPSSpoof, SRCFDisabledRegression;
 EKFSourceSetFailsafe, OpticalFlowGPSLossAiding, EKF3SRCPerCore,

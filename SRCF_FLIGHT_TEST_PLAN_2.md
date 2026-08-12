@@ -1,6 +1,6 @@
 # SRCF field flight test plan - session 2
 
-Branch `SmallFastDrone-4.7.0-gps-optflow-fallback` @ `4650570584`.
+Branch `SmallFastDrone-4.7.0-gps-optflow-fallback` @ `67009e2373`.
 Vehicle SmallFastDronev1. Written 2026-08-11 after session 1.
 
 Session 1 flew Flights 1 and 2 and found two config errors and one
@@ -31,7 +31,7 @@ can only show the detector staying quiet when it should.
 ## Before leaving - bench
 
 - [ ] Parameter backup of the current config, before anything else.
-- [ ] Flash `4650570584` or later. Session 1 flew `432aba9209`, which
+- [ ] Flash `67009e2373` or later. Session 1 flew `432aba9209`, which
       predates every code change below.
 - [ ] Confirm `SRCF_NSIGMA` exists and reads 2.5. If the parameter is
       absent the flash did not take.

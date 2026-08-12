@@ -2,7 +2,7 @@
 
 Branch `SmallFastDrone-4.7.0-gps-optflow-fallback`. Vehicle
 SmallFastDronev1. Logs 326-330, 2026-08-11. Flights flown against
-`432aba9209`; the code changes at the end are `ee39611791..62d8f804bc`.
+`432aba9209`; the code changes at the end are `3df6b7b3c8..c6fe00f4f0`.
 
 Outcome: Flight 1 passed. Flight 2 passed on the second attempt after
 a false spoof trip caused by flying above the rangefinder ceiling.
@@ -189,7 +189,7 @@ Rejected first: gating the detector on rangefinder freshness. It
 would have suppressed the log329 trip but caps the operating
 envelope, and altitude operation is a requirement.
 
-Implemented instead, in `ee39611791..62d8f804bc`:
+Implemented instead, in `3df6b7b3c8..c6fe00f4f0`:
 
 - `AP_NavEKF3` logs state variances for every core rather than the
   primary only, and exposes a lane's NE velocity variance plus a
@@ -266,7 +266,7 @@ LOG_REPLAY      = 1
 ```
 
 The vehicle still carries the session-1 firmware. Reflashing to
-`62d8f804bc` adds `SRCF_NSIGMA`, default 2.5.
+`c6fe00f4f0` adds `SRCF_NSIGMA`, default 2.5.
 
 ## Next session
 
@@ -291,7 +291,7 @@ The vehicle still carries the session-1 firmware. Reflashing to
 
 ### Code work
 
-Done in `ee39611791..62d8f804bc`: split vote counters, `SRCF_NSIGMA`
+Done in `3df6b7b3c8..c6fe00f4f0`: split vote counters, `SRCF_NSIGMA`
 significance gate, all-core `XKV1` logging, pre-arm `EK3_SRC2_YAW`
 check. Flash before the next session.
 
