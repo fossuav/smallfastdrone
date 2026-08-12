@@ -259,9 +259,11 @@ void Copter::source_fallback_update()
         break;
     }
 
-    // final rung: no lane can provide position. Only Loiter is demoted;
-    // the holdoff stops the EKF failsafe pre-empting the mode change
-    if (demote_needed && flightmode->mode_number() == Mode::Number::LOITER) {
+    // final rung: no lane can provide position. Loiter and Brake are
+    // demoted (Brake is where an RC failsafe parks the vehicle); the
+    // holdoff stops the EKF failsafe pre-empting the mode change
+    if (demote_needed && (flightmode->mode_number() == Mode::Number::LOITER ||
+                          flightmode->mode_number() == Mode::Number::BRAKE)) {
         reset_ekf_check_gate();
         if (set_mode(Mode::Number::ALT_HOLD, ModeReason::SOURCE_FALLBACK)) {
             gcs().send_text(MAV_SEVERITY_CRITICAL, "SRCF: no nav source, AltHold");
