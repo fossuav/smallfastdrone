@@ -319,6 +319,27 @@ passes with the bound, while `SRCFGPSLossLadder` still recovers - the
 regression that mattered, since a bound set too tight would have
 quietly undone Card 3.
 
+### Telling the pilot
+
+A blocked recovery was silent, which made a receiver that comes back in
+the wrong place indistinguishable from one that never comes back.
+`Copter` now warns once the offset has been the only thing holding
+recovery off for as long as recovery itself would have taken, so the
+message means "this would have recovered by now":
+
+```
+SRCF: GPS returned 500m off, staying on flow
+```
+
+`AP_OSD` gains an `EKFLANE` panel for the state rather than the event.
+Nothing on the OSD reported which lane was flying: the flight mode
+panel shows a demotion and the message panel flashes a statustext for a
+second, but neither answers "which sensors am I on now" ten minutes
+later. It reports the lane number rather than naming a sensor, because
+what a lane means is set by that lane's source set, and for the same
+reason it does not flash on a non-zero lane. Satellite count and HDOP
+are not a substitute - under a spoof both read healthy by construction.
+
 ## Vehicle state at end of session
 
 ```
@@ -360,9 +381,12 @@ logs 335 and 336. It should stay at 2.0.
    while `SRCF_ENABLE > 0`, and a lane whose yaw source is None is a
    latent arming blocker under per-core source sets regardless of
    SRCF.
-6. A recovery held off by the position offset bound is silent. The
-   pilot sees `SRCF: GPS lost, using flow lane` and then nothing more,
-   which is the right behaviour with the wrong amount of information
-   in the one case where GPS never returns because it is lying. A
-   one-shot statustext naming the offset as the reason would cost
-   little.
+6. Nothing added after the flying has flown. The threshold change was
+   validated in the air on log336, but the offset bound, its warning
+   and the OSD panel are SITL-only. The bound and the warning sit in
+   the recovery path Cards 3 and 5 exercise, so one GPS-loss cycle on
+   the next flight should confirm `SRCF: GPS recovered` still arrives
+   at about 12.2 s. Replay of the six real recoveries says it will -
+   they run at 0.21 to 1.76 sigma against a bound of 6, and the ratio
+   plateaus at 4.0 over 171 s of dead reckoning - but replay exercises
+   the logic, not the firmware.
