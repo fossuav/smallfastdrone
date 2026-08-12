@@ -4044,6 +4044,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.delay_sim_time(30)
 
         recovered = self.statustext_in_collections("SRCF: GPS recovered")
+        # the pilot has to be told why GPS never comes back, else a blocked
+        # recovery is indistinguishable from a receiver that stayed dead
+        warned = self.statustext_in_collections("SRCF: GPS returned")
         # SIMSTATE, not mav.location(): the fix on offer here is a lie
         dist = self.get_distance(sim_start, self.sim_location())
         self.progress("held %.1fm from the start point on the flow lane" % dist)
@@ -4057,6 +4060,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if recovered:
             raise NotAchievedException(
                 "auto-recovered onto a GPS lane %um away from the flow lane" % spoof_ofs_m)
+        if not warned:
+            raise NotAchievedException(
+                "recovery was blocked by the offset bound but nothing said so")
         if dist > 15:
             raise NotAchievedException("drifted %.1fm while held on the flow lane" % dist)
 
