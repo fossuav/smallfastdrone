@@ -764,6 +764,9 @@ void Copter::three_hz_loop()
     // check for deadreckoning failsafe
     failsafe_deadreckon_check();
 
+    // supervise an AltHold failsafe fallback (drift instead of land)
+    failsafe_drift_check();
+
 #if AP_RC_TRANSMITTER_TUNING_ENABLED
     //update transmitter based in flight tuning
     tuning();

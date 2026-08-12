@@ -456,8 +456,63 @@ void Copter::set_mode_brake_or_land_with_pause(ModeReason reason)
     }
 #endif
 
+    // Brake needs a position estimate. On a link failsafe the option
+    // allows holding altitude and drifting instead of landing, bounded
+    // by FS_ALTH_TMO via failsafe_drift_check()
+    if (failsafe_option(FailsafeOption::ALTHOLD_NO_POSITION) &&
+        (reason == ModeReason::RADIO_FAILSAFE || reason == ModeReason::GCS_FAILSAFE) &&
+        set_mode(Mode::Number::ALT_HOLD, reason)) {
+        AP_Notify::events.failsafe_mode_change = 1;
+        gcs().send_text(MAV_SEVERITY_WARNING, "Failsafe: AltHold, no position");
+        return;
+    }
+
     gcs().send_text(MAV_SEVERITY_WARNING, "Trying Land Mode");
     set_mode_land_with_pause(reason);
+}
+
+// Supervise an AltHold failsafe fallback. With the radio in failsafe
+// the stick inputs are neutralised, so the vehicle holds altitude and
+// drifts with the wind. Return to a position-holding failsafe as soon
+// as an estimate is available, and land once FS_ALTH_TMO expires
+// without the radio returning. Called at 3hz
+void Copter::failsafe_drift_check()
+{
+    static uint32_t drift_start_ms;
+
+    const ModeReason reason = get_control_mode_reason();
+    const bool drifting = motors->armed() && !ap.land_complete && failsafe.radio &&
+                          flightmode->mode_number() == Mode::Number::ALT_HOLD &&
+                          (reason == ModeReason::RADIO_FAILSAFE ||
+                           reason == ModeReason::GCS_FAILSAFE ||
+                           reason == ModeReason::EKF_FAILSAFE ||
+                           reason == ModeReason::SOURCE_FALLBACK);
+    if (!drifting) {
+        drift_start_ms = 0;
+        return;
+    }
+
+    if (position_ok()) {
+        // a position estimate has returned, resume position-holding failsafe
+        set_mode_brake_or_land_with_pause(ModeReason::RADIO_FAILSAFE);
+        drift_start_ms = 0;
+        return;
+    }
+
+    if (g2.fs_althold_timeout <= 0) {
+        // no timeout configured, drift until the radio returns
+        return;
+    }
+
+    const uint32_t now_ms = millis();
+    if (drift_start_ms == 0) {
+        drift_start_ms = now_ms;
+        return;
+    }
+    if (now_ms - drift_start_ms > (uint32_t)g2.fs_althold_timeout.get() * 1000U) {
+        gcs().send_text(MAV_SEVERITY_CRITICAL, "Failsafe: drift timeout, landing");
+        set_mode_land_with_pause(ModeReason::RADIO_FAILSAFE);
+    }
 }
 
 bool Copter::should_disarm_on_failsafe() {

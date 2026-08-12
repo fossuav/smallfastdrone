@@ -625,6 +625,7 @@ public:
 
     // Failsafe options bitmask #36
     AP_Int32 fs_options;
+    AP_Int16 fs_althold_timeout;  // seconds an AltHold failsafe fallback may drift without RC before landing
 
 #if MODE_AUTOROTATE_ENABLED
     // Autonmous autorotation

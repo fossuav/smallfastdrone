@@ -263,8 +263,10 @@ void Copter::failsafe_ekf_event()
             // Should have early returned above
             break;
         case FS_EKF_ACTION_ALTHOLD:
-            // AltHold
-            if (failsafe.radio || !set_mode(Mode::Number::ALT_HOLD, ModeReason::EKF_FAILSAFE)) {
+            // AltHold. During a radio failsafe land instead, unless the
+            // option to hold and drift without position is enabled
+            if ((failsafe.radio && !failsafe_option(FailsafeOption::ALTHOLD_NO_POSITION)) ||
+                !set_mode(Mode::Number::ALT_HOLD, ModeReason::EKF_FAILSAFE)) {
                 set_mode_land_with_pause(ModeReason::EKF_FAILSAFE);
             }
             break;

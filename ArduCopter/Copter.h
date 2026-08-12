@@ -629,6 +629,7 @@ private:
         CONTINUE_IF_LANDING             = (1<<3),   // 8
         GCS_CONTINUE_IF_PILOT_CONTROL   = (1<<4),   // 16
         RELEASE_GRIPPER                 = (1<<5),   // 32
+        ALTHOLD_NO_POSITION             = (1<<6),   // 64
     };
 
 
@@ -842,6 +843,7 @@ private:
     void failsafe_terrain_on_event();
     void gpsglitch_check();
     void failsafe_deadreckon_check();
+    void failsafe_drift_check();
     void set_mode_RTL_or_land_with_pause(ModeReason reason);
     void set_mode_SmartRTL_or_RTL(ModeReason reason);
     void set_mode_SmartRTL_or_land_with_pause(ModeReason reason);

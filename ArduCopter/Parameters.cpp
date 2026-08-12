@@ -786,7 +786,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Param: FS_OPTIONS
     // @DisplayName: Failsafe options bitmask
     // @Description: Bitmask of additional options for battery, radio, & GCS failsafes. 0 (default) disables all options.
-    // @Bitmask: 0:Continue if in Auto on RC failsafe, 1:Continue if in Auto on GCS failsafe, 2:Continue if in Guided on RC failsafe, 3:Continue if landing on any failsafe, 4:Continue if in pilot controlled modes on GCS failsafe, 5:Release Gripper
+    // @Bitmask: 0:Continue if in Auto on RC failsafe, 1:Continue if in Auto on GCS failsafe, 2:Continue if in Guided on RC failsafe, 3:Continue if landing on any failsafe, 4:Continue if in pilot controlled modes on GCS failsafe, 5:Release Gripper, 6:AltHold and drift instead of Land when failing over without position
     // @User: Advanced
     AP_GROUPINFO("FS_OPTIONS", 36, ParametersG2, fs_options, (float)Copter::FailsafeOption::GCS_CONTINUE_IF_PILOT_CONTROL),
 
@@ -1299,6 +1299,14 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @User: Advanced
     AP_GROUPINFO("SRCF_NSIGMA", 36, ParametersG2, srcf_nsigma, 2.5),
 #endif
+
+    // @Param: FS_ALTH_TMO
+    // @DisplayName: Failsafe AltHold drift timeout
+    // @Description: Maximum time the vehicle will hold altitude and drift with neutral sticks after a failsafe has fallen back to AltHold without a position estimate (FS_OPTIONS bit 6). If the RC link has not returned when this expires the vehicle lands. 0 drifts indefinitely
+    // @Units: s
+    // @Range: 0 300
+    // @User: Advanced
+    AP_GROUPINFO("FS_ALTH_TMO", 37, ParametersG2, fs_althold_timeout, 30),
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 
