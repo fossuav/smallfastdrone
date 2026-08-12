@@ -3967,6 +3967,110 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_mode('LAND')
         self.wait_disarmed(timeout=120)
 
+    def SRCFRCFailsafeDrift(self):
+        '''RC failsafe without a position estimate drifts in AltHold with the new option, then lands after FS_ALTH_TMO'''
+        # With no position estimate the Brake/Land RC failsafe cannot enter
+        # Brake and stock behaviour is to land.  FS_OPTIONS bit 6 falls back
+        # to AltHold instead: during radio failsafe the pilot-input helpers
+        # neutralise the sticks, so the vehicle holds altitude and drifts.
+        # failsafe_drift_check() bounds the drift - after FS_ALTH_TMO
+        # without the radio returning it lands anyway.  Phase 1 proves the
+        # stock half (no option bit -> immediate land), phase 2 the drift
+        # and the timeout.
+        self.configure_source_fallback_per_core()
+        self.set_parameters({
+            "FS_THR_ENABLE": 7,     # RC failsafe action = Brake or Land
+        })
+        self.context_collect('STATUSTEXT')
+
+        self.start_subtest("without the option bit, RC failsafe lands")
+        self.takeoff(10, mode='LOITER')
+        self.progress("Killing GPS and flow, expecting AltHold demotion")
+        self.set_parameters({
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_FLOW_ENABLE": 0,
+        })
+        self.wait_statustext("SRCF: no nav source, AltHold", timeout=30, check_context=True)
+        self.wait_mode('ALT_HOLD')
+        self.progress("Triggering RC failsafe")
+        self.set_parameter("SIM_RC_FAIL", 1)
+        self.wait_mode('LAND', timeout=10)
+        self.wait_disarmed(timeout=120)
+        self.set_parameters({
+            "SIM_RC_FAIL": 0,
+            "SIM_GPS1_ENABLE": 1,
+            "SIM_FLOW_ENABLE": 1,
+        })
+
+        self.start_subtest("with the option bit, RC failsafe drifts then times out")
+        self.set_parameters({
+            "FS_OPTIONS": 16 + 64,  # default + AltHold-without-position
+            "FS_ALTH_TMO": 15,
+        })
+        self.takeoff(10, mode='LOITER')
+        self.set_parameters({
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_FLOW_ENABLE": 0,
+        })
+        self.wait_statustext("SRCF: no nav source, AltHold", timeout=30, check_context=False)
+        self.wait_mode('ALT_HOLD')
+        self.progress("Triggering RC failsafe, expecting altitude-holding drift")
+        self.set_parameter("SIM_RC_FAIL", 1)
+        # must hold AltHold and altitude through most of the 15s timeout,
+        # not descend into a landing
+        self.wait_altitude(7, 13, relative=True, minimum_duration=8, timeout=20)
+        self.assert_mode('ALT_HOLD')
+        self.progress("Waiting for the drift timeout to land the vehicle")
+        self.wait_statustext("Failsafe: drift timeout, landing", timeout=20, check_context=True)
+        self.wait_mode('LAND', timeout=10)
+        self.wait_disarmed(timeout=120)
+        self.set_parameter("SIM_RC_FAIL", 0)
+
+    def SRCFBrakeNavLossDemote(self):
+        '''nav loss while parked in Brake by an RC failsafe demotes to AltHold drift, and re-enters Brake when position returns'''
+        # An RC failsafe parks the vehicle in Brake, which holds position on
+        # whichever lane is healthy but has no run-time position check.  If
+        # every nav source then dies the demotion rung must move Brake to
+        # AltHold before the EKF failsafe can land it (the EKF failsafe
+        # lands during radio failsafe even with FS_EKF_ACTION=2).  With
+        # FS_ALTH_TMO=0 the drift is unbounded, and failsafe_drift_check()
+        # must re-enter Brake once a position estimate returns.
+        self.configure_source_fallback_per_core()
+        self.set_parameters({
+            "FS_THR_ENABLE": 7,     # RC failsafe action = Brake or Land
+            "FS_OPTIONS": 16 + 64,  # default + AltHold-without-position
+            "FS_ALTH_TMO": 0,       # drift indefinitely
+        })
+        self.context_collect('STATUSTEXT')
+
+        self.takeoff(10, mode='LOITER')
+        self.progress("Triggering RC failsafe with position available")
+        self.set_parameter("SIM_RC_FAIL", 1)
+        self.wait_mode('BRAKE', timeout=10)
+
+        self.progress("Killing GPS and flow while in Brake")
+        self.set_parameters({
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_FLOW_ENABLE": 0,
+        })
+        self.wait_statustext("SRCF: no nav source, AltHold", timeout=30, check_context=True)
+        self.wait_mode('ALT_HOLD')
+        if self.statustext_in_collections("EKF Failsafe"):
+            raise NotAchievedException("EKF failsafe landed the vehicle instead of drifting")
+
+        self.progress("Drifting with FS_ALTH_TMO=0, must not land")
+        self.wait_altitude(7, 13, relative=True, minimum_duration=8, timeout=20)
+        self.assert_mode('ALT_HOLD')
+
+        self.progress("Restoring GPS, expecting re-entry to Brake")
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_mode('BRAKE', timeout=90)
+
+        self.progress("Restoring RC and landing")
+        self.set_parameter("SIM_RC_FAIL", 0)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+
     def LoiterFlowBrakeOvershoot(self):
         '''Forward-jab overshoot in optical-flow Loiter at low height'''
         # Optical flow, no GPS, low height: the EKF flow speed limit is small,
@@ -18097,6 +18201,8 @@ return update, 1000
             self.SRCFGPSLossLadder,
             self.SRCFGPSSpoof,
             self.SRCFDisabledRegression,
+            self.SRCFRCFailsafeDrift,
+            self.SRCFBrakeNavLossDemote,
         ])
         return ret
 
