@@ -54,6 +54,8 @@ static struct {
     uint8_t hist_idx;
     uint8_t hist_count;
     uint32_t recovery_start_ms; // time GPS recovery conditions first held
+    uint32_t offset_block_ms;   // time the offset bound alone first blocked recovery
+    bool offset_warned;         // offset block warning sent for this episode
     uint32_t last_lane_cmd_ms;  // time of last commanded lane change
     uint8_t last_source_set;    // detects a pilot source set change
 } srcf_state;
@@ -68,6 +70,8 @@ static void srcf_reset_detectors()
     srcf_state.hist_idx = 0;
     srcf_state.hist_count = 0;
     srcf_state.recovery_start_ms = 0;
+    srcf_state.offset_block_ms = 0;
+    srcf_state.offset_warned = false;
 }
 
 // command the EKF primary lane and arm the failsafe holdoff
@@ -258,8 +262,28 @@ void Copter::source_fallback_update()
             // consistent with the flow lane for SRCF_RECOV_TIME. Judged
             // against the same gates as the outbound trip, else at altitude
             // the flow lane's own imprecision blocks recovery indefinitely
-            const bool recovery_ok = gps_lane_usable && pos_rate_valid && offset_ok &&
-                                     (vel_div < vel_gate) && (fabsf(pos_rate) < pos_gate);
+            const bool consistent = gps_lane_usable && pos_rate_valid &&
+                                    (vel_div < vel_gate) && (fabsf(pos_rate) < pos_gate);
+            const bool recovery_ok = consistent && offset_ok;
+
+            // a receiver that comes back in the wrong place is otherwise
+            // indistinguishable from one that never comes back: nothing is
+            // sent and GPS simply never returns. Say so once the offset has
+            // been the only thing holding recovery off for as long as
+            // recovery itself would have taken
+            if (consistent && !offset_ok) {
+                if (srcf_state.offset_block_ms == 0) {
+                    srcf_state.offset_block_ms = now_ms;
+                } else if (!srcf_state.offset_warned &&
+                           (now_ms - srcf_state.offset_block_ms > (uint32_t)(g2.srcf_recov_time * 1000))) {
+                    srcf_state.offset_warned = true;
+                    gcs().send_text(MAV_SEVERITY_WARNING, "SRCF: GPS returned %.0fm off, staying on flow",
+                                    (double)pos_div);
+                }
+            } else {
+                srcf_state.offset_block_ms = 0;
+            }
+
             if (recovery_ok) {
                 if (srcf_state.recovery_start_ms == 0) {
                     srcf_state.recovery_start_ms = now_ms;
