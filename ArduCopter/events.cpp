@@ -479,6 +479,7 @@ void Copter::set_mode_brake_or_land_with_pause(ModeReason reason)
 void Copter::failsafe_drift_check()
 {
     static uint32_t drift_start_ms;
+    static uint32_t position_ok_start_ms;
 
     const ModeReason reason = get_control_mode_reason();
     const bool drifting = motors->armed() && !ap.land_complete && failsafe.radio &&
@@ -489,14 +490,27 @@ void Copter::failsafe_drift_check()
                            reason == ModeReason::SOURCE_FALLBACK);
     if (!drifting) {
         drift_start_ms = 0;
+        position_ok_start_ms = 0;
         return;
     }
 
+    const uint32_t now_ms = millis();
+
+    // resume a position-holding failsafe only once the estimate has been
+    // back continuously for a few seconds. A dying estimate stays stale-valid
+    // for the dead-reckoning window, and re-entering Brake on it just
+    // bounces between Brake and the demotion back to AltHold
     if (position_ok()) {
-        // a position estimate has returned, resume position-holding failsafe
-        set_mode_brake_or_land_with_pause(ModeReason::RADIO_FAILSAFE);
-        drift_start_ms = 0;
-        return;
+        if (position_ok_start_ms == 0) {
+            position_ok_start_ms = now_ms;
+        } else if (now_ms - position_ok_start_ms > 3000) {
+            set_mode_brake_or_land_with_pause(ModeReason::RADIO_FAILSAFE);
+            drift_start_ms = 0;
+            position_ok_start_ms = 0;
+            return;
+        }
+    } else {
+        position_ok_start_ms = 0;
     }
 
     if (g2.fs_althold_timeout <= 0) {
@@ -504,7 +518,6 @@ void Copter::failsafe_drift_check()
         return;
     }
 
-    const uint32_t now_ms = millis();
     if (drift_start_ms == 0) {
         drift_start_ms = now_ms;
         return;
