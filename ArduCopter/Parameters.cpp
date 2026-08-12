@@ -1255,7 +1255,7 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
 #if AP_OPTICALFLOW_ENABLED
     // @Param: SRCF_ENABLE
     // @DisplayName: EKF source fallback enable
-    // @Description: Enables the navigation source fallback monitor. Requires EK3_SRC_OPTIONS bit 3 (per-core source sets) with EK3_SRC1 configured for GPS and EK3_SRC2 for optical flow, EK3_OPTIONS bit 1 (manual lane switching) and two EKF lanes. On GPS loss or detected GPS spoofing the monitor moves the primary EKF lane to the optical flow lane without triggering the EKF failsafe, and if neither lane can provide position while in Loiter the vehicle changes to AltHold. GPS loss recovers automatically; a spoof detection latches GPS as untrusted until disarm or a pilot source set change.
+    // @Description: Enables the navigation source fallback monitor. Requires EK3_SRC_OPTIONS bit 3 (per-core source sets) with EK3_SRC1 configured for GPS and EK3_SRC2 for optical flow, EK3_OPTIONS bit 1 (manual lane switching) and two EKF lanes. On GPS loss or detected GPS spoofing the monitor moves the primary EKF lane to the optical flow lane without triggering the EKF failsafe, and if neither lane can provide position while in Loiter the vehicle changes to AltHold. GPS loss recovers automatically; a spoof detection latches GPS as untrusted until disarm or a pilot source set change. Spoof detection is bounded by how far the two lanes disagree during ordinary flight: it catches a spoofer whose reported velocity is consistent with its position walk, and does not catch a position-only walk slow enough to sit inside that envelope.
     // @Values: 0:Disabled, 1:Enabled
     // @User: Advanced
     AP_GROUPINFO("SRCF_ENABLE", 31, ParametersG2, srcf_enable, 0),
@@ -1266,15 +1266,15 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Units: m/s
     // @Range: 0.2 3
     // @User: Advanced
-    AP_GROUPINFO("SRCF_VEL_THR", 32, ParametersG2, srcf_vel_thr, 0.8),
+    AP_GROUPINFO("SRCF_VEL_THR", 32, ParametersG2, srcf_vel_thr, 1.6),
 
     // @Param: SRCF_POSR_THR
     // @DisplayName: EKF source fallback position divergence rate threshold
     // @Description: Rate of growth of the horizontal position difference between the GPS and optical flow EKF lanes above which GPS spoofing is suspected. Catches a spoofer whose reported velocity is consistent with its position walk
     // @Units: m/s
-    // @Range: 0.1 2
+    // @Range: 0.1 3
     // @User: Advanced
-    AP_GROUPINFO("SRCF_POSR_THR", 33, ParametersG2, srcf_posr_thr, 0.9),
+    AP_GROUPINFO("SRCF_POSR_THR", 33, ParametersG2, srcf_posr_thr, 1.9),
 
     // @Param: SRCF_CNF_TIME
     // @DisplayName: EKF source fallback spoof confirmation time
