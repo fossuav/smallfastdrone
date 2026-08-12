@@ -460,6 +460,10 @@ public:
     // and the primary, the scale a divergence between them is significant against
     bool get_lane_divergence_sigma(uint8_t lane_index, float &vel_sigma_mps) const;
 
+    // get the combined 1-sigma horizontal position uncertainty of an EKF3 lane
+    // and the primary
+    bool get_lane_divergence_pos_sigma(uint8_t lane_index, float &pos_sigma_m) const;
+
     // get health and filter status of a specific EKF3 lane
     bool get_lane_status(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const;
 

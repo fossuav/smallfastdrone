@@ -3552,6 +3552,16 @@ bool AP_AHRS::get_lane_divergence_sigma(uint8_t lane_index, float &vel_sigma_mps
 #endif
 }
 
+// get the combined 1-sigma horizontal position uncertainty of a lane and the primary
+bool AP_AHRS::get_lane_divergence_pos_sigma(uint8_t lane_index, float &pos_sigma_m) const
+{
+#if HAL_NAVEKF3_AVAILABLE
+    return EKF3.getLaneDivergencePosSigma(lane_index, pos_sigma_m);
+#else
+    return false;
+#endif
+}
+
 // get health and filter status of a specific EKF3 lane
 bool AP_AHRS::get_lane_status(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const
 {
