@@ -4003,6 +4003,63 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 "position-only spoof also drove the velocity detector (VVot peak %u); "
                 "the two phases no longer exercise distinct detectors" % vvot)
 
+    def SRCFStaticSpoofNoRecovery(self):
+        '''a static GPS capture offers no divergence rate to measure, and must not be auto-recovered onto after a GPS loss'''
+        # Both walk modes are caught because they move: each detector watches
+        # how fast the lanes separate.  SIM_GPS1_SPOOF mode 3 steps the
+        # reported position once and then holds it with zero reported
+        # velocity, so once settled there is no rate at all, and while the
+        # vehicle hovers there is no velocity signature either.  The recovery
+        # gate at source_fallback.cpp:243 tests vel_div and pos_rate and
+        # never the size of pos_div, so it sees two lanes agreeing on
+        # everything it measures while they are SPOOF_R apart.
+        #
+        # The sequence is the realistic one for a capture: the receiver loses
+        # lock, the monitor falls to the flow lane on the FLOW_LOSS rung -
+        # the rung that auto-recovers - and the receiver then reacquires on
+        # the spoofed signal.
+        spoof_ofs_m = 500
+
+        self.configure_source_fallback_per_core()
+        self.context_collect('STATUSTEXT')
+
+        self.takeoff(10, mode='LOITER')
+        sim_start = self.sim_location()
+
+        self.progress("Killing GPS to reach the FLOW_LOSS rung")
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_statustext("SRCF: GPS lost, using flow lane", timeout=15, check_context=True)
+        self.wait_statustext("EKF3 lane switch 1", timeout=10, check_context=True)
+
+        self.progress("Receiver reacquires on a static capture %um away" % spoof_ofs_m)
+        self.set_parameters({
+            "SIM_GPS1_SPOOF": 3,
+            "SIM_GPS1_SPOOF_R": spoof_ofs_m,
+            "SIM_GPS1_ENABLE": 1,
+        })
+
+        # nothing is emitted for "did not recover", so this has to be a plain
+        # wait: well past SRCF_RECOV_TIME for the gate to settle and fire if
+        # it is going to
+        self.delay_sim_time(30)
+
+        recovered = self.statustext_in_collections("SRCF: GPS recovered")
+        # SIMSTATE, not mav.location(): the fix on offer here is a lie
+        dist = self.get_distance(sim_start, self.sim_location())
+        self.progress("held %.1fm from the start point on the flow lane" % dist)
+
+        # land before reporting, else the harness reboots while armed and
+        # that exception buries the one that matters
+        self.set_parameter("SIM_GPS1_SPOOF", 0)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+
+        if recovered:
+            raise NotAchievedException(
+                "auto-recovered onto a GPS lane %um away from the flow lane" % spoof_ofs_m)
+        if dist > 15:
+            raise NotAchievedException("drifted %.1fm while held on the flow lane" % dist)
+
     def SRCFDisabledRegression(self):
         '''with SRCF_ENABLE=0 the monitor is inert and GPS loss trips the stock EKF failsafe'''
         # Negative half of the fallback invariant: identical per-core lane
@@ -18283,6 +18340,7 @@ return update, 1000
             self.EKF3SRCPerCore,
             self.SRCFGPSLossLadder,
             self.SRCFGPSSpoof,
+            self.SRCFStaticSpoofNoRecovery,
             self.SRCFDisabledRegression,
             self.SRCFRCFailsafeDrift,
             self.SRCFBrakeNavLossDemote,
