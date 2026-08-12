@@ -1306,7 +1306,7 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Units: s
     // @Range: 0 300
     // @User: Advanced
-    AP_GROUPINFO("FS_ALTH_TMO", 37, ParametersG2, fs_althold_timeout, 30),
+    AP_GROUPINFO("FS_ALTH_TMO", 47, ParametersG2, fs_althold_timeout, 30),
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 
