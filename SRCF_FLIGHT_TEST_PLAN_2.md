@@ -39,6 +39,17 @@ can only show the detector staying quiet when it should.
       session 1 (PR crossed 0.5 on every flight as a permanent vote
       contributor); the vehicle never stored an override so the new
       default applies on reflash.
+- [ ] Confirm `FS_ALTH_TMO` exists and reads 30. It is the newest
+      parameter - if absent, the flash predates the RC failsafe drift
+      feature.
+- [ ] Set the RC failsafe block for the intermittent link:
+      `FS_THR_ENABLE=7` (Brake or Land), `FS_OPTIONS=80` (default 16
+      plus bit 6, AltHold drift without position), `FS_EKF_ACTION=2`
+      (AltHold). An RC dropout then parks in Brake on whichever lane
+      is healthy; with no position at all the vehicle holds altitude
+      and drifts with neutral sticks, re-enters Brake about 3 s after
+      a position source returns, and lands only once the link has
+      been down for `FS_ALTH_TMO` (30 s; 0 drifts indefinitely).
 - [ ] Confirm the rest of the lane block still matches the session-1
       table, in particular `EK3_SRC2_YAW=1` and `EK3_OPTIONS=126`.
 - [ ] Pre-arm negative test, five minutes and worth it. With
@@ -69,6 +80,14 @@ reads about 25% low. Fly every height call by rangefinder AGL.
 
 Reminder of the numbers that matter on this vehicle: 8 m true is
 about 6 m indicated; the rangefinder ceiling is 15 m.
+
+If the RC link genuinely drops during a card it no longer lands the
+vehicle: expect Brake while any lane holds position, or altitude-hold
+drift with `Failsafe: AltHold, no position` when none does, then
+`Failsafe: drift timeout, landing` if the link stays down for 30 s.
+This path is SITL-tested (SRCFRCFailsafeDrift, SRCFBrakeNavLossDemote)
+but not exercised by these cards; treat a real occurrence as bonus
+field data and pull the log.
 
 ## What changed in the code, and what each card tests
 
