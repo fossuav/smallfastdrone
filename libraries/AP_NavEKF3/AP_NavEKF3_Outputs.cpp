@@ -536,6 +536,11 @@ float NavEKF3_core::getVelVarianceNE() const
     return float(P[4][4] + P[5][5]);
 }
 
+float NavEKF3_core::getPosVarianceNE() const
+{
+    return float(P[7][7] + P[8][8]);
+}
+
 // return the innovation consistency test ratios for the velocity, position, magnetometer and true airspeed measurements
 // this indicates the amount of margin available when tuning the various error traps
 // also return the delta in position due to the last position reset

@@ -372,6 +372,10 @@ public:
     // against. Same validity rules as getLaneDivergence
     bool getLaneDivergenceSigma(uint8_t lane_index, float &vel_sigma_mps) const;
 
+    // get the combined 1-sigma horizontal position uncertainty of a lane and
+    // the current primary. Same validity rules as getLaneDivergence
+    bool getLaneDivergencePosSigma(uint8_t lane_index, float &pos_sigma_m) const;
+
     // get health and filter status of a specific lane
     bool getLaneStatus(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const;
 

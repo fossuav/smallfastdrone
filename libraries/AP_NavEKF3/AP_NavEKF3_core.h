@@ -173,6 +173,11 @@ public:
     // getVariances() which reports innovation consistency test ratios
     float getVelVarianceNE() const;
 
+    // return the sum of the North and East position state variances in m^2.
+    // Grows without bound on a lane that is dead reckoning, which is what
+    // makes it the right scale for judging a cross-lane position difference
+    float getPosVarianceNE() const;
+
     // return estimate of true airspeed vector in body frame in m/s
     // returns false if estimate is unavailable
     bool getAirSpdVec(Vector3f &vel) const;
