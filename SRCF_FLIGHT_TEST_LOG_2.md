@@ -11,7 +11,9 @@ rangefinder ceiling. Seven loss/recovery cycles across three flights,
 false-tripped on the first flight, was root-caused to the fixed
 threshold rather than the new significance gate, and was retuned and
 revalidated in the air. Spoof detection is now known to be limited to
-velocity-consistent spoofers; that limit is measured, not assumed.
+velocity-consistent spoofers; that limit is measured, not assumed. A
+separate hole found in SITL afterwards, auto-recovery onto a
+statically captured receiver, is fixed and regression-tested.
 
 ## Card 1 - log332 - false spoof trip at 5 m
 
@@ -181,6 +183,67 @@ The sigma framing does not rescue the position case, because benign
 thresholds produce nine velocity false trips instead of one - but it
 cannot close the gap alone.
 
+## Static capture - a hole the walk models could not show
+
+Raised after the flying: would the detector catch a capture that
+reports a fixed position, the shape behind the widely reported airport
+spoofs where receivers jump to a distant location and stay there.
+
+The jump itself, eventually. `pos_div` compares the two lanes' EKF
+positions rather than raw GPS, so nothing happens while the GPS lane
+is still rejecting the fix on innovation gating. Once the EKF gives up
+and resets onto the spoof, `pos_div` steps by the whole offset in one
+sample and the position-rate detector saturates inside
+`SRCF_CNF_TIME`. That path latches, so it ends safely.
+
+The hole was on the other side. `recovery_ok` tested a velocity and a
+rate and never the size of `pos_div`. A static capture has no rate
+once settled, and while the vehicle hovers no velocity signature
+either, so two lanes 500 m apart agreed on everything the gate
+measured. It is the `FLOW_LOSS` rung that auto-recovers, and
+`FLOW_LOSS` is what a jam-then-spoof produces: lose lock, fall to the
+flow lane, reacquire on the capture, recover onto it.
+
+Neither existing SITL spoof mode could show this, because both walk,
+and a walk is exactly what a rate detector sees. `SIM_GPS1_SPOOF` mode
+3 steps the position once and holds it reporting zero velocity. On the
+unfixed code the vehicle recovered onto a lane 500 m away while
+holding station to 1.0 m, so nothing in its behaviour gave the fault
+away.
+
+### Why the bound is a sigma and not a distance
+
+Rejecting recovery when the lanes are more than a few metres apart is
+ruled out by this session's own data: legitimate recovery ran at `PD`
+9.80 m in log332, and flow-lane drift reached 28.4 m in log334 and
+32.0 m in log332. Any constant tight enough to catch a capture blocks
+ordinary recovery on a long outage.
+
+Measured across the flow-lane periods of all four flights against the
+lanes' combined 1-sigma position uncertainty:
+
+| | `PD` p50/max | `PD`/sigma p50/max | sigma range |
+|---|---|---|---|
+| log332 | 20.2 / 32.0 | 3.18 / 4.00 | 4.6-8.1 m |
+| log333 | 13.8 / 28.4 | 1.10 / 1.76 | 7.2-16.9 m |
+| log334 | 2.9 / 10.1 | 0.28 / 0.65 | 4.6-17.7 m |
+| log335 | 4.3 / 5.0 | 0.27 / 0.33 | 13.9-16.9 m |
+
+Flights that actually recovered stay under 1.8 sigma. log332's 4.0 is
+171 s of flow-lane drift after the spoof latch, where recovery never
+runs, so it bounds how far honest lanes wander rather than what
+recovery has to pass. A 500 m capture is about 125 sigma.
+
+`SRCF_RECOV_POS_NSIGMA` is 6: half again the worst legitimate
+observation and twenty times under a capture. Loose on purpose - it
+only has to separate tens of metres from hundreds, and the sigma grows
+with the flow lane's drift where a constant cannot.
+
+The smallest static offset this catches is about six times the
+combined sigma, so tens of metres early in an outage and over a
+hundred once the flow lane has been dead reckoning a while. A capture
+that small is a different problem from the one reported in the field.
+
 ## Bonus - the RC failsafe rung, unplanned
 
 log334 took four in-flight Radio Failsafes, two of them while on the
@@ -246,6 +309,16 @@ spans several arm/disarm cycles and the counters reset on disarm, so
 an unscoped scan reports the previous phase's peaks - which is
 exactly how the first version of the assertion failed.
 
+The static capture fix spans four more modules. `AP_NavEKF3` exposes
+`getPosVarianceNE` and `getLaneDivergencePosSigma`, mirroring the
+velocity pair added in session 1; `AP_AHRS` passes it through;
+`Copter` bounds `pos_div` in `recovery_ok` at `SRCF_RECOV_POS_NSIGMA`;
+`SITL` gains spoof mode 3. `autotest` gains
+`SRCFStaticSpoofNoRecovery`, which fails on the unfixed code and
+passes with the bound, while `SRCFGPSLossLadder` still recovers - the
+regression that mattered, since a bound set too tight would have
+quietly undone Card 3.
+
 ## Vehicle state at end of session
 
 ```
@@ -272,9 +345,11 @@ logs 335 and 336. It should stay at 2.0.
    will push `VD` and `PR` up and there is only 11% of headroom. Every
    `SRCF_ENABLE=1` flight should keep adding to the `VSig`/`VD`/`PR`
    table.
-2. The position-only spoof limit belongs in user-facing documentation,
-   not just the parameter description. The feature should not be
-   described as detecting GPS spoofing without qualification.
+2. The detection limits belong in user-facing documentation, not just
+   the parameter description: neither a position-only walk slower than
+   `SRCF_POSR_THR` nor a static offset under about six sigma is seen.
+   The feature should not be described as detecting GPS spoofing
+   without qualification.
 3. `SRCF_NSIGMA` = 2.5 is still not calibrated. It measurably helps
    (nine velocity false trips become one on the old thresholds) but
    the value itself remains a choice made from two SITL points.
@@ -285,3 +360,9 @@ logs 335 and 336. It should stay at 2.0.
    while `SRCF_ENABLE > 0`, and a lane whose yaw source is None is a
    latent arming blocker under per-core source sets regardless of
    SRCF.
+6. A recovery held off by the position offset bound is silent. The
+   pilot sees `SRCF: GPS lost, using flow lane` and then nothing more,
+   which is the right behaviour with the wrong amount of information
+   in the one case where GPS never returns because it is lying. A
+   one-shot statustext naming the offset as the reason would cost
+   little.
