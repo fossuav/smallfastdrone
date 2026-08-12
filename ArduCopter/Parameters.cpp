@@ -1274,7 +1274,7 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Units: m/s
     // @Range: 0.1 2
     // @User: Advanced
-    AP_GROUPINFO("SRCF_POSR_THR", 33, ParametersG2, srcf_posr_thr, 0.5),
+    AP_GROUPINFO("SRCF_POSR_THR", 33, ParametersG2, srcf_posr_thr, 0.9),
 
     // @Param: SRCF_CNF_TIME
     // @DisplayName: EKF source fallback spoof confirmation time
