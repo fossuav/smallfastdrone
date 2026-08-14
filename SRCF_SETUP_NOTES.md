@@ -1,0 +1,256 @@
+# SRCF setup notes - field tester guide
+
+How to put the GPS/optical-flow source fallback (SRCF) on your
+airframe: flashing the firmware, the required configuration, what has
+to be recalibrated per airframe, and the staged flight program that
+takes you from first hover to the detectors running armed.
+
+SRCF runs two EKF lanes on different source sets - lane 0 on GPS,
+lane 1 on optical flow - and moves the primary lane to flow when GPS
+is lost or looks spoofed, without tripping the EKF failsafe. GPS loss
+recovers automatically; a spoof detection latches GPS untrusted until
+disarm or a pilot source-set change. It is field-validated on two
+airframes (a small quad and a 1 m octaquad): detection in 0.2-0.3 s,
+recovery in 10-12 s, repeatably. The detection thresholds are NOT
+transferable between airframes or mission profiles - calibrating them
+on yours is most of this document.
+
+Hardware assumed: a downward optical flow sensor plus rangefinder
+(both test airframes fly an ARK Flow MR on DroneCAN) and a GPS. Two
+usable IMUs are required for the two lanes.
+
+## 1. Firmware
+
+Branch `SmallFastDrone-4.7.0-gps-optflow-fallback`, based on
+ArduCopter 4.7.0.
+
+```
+./waf configure --board <your-board>     # e.g. MatekH743-bdshot
+./waf copter
+```
+
+Flash `build/<your-board>/bin/arducopter.apj` with your GCS (Mission
+Planner: Setup -> Install Firmware -> Load custom firmware), or
+`./waf --targets bin/arducopter --upload` with the board on USB.
+
+Save a full parameter file before flashing. Parameters survive the
+flash (same parameter format), but the backup is your way home: to
+back out, restore stock 4.7.0 firmware and that file.
+
+## 2. Required configuration
+
+The lane split, without which SRCF will not arm:
+
+| parameter | value | why |
+|---|---|---|
+| `EK3_SRC_OPTIONS` | 8 | bit 3: per-core source sets - lane 0 follows SRC1, lane 1 follows SRC2 |
+| `EK3_OPTIONS` | bit 1 set | manual lane switching; SRCF owns the lane choice |
+| `EK3_IMU_MASK` | 3 | two lanes |
+| `EK3_SRC1_POSXY/VELXY/VELZ` | 3/3/3 | GPS set |
+| `EK3_SRC1_POSZ`, `EK3_SRC1_YAW` | as currently flown | typically 1 (baro) and 1 (compass) |
+| `EK3_SRC2_POSXY` | 0 | flow lane is dead reckoning |
+| `EK3_SRC2_VELXY` | 5 | optical flow |
+| `EK3_SRC2_VELZ` | 0 | none |
+| `EK3_SRC2_YAW` | 1 | 0 blocks arming |
+| `FLOW_TYPE`, `RNGFND1_TYPE` | per hardware | ARK Flow on DroneCAN: 6 and 24 |
+| `RCx_OPTION` | 65 | GPS Disable - the reversible field lever for loss testing |
+| `RCx_OPTION` | 90 | EKF source set select - manual flow flying, and clears a spoof latch |
+
+Both test airframes additionally fly `EK3_OPTIONS = 94` (bits 1, 2, 3,
+4, 6), which adds the fork's flow-at-height and AGL-KF behaviour. Only
+bit 1 is required by SRCF. Do not set bit 5 on the flow lane: with
+`EK3_SRC2_VELZ = 0` it fuses terrain-relative vertical velocity
+whenever flow is primary, which turns into terrain following.
+
+Set `SRCF_ENABLE = 1` on the bench *before* the first SRCF flight and
+try to arm: the pre-arm names any misconfiguration ("bad
+EK3_SRC_OPTIONS/EK3_OPTIONS", "need 2 lanes in EK3_IMU_MASK", "need
+SRC1 GPS, SRC2 flow", "set EK3_SRC2_YAW", "optical flow disabled").
+Note the pre-arm only validates while `SRCF_ENABLE > 0`, so a
+disabled-but-misconfigured setup stays silent.
+
+On boot with the split active you should see:
+
+```
+EKF3 IMU0 is using GPS
+EKF3 IMU1 fusing optical flow
+EKF3 IMU1 started relative aiding
+```
+
+## 3. SRCF parameters
+
+| parameter | default | validated values | meaning |
+|---|---|---|---|
+| `SRCF_ENABLE` | 0 | 1 | master enable |
+| `SRCF_VEL_THR` | 1.6 | 1.6 low-speed; 3.0 for 30 km/h | cross-lane velocity difference gate, m/s |
+| `SRCF_POSR_THR` | 1.9 | 2.6 | cross-lane position growth rate gate, m/s |
+| `SRCF_POSD_NSIG` | 0 (off) | unflown; start at 4 | position offset detector, in sigmas |
+| `SRCF_CNF_TIME` | 2.0 | 2.0 | confirmation window; 20 votes at the 10 Hz monitor |
+| `SRCF_RECOV_TIME` | 10.0 | 10.0 | GPS must be healthy this long before return |
+| `SRCF_NSIGMA` | 2.5 | 2.5 (measured inert) | adaptive floor; fixed thresholds always win in practice |
+
+The three detectors, and what each can and cannot see:
+
+- `SRCF_VEL_THR` (velocity difference): catches a spoofer whose
+  velocity moves. Its benign envelope scales with airspeed - at
+  30 km/h it needs 3.0, at which the known velocity-consistent spoof
+  (sustained VD 1.77 in SITL) becomes invisible. There is no fixed
+  value that survives 30 km/h and catches that spoof.
+- `SRCF_POSR_THR` (position growth rate): catches a spoofer whose
+  reported velocity is consistent with its position walk. No speed
+  trend observed; 2.6 gave a clean six-minute soak.
+- `SRCF_POSD_NSIG` (position offset): speed-invariant, and the only
+  one that sees a slow position-only walk (0.8 m/s in SITL, invisible
+  to both rate detectors). The cost is latency - roughly 37 m of drag
+  before it can fire, because an integrating detector cannot trip
+  until the offset has built. Replay over eight flights is clean at
+  2.5 and above; start at 4 (1.7x over the worst benign ratio) and
+  tighten toward 3 only after soaking your own airframe. It has never
+  flown enabled.
+
+Do not copy the thresholds and consider it done. Section 6 tells you
+how to measure your own envelope; the rule is at least ~30% margin
+over the worst benign excursion, which is the margin that was one vote
+from a false trip when it was missing.
+
+Related but separate: with `FS_OPTIONS` bit 6, an RC failsafe with no
+position estimate falls back to AltHold and drifts for `FS_ALTH_TMO`
+(default 30 s) before landing.
+
+## 4. What must be recalibrated on your airframe
+
+Assumed done already: the standard build bring-up (accel, compass, RC,
+ESC, a basic tune). SRCF-specific, in order:
+
+**Rangefinder first.** Everything downstream divides by height.
+Validate against two witnesses in a GPS hover log: `RFND` vs `BARO`
+altitude (slope ~1.0) and `d(RFND)/dt` vs GPS climb rate (slope
+~1.0).
+
+**Flow orientation and node rate** (`FLOW_ORIENT_YAW`). From any hover
+log, no GPS needed:
+
+```
+python3 .claude/skills/log-analyze/flow_cal_check.py <log.bin>
+```
+
+The sensor-gyro vs FC-IMU slope must be +1.0 on both axes: 180 deg of
+orientation error reads -1.0 on both, 90 deg swaps the axes, and a
+slope well off 1.0 is the DroneCAN integration-interval fault, which
+no scaler can fix (`FLOW_HF_RATEF` exists for that case). Fix
+whatever it reports before touching scalers.
+
+**Flow scale** (`FLOW_FXSCALER` / `FLOW_FYSCALER`). Not transferable -
+the octaquad needed -57/-110 where the small quad flew -88/-148, on
+the same sensor model. Calibration flight: outdoors with GPS, heading
+held, deliberate forward runs then strafe runs at a few m/s, 5-9 m
+AGL, a couple of minutes total. Run `flow_cal_check.py` on the log;
+it prints per-axis ratios and suggested scalers, using raw rangefinder
+height by default (do not switch it to the AGL KF height - the KF's
+lag absorbs into the scaler and reads as a scale error). Fly the new
+scalers once to confirm ratios near 1.0; if two flights disagree by a
+few percent, split the difference.
+
+**`EK3_FLOW_GAIN_H`.** The position-controller detune on flow scales
+as `EK3_FLOW_GAIN_H / max(HAGL, EK3_FLOW_GAIN_H)`, so any value at or
+above your operating height means no detune at all. 12 at 7-9 m gave
+a sustained 2.4 s roll limit cycle; 4 halved roll sd and improved the
+actual hold on both airframes. Set it well below operating height; 4
+is validated at 6-8 m.
+
+**`EK3_GLITCH_RAD`.** 25 unless you fly 50 m/s class (where 0 is
+correct). At 0 a modest position jump on the flow-to-GPS return can
+wedge the glitch logic for tens of seconds instead of resetting.
+
+**Baro sanity.** Log a bench cool-down. One test airframe's baro sat
+at 61 C and drifted 0.30 m in 78 s of cooling; that noise floor
+contaminates every altitude measurement you will make.
+
+## 5. Field program
+
+One change per flight. Each stage gates the next.
+
+1. **Bring-up hover.** ALT_HOLD, under 2 m, over flat ground, SRCF
+   off. Afterwards: flow quality mean well above 50, `RFND` healthy
+   in flight, orientation slopes +1.0.
+2. **Flow calibration flight** (section 4). Then one confirm flight
+   on the new scalers.
+3. **Flow LOITER.** At 5-9 m, switch the source set to flow with the
+   RC 90 switch, station-keep, switch back gently. Watch for the
+   fast sway that means `EK3_FLOW_GAIN_H` is not detuning. When
+   A/B-ing gains here, confirm in the log (`XKF4.AID = 2`, relative
+   aiding) that the EKF was actually on flow for the window - one of
+   our "flow tuning" flights turned out to be tuning GPS LOITER.
+4. **SRCF soak.** `SRCF_ENABLE = 1`, default thresholds, normal
+   flying including your target speeds, no GPS-loss cycling. The
+   point is the benign envelope: afterwards read max `|VD|`, max
+   `|PR|`, `PD` against `PSig`, and the peak `VVot`/`PVot`/`OVot`
+   counts. Set your thresholds from these with ~30% margin. If a
+   counter approached 20, the threshold it feeds was about to
+   false-trip.
+5. **GPS-loss ladder.** Low speed, 5-9 m AGL, comfortable arena.
+   Flip GPS Disable (RC 65), watch the lane switch, hold position on
+   flow for 15-30 s, restore, wait out recovery. Expect detection in
+   ~0.25 s, recovery in `SRCF_RECOV_TIME` plus ~2 s, hands-off drift
+   on flow of ~0.5-1 m over 20 s. Repeat several cycles. An
+   `EKF_YAW_RESET` event at every lane switch is expected and benign
+   - check the yaw step is a couple of degrees, not tens.
+6. **Envelope expansion.** Repeat the soak at mission speed and
+   re-read the envelope before trusting any threshold at that speed.
+   Our 8-12 m/s band produced `|VD|` 2.17 and a `VVot` of 19/20
+   against the 1.6 default - one vote from a latching false trip.
+7. **Position offset detector.** Only after a clean soak with
+   `SRCF_POSD_NSIG = 0`: read the flight's max `PD/PSig` ratio, then
+   enable at 4 and repeat the soak before relying on it.
+
+Not yet flown by anyone, deliberately left to arithmetic: a GPS-loss
+cycle at cruise speed. A 3-5% residual flow scale error at 8.3 m/s is
+15-25 m of drift per minute of outage. Measure it before the mission
+depends on it.
+
+### GCS messages in the field
+
+| message | meaning |
+|---|---|
+| `SRCF: GPS lost, using flow lane` | loss detected, lane moved |
+| `SRCF: GPS recovered` | recovery hold passed, back on GPS |
+| `SRCF: GPS spoof suspected, using flow lane` | a detector confirmed; GPS latched untrusted |
+| `SRCF: GPS returned Xm off, staying on flow` | GPS is back but disagrees with the flow lane's position |
+| `SRCF: GPS trust reset` | latch cleared (disarm or pilot source-set change) |
+| `SRCF: flow lost, back on GPS lane` | flow lane became unusable while primary |
+| `SRCF: no nav source, AltHold` | final rung: neither lane has position |
+| `SRCF: lane switch unavailable` | wanted to switch and could not |
+
+## 6. Reading the logs
+
+The `SRCF` record, 10 Hz:
+
+| field | meaning |
+|---|---|
+| `St` | 0 GPS primary, 1 flow after GPS loss, 2 flow after spoof |
+| `GU` | GPS untrusted latch |
+| `VD`, `PD`, `PR` | cross-lane velocity difference, position offset, offset growth rate |
+| `VVot`, `PVot`, `OVot` | confirmation counters (velocity / position rate / position offset); a detector trips at 20 |
+| `VSig`, `PSig` | combined 1-sigma velocity / position uncertainty of the two lanes |
+| `GpsB`, `FlwU`, `GpsL` | GPS receiver loss confirmed; flow lane usable; GPS lane usable |
+
+A healthy benign flight has all three counters at or near zero
+throughout. The GPS-loss path runs on `GpsB`/`GpsL`, not the vote
+counters, so loss handling keeps working however you set the spoof
+thresholds.
+
+## 7. Known limits
+
+- No fixed `SRCF_VEL_THR` both survives 30 km/h flight and catches a
+  velocity-consistent spoof. At high cruise you are choosing between
+  spoof coverage and false trips; the position offset detector is the
+  current answer for slow walks, and it is late by design.
+- `SRCF_NSIGMA` is inert on both test airframes - the fixed
+  thresholds always win the max(). Leave it at 2.5.
+- The flow lane dead-reckons position. Hold is sub-metre over tens of
+  seconds when calibrated; over minutes, drift is bounded by your
+  residual scale error times distance flown.
+- The AltHold demotion rung (both lanes lost) has only been exercised
+  in SITL.
+- Flow near the ground is its own problem set (focus height, ground
+  effect); do the low work in ALT_HOLD and the SRCF work at 5-9 m.
