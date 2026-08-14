@@ -37,7 +37,48 @@ Save a full parameter file before flashing. Parameters survive the
 flash (same parameter format), but the backup is your way home: to
 back out, restore stock 4.7.0 firmware and that file.
 
-## 2. Required configuration
+### DFU flash with STM32CubeProgrammer
+
+The .apj route needs the ArduPilot bootloader already on the board. A
+blank board, a bricked one, or one arriving with another firmware's
+bootloader gets flashed over USB DFU instead, using the combined
+bootloader-plus-firmware image the build also produces:
+`build/<your-board>/bin/arducopter_with_bl.hex`.
+
+1. Enter DFU: hold the boot button (or bridge the BOOT0 pad) while
+   plugging in USB. The board enumerates as "STM32 BOOTLOADER" or
+   "DFU in FS Mode" - no COM port appears. If nothing shows up it is
+   almost always the DFU driver or a charge-only cable.
+2. In CubeProgrammer set the connection type to USB, refresh, pick
+   the USB port, Connect.
+3. Open `arducopter_with_bl.hex` under "Erasing & programming" and
+   Download. The load address comes from the hex; leave it alone.
+   "Verify programming" is worth the extra seconds.
+4. Disconnect in CubeProgrammer, unplug, power up normally. First
+   boot after a bootloader flash can take a few seconds longer.
+
+Parameters usually survive - the hex does not cover the storage
+sectors - but do not rely on it: if you had to do a full chip erase
+they are gone, so check against your saved file either way.
+
+## 2. Motor wiring
+
+The reference octaquad build runs two 4-in-1 ESCs: one on outputs
+S1-4, the other on S5-8. Getting the two connectors the right way
+round matters - swapped banks put every motor in the wrong frame
+position, which no configuration survives - and the same goes for the
+motor order within each bank.
+
+Props off, verify with Mission Planner's motor test (Setup ->
+Optional Hardware -> Motor Test) before the first flight: each button
+must spin the motor the OCTAQUAD X_REV diagram expects, in both
+position and direction. The test letters run A, B, C... clockwise
+from the front-right arm - diagram order, not output order - so do
+not assume button A is S1. A motor spinning the wrong way is fixed in
+ESC configuration or by swapping any two of its three phase wires,
+not in ArduPilot parameters.
+
+## 3. Required configuration
 
 The lane split, without which SRCF will not arm:
 
@@ -77,7 +118,7 @@ EKF3 IMU1 fusing optical flow
 EKF3 IMU1 started relative aiding
 ```
 
-## 3. SRCF parameters
+## 4. SRCF parameters
 
 | parameter | default | validated values | meaning |
 |---|---|---|---|
@@ -117,10 +158,10 @@ Related but separate: with `FS_OPTIONS` bit 6, an RC failsafe with no
 position estimate falls back to AltHold and drifts for `FS_ALTH_TMO`
 (default 30 s) before landing.
 
-## 4. What must be recalibrated on your airframe
+## 5. What must be recalibrated on your airframe
 
-Assumed done already: the standard build bring-up (accel, compass, RC,
-ESC, a basic tune). SRCF-specific, in order:
+Assumed done already: the standard build bring-up (accel, RC, ESC, a
+basic tune). SRCF-specific, in order:
 
 **Rangefinder first.** Everything downstream divides by height.
 Validate against two witnesses in a GPS hover log: `RFND` vs `BARO`
@@ -139,6 +180,28 @@ orientation error reads -1.0 on both, 90 deg swaps the axes, and a
 slope well off 1.0 is the DroneCAN integration-interval fault, which
 no scaler can fix (`FLOW_HF_RATEF` exists for that case). Fix
 whatever it reports before touching scalers.
+
+**Compass.** The flow lane's yaw source is the compass
+(`EK3_SRC2_YAW = 1`), and while dead reckoning a yaw error rotates
+flow velocity directly into position drift - the flow lane holds
+position only as well as it holds heading. The flow scale calibration
+below also rotates GPS velocity into the body frame by yaw, so do
+this before it. Three steps:
+
+1. The bench compass dance: standard onboard calibration, well away
+   from vehicles and steel. Good enough to arm and fly, not good
+   enough to stop there.
+2. Fly figure-8s in ALT_HOLD for a couple of minutes with GPS lock,
+   working through a full circle of headings with some throttle and
+   speed variation so motor interference shows in the data. ALT_HOLD
+   because it flies fine on a rough compass; LOITER leans on the
+   heading you are calibrating.
+3. Feed the log to the MAGFit web tool
+   (firmware.ardupilot.org/Tools/WebTools/MAGFit). It fits offsets,
+   iron correction, scale and motor compensation against the world
+   magnetic model and checks orientation. Apply what it suggests,
+   reboot, and confirm on the next flight that the mag innovations
+   stay quiet (`XKF4.SM` comfortably below 1).
 
 **Flow scale** (`FLOW_FXSCALER` / `FLOW_FYSCALER`). Not transferable -
 the octaquad needed -57/-110 where the small quad flew -88/-148, on
@@ -166,40 +229,42 @@ wedge the glitch logic for tens of seconds instead of resetting.
 at 61 C and drifted 0.30 m in 78 s of cooling; that noise floor
 contaminates every altitude measurement you will make.
 
-## 5. Field program
+## 6. Field program
 
 One change per flight. Each stage gates the next.
 
 1. **Bring-up hover.** ALT_HOLD, under 2 m, over flat ground, SRCF
    off. Afterwards: flow quality mean well above 50, `RFND` healthy
    in flight, orientation slopes +1.0.
-2. **Flow calibration flight** (section 4). Then one confirm flight
+2. **Compass figure-8.** A couple of minutes of ALT_HOLD figure-8s
+   with GPS lock; run the log through MAGFit and apply (section 5).
+3. **Flow calibration flight** (section 5). Then one confirm flight
    on the new scalers.
-3. **Flow LOITER.** At 5-9 m, switch the source set to flow with the
+4. **Flow LOITER.** At 5-9 m, switch the source set to flow with the
    RC 90 switch, station-keep, switch back gently. Watch for the
    fast sway that means `EK3_FLOW_GAIN_H` is not detuning. When
    A/B-ing gains here, confirm in the log (`XKF4.AID = 2`, relative
    aiding) that the EKF was actually on flow for the window - one of
    our "flow tuning" flights turned out to be tuning GPS LOITER.
-4. **SRCF soak.** `SRCF_ENABLE = 1`, default thresholds, normal
+5. **SRCF soak.** `SRCF_ENABLE = 1`, default thresholds, normal
    flying including your target speeds, no GPS-loss cycling. The
    point is the benign envelope: afterwards read max `|VD|`, max
    `|PR|`, `PD` against `PSig`, and the peak `VVot`/`PVot`/`OVot`
    counts. Set your thresholds from these with ~30% margin. If a
    counter approached 20, the threshold it feeds was about to
    false-trip.
-5. **GPS-loss ladder.** Low speed, 5-9 m AGL, comfortable arena.
+6. **GPS-loss ladder.** Low speed, 5-9 m AGL, comfortable arena.
    Flip GPS Disable (RC 65), watch the lane switch, hold position on
    flow for 15-30 s, restore, wait out recovery. Expect detection in
    ~0.25 s, recovery in `SRCF_RECOV_TIME` plus ~2 s, hands-off drift
    on flow of ~0.5-1 m over 20 s. Repeat several cycles. An
    `EKF_YAW_RESET` event at every lane switch is expected and benign
    - check the yaw step is a couple of degrees, not tens.
-6. **Envelope expansion.** Repeat the soak at mission speed and
+7. **Envelope expansion.** Repeat the soak at mission speed and
    re-read the envelope before trusting any threshold at that speed.
    Our 8-12 m/s band produced `|VD|` 2.17 and a `VVot` of 19/20
    against the 1.6 default - one vote from a latching false trip.
-7. **Position offset detector.** Only after a clean soak with
+8. **Position offset detector.** Only after a clean soak with
    `SRCF_POSD_NSIG = 0`: read the flight's max `PD/PSig` ratio, then
    enable at 4 and repeat the soak before relying on it.
 
@@ -221,7 +286,7 @@ depends on it.
 | `SRCF: no nav source, AltHold` | final rung: neither lane has position |
 | `SRCF: lane switch unavailable` | wanted to switch and could not |
 
-## 6. Reading the logs
+## 7. Reading the logs
 
 The `SRCF` record, 10 Hz:
 
@@ -239,7 +304,7 @@ throughout. The GPS-loss path runs on `GpsB`/`GpsL`, not the vote
 counters, so loss handling keeps working however you set the spoof
 thresholds.
 
-## 7. Known limits
+## 8. Known limits
 
 - No fixed `SRCF_VEL_THR` both survives 30 km/h flight and catches a
   velocity-consistent spoof. At high cruise you are choosing between
