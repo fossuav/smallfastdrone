@@ -84,11 +84,22 @@ different:
 In the fixed replay the body field states converge to (-7, 57, 119)
 mGauss and settle instead of walking - the learning now works.
 
+Bench-validated on the small quad, log 339, against `9621bf2c`
+itself: 47 s on the ground through origin set with `MAG_FUSION = 2`
+the whole time, both cores within 0.2 deg of DCM, then a ~200 deg
+hand rotation that both cores tracked to within 1.6 deg of the
+compass and 0.7 deg of each other. Body field states settled at
+(12, 19, 19) mGauss. The unfixed filter rotated its yaw without the
+vehicle moving; the fixed one moves only when the vehicle does. The
+small quad never provoked the failure unfixed, so the disturbed-site
+half of the evidence rests on the log 50/51 replay; the eudrone's
+next outing at its own site closes that for free.
+
 Consequences:
 
-- The fix needs a vehicle test: power the X8 at the same spot and
-  watch the pre-arm and both core yaws against DCM. It is on both
-  branches.
+- The fix is bench-validated (log 339, above) and on both branches.
+  Remaining: the eudrone at its own site, whose next outing covers
+  it.
 - The X8 default parameter file ships `EK3_MAG_CAL = 7`: fine with
   the fix, a latent arm-blocker (or worse, single-lane) without it.
   The small quad also flies 7 and armed clean on log 338 - its site
@@ -106,5 +117,6 @@ Consequences:
    gentle flight.
 2. The offset detector still needs the long soak (ratio plateau), a
    GPS-loss cycle with it enabled, and an in-flight detection test.
-3. The mag cal fix is Replay-validated only: vehicle test pending.
-   It is on both branches.
+3. The mag cal fix is Replay-validated on the failure logs and
+   bench-validated on the small quad (log 339). Outstanding only:
+   the eudrone at its own disturbed site.
