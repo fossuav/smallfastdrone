@@ -1298,6 +1298,13 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Range: 0 10
     // @User: Advanced
     AP_GROUPINFO("SRCF_NSIGMA", 36, ParametersG2, srcf_nsigma, 2.5),
+
+    // @Param: SRCF_POSD_NSIG
+    // @DisplayName: EKF source fallback position offset spoof threshold
+    // @Description: Number of standard deviations the cross-lane position offset must exceed before GPS spoofing is suspected, held for SRCF_CNF_TIME. The deviation is the two lanes' combined horizontal position uncertainty, which accumulates from the same dead reckoning error that moves the offset, so unlike SRCF_VEL_THR this ratio does not grow with airspeed. It sees a slow position-only spoof that the velocity and position-rate detectors miss, because a walk that stays inside their thresholds still accumulates offset. The deviation is floored at 2m so the gate cannot collapse just after takeoff before the flow lane has dead reckoned any distance. Sensitivity still falls as the flight goes on, since that uncertainty grows without bound. 0 disables this detector.
+    // @Range: 0 10
+    // @User: Advanced
+    AP_GROUPINFO("SRCF_POSD_NSIG", 37, ParametersG2, srcf_posd_nsig, 0),
 #endif
 
     // @Param: FS_ALTH_TMO

@@ -20,6 +20,10 @@
  * velocity is consistent with its position walk). Quality-based GPS
  * checks cannot see either case. A spoof detection latches GPS as
  * untrusted until disarm or a pilot source set change.
+ *
+ * SRCF_POSD_NSIG adds a third test on the accumulated position offset,
+ * which catches a walk slow enough to sit inside both rate thresholds.
+ * It is off by default and has not been flown.
  */
 
 #define SRCF_GPS_BAD_ITERATIONS     3       // 0.3s at 10hz to confirm GPS loss
@@ -32,6 +36,13 @@
 // on purpose - it separates tens of metres from hundreds, and blocking a
 // legitimate recovery is worse than missing a small static offset.
 #define SRCF_RECOV_POS_NSIGMA       6.0f
+// Floor under the offset detector's denominator. The flow lane only earns
+// position uncertainty by dead reckoning, so just after takeoff the divisor
+// is smallest exactly while the lanes are still settling: field log 57 pairs
+// a 2.4m offset with a 0.79m sigma at 0.2m AGL, a ratio of 3.1 against an
+// airborne worst of 2.05. Without a floor the gate collapses on the ground
+// and the detector is most likely to false trip where it is least useful.
+#define SRCF_POSD_MIN_SIGMA         2.0f
 
 static const uint8_t SRCF_GPS_LANE = 0;     // lane running EK3_SRC1 (GPS)
 static const uint8_t SRCF_FLOW_LANE = 1;    // lane running EK3_SRC2 (optical flow)
@@ -50,6 +61,7 @@ static struct {
     uint8_t flow_bad_count;
     uint16_t vel_vote;          // velocity divergence confirmation vote
     uint16_t pos_vote;          // position divergence rate confirmation vote
+    uint16_t pos_off_vote;      // position offset confirmation vote
     float pos_div_hist[SRCF_POS_RATE_WINDOW];   // ring buffer of position divergence
     uint8_t hist_idx;
     uint8_t hist_count;
@@ -67,6 +79,7 @@ static void srcf_reset_detectors()
     srcf_state.flow_bad_count = 0;
     srcf_state.vel_vote = 0;
     srcf_state.pos_vote = 0;
+    srcf_state.pos_off_vote = 0;
     srcf_state.hist_idx = 0;
     srcf_state.hist_count = 0;
     srcf_state.recovery_start_ms = 0;
@@ -192,6 +205,16 @@ void Copter::source_fallback_update()
     const float vel_gate = MAX(g2.srcf_vel_thr.get(), sig_gate);
     const float pos_gate = MAX(g2.srcf_posr_thr.get(), sig_gate);
 
+    // The offset detector judges the position difference itself against the
+    // lanes' combined position uncertainty. That uncertainty accumulates from
+    // the same dead reckoning error that opens the offset, so the ratio is
+    // self-normalising where the velocity difference is not: field logs 53,
+    // 55 and 57 read 1.51, 0.55 and 1.64 across 0 to 8.8 m/s, while vel_div
+    // over the same range went 1.26 to 2.17. Off by default, unflown.
+    float pos_sigma = 0.0f;
+    const bool pos_sigma_valid = ahrs.get_lane_divergence_pos_sigma(other_lane, pos_sigma) &&
+                                 is_positive(pos_sigma);
+
     // one vote integrator per signal: a divergence must persist on the same
     // signal for SRCF_CNF_TIME. A single counter fed by both lets a decaying
     // signal hand over to a rising one and confirm on neither alone.
@@ -208,12 +231,20 @@ void Copter::source_fallback_update()
     } else if (srcf_state.pos_vote > 0) {
         srcf_state.pos_vote--;
     }
+    if (can_vote && pos_sigma_valid && is_positive(g2.srcf_posd_nsig) &&
+        (pos_div > g2.srcf_posd_nsig * MAX(pos_sigma, SRCF_POSD_MIN_SIGMA))) {
+        srcf_state.pos_off_vote = MIN(srcf_state.pos_off_vote + 1, vote_max);
+    } else if (srcf_state.pos_off_vote > 0) {
+        srcf_state.pos_off_vote--;
+    }
 
     bool demote_needed = false;
 
     switch (srcf_state.lane_state) {
     case LaneState::GPS_PRIMARY: {
-        const bool spoof_confirmed = (srcf_state.vel_vote >= vote_max) || (srcf_state.pos_vote >= vote_max);
+        const bool spoof_confirmed = (srcf_state.vel_vote >= vote_max) ||
+                                     (srcf_state.pos_vote >= vote_max) ||
+                                     (srcf_state.pos_off_vote >= vote_max);
         if ((spoof_confirmed || gps_bad) && flow_usable) {
             if (source_fallback_command_lane(SRCF_FLOW_LANE)) {
                 if (spoof_confirmed) {
@@ -254,8 +285,7 @@ void Copter::source_fallback_update()
             // which is their combined position uncertainty: that grows as
             // the flow lane dead reckons, so a fixed metre limit would block
             // legitimate recovery on a long outage.
-            float pos_sigma = 0.0f;
-            const bool offset_ok = ahrs.get_lane_divergence_pos_sigma(other_lane, pos_sigma) &&
+            const bool offset_ok = pos_sigma_valid &&
                                    (pos_div < SRCF_RECOV_POS_NSIGMA * pos_sigma);
 
             // auto-recovery: GPS lane must be continuously usable and
@@ -323,18 +353,22 @@ void Copter::source_fallback_update()
     // @Field: PR: cross-lane position difference growth rate
     // @Field: VVot: velocity divergence confirmation vote count
     // @Field: PVot: position divergence rate confirmation vote count
+    // @Field: OVot: position offset confirmation vote count
     // @Field: VSig: combined 1-sigma horizontal velocity uncertainty of both lanes
+    // @Field: PSig: combined 1-sigma horizontal position uncertainty of both lanes
     // @Field: GpsB: GPS receiver loss confirmed
     // @Field: FlwU: flow lane usable
     // @Field: GpsL: GPS lane usable
-    AP::logger().WriteStreaming("SRCF", "TimeUS,St,GU,VD,PD,PR,VVot,PVot,VSig,GpsB,FlwU,GpsL", "QBBfffHHfBBB",
+    AP::logger().WriteStreaming("SRCF", "TimeUS,St,GU,VD,PD,PR,VVot,PVot,OVot,VSig,PSig,GpsB,FlwU,GpsL", "QBBfffHHHffBBB",
                                 AP_HAL::micros64(),
                                 (uint8_t)srcf_state.lane_state,
                                 (uint8_t)srcf_state.gps_untrusted,
                                 (double)vel_div, (double)pos_div, (double)pos_rate,
                                 (uint16_t)srcf_state.vel_vote,
                                 (uint16_t)srcf_state.pos_vote,
+                                (uint16_t)srcf_state.pos_off_vote,
                                 (double)vel_sigma,
+                                (double)pos_sigma,
                                 (uint8_t)gps_bad,
                                 (uint8_t)flow_usable,
                                 (uint8_t)gps_lane_usable);
