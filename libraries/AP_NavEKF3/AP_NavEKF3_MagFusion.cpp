@@ -434,6 +434,14 @@ void NavEKF3_core::SelectMagFusion()
 
         } else {
             magFusionSel = MagFuseSel::FUSE_MAG;
+            // a stationary vehicle gives 3-axis fusion no yaw observability while the field
+            // states are learning - a yaw error can be absorbed by the body field states with
+            // zero innovation. When learning on the ground, anchor the yaw to the measured
+            // heading so the field learning stays referenced to it
+            bool yawAnchored = false;
+            if (!inFlight && effectiveMagCal == MagCal::GROUND_AND_INFLIGHT) {
+                yawAnchored = fuseEulerYaw(yawFusionMethod::MAGNETOMETER);
+            }
             // if we are not doing aiding with earth relative observations (eg GPS) then the declination is
             // maintained by fusing declination as a synthesised observation
             // We also fuse declination if we are using the WMM tables
@@ -443,8 +451,10 @@ void NavEKF3_core::SelectMagFusion()
             }
             // fuse the three magnetometer componenents using sequential fusion for each axis
             FuseMagnetometer();
-            // zero the test ratio output from the inactive simple magnetometer yaw fusion
-            yawTestRatio = 0.0f;
+            if (!yawAnchored) {
+                // zero the test ratio output from the inactive simple magnetometer yaw fusion
+                yawTestRatio = 0.0f;
+            }
         }
     }
 
