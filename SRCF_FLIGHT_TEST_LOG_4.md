@@ -5,8 +5,8 @@ position offset detector enabled for the first time - log 338, against
 `df3037db`. And a tester's X8 ("eudrone", MatekH743-bdshot on an
 OCTAQUAD/X_REV, against `60b12780`) was blocked from arming by a
 growing "EKF3 Yaw inconsistent" pre-arm - logs 50/51, root-caused to
-`EK3_MAG_CAL = 7`, fixed on SmallFastDrone-4.7-beta and
-Replay-validated, not yet flown.
+`EK3_MAG_CAL = 7`, fixed on SmallFastDrone-4.7-beta and cherry-picked
+here, Replay-validated, not yet flown.
 
 ## The position offset detector's first flight - log 338
 
@@ -66,7 +66,8 @@ with two active cores the DCM yaw comparison is skipped - a
 single-lane setup would have raised no message and **armed** with a
 yaw estimate 100+ deg wrong and rotating.
 
-The fix (commit `1196739139`, SmallFastDrone-4.7-beta): while mode 7
+The fix (`1196739139` on SmallFastDrone-4.7-beta, `9621bf2cd4`
+here): while mode 7
 is learning on the ground, fuse the magnetic heading alongside the
 3-axis fusion. The heading comes from the raw compass, not the
 learned states, so the anchor is not circular; with yaw pinned and
@@ -85,9 +86,9 @@ mGauss and settle instead of walking - the learning now works.
 
 Consequences:
 
-- The fix needs a vehicle test (power the X8 at the same spot, watch
-  the pre-arm and both core yaws against DCM) and a cherry-pick onto
-  the gps-optflow-fallback branch, in that order or together.
+- The fix needs a vehicle test: power the X8 at the same spot and
+  watch the pre-arm and both core yaws against DCM. It is on both
+  branches.
 - The X8 default parameter file ships `EK3_MAG_CAL = 7`: fine with
   the fix, a latent arm-blocker (or worse, single-lane) without it.
   The small quad also flies 7 and armed clean on log 338 - its site
@@ -105,5 +106,5 @@ Consequences:
    gentle flight.
 2. The offset detector still needs the long soak (ratio plateau), a
    GPS-loss cycle with it enabled, and an in-flight detection test.
-3. The mag cal fix is Replay-validated only: vehicle test pending,
-   cherry-pick to the fallback branch pending.
+3. The mag cal fix is Replay-validated only: vehicle test pending.
+   It is on both branches.
