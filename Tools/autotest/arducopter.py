@@ -3824,10 +3824,10 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.reboot_sitl()
 
     def srcf_vote_peaks(self):
-        '''peak VVot/PVot since the most recent arm, to show which detector
-        confirmed a spoof rather than only that one did. The counters reset
-        on disarm and one onboard log spans several arm/disarm cycles, so an
-        unscoped scan reports an earlier phase's peaks'''
+        '''peak VVot/PVot/OVot since the most recent arm, to show which
+        detector confirmed a spoof rather than only that one did. The counters
+        reset on disarm and one onboard log spans several arm/disarm cycles,
+        so an unscoped scan reports an earlier phase's peaks'''
         dfreader = self.dfreader_for_current_onboard_log()
         arm_us = 0
         samples = []
@@ -3839,11 +3839,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 if m.ArmState == 1:
                     arm_us = m.TimeUS
                 continue
-            samples.append((m.TimeUS, m.VVot, m.PVot))
+            samples.append((m.TimeUS, m.VVot, m.PVot, m.OVot))
         scoped = [s for s in samples if s[0] >= arm_us]
         if len(scoped) == 0:
             raise NotAchievedException("no SRCF messages after arming; check LOG_FILE_RATEMAX")
-        return max(s[1] for s in scoped), max(s[2] for s in scoped)
+        return max(s[1] for s in scoped), max(s[2] for s in scoped), max(s[3] for s in scoped)
 
     def SRCFGPSLossLadder(self):
         '''GPS loss in Loiter falls to the flow lane and holds, GPS return recovers, losing both demotes to AltHold, all without EKF failsafe'''
@@ -3972,8 +3972,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.change_mode('LAND')
         self.wait_disarmed(timeout=120)
 
-        vvot, pvot = self.srcf_vote_peaks()
-        self.progress("velocity-consistent spoof: VVot peak %u PVot peak %u" % (vvot, pvot))
+        vvot, pvot, ovot = self.srcf_vote_peaks()
+        self.progress("velocity-consistent spoof: VVot peak %u PVot peak %u OVot peak %u" % (vvot, pvot, ovot))
         if vvot < 15:
             raise NotAchievedException(
                 "velocity-consistent spoof did not confirm on the velocity detector (VVot peak %u)" % vvot)
@@ -3993,8 +3993,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.change_mode('LAND')
         self.wait_disarmed(timeout=120)
 
-        vvot, pvot = self.srcf_vote_peaks()
-        self.progress("position-only spoof: VVot peak %u PVot peak %u" % (vvot, pvot))
+        vvot, pvot, ovot = self.srcf_vote_peaks()
+        self.progress("position-only spoof: VVot peak %u PVot peak %u OVot peak %u" % (vvot, pvot, ovot))
         if pvot < 15:
             raise NotAchievedException(
                 "position-only spoof did not confirm on the position-rate detector (PVot peak %u)" % pvot)
@@ -4002,6 +4002,91 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException(
                 "position-only spoof also drove the velocity detector (VVot peak %u); "
                 "the two phases no longer exercise distinct detectors" % vvot)
+
+    def SRCFSlowSpoofPositionOffset(self):
+        '''a position walk too slow for either rate detector is caught by the accumulated position offset, and only once SRCF_POSD_NSIG enables it'''
+        # Both rate detectors watch how fast the lanes separate, so a walk
+        # slow enough to sit inside SRCF_VEL_THR and SRCF_POSR_THR is missed
+        # however long it runs - the gap SRCF_ENABLE's own documentation
+        # admits to.  The offset detector integrates instead: the same walk
+        # still accumulates position difference, judged against the lanes'
+        # combined position uncertainty so the ratio does not grow with
+        # airspeed the way the velocity difference does.
+        #
+        # Both halves are asserted.  The disabled phase proves the walk really
+        # is invisible to the shipped detectors (otherwise the enabled phase
+        # proves nothing) and that SRCF_POSD_NSIG=0 leaves the new counter
+        # dormant, which is what makes the default safe to ship unflown.
+        self.configure_source_fallback_per_core()
+        # pin the rate thresholds the walk rate below is chosen against, so a
+        # default change cannot silently turn this into a rate-detector test
+        self.set_parameters({
+            "SRCF_VEL_THR": 1.6,
+            "SRCF_POSR_THR": 1.9,
+            "SRCF_POSD_NSIG": 0,    # the shipped default
+        })
+        self.context_collect('STATUSTEXT')
+
+        self.start_subtest("slow walk is missed while SRCF_POSD_NSIG is 0")
+        self.takeoff(10, mode='LOITER')
+        # 0.8 m/s is comfortably inside SRCF_POSR_THR, and mode 1 reports
+        # truthful velocity so the velocity detector has nothing to see
+        self.set_parameters({
+            "SIM_GPS1_SPOOF": 1,
+            "SIM_GPS1_SPOOF_R": 0.8,
+        })
+        # no event to wait on - the assertion is that nothing happens, and the
+        # window must outlast the ~20s the enabled phase below needs
+        self.delay_sim_time(35)
+        if self.statustext_in_collections("SRCF: GPS spoof suspected"):
+            raise NotAchievedException("slow walk was detected with every detector at its shipped setting")
+        self.set_parameter("SIM_GPS1_SPOOF", 0)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+
+        vvot, pvot, ovot = self.srcf_vote_peaks()
+        self.progress("slow walk, detector off: VVot peak %u PVot peak %u OVot peak %u" % (vvot, pvot, ovot))
+        if ovot != 0:
+            raise NotAchievedException("SRCF_POSD_NSIG=0 still accumulated offset votes (OVot peak %u)" % ovot)
+
+        self.start_subtest("the same walk trips the offset detector once enabled")
+        self.set_parameter("SRCF_POSD_NSIG", 3)
+        self.takeoff(10, mode='LOITER')
+        sim_start = self.sim_location()
+        self.set_parameters({
+            "SIM_GPS1_SPOOF": 1,
+            "SIM_GPS1_SPOOF_R": 0.8,
+        })
+        self.wait_statustext("SRCF: GPS spoof suspected", timeout=90, check_context=True)
+
+        # An integrating detector cannot fire until the offset has built, so
+        # unlike the rate detectors it concedes ground before it acts. That
+        # pre-detection drag is the price of seeing a walk this slow at all;
+        # what must hold is that the drag stops once the flow lane takes over.
+        caught_at = self.sim_location()
+        self.progress("dragged %.1fm before detection" % self.get_distance(sim_start, caught_at))
+        tstart = self.get_sim_time()
+        while self.get_sim_time_cached() - tstart < 15:
+            self.delay_sim_time(1)
+            dist = self.get_distance(caught_at, self.sim_location())
+            if dist > 15:
+                raise NotAchievedException("vehicle still dragged %.1fm after the flow lane took over" % dist)
+        if self.statustext_in_collections("EKF variance"):
+            raise NotAchievedException("EKF failsafe fired during spoof fallback")
+
+        self.set_parameter("SIM_GPS1_SPOOF", 0)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+
+        vvot, pvot, ovot = self.srcf_vote_peaks()
+        self.progress("slow walk, detector on: VVot peak %u PVot peak %u OVot peak %u" % (vvot, pvot, ovot))
+        if ovot < 15:
+            raise NotAchievedException(
+                "slow walk did not confirm on the offset detector (OVot peak %u)" % ovot)
+        if vvot >= 15 or pvot >= 15:
+            raise NotAchievedException(
+                "slow walk also drove a rate detector (VVot %u PVot %u); the walk is no longer "
+                "slow enough to isolate the offset detector" % (vvot, pvot))
 
     def SRCFStaticSpoofNoRecovery(self):
         '''a static GPS capture offers no divergence rate to measure, and must not be auto-recovered onto after a GPS loss'''
@@ -18346,6 +18431,7 @@ return update, 1000
             self.EKF3SRCPerCore,
             self.SRCFGPSLossLadder,
             self.SRCFGPSSpoof,
+            self.SRCFSlowSpoofPositionOffset,
             self.SRCFStaticSpoofNoRecovery,
             self.SRCFDisabledRegression,
             self.SRCFRCFailsafeDrift,
