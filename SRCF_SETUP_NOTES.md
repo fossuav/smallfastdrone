@@ -80,6 +80,34 @@ not in ArduPilot parameters.
 
 ## 3. Required configuration
 
+### The default parameter file
+
+A default parameter set (`SRCF_defaults.param`, provided alongside
+these notes) is the complete configuration of the reference X8
+octaquad - everything in this section and section 4, plus the
+airframe's tune and hardware setup. To use it:
+
+1. Flash the SRCF firmware first (section 1). Stock firmware does
+   not know the `SRCF_*` and fork `EK3_*` parameters and will
+   silently drop them.
+2. In Mission Planner: CONFIG -> Full Parameter List -> Compare
+   Params, pick the file, review the diff, apply, Write Params,
+   reboot the board.
+3. Flight modes and switches are yours to arrange: set `FLTMODE1-6`
+   and the `RCx_OPTION` channel assignments to suit your radio. Keep
+   GPS Disable (65) and source-set select (90) on switches you can
+   reach in flight - the test program uses both.
+
+The file carries the donor vehicle's per-unit calibrations, so redo
+your own accel and compass calibrations after loading (section 5
+covers the compass), and run the section 5 checks - flow scalers
+included - on your unit rather than assuming an identical build
+measures identical.
+
+The rest of this section is what the file sets and why, so that a
+loaded parameter is a choice you can defend rather than a line in a
+file.
+
 The lane split, without which SRCF will not arm:
 
 | parameter | value | why |
@@ -285,6 +313,20 @@ depends on it.
 | `SRCF: flow lost, back on GPS lane` | flow lane became unusable while primary |
 | `SRCF: no nav source, AltHold` | final rung: neither lane has position |
 | `SRCF: lane switch unavailable` | wanted to switch and could not |
+
+### OSD lane panel
+
+The fork adds an OSD panel showing which EKF lane is flying the
+vehicle: set `OSDn_EKFLANE_EN = 1` and place it with the `_X`/`_Y`
+positions. With the source sets from section 3 it reads `EKF0` on the
+GPS lane and `EKF1` on flow (`EKF-` if no lane is reporting). The GCS
+messages above flash once and are gone; this is the one persistent
+indicator of what is navigating, so put it on your flight screen for
+the loss ladder and the spoof work. It shows the lane, not a sensor
+name, and does not flash on a non-zero lane - what a lane means is
+set by your source sets, so know your own mapping. It is deliberately
+not satellite count or HDOP: under a spoof both read healthy by
+construction.
 
 ## 7. Reading the logs
 
