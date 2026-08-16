@@ -16664,6 +16664,10 @@ return update, 1000
             # rather than silently in the air. 400k was left behind when the other
             # sites moved on 07-27 and the module has since outgrown it.
             "SCR_HEAP_SIZE": 500000,
+            # This test builds its own script set rather than calling
+            # install_autoacro_scripts, so it needs the same per-tick instruction
+            # budget; see the note there for why 10000 is no longer enough.
+            "SCR_VM_I_COUNT": 20000,
             "WP_ACC": 5,
             "WP_ACC_Z": 5,
             "WP_JERK": 20,
@@ -17048,7 +17052,18 @@ return update, 1000
         # ap_lua/autoacro/REFACTOR_MODULE_SPLIT.md is the live constraint on the
         # next move. Steady-state was not re-read (the SCR message is absent
         # from these logs), so the 406-412 KB above is the 07-27 number.
+        # SCR_VM_I_COUNT is the per-tick INSTRUCTION budget, not a time. At the
+        # 10000 default the curated display sits close enough to it that ~50
+        # instructions added to thrust_for_g -- which every arc calls every tick --
+        # tripped the hook after move 1 and killed the script for the rest of the
+        # flight (2026-08-13, the map delivery correction). The vehicle runs the
+        # same 10000, so that headroom is real rather than a SITL artifact, and it
+        # has been quietly shrinking as moves were added. 20000 restores margin;
+        # the vehicle has the CPU for it (scheduler MaxT 3.9-4.2 ms and load
+        # 39.6-61.6% through a whole field display). Keep this and the vehicle's
+        # value in step, or the test stops predicting what the airframe does.
         self.set_parameters({"SCR_ENABLE": 1, "SCR_HEAP_SIZE": 500000,
+                             "SCR_VM_I_COUNT": 20000,
                              "SCR_DEBUG_OPTS": 8})
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
