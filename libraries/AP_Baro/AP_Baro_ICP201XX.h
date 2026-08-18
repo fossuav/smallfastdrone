@@ -47,13 +47,14 @@ private:
     // time last read command was sent
     uint32_t last_measure_us;
 
+    /* Mode 1 for noise: Mode 2 is 2.5x noisier per sample and only saves 170uA */
     enum class OP_MODE : uint8_t {
 		OP_MODE0 = 0,   /* Mode 0: Bw:6.25 Hz ODR: 25Hz */
 		OP_MODE1,       /* Mode 1: Bw:30 Hz ODR: 120Hz */
 		OP_MODE2,       /* Mode 2: Bw:10 Hz ODR: 40Hz */
 		OP_MODE3,       /* Mode 3: Bw:0.5 Hz ODR: 2Hz */
 		OP_MODE4,       /* Mode 4: User configurable Mode */
-	} _op_mode{OP_MODE::OP_MODE2};
+	} _op_mode{OP_MODE::OP_MODE1};
 
 	enum class FIFO_READOUT_MODE : uint8_t {
 		FIFO_READOUT_MODE_PRES_TEMP = 0,   /* Pressure and temperature as pair and address wraps to the start address of the Pressure value ( pressure first ) */
