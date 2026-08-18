@@ -11,14 +11,34 @@
  * position P loop is bypassed (velocity control).  VALT_POS_EXPO blends how
  * hard that snap is with stick deflection, so position authority returns near
  * centre (altitude hold) and at full deflection (position backstop); 0 keeps
- * the original hard cutoff.
+ * the original hard cutoff.  While the baro is in ground effect the position
+ * correction is clamped instead, so a metre-scale estimate error at ground
+ * contact cannot command a launch.
  */
+
+// Vertical position-correction limit used while the baro is in ground effect.
+// Measured drift with no position authority is 0.03-0.05 m/s, so this still
+// arrests it while keeping the demand from a bad estimate small on the ground.
+#define VALT_GNDEFF_CORR_SPEED_MS 0.1f
 
 // velocity-controlled Flying state
 void ModeVelAltHold::alt_hold_run_flying(float &target_roll_rad, float &target_pitch_rad, float target_climb_rate_ms)
 {
     // get avoidance adjusted climb rate
     target_climb_rate_ms = get_avoidance_adjusted_climbrate_ms(target_climb_rate_ms);
+
+    // Rotor wash on the ground moves the barometer by metres, so at contact the
+    // height estimate can step further than any real deviation.  Clamp the
+    // position correction while in ground effect: AC_P_1D converts the limit
+    // into an error limit, so small errors are still corrected at full gain
+    // while a large one saturates and drags pos_desired to the estimate rather
+    // than commanding a climb.  ModeAltHold::run() only refreshes the trajectory
+    // limits, so the unclamped value has to be restored here.
+    if (ahrs.get_takeoff_expected() || ahrs.get_touchdown_expected()) {
+        pos_control->D_set_correction_speed_accel_m(VALT_GNDEFF_CORR_SPEED_MS, VALT_GNDEFF_CORR_SPEED_MS, get_pilot_accel_D_mss());
+    } else {
+        pos_control->D_set_correction_speed_accel_m(get_pilot_speed_dn_ms(), get_pilot_speed_up_ms(), get_pilot_accel_D_mss());
+    }
 
     // Send the commanded climb rate to the position controller
     pos_control->D_set_pos_target_from_climb_rate_ms(target_climb_rate_ms);
