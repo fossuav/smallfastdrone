@@ -1,8 +1,9 @@
 # SRCF GPS-free arming - design note
 
-Branch `SmallFastDrone-4.7.0-gps-optflow-fallback`. Written 2026-08-19,
-from code reading only. Nothing here has been built, simulated or
-flown.
+Branch `SmallFastDrone-4.7.0-gps-optflow-fallback`. Written 2026-08-19
+from code reading, then implemented and measured in SITL the same day.
+Numbers below marked "measured" come from `SRCFArmWithoutGPS`. Nothing
+has flown.
 
 Goal: arm indoors with no GPS fix, fly out of the door, and have the
 GPS lane take over when it acquires - the reverse of the ladder SRCF
@@ -83,6 +84,9 @@ Both lanes report through the common `public_origin` frame
 (`getPosNE`, `AP_NavEKF3_Outputs.cpp:280`), so at that instant
 
     pos_div = horizontal distance flown since the flow lane started aiding
+
+Measured: 46.3m, and stable rather than growing, which is the signature
+of a fixed frame offset rather than of drift.
 
 Consequences, in order of severity:
 
@@ -221,17 +225,48 @@ fence. The AltHold rung and the session-2 RC-failsafe drift path
 (`FS_OPTIONS` bit 6, `FS_ALTH_TMO`) are the only escapes, and the drift
 rung is still SITL-only.
 
-## Work estimate
+## What was built
 
-| area | change | rough size |
+Six commits, `a96c9c0f41..6f9393bf5d`, in the order above plus DAL and
+Replay support for the alignment so a log still replays.
+
+Two things came out of the build that the design did not anticipate.
+
+**The alignment cannot be applied at the moment of the switch.**
+`set_ekf_primary_lane` only records a request; `switchLane` runs on the
+EKF's next update, so at the instant SRCF commands the handover the flow
+lane is still primary and `alignLanePosition` refuses it - correctly,
+because shifting the lane that is flying the vehicle would inject a
+position jump with no reset reported. The alignment is therefore pending
+until the commanded switch lands, which is inside the post-switch
+detector mute either way.
+
+**Home is set from the flow lane if nothing stops it.** The EKF origin
+appears as soon as *either* lane sets one, and `update_home_from_EKF`
+fires on the next loop. Measured: origin at t=56.0s, home at t=56.2s,
+handover at t=67.3s, and home 30.7m from GPS truth and never revised.
+Home is now held off until the handover. This was predicted as a risk in
+the first draft, dismissed after a mismeasurement - ORGN Type 0 is the
+EKF origin and Type 1 is home, not the other way round - and only found
+by measuring the right record.
+
+| | without | with |
 |---|---|---|
-| `ArduCopter/source_fallback.cpp` | ground selection, new state, first-acquisition path | ~100 lines |
-| `AP_NavEKF3`, `AP_AHRS` | `alignLanePosition` and pass-through | ~40 lines |
-| `ArduCopter` pre-arm and parameters | `SRCF_ENABLE=2`, statustexts | ~20 lines |
-| `Tools/autotest` | two tests plus registration | ~150 lines |
-| docs | setup notes section, session 5 plan | - |
+| lane separation after handover | 46.3 m | 1.4-1.6 m |
+| home error against GPS truth | 30.7 m | 0.0 m |
 
-One commit per module, as usual.
+## Test status
+
+`SRCFArmWithoutGPS` covers the whole path: no GPS at boot, arm and take
+off in Loiter on the flow lane, translate, acquire GPS in flight, assert
+the handover, the lane separation afterwards and the home error. It
+asserts the separation rather than the statustexts, because without the
+alignment every message still arrives and only the frames are wrong.
+
+Green alongside the existing suite: SRCFGPSLossLadder, SRCFGPSSpoof,
+SRCFSlowSpoofPositionOffset, SRCFStaticSpoofNoRecovery,
+SRCFDisabledRegression, SRCFRCFailsafeDrift, SRCFBrakeNavLossDemote,
+EKF3SRCPerCore, OpticalFlow.
 
 ## Test plan
 
@@ -248,7 +283,7 @@ SITL first, and it is genuinely testable there:
   established the SIMSTATE and dfreader workarounds for asserting
   without a fix.
 
-Field, and this is where the honest gaps are. Everything sessions 1-4
+Field, none of it flown, and this is where the honest gaps are. Everything sessions 1-4
 measured was 5-9 m over textured ground with GPS present. Indoor flow at
 1-2 m is the regime session 3 listed as unresolved (focus height, ground
 effect), and `EK3_FLOW_GAIN_H = 4` gives
@@ -262,6 +297,16 @@ and this manoeuvre is exactly that transition.
 
 ## Open questions
 
+0. A lane that has not yet set its own origin still adds
+   `public_origin.get_distance_NE_postype(EKF_origin)` in `getPosNE`
+   (`AP_NavEKF3_Outputs.cpp:280`) with `EKF_origin` at (0,0). Once
+   another lane makes the common origin valid, that term is the distance
+   from the site to Null Island. **Not reproduced**: in SITL the two
+   lanes set their origins 0.2s apart and nothing measurable appeared,
+   so this is a code path, not a demonstrated bug. It is more exposed on
+   a real vehicle, where `calcGpsGoodToAlign` can differ per lane on the
+   per-core yaw and mag test ratios - which is exactly what session 4's
+   eudrone showed. No guard has been added for something unproven.
 1. What is the pilot's escape between arming and the first fix? AltHold
    plus manual flying is the honest answer today, and it should be
    written down rather than assumed.

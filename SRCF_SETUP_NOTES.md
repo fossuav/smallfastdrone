@@ -150,7 +150,7 @@ EKF3 IMU1 started relative aiding
 
 | parameter | default | validated values | meaning |
 |---|---|---|---|
-| `SRCF_ENABLE` | 0 | 1 | master enable |
+| `SRCF_ENABLE` | 0 | 1 | master enable; 2 also allows arming without GPS, see section 8 |
 | `SRCF_VEL_THR` | 1.6 | 1.6 low-speed; 3.0 for 30 km/h | cross-lane velocity difference gate, m/s |
 | `SRCF_POSR_THR` | 1.9 | 2.6 | cross-lane position growth rate gate, m/s |
 | `SRCF_POSD_NSIG` | 0 (off) | unflown; start at 4 | position offset detector, in sigmas |
@@ -346,7 +346,53 @@ throughout. The GPS-loss path runs on `GpsB`/`GpsL`, not the vote
 counters, so loss handling keeps working however you set the spoof
 thresholds.
 
-## 8. Known limits
+## 8. Arming without GPS
+
+`SRCF_ENABLE = 2` lets the vehicle arm on the flow lane when GPS is not
+available - indoors, in a hangar, under cover - and take up the GPS lane
+once a fix arrives in flight. At 1 the monitor always arms on the GPS
+lane, which is the behaviour every field session so far has flown.
+
+What happens, in order:
+
+1. On the ground with no usable GPS lane and a usable flow lane, the
+   monitor moves the primary to the flow lane after 2 s and says
+   `SRCF: no GPS, arming on flow lane`. The arming GPS checks stand down
+   because they are keyed on the primary lane's sources, so Loiter arms
+   on flow-derived position.
+2. You fly. Position is relative: hold is as good as your flow
+   calibration, and drift is bounded by residual scale error times
+   distance flown.
+3. When the GPS lane acquires and holds position for `SRCF_RECOV_TIME`,
+   the monitor takes it up and says `SRCF: GPS acquired, using GPS lane`.
+   The flow lane is pulled into the GPS lane's position frame at the same
+   moment, so `PD` and the spoof detectors mean afterwards what they mean
+   on an ordinary flight.
+
+What you do not have until step 3 completes:
+
+- **No home**, so no RTL and no fence. Home is deliberately held off
+  until the handover: the EKF origin appears about 11 s earlier, and home
+  taken from the flow lane in that window is wrong by the distance flown
+  since arming and is never revised. Your escape in that window is
+  AltHold and your own eyes.
+- **No absolute altitude reference** beyond baro.
+
+Setting an origin before takeoff gives you home from the start.
+`AHRS_OPTIONS` bit 4 (USE_RECORDED_ORIGIN_FOR_NONGPS) with
+`AHRS_ORIGIN_LAT/LON/ALT` will do it, but understand what it is: bit 3
+(RECORD_ORIGIN) saves the origin of the *last* flight, so if you have
+driven to a new site it is stale and nothing warns you. A GCS
+SET_GPS_GLOBAL_ORIGIN at the actual takeoff point is the accurate
+version. Either way the handover itself is safe - the lane alignment
+does not depend on the origin being right - but home and the fence do.
+
+None of this has flown. It is SITL-validated only: `SRCFArmWithoutGPS`
+arms with no GPS, takes off in Loiter on flow, acquires in flight, and
+checks the lanes end up 1.5 m apart rather than the 46 m they sit at
+without the alignment.
+
+## 9. Known limits
 
 - No fixed `SRCF_VEL_THR` both survives 30 km/h flight and catches a
   velocity-consistent spoof. At high cruise you are choosing between
@@ -361,3 +407,6 @@ thresholds.
   in SITL.
 - Flow near the ground is its own problem set (focus height, ground
   effect); do the low work in ALT_HOLD and the SRCF work at 5-9 m.
+- Arming without GPS (`SRCF_ENABLE = 2`, section 8) has never flown. It
+  is also the one part of SRCF whose takeoff happens at low height on
+  flow alone, which is the regime the previous limit is about.
