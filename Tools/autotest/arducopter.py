@@ -4181,12 +4181,25 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_rc(2, 1500)
         self.delay_sim_time(3)
 
+        # the OSD lane panel reports the primary lane's position type from
+        # these same bits, so this is what it will be showing: relative only
+        # while the flow lane carries the vehicle, absolute after the handover
+        m = self.assert_receive_message('EKF_STATUS_REPORT', timeout=10)
+        if not (m.flags & mavutil.mavlink.EKF_POS_HORIZ_REL):
+            raise NotAchievedException("flow lane is not reporting relative position")
+        if m.flags & mavutil.mavlink.EKF_POS_HORIZ_ABS:
+            raise NotAchievedException("flow lane claims absolute position before any fix")
+
         self.progress("Acquiring GPS in flight")
         self.set_parameter("SIM_GPS1_ENABLE", 1)
         self.wait_statustext("SRCF: GPS acquired, using GPS lane", timeout=60, check_context=True)
         self.wait_statustext("EKF3 lane switch 0", timeout=10, check_context=True)
         switch_us = self.get_sim_time() * 1e6
         self.delay_sim_time(20)
+
+        m = self.assert_receive_message('EKF_STATUS_REPORT', timeout=10)
+        if not (m.flags & mavutil.mavlink.EKF_POS_HORIZ_ABS):
+            raise NotAchievedException("GPS lane is not reporting absolute position after the handover")
 
         self.land_and_disarm(timeout=120)
 

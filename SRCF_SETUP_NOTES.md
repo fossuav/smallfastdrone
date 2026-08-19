@@ -317,9 +317,22 @@ depends on it.
 ### OSD lane panel
 
 The fork adds an OSD panel showing which EKF lane is flying the
-vehicle: set `OSDn_EKFLANE_EN = 1` and place it with the `_X`/`_Y`
-positions. With the source sets from section 3 it reads `EKF0` on the
-GPS lane and `EKF1` on flow (`EKF-` if no lane is reporting). The GCS
+vehicle and what kind of horizontal position it has: set
+`OSDn_EKFLANE_EN = 1` and place it with the `_X`/`_Y` positions. With
+the source sets from section 3 it reads `EKF0 ABS` on the GPS lane and
+`EKF1 REL` on flow (`EKF-` if no lane is reporting).
+
+| field | meaning |
+|---|---|
+| `ABS` | absolute position - fixed to the earth by GPS, beacon or extnav |
+| `REL` | relative only - tracks movement since the lane started aiding and drifts without bound. This is the flow lane |
+| `DRK` | wind or drag relative. A fixed wing state: EKF3 clears it whenever flow, GPS or body odometry is navigating, so it will not appear on a copter flow lane |
+| `NON` | no horizontal position at all. Flashes |
+
+`REL` is the one to read as "drifting". ArduPilot's own dead reckoning
+flag is `DRK` and means something else - it is set only when the filter
+is navigating on airspeed or drag - so a copter on the flow lane shows
+`REL`, not `DRK`. The GCS
 messages above flash once and are gone; this is the one persistent
 indicator of what is navigating, so put it on your flight screen for
 the loss ladder and the spoof work. It shows the lane, not a sensor
