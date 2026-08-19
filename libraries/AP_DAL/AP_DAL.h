@@ -67,6 +67,9 @@ public:
         requestLaneSwitch0        = 16,
         requestLaneSwitch1        = 17,
         requestLaneSwitch2        = 18,
+        alignLanePosition0        = 19,
+        alignLanePosition1        = 20,
+        alignLanePosition2        = 21,
     };
 
     // must remain the same as AP_AHRS_VehicleClass numbers-wise
