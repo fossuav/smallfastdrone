@@ -3562,6 +3562,16 @@ bool AP_AHRS::get_lane_divergence_pos_sigma(uint8_t lane_index, float &pos_sigma
 #endif
 }
 
+// move an EKF3 lane's reported position into the frame of the primary
+bool AP_AHRS::align_lane_position(uint8_t lane_index)
+{
+#if HAL_NAVEKF3_AVAILABLE
+    return EKF3.alignLanePosition(lane_index);
+#else
+    return false;
+#endif
+}
+
 // get health and filter status of a specific EKF3 lane
 bool AP_AHRS::get_lane_status(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const
 {

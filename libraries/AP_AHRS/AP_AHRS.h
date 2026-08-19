@@ -464,6 +464,9 @@ public:
     // and the primary
     bool get_lane_divergence_pos_sigma(uint8_t lane_index, float &pos_sigma_m) const;
 
+    // move an EKF3 lane's reported position into the frame of the primary
+    bool align_lane_position(uint8_t lane_index);
+
     // get health and filter status of a specific EKF3 lane
     bool get_lane_status(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const;
 
