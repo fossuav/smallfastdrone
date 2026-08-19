@@ -28,6 +28,7 @@
 
 #define SRCF_GPS_BAD_ITERATIONS     3       // 0.3s at 10hz to confirm GPS loss
 #define SRCF_FLOW_BAD_ITERATIONS    5       // 0.5s at 10hz to confirm flow loss
+#define SRCF_GROUND_LANE_ITERATIONS 20      // 2s at 10hz to change the lane armed on
 #define SRCF_POST_SWITCH_MUTE_MS    5000    // divergence detector mute after a lane change
 #define SRCF_POS_RATE_WINDOW        20      // position divergence rate baseline, 2s at 10hz
 // Sigma bound on the cross-lane position offset before recovery is allowed.
@@ -51,12 +52,15 @@ enum class LaneState : uint8_t {
     GPS_PRIMARY = 0,    // flying on the GPS lane
     FLOW_LOSS = 1,      // on the flow lane after GPS loss, may auto-recover
     FLOW_SPOOF = 2,     // on the flow lane after spoof detection, latched
+    FLOW_NO_GPS = 3,    // armed on the flow lane, GPS not yet acquired this flight
 };
 
 static struct {
     LaneState lane_state;
     bool gps_untrusted;         // spoof latch, cleared on disarm or pilot source set change
     bool switch_warned;         // lane switch command failed warning sent
+    bool align_pending;         // pull the flow lane into the GPS lane's frame once the switch lands
+    uint8_t ground_lane_count;  // consecutive ticks the armed-on lane choice has differed
     uint8_t gps_bad_count;
     uint8_t flow_bad_count;
     uint16_t vel_vote;          // velocity divergence confirmation vote
@@ -103,6 +107,61 @@ bool Copter::source_fallback_command_lane(uint8_t lane)
     return true;
 }
 
+// choose the lane to arm on. Normally the GPS lane, but at SRCF_ENABLE=2 a
+// vehicle that cannot see GPS arms on the flow lane instead. The arming GPS
+// checks are keyed on the primary lane's configured sources
+// (AP_Arming_Copter.cpp:405 via AP_AHRS::using_gps), so moving the primary is
+// what stands them down - there is nothing to relax in AP_Arming itself.
+void Copter::source_fallback_ground_lane()
+{
+    bool gps_lane_healthy = false;
+    bool flow_lane_healthy = false;
+    nav_filter_status gps_lane_status {};
+    nav_filter_status flow_lane_status {};
+    if (!ahrs.get_lane_status(SRCF_GPS_LANE, gps_lane_healthy, gps_lane_status) ||
+        !ahrs.get_lane_status(SRCF_FLOW_LANE, flow_lane_healthy, flow_lane_status)) {
+        return;
+    }
+
+    // predicted position counts while disarmed, matching Copter::position_ok
+    const bool gps_lane_ready = gps_lane_healthy &&
+                                (gps_lane_status.flags.horiz_pos_abs || gps_lane_status.flags.pred_horiz_pos_abs);
+    const bool flow_lane_ready = flow_lane_healthy && optflow.healthy() &&
+                                 (flow_lane_status.flags.horiz_pos_rel || flow_lane_status.flags.pred_horiz_pos_rel);
+
+    uint8_t want_lane = SRCF_GPS_LANE;
+    if ((g2.srcf_enable >= 2) && !gps_lane_ready && flow_lane_ready) {
+        want_lane = SRCF_FLOW_LANE;
+    }
+
+    const int8_t primary = ahrs.get_primary_core_index();
+    if (primary >= 0 && want_lane != primary) {
+        // a marginal indoor fix that comes and goes would otherwise flap the
+        // primary, and the EKF announces every change at CRITICAL
+        if (++srcf_state.ground_lane_count >= SRCF_GROUND_LANE_ITERATIONS) {
+            srcf_state.ground_lane_count = 0;
+            if (source_fallback_command_lane(want_lane) && want_lane == SRCF_FLOW_LANE) {
+                gcs().send_text(MAV_SEVERITY_INFO, "SRCF: no GPS, arming on flow lane");
+            }
+        }
+    } else {
+        srcf_state.ground_lane_count = 0;
+    }
+
+    // track the lane actually in use rather than the one asked for: a
+    // commanded switch does not land until the EKF's next update
+    srcf_state.lane_state = (ahrs.get_primary_core_index() == SRCF_FLOW_LANE) ?
+                            LaneState::FLOW_NO_GPS : LaneState::GPS_PRIMARY;
+}
+
+// true while the primary lane's absolute position is provisional: the vehicle
+// armed on the flow lane and the GPS lane has not been taken up yet, so the
+// two are still offset by however far the vehicle has travelled since arming
+bool Copter::source_fallback_position_provisional() const
+{
+    return (g2.srcf_enable > 0) && (srcf_state.lane_state == LaneState::FLOW_NO_GPS);
+}
+
 // monitor navigation sources and manage the GPS -> flow -> AltHold ladder
 // called at 10hz, ahead of ekf_check() so holdoffs land the same tick
 void Copter::source_fallback_update()
@@ -114,13 +173,11 @@ void Copter::source_fallback_update()
     const uint32_t now_ms = AP_HAL::millis();
 
     if (!motors->armed()) {
-        // restore the GPS lane and clear latches for the next flight
-        if (srcf_state.lane_state != LaneState::GPS_PRIMARY) {
-            ahrs.set_ekf_primary_lane(SRCF_GPS_LANE);
-            srcf_state.lane_state = LaneState::GPS_PRIMARY;
-        }
+        // pick the lane for the next flight and clear the latches
+        source_fallback_ground_lane();
         srcf_state.gps_untrusted = false;
         srcf_state.switch_warned = false;
+        srcf_state.align_pending = false;
         srcf_reset_detectors();
         srcf_state.last_source_set = ahrs.get_posvelyaw_source_set();
         return;
@@ -170,6 +227,15 @@ void Copter::source_fallback_update()
     const uint8_t other_lane = (primary == SRCF_GPS_LANE) ? SRCF_FLOW_LANE : SRCF_GPS_LANE;
     const bool muted = (srcf_state.last_lane_cmd_ms != 0) &&
                        (now_ms - srcf_state.last_lane_cmd_ms < SRCF_POST_SWITCH_MUTE_MS);
+
+    // a lane switch is not applied until the EKF's next update, and the flow
+    // lane cannot be shifted while it is the one flying the vehicle, so the
+    // alignment waits for the commanded switch to land
+    if (srcf_state.align_pending && primary == SRCF_GPS_LANE) {
+        srcf_state.align_pending = false;
+        ahrs.align_lane_position(SRCF_FLOW_LANE);
+    }
+
     float vel_div = 0.0f;
     float pos_div = 0.0f;
     float pos_rate = 0.0f;
@@ -263,11 +329,14 @@ void Copter::source_fallback_update()
     }
     case LaneState::FLOW_LOSS:
     case LaneState::FLOW_SPOOF:
+    case LaneState::FLOW_NO_GPS:
         if (flow_bad) {
             // flow lane lost while it carries the vehicle: return to a
             // usable, trusted GPS lane immediately, else give up position
             if (gps_lane_usable && !srcf_state.gps_untrusted) {
+                const bool first_fix = (srcf_state.lane_state == LaneState::FLOW_NO_GPS);
                 if (source_fallback_command_lane(SRCF_GPS_LANE)) {
+                    srcf_state.align_pending = first_fix;
                     srcf_state.lane_state = LaneState::GPS_PRIMARY;
                     gcs().send_text(MAV_SEVERITY_CRITICAL, "SRCF: flow lost, back on GPS lane");
                 }
@@ -276,7 +345,28 @@ void Copter::source_fallback_update()
             }
             break;
         }
-        if (srcf_state.lane_state == LaneState::FLOW_LOSS) {
+        if (srcf_state.lane_state == LaneState::FLOW_NO_GPS) {
+            // First acquisition, not a recovery. The lanes have no common
+            // frame yet - the flow lane is referenced to where it started
+            // aiding and the GPS lane to the origin it has just set - so the
+            // consistency gates would be comparing that offset rather than a
+            // disagreement, and the offset bound would reject the handover
+            // outright. Wait only for the GPS lane to hold position.
+            if (gps_lane_usable) {
+                if (srcf_state.recovery_start_ms == 0) {
+                    srcf_state.recovery_start_ms = now_ms;
+                }
+                if (now_ms - srcf_state.recovery_start_ms > (uint32_t)(g2.srcf_recov_time * 1000)) {
+                    if (source_fallback_command_lane(SRCF_GPS_LANE)) {
+                        srcf_state.align_pending = true;
+                        srcf_state.lane_state = LaneState::GPS_PRIMARY;
+                        gcs().send_text(MAV_SEVERITY_CRITICAL, "SRCF: GPS acquired, using GPS lane");
+                    }
+                }
+            } else {
+                srcf_state.recovery_start_ms = 0;
+            }
+        } else if (srcf_state.lane_state == LaneState::FLOW_LOSS) {
             // A receiver captured onto a static spoof reports a fixed
             // position with no motion, so it presents neither a velocity
             // difference nor a divergence rate and passes both gates above
@@ -346,7 +436,7 @@ void Copter::source_fallback_update()
     // @LoggerMessage: SRCF
     // @Description: Navigation source fallback monitor state
     // @Field: TimeUS: Time since system startup
-    // @Field: St: lane state, 0:GPS primary 1:flow after GPS loss 2:flow after spoof
+    // @Field: St: lane state, 0:GPS primary 1:flow after GPS loss 2:flow after spoof 3:flow before GPS acquired
     // @Field: GU: GPS untrusted latch
     // @Field: VD: cross-lane horizontal velocity difference
     // @Field: PD: cross-lane horizontal position difference

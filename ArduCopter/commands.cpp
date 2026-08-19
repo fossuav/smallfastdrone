@@ -8,6 +8,16 @@ void Copter::update_home_from_EKF()
         return;
     }
 
+#if AP_OPTICALFLOW_ENABLED
+    // the EKF origin appears as soon as any lane sets one, which on a
+    // flow-lane takeoff is several seconds before the monitor takes up the
+    // GPS lane. Home taken from the flow lane in that window is wrong by the
+    // distance flown since arming, and home is never revised
+    if (source_fallback_position_provisional()) {
+        return;
+    }
+#endif
+
     // special logic if home is set in-flight
     if (motors->armed()) {
         set_home_to_current_location_inflight();

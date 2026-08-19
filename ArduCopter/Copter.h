@@ -820,6 +820,8 @@ private:
     // source_fallback.cpp
     void source_fallback_update();
     bool source_fallback_command_lane(uint8_t lane);
+    void source_fallback_ground_lane();
+    bool source_fallback_position_provisional() const;
 #endif
     void check_vibration();
 
