@@ -1070,7 +1070,7 @@ const AP_Param::GroupInfo AP_OSD_Screen::var_info2[] = {
 
     // @Param: EKFLANE_EN
     // @DisplayName: EKFLANE_EN
-    // @Description: Displays which EKF lane is providing the navigation solution. Only meaningful with more than one lane allocated, where a change means the vehicle is navigating on different sensors than it booted on
+    // @Description: Displays which EKF lane is providing the navigation solution and what kind of horizontal position it has: ABS absolute, REL relative only so it drifts, DRK wind or drag relative, NON none. The lane number is only meaningful with more than one lane allocated, where a change means the vehicle is navigating on different sensors than it booted on
     // @Values: 0:Disabled,1:Enabled
 
     // @Param: EKFLANE_X
@@ -1604,17 +1604,35 @@ void AP_OSD_Screen::draw_fltmode(uint8_t x, uint8_t y)
     }
 }
 
-// which EKF lane is flying the vehicle. Deliberately reports the lane rather
-// than naming a sensor: what a lane means is set by that lane's source set,
-// so only the operator knows whether lane 1 is a spare IMU or a flow lane
+// which EKF lane is flying the vehicle, and what kind of position it is
+// giving. Deliberately reports the lane rather than naming a sensor: what a
+// lane means is set by that lane's source set, so only the operator knows
+// whether lane 1 is a spare IMU or a flow lane. The position type says what
+// that is worth - ABS is fixed to the earth, REL only tracks movement since
+// the lane started aiding and drifts without bound.
 void AP_OSD_Screen::draw_ekflane(uint8_t x, uint8_t y)
 {
+    const AP_AHRS &ahrs = AP::ahrs();
+
+    // ABS before REL: a lane with an absolute fix also reports relative
+    const char *postype = "NON";
+    if (ahrs.has_status(AP_AHRS::Status::HORIZ_POS_ABS)) {
+        postype = "ABS";
+    } else if (ahrs.has_status(AP_AHRS::Status::HORIZ_POS_REL)) {
+        postype = "REL";
+    } else if (ahrs.has_status(AP_AHRS::Status::DEAD_RECKONING)) {
+        // wind or drag relative, so this is a fixed wing state: EKF3 clears
+        // it whenever flow, GPS or body odometry is navigating
+        postype = "DRK";
+    }
+
     const int8_t lane = AP::ahrs().get_primary_core_index();
+    const bool flash = (postype[0] == 'N');
     if (lane < 0) {
-        backend->write(x, y, false, "EKF-");
+        backend->write(x, y, flash, "EKF- %s", postype);
         return;
     }
-    backend->write(x, y, false, "EKF%d", lane);
+    backend->write(x, y, flash, "EKF%d %s", lane, postype);
 }
 
 void AP_OSD_Screen::draw_sats(uint8_t x, uint8_t y)
