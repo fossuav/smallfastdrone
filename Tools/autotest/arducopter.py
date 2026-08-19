@@ -4151,6 +4151,93 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if dist > 15:
             raise NotAchievedException("drifted %.1fm while held on the flow lane" % dist)
 
+    def SRCFArmWithoutGPS(self):
+        '''SRCF_ENABLE=2 arms on the flow lane with no GPS and takes up the GPS lane once a fix arrives'''
+        # The arming GPS checks are keyed on the primary lane's configured
+        # sources (AP_Arming_Copter.cpp:405 via AP_AHRS::using_gps), so putting
+        # the flow lane primary on the ground is what allows the arm - nothing
+        # in AP_Arming is relaxed.
+        #
+        # The lanes have no common position frame until a fix arrives: the flow
+        # lane is referenced to where it started aiding and the GPS lane to the
+        # origin it sets on acquisition, so they sit a fixed "distance flown"
+        # apart. Measured at 46m before the alignment was added. The assertion
+        # that matters is therefore the separation AFTER the handover, not that
+        # the handover happened.
+        self.configure_source_fallback_per_core()
+        self.set_parameters({
+            "SRCF_ENABLE": 2,
+            "SIM_GPS1_ENABLE": 0,
+        })
+        self.reboot_sitl()
+        self.context_collect('STATUSTEXT')
+
+        self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=60, check_context=True)
+        self.takeoff(10, mode='LOITER', require_absolute=False)
+
+        self.progress("Translating to open a gap between the lane frames")
+        self.set_rc(2, 1300)
+        self.delay_sim_time(8)
+        self.set_rc(2, 1500)
+        self.delay_sim_time(3)
+
+        self.progress("Acquiring GPS in flight")
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_statustext("SRCF: GPS acquired, using GPS lane", timeout=60, check_context=True)
+        self.wait_statustext("EKF3 lane switch 0", timeout=10, check_context=True)
+        switch_us = self.get_sim_time() * 1e6
+        self.delay_sim_time(20)
+
+        self.land_and_disarm(timeout=120)
+
+        pos = {0: None, 1: None}
+        sep_max = 0.0
+        dfreader = self.dfreader_for_current_onboard_log()
+        while True:
+            m = dfreader.recv_match(type=['XKF1'])
+            if m is None:
+                break
+            # skip the switch itself: the alignment is applied on the tick
+            # after the commanded switch lands
+            if m.TimeUS < switch_us + 2e6:
+                continue
+            pos[m.C] = (m.PN, m.PE)
+            if pos[0] is None or pos[1] is None:
+                continue
+            sep_max = max(sep_max, math.sqrt((pos[0][0] - pos[1][0])**2 + (pos[0][1] - pos[1][1])**2))
+        self.progress("peak lane separation after the handover %.1fm" % sep_max)
+        if sep_max > 10:
+            raise NotAchievedException(
+                "lanes %.1fm apart after the handover, alignment did not take" % sep_max)
+
+        # Home must not be taken from the flow lane. The EKF origin appears as
+        # soon as either lane sets one, several seconds before the handover,
+        # and home set in that window is wrong by the distance flown since
+        # arming and is never revised. Measured at 30.7m before the gate.
+        home = None
+        fixes = []
+        dfreader = self.dfreader_for_current_onboard_log()
+        while True:
+            m = dfreader.recv_match(type=['ORGN', 'GPS'])
+            if m is None:
+                break
+            # ORGN Type 1 is ahrs_home, Type 0 is the EKF origin
+            if m.get_type() == 'ORGN' and m.Type == 1 and home is None:
+                home = (m.TimeUS, m.Lat, m.Lng)
+            elif m.get_type() == 'GPS' and m.Status >= 3:
+                fixes.append((m.TimeUS, m.Lat, m.Lng))
+        if home is None:
+            raise NotAchievedException("home was never set after acquiring GPS")
+        truth = min(fixes, key=lambda g: abs(g[0] - home[0]))
+        # dfreader returns ORGN and GPS lat/lng already scaled to degrees
+        home_err = self.get_distance_accurate(
+            mavutil.location(home[1], home[2], 0, 0),
+            mavutil.location(truth[1], truth[2], 0, 0))
+        self.progress("home set %.1fm from GPS truth at the time" % home_err)
+        if home_err > 5:
+            raise NotAchievedException(
+                "home set %.1fm from truth, taken from the unaligned flow lane" % home_err)
+
     def SRCFDisabledRegression(self):
         '''with SRCF_ENABLE=0 the monitor is inert and GPS loss trips the stock EKF failsafe'''
         # Negative half of the fallback invariant: identical per-core lane
@@ -18433,6 +18520,7 @@ return update, 1000
             self.SRCFGPSSpoof,
             self.SRCFSlowSpoofPositionOffset,
             self.SRCFStaticSpoofNoRecovery,
+            self.SRCFArmWithoutGPS,
             self.SRCFDisabledRegression,
             self.SRCFRCFailsafeDrift,
             self.SRCFBrakeNavLossDemote,
