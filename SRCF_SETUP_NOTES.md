@@ -369,6 +369,24 @@ What happens, in order:
    moment, so `PD` and the spoof detectors mean afterwards what they mean
    on an ordinary flight.
 
+The ground selection is much slower to leave GPS than to return to it, and
+that is the EKF rather than the monitor. It watches the GPS lane's own
+filter status, and the filter dead reckons for about 10 s before it drops
+absolute position, while it regains it on the first fix. Measured in SITL:
+12.4 s to move to flow after killing GPS, 2.8 s to move back after
+restoring it, of which the monitor's own debounce is 1.8 s either way.
+
+None of that applies in flight. The in-flight ladder runs on receiver
+status, not on filter status, which is why sessions 2 and 3 measured GPS
+loss detection at 0.20-0.26 s. A slow bench transition does not mean a
+slow fallback in the air.
+
+One practical consequence: near a doorway, where a fix comes and goes, the
+asymmetry biases the lane you end up armed on towards GPS. That is not
+wrong - a lane reporting absolute position really is fusing GPS - but if
+you intend to fly indoors, check the OSD lane panel before you arm rather
+than assuming.
+
 What you do not have until step 3 completes:
 
 - **No home**, so no RTL and no fence. Home is deliberately held off
