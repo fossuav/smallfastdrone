@@ -376,6 +376,14 @@ public:
     // the current primary. Same validity rules as getLaneDivergence
     bool getLaneDivergencePosSigma(uint8_t lane_index, float &pos_sigma_m) const;
 
+    // move a lane's reported position into the frame of the current primary.
+    // A lane that only ever dead reckons keeps the frame it started aiding
+    // in, so once another lane establishes an absolute position the two are
+    // offset for the rest of the flight by however far the vehicle travelled
+    // in between. Returns false if the lane is invalid, unallocated, is the
+    // primary, or either lane has no position to compare
+    bool alignLanePosition(uint8_t lane_index);
+
     // get health and filter status of a specific lane
     bool getLaneStatus(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const;
 

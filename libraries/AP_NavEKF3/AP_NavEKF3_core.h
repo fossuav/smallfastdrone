@@ -178,6 +178,11 @@ public:
     // makes it the right scale for judging a cross-lane position difference
     float getPosVarianceNE() const;
 
+    // shift the horizontal position states and their output history by a
+    // fixed offset. Changes the frame the lane reports in without changing
+    // what it has measured, so the covariance is deliberately left alone
+    void shiftPositionNE(const Vector2F &delta_ne);
+
     // return estimate of true airspeed vector in body frame in m/s
     // returns false if estimate is unavailable
     bool getAirSpdVec(Vector3f &vel) const;

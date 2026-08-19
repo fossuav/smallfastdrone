@@ -1256,6 +1256,23 @@ bool NavEKF3::getLaneDivergencePosSigma(uint8_t lane_index, float &pos_sigma_m) 
     return true;
 }
 
+bool NavEKF3::alignLanePosition(uint8_t lane_index)
+{
+    if (lane_index < MAX_EKF_CORES) {
+        dal.log_event3(AP_DAL::Event(uint8_t(AP_DAL::Event::alignLanePosition0)+lane_index));
+    }
+    if (core == nullptr || lane_index >= num_cores || lane_index == primary) {
+        return false;
+    }
+    Vector2p pos_lane, pos_primary;
+    if (!core[lane_index].getPosNE(pos_lane) || !core[primary].getPosNE(pos_primary)) {
+        return false;
+    }
+    const Vector2F delta{ftype(pos_primary.x - pos_lane.x), ftype(pos_primary.y - pos_lane.y)};
+    core[lane_index].shiftPositionNE(delta);
+    return true;
+}
+
 // get health and filter status of a specific lane
 bool NavEKF3::getLaneStatus(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const
 {

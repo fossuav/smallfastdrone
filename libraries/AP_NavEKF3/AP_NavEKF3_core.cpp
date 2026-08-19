@@ -2315,3 +2315,20 @@ void NavEKF3_core::moveEKFOrigin(void)
         storedOutput[index].position.xy() += diffNE;
     }
 }
+
+/*
+  shift the horizontal position states and their output history by a fixed
+  offset. This changes the frame the lane reports in without changing what it
+  has measured, so the position covariance is deliberately left alone.
+ */
+void NavEKF3_core::shiftPositionNE(const Vector2F &delta_ne)
+{
+    stateStruct.position.xy() += delta_ne;
+    outputDataNew.position.xy() += delta_ne;
+    outputDataDelayed.position.xy() += delta_ne;
+    lastKnownPositionNE += delta_ne;
+
+    for (unsigned index=0; index < imu_buffer_length; index++) {
+        storedOutput[index].position.xy() += delta_ne;
+    }
+}
