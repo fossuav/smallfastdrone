@@ -1070,7 +1070,7 @@ const AP_Param::GroupInfo AP_OSD_Screen::var_info2[] = {
 
     // @Param: EKFLANE_EN
     // @DisplayName: EKFLANE_EN
-    // @Description: Displays which EKF lane is providing the navigation solution and what kind of horizontal position it has: ABS absolute, REL relative only so it drifts, DRK wind or drag relative, NON none. The lane number is only meaningful with more than one lane allocated, where a change means the vehicle is navigating on different sensors than it booted on
+    // @Description: Displays which EKF lane is providing the navigation solution and what kind of horizontal position it has: ABS absolute, CST absolute but coasting on a stale fix, REL relative only so it drifts, DRK wind or drag relative, NON none. Flashes on CST and NON. The lane number is only meaningful with more than one lane allocated, where a change means the vehicle is navigating on different sensors than it booted on
     // @Values: 0:Disabled,1:Enabled
 
     // @Param: EKFLANE_X
@@ -1617,7 +1617,13 @@ void AP_OSD_Screen::draw_ekflane(uint8_t x, uint8_t y)
     // ABS before REL: a lane with an absolute fix also reports relative
     const char *postype = "NON";
     if (ahrs.has_status(AP_AHRS::Status::HORIZ_POS_ABS)) {
-        postype = "ABS";
+        // A lane that has stopped fusing GPS keeps reporting absolute
+        // position while it coasts on the last fix, for around 10s before the
+        // filter times out, and nothing else on screen says so. Gated on the
+        // lane being configured for GPS at all, else a beacon or extnav lane
+        // reads as coasting for its whole flight.
+        const bool coasting = ahrs.using_gps() && !ahrs.has_status(AP_AHRS::Status::USING_GPS);
+        postype = coasting ? "CST" : "ABS";
     } else if (ahrs.has_status(AP_AHRS::Status::HORIZ_POS_REL)) {
         postype = "REL";
     } else if (ahrs.has_status(AP_AHRS::Status::DEAD_RECKONING)) {
@@ -1626,8 +1632,11 @@ void AP_OSD_Screen::draw_ekflane(uint8_t x, uint8_t y)
         postype = "DRK";
     }
 
-    const int8_t lane = AP::ahrs().get_primary_core_index();
-    const bool flash = (postype[0] == 'N');
+    // flash when the position on screen is not being held up by a source:
+    // coasting on a stale fix, or nothing at all. REL does not flash - a flow
+    // lane reporting relative position is working as configured
+    const int8_t lane = ahrs.get_primary_core_index();
+    const bool flash = (postype[0] == 'N') || (postype[0] == 'C');
     if (lane < 0) {
         backend->write(x, y, flash, "EKF- %s", postype);
         return;
