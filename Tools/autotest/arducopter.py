@@ -4238,6 +4238,34 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException(
                 "home set %.1fm from truth, taken from the unaligned flow lane" % home_err)
 
+    def SRCFGroundLaneFollowsGPS(self):
+        '''at SRCF_ENABLE=2 the lane armed on follows GPS availability while disarmed, both ways'''
+        # The in-flight ladder runs on receiver status and switches in ~0.25s.
+        # This is the ground selection, which runs on the GPS lane's own filter
+        # status instead, so it is far slower to leave GPS than to return: the
+        # EKF dead reckons for about 10s before dropping horiz_pos_abs and
+        # regains it on the first fix. Measured 12.4s out and 2.8s back, of
+        # which the SRCF debounce is 1.8s either way. The timeouts below are
+        # deliberately loose - this asserts the direction of travel, not timing.
+        #
+        # check_context is False throughout: booting at SRCF_ENABLE=2 with no
+        # fix yet already switches to flow and back once GPS arrives, so the
+        # collection holds a lane switch in each direction before this starts.
+        self.configure_source_fallback_per_core()
+        self.set_parameter("SRCF_ENABLE", 2)
+        self.reboot_sitl()
+
+        self.wait_ready_to_arm(timeout=120)
+
+        self.progress("Killing GPS on the ground")
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=60, check_context=False)
+        self.wait_statustext("EKF3 lane switch 1", timeout=30, check_context=False)
+
+        self.progress("Restoring GPS on the ground")
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_statustext("EKF3 lane switch 0", timeout=60, check_context=False)
+
     def SRCFDisabledRegression(self):
         '''with SRCF_ENABLE=0 the monitor is inert and GPS loss trips the stock EKF failsafe'''
         # Negative half of the fallback invariant: identical per-core lane
@@ -18521,6 +18549,7 @@ return update, 1000
             self.SRCFSlowSpoofPositionOffset,
             self.SRCFStaticSpoofNoRecovery,
             self.SRCFArmWithoutGPS,
+            self.SRCFGroundLaneFollowsGPS,
             self.SRCFDisabledRegression,
             self.SRCFRCFailsafeDrift,
             self.SRCFBrakeNavLossDemote,
