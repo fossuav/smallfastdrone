@@ -4279,6 +4279,69 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("SIM_GPS1_ENABLE", 1)
         self.wait_statustext("EKF3 lane switch 0", timeout=60, check_context=False)
 
+    def SRCFCoastingShown(self):
+        '''losing GPS on the ground shows a coasting position type well before the lane switch'''
+        # The lane switch waits on the GPS lane's own filter status, which
+        # dead reckons for about 10s before dropping absolute position, so for
+        # that whole window nothing on the OSD changed: the panel read ABS
+        # while GPS was already dead. The EKF stops fusing GPS after 4s, which
+        # is what CST reports.
+        #
+        # There is no way to read the OSD panel back without an SFML build,
+        # and EKF_STATUS_REPORT does not carry using_gps, so this pins the
+        # condition the panel renders from using the logged filter status.
+        self.configure_source_fallback_per_core()
+        self.set_parameter("SRCF_ENABLE", 2)
+        self.reboot_sitl()
+
+        self.wait_ready_to_arm(timeout=120)
+        kill_us = self.get_sim_time() * 1e6
+        self.progress("Killing GPS on the ground")
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_statustext("EKF3 lane switch 1", timeout=60, check_context=False)
+        self.delay_sim_time(2)
+
+        SS_POS_ABS = 1 << 4
+        SS_USING_GPS = 1 << 13
+        coast_us = None
+        abs_lost_us = None
+        switch_us = None
+        dfreader = self.dfreader_for_current_onboard_log()
+        while True:
+            m = dfreader.recv_match(type=['XKF4', 'MSG'])
+            if m is None:
+                break
+            if m.TimeUS < kill_us:
+                continue
+            if m.get_type() == 'MSG':
+                # the harness mirrors its own progress() output into MSG, so
+                # match the vehicle's message from the start of the string:
+                # its echoes carry a SRC=250/250 prefix
+                if switch_us is None and m.Message.startswith('EKF3 lane switch 1'):
+                    switch_us = m.TimeUS
+                continue
+            if m.C != 0:
+                continue
+            if coast_us is None and (m.SS & SS_POS_ABS) and not (m.SS & SS_USING_GPS):
+                coast_us = m.TimeUS
+            if abs_lost_us is None and not (m.SS & SS_POS_ABS):
+                abs_lost_us = m.TimeUS
+
+        if coast_us is None:
+            raise NotAchievedException("never reported absolute position without using GPS")
+        if switch_us is None:
+            raise NotAchievedException("no lane switch found in the log")
+        self.progress("coasting from t+%.1fs, absolute position lost t+%.1fs, lane switch t+%.1fs"
+                      % ((coast_us - kill_us)/1e6, (abs_lost_us - kill_us)/1e6,
+                         (switch_us - kill_us)/1e6))
+
+        # it has to lead the lane switch by enough to be worth showing, else
+        # it adds nothing over watching the lane number change
+        lead_s = (switch_us - coast_us) / 1e6
+        if lead_s < 2:
+            raise NotAchievedException(
+                "coasting only %.1fs ahead of the lane switch, no useful warning" % lead_s)
+
     def SRCFDisabledRegression(self):
         '''with SRCF_ENABLE=0 the monitor is inert and GPS loss trips the stock EKF failsafe'''
         # Negative half of the fallback invariant: identical per-core lane
@@ -18563,6 +18626,7 @@ return update, 1000
             self.SRCFStaticSpoofNoRecovery,
             self.SRCFArmWithoutGPS,
             self.SRCFGroundLaneFollowsGPS,
+            self.SRCFCoastingShown,
             self.SRCFDisabledRegression,
             self.SRCFRCFailsafeDrift,
             self.SRCFBrakeNavLossDemote,

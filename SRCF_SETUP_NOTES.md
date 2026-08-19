@@ -325,9 +325,19 @@ the source sets from section 3 it reads `EKF0 ABS` on the GPS lane and
 | field | meaning |
 |---|---|
 | `ABS` | absolute position - fixed to the earth by GPS, beacon or extnav |
+| `CST` | absolute, but coasting: the lane has not fused GPS for 4 s and is running on the last fix. Flashes |
 | `REL` | relative only - tracks movement since the lane started aiding and drifts without bound. This is the flow lane |
 | `DRK` | wind or drag relative. A fixed wing state: EKF3 clears it whenever flow, GPS or body odometry is navigating, so it will not appear on a copter flow lane |
 | `NON` | no horizontal position at all. Flashes |
+
+`CST` is what fills the gap the ground selection leaves. Kill GPS on the
+bench and the lane number does not change for about 12 s, because the
+filter coasts before it drops absolute position - so for that whole window
+the old panel read `ABS` while GPS was already dead. The EKF stops fusing
+GPS after 4 s, so `CST` appears at about t+4.6 s and gives roughly 8 s of
+warning before the lane switch. In the air the same display tells you the
+fix behind your position went away several seconds before anything else
+reacts.
 
 `REL` is the one to read as "drifting". ArduPilot's own dead reckoning
 flag is `DRK` and means something else - it is set only when the filter
