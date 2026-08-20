@@ -4251,6 +4251,90 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException(
                 "home set %.1fm from truth, taken from the unaligned flow lane" % home_err)
 
+    def SRCFFirstFixOffsetBound(self):
+        '''a first fix that disagrees with the flow lane is refused when an origin predates takeoff'''
+        # Field log 346 flew this: armed indoors on a recorded origin with GPS
+        # disabled, hovered on flow at 0.9m, then re-enabled GPS under a
+        # repeater. The fix that came back read 8-9 sats, HDop 0.89 and HAcc
+        # 1.24m while sitting 26m from truth. The lanes held 25.8m apart at
+        # 12-14 sigma for the whole SRCF_RECOV_TIME hold, the handover was
+        # taken unchallenged, and Loiter chased the walking fix into a wall
+        # 2.1s later. VD ran 0.02-0.61 against a 1.6 gate and PR +/-0.23
+        # against 1.9 throughout, so the offset was the only thing that saw
+        # it. The spoof detectors cannot vote before the switch - can_vote
+        # needs the GPS lane primary - so the gate has to be on the handover.
+        #
+        # SIM_GPS1_SPOOF mode 3 is the same shape: one position step, then
+        # held with zero reported velocity. The bound applies only because an
+        # origin exists before takeoff; without one the flow lane's frame is
+        # arbitrary and the offset carries no information, which is the case
+        # SRCFArmWithoutGPS covers.
+        spoof_ofs_m = 100
+
+        self.configure_source_fallback_per_core()
+        start = self.sitl_start_location()
+        self.set_parameters({
+            "SRCF_ENABLE": 2,
+            "AHRS_OPTIONS": 16,     # USE_RECORDED_ORIGIN_FOR_NONGPS
+            "AHRS_ORIGIN_LAT": start.lat,
+            "AHRS_ORIGIN_LON": start.lng,
+            "AHRS_ORIGIN_ALT": start.alt,
+            "SIM_GPS1_ENABLE": 0,
+        })
+        self.reboot_sitl()
+        self.context_collect('STATUSTEXT')
+
+        # the recorded origin is only taken up once SRCF has moved the primary
+        # to the flow lane: use_recorded_origin_maybe early-returns while the
+        # primary lane is configured for GPS, so it follows the arming message
+        self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=60, check_context=True)
+        self.wait_statustext("AHRS: using recorded origin", timeout=30, check_context=True)
+        self.takeoff(10, mode='LOITER', require_absolute=False)
+        sim_start = self.sim_location()
+
+        self.progress("Receiver acquires %um from truth" % spoof_ofs_m)
+        self.set_parameters({
+            "SIM_GPS1_SPOOF": 3,
+            "SIM_GPS1_SPOOF_R": spoof_ofs_m,
+            "SIM_GPS1_ENABLE": 1,
+        })
+
+        # the EKF takes tens of seconds to start using a fix it has just been
+        # handed - 28.7s here - so the wait below has to be timed from the GPS
+        # lane becoming usable, not from the receiver being switched on
+        self.wait_statustext("EKF3 IMU0 is using GPS", timeout=120, check_context=True)
+
+        # nothing is emitted for "did not hand over", so this has to be a
+        # plain wait, and it has to cover SRCF_RECOV_TIME for the handover to
+        # have happened if it were going to plus SRCF_RECOV_TIME again for the
+        # warning that says why it did not
+        self.delay_sim_time(30)
+
+        handed_over = self.statustext_in_collections("SRCF: GPS acquired, using GPS lane")
+        # a refused fix is otherwise indistinguishable from one that never came
+        warned = self.statustext_in_collections("m off, staying on flow")
+        # SIMSTATE, not mav.location(): the fix on offer here is a lie
+        dist = self.get_distance(sim_start, self.sim_location())
+        self.progress("held %.1fm from the takeoff point on the flow lane" % dist)
+
+        if handed_over:
+            raise NotAchievedException(
+                "took up a GPS lane %um from the flow lane" % spoof_ofs_m)
+        if not warned:
+            raise NotAchievedException(
+                "the handover was blocked by the offset bound but nothing said so")
+        if dist > 15:
+            raise NotAchievedException("drifted %.1fm while the fix was refused" % dist)
+
+        # the bound must not have simply disabled the handover: an honest fix
+        # in the same flight still has to be taken up
+        self.progress("Receiver returns to truth")
+        self.set_parameter("SIM_GPS1_SPOOF", 0)
+        self.wait_statustext("SRCF: GPS acquired, using GPS lane", timeout=60, check_context=True)
+        self.wait_statustext("EKF3 lane switch 0", timeout=10, check_context=True)
+
+        self.land_and_disarm(timeout=120)
+
     def SRCFGroundLaneFollowsGPS(self):
         '''at SRCF_ENABLE=2 the lane armed on follows GPS availability while disarmed, both ways'''
         # The in-flight ladder runs on receiver status and switches in ~0.25s.
@@ -18625,6 +18709,7 @@ return update, 1000
             self.SRCFSlowSpoofPositionOffset,
             self.SRCFStaticSpoofNoRecovery,
             self.SRCFArmWithoutGPS,
+            self.SRCFFirstFixOffsetBound,
             self.SRCFGroundLaneFollowsGPS,
             self.SRCFCoastingShown,
             self.SRCFDisabledRegression,
