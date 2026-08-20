@@ -178,16 +178,21 @@ the regression a bound set too tight would break).
 
 ## This airframe's configuration
 
-Two values never picked up session 3's findings. Neither caused the
-crash, and the first made it worse:
+Two values differ from the octaquad's and neither should be changed on
+the strength of that alone:
 
-- `EK3_GLITCH_RAD = 0`. Session 3 settled on 25 on both airframes after
-  log 48 wedged a flow-to-GPS return for 18.8 s. A glitch was declared
-  0.1 s after the handover here and held for 7.0 s; at 0 the lane
-  crawls toward the bad fix rather than resetting.
-- `EK3_FLOW_GAIN_H = 12`, against session 3's measured 4. Inert at
-  0.9 m AGL - `gainHgt / max(HAGL, gainHgt)` is 1.0 below either value,
-  so there is no detune at 12 or at 4 - but wrong from 4 m up.
+- `EK3_GLITCH_RAD = 0`. Session 3 raised the octaquad 0 to 25 and
+  described 0 as right for a 50 m/s vehicle "inherited from one". This
+  airframe hovers at 9.5% throttle against the octaquad's 26.5%, so it
+  is plausibly that vehicle and 0 is plausibly deliberate. It did make
+  this crash worse either way: a glitch was declared 0.1 s after the
+  handover and held for 7.0 s, and at 0 the lane crawls toward the bad
+  fix rather than resetting. Settle which speed class this airframe is
+  before touching it - not from the octaquad's number.
+- `EK3_FLOW_GAIN_H = 12` against the octaquad's measured 4. Inert at
+  0.9 m AGL: `gainHgt / max(HAGL, gainHgt)` is 1.0 below either value,
+  so there is no detune at 12 or at 4 and this flight cannot say which
+  is right. The octaquad's 2.4 s roll limit cycle at 12 was at 7-9 m.
 
 `SRCF_VEL_THR = 1.6` and `SRCF_POSR_THR = 1.9` are correct here and
 should stay: they are this airframe's own values from session 2's
