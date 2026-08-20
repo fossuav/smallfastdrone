@@ -309,6 +309,7 @@ depends on it.
 | `SRCF: GPS recovered` | recovery hold passed, back on GPS |
 | `SRCF: GPS spoof suspected, using flow lane` | a detector confirmed; GPS latched untrusted |
 | `SRCF: GPS returned Xm off, staying on flow` | GPS is back but disagrees with the flow lane's position |
+| `SRCF: GPS acquired Xm off, staying on flow` | the same, on the first fix of a GPS-free arm (section 8) |
 | `SRCF: GPS trust reset` | latch cleared (disarm or pilot source-set change) |
 | `SRCF: flow lost, back on GPS lane` | flow lane became unusable while primary |
 | `SRCF: no nav source, AltHold` | final rung: neither lane has position |
@@ -394,6 +395,22 @@ What happens, in order:
    moment, so `PD` and the spoof detectors mean afterwards what they mean
    on an ordinary flight.
 
+If you set an origin before takeoff (below), the handover also has to pass
+the same offset bound the ordinary recovery uses, and a fix that disagrees
+with the flow lane by more than the two lanes could honestly be apart is
+refused with `SRCF: GPS acquired Xm off, staying on flow`. Arming with no
+origin at all, the two lanes have no common frame and there is nothing to
+compare, so the bound does not apply and the first fix is taken on trust.
+An accurate origin therefore buys you the check as well as home, which is
+a second reason to set one.
+
+The bound exists because log 346 did not have it: that flight armed on an
+accurate recorded origin indoors, acquired a GPS repeater's fix 26 m off,
+took the handover unchallenged and flew into a wall 2.1 s later. Nothing
+in the fix looked wrong - 8-9 satellites, HDop 0.89, a reported accuracy
+of 1.24 m - and the OSD read `EKF0 ABS` throughout, because the lane
+really was fusing GPS.
+
 The ground selection is much slower to leave GPS than to return to it, and
 that is the EKF rather than the monitor. It watches the GPS lane's own
 filter status, and the filter dead reckons for about 10 s before it drops
@@ -456,10 +473,18 @@ There is no log trace of the ground decision - the monitor returns before
 it writes its `SRCF` record while disarmed - so the OSD panel and the
 statustexts are the whole diagnosis for now.
 
-None of this has flown. It is SITL-validated only: `SRCFArmWithoutGPS`
-arms with no GPS, takes off in Loiter on flow, acquires in flight, and
-checks the lanes end up 1.5 m apart rather than the 46 m they sit at
-without the alignment.
+Flown once, in log 346, and it crashed - see above and
+`SRCF_FLIGHT_TEST_LOG_5.md`. The offset bound that came out of it has not
+flown. In SITL, `SRCFArmWithoutGPS` arms with no GPS, takes off in Loiter
+on flow, acquires in flight, and checks the lanes end up 1.5 m apart
+rather than the 46 m they sit at without the alignment;
+`SRCFFirstFixOffsetBound` covers the refusal and the honest fix after it.
+
+Do not fly this indoors under a GPS repeater. A repeater is a spoof you
+have installed on purpose: every receiver under it computes the roof
+antenna's position, the fix reads healthy on every field a pilot can see,
+and the vehicle will fly to wherever that position drifts. If your site
+has one, switch it off for this work.
 
 ## 9. Known limits
 
@@ -476,6 +501,11 @@ without the alignment.
   in SITL.
 - Flow near the ground is its own problem set (focus height, ground
   effect); do the low work in ALT_HOLD and the SRCF work at 5-9 m.
-- Arming without GPS (`SRCF_ENABLE = 2`, section 8) has never flown. It
-  is also the one part of SRCF whose takeoff happens at low height on
-  flow alone, which is the regime the previous limit is about.
+- Arming without GPS (`SRCF_ENABLE = 2`, section 8) has flown once and
+  crashed, on a GPS repeater indoors. The hover on flow was fine; the
+  handover to the fix was not. It is also the one part of SRCF whose
+  takeoff happens at low height on flow alone, which is the regime the
+  previous limit is about.
+- The first fix of a GPS-free arm is trusted where the vehicle armed
+  with no origin, because the two lanes have no frame in common to
+  compare. Set an origin before takeoff and the offset bound applies.

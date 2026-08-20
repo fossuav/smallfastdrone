@@ -183,6 +183,15 @@ the first fix. Add a state whose exit condition is only that the GPS
 lane reaches `horiz_pos_abs` and holds it - no cross-lane consistency,
 no offset bound. After the switch the machine is exactly today's.
 
+Amended after session 5. "No common frame" is true only where the
+vehicle armed with no origin at all. Armed on a recorded origin or a
+GCS `SET_GPS_GLOBAL_ORIGIN` both lanes are in a real earth frame from
+the start and the offset is a real disagreement, so the handover now
+applies `SRCF_RECOV_POS_NSIGMA` in that case and only that case. Field
+log 346 took this handover on a GPS repeater indoors with the lanes
+25.8 m and 10.6-14.7 sigma apart and flew into a wall 2.1 s later; see
+`SRCF_FLIGHT_TEST_LOG_5.md`.
+
 ### 3. Align the flow lane at the first fix
 
 A `NavEKF3::alignLanePosition(lane, reference_lane)` that offsets
@@ -338,6 +347,13 @@ the handover, the lane separation afterwards and the home error. It
 asserts the separation rather than the statustexts, because without the
 alignment every message still arrives and only the frames are wrong.
 
+`SRCFFirstFixOffsetBound` covers the case session 5 flew: a recorded
+origin, arming without GPS, and acquisition on a static capture 100 m
+out. It asserts the refusal, the warning and that the vehicle holds
+station, then clears the spoof in the same flight and asserts the
+handover completes - a bound that had simply disabled the handover
+would pass the first half on its own.
+
 `SRCFGroundLaneFollowsGPS` covers the bench case that
 `SRCFArmWithoutGPS` does not: GPS present at boot, killed on the ground,
 restored. Loose timeouts on purpose - it asserts the direction of travel,
@@ -359,8 +375,14 @@ EKF3SRCPerCore, OpticalFlow.
 
 ## What flying it still needs
 
-None of this has flown, and that is where the gaps are. Everything
-sessions 1-4 measured was 5-9 m over textured ground with GPS present.
+Session 5 flew it once, indoors, and crashed: the handover was taken on
+a GPS repeater's fix 26 m from truth and Loiter chased it into a wall.
+That is what the offset bound above is for; the bound itself has not
+flown. `SRCF_FLIGHT_TEST_LOG_5.md` has the flight. The rest of this
+section is unchanged and still stands.
+
+Everything sessions 1-4 measured was 5-9 m over textured ground with
+GPS present.
 Indoor flow at 1-2 m is the regime session 3 listed as unresolved (focus
 height, ground effect), and `EK3_FLOW_GAIN_H = 4` gives
 `gainHgt / max(HAGL, gainHgt) = 1.0` below 4 m, so there is no detune at
@@ -401,7 +423,10 @@ and this manoeuvre is exactly that transition.
 3. Should the first-fix switch be automatic at all, or should it be
    announced and left to the pilot? Automatic matches the rest of SRCF;
    a several-hundred-metre position reset mid-flight is a bigger event
-   than anything the ladder does today.
+   than anything the ladder does today. Session 5 is the case for
+   leaving it to the pilot: the offset bound now refuses the fixes it
+   can prove are wrong, but where it passes, the pilot still gets 2 s
+   to notice a bad handover from inside the aircraft.
 4. How is a stale recorded origin detected? Nothing in the parameters
    carries provenance or age. A pre-arm that compares the recorded
    origin against the last known GPS position would catch the drive-to-a-
