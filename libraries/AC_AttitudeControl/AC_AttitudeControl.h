@@ -609,6 +609,8 @@ protected:
     // Angle limit
     AP_Float            _angle_max_deg;
 
+    // Body-frame angular velocity target (rad/s) as given to the rate controller
+    Vector3f            _rate_target_rads;
     // Latest body-frame gyro measurement (rad/s) used by rate controller
     Vector3f            _rate_gyro_rads;
     // timestamp of the latest gyro measurement (in microseconds) value used by the rate controller

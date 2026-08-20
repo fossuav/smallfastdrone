@@ -451,6 +451,7 @@ void AC_AttitudeControl_Multi::rate_controller_run_dt(const Vector3f& gyro_rads,
 
     ang_vel_body += _sysid_ang_vel_body_rads;
 
+    _rate_target_rads = ang_vel_body;
     _rate_gyro_rads = gyro_rads;
     _rate_gyro_time_us = AP_HAL::micros64();
 
