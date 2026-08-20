@@ -206,30 +206,109 @@ recorded as deliberate (session 3, terrain following). `AHRS_OPTIONS =
 24` is bits 3 and 4, so the origin came from a previous flight -
 accurate here, and the thing that made `PD` meaningful.
 
+## 5b: the gate's first flight - log 347
+
+Same room, same evening, firmware `d8be1f94`. GPS off at boot, armed on
+the flow lane at 23.6 s in Loiter, GPS restored on the switch at 53.9 s,
+and the GPS lane reached absolute position at 131.3 s.
+
+`SRCF: GPS acquired 35m off, staying on flow` at 141.4 s - 10.1 s after
+the lane became usable, which is `SRCF_RECOV_TIME` to the tenth, so the
+message arrived at the instant the handover would have. There was no
+handover. The vehicle flew on for another 98 s and landed normally.
+
+Over the whole 108 s the GPS lane was usable and refused:
+
+| | measured | gate |
+|---|---|---|
+| `PD` | 19.8-46.1 m | 6 x `PSig`, i.e. 7.0-17.4 m |
+| `PSig` | 1.16-2.90 m | |
+| `PD`/`PSig` | 12.4-34.8 | 6 |
+| `VD` | 0.003-1.272 | 1.6, never crossed |
+| `PR` | -1.09 to +0.88 | 1.9, never crossed |
+| `VVot`/`PVot`/`OVot` | 0 | 20 |
+
+The refusal was right, and not because the origin was stale. The flow
+lane held station to 5 cm - `PN` -0.16 to -0.20 m, `PE` +0.26 to
++0.32 m over 168 s at 0.64 m AGL, flow quality 113-134 - while the
+receiver reported 195 m of path length with fixes up to 34 m apart,
+speeds to 2.71 m/s, an altitude spanning 70.1 to 131.8 m against an
+origin altitude of 139 m, and 7-8 satellites at HDop 1.09-1.37
+throughout. A stationary vehicle cannot produce that, whatever the
+origin is.
+
+### A large offset hides the wander from PD
+
+`PD` is the magnitude of the offset vector, and magnitude is blind to
+motion across it. Between 130.1 and 142.1 s the reported position moved
+6.6 m on a bearing of 194 deg while the standing offset pointed at
+296 deg - 102 deg apart, near enough perpendicular - and `PD` changed by
+0.9 m. `PR`, which differentiates `PD`, therefore saw almost nothing of
+a 0.55 m/s walk.
+
+So the offset test catches the standing disagreement and misses the
+dynamics, while the vector displacement of the two lanes over the same
+window differed by the full 6.6 m against the flow lane's 5 cm. Worth
+remembering when reading `PR` on any flight with a large `PD`.
+
+### The flow-lost path is not gated
+
+At 239.8 s, between `LAND_COMPLETE_MAYBE` at 239.4 and `LAND_COMPLETE`
+at 240.2, the monitor printed `SRCF: flow lost, back on GPS lane` and
+took the lane it had spent 98 s refusing. On the ground at touchdown
+that is harmless and expected - flow quality collapses and the
+rangefinder goes under its minimum - but the branch is the same one that
+runs in flight, and it has no offset check at all.
+
+The alternative is the AltHold demotion with no position, so which is
+right is not obvious: a lane 35 m out still holds station, and nothing
+does not. Left open rather than patched off one landing.
+
 ## Still open
 
-1. The gate is SITL-tested and has not flown. The next indoor session
-   with a repeater is the test, and it should now refuse the handover
-   and say so. The SITL capture is 100 m at 16 sigma against a field
-   case of 26 m at 10.6-14.7, so the margin over the bound has only
-   been exercised comfortably; a repeater closer to the true position
-   would sit nearer 6 and is the case that is untested.
-2. Whether the first-fix handover should be automatic at all. This is
+1. The gate has now refused once in the field (log 347, 35 m at
+   12.4-34.8 sigma) and has never been tested near its bound. Every
+   case so far - 26 m, 35 m, and 100 m in SITL - has been ten times the
+   threshold or more. A repeater closer to the true position, or an
+   origin a few metres out, would sit near 6 and decide the flight;
+   that case is untested in both directions.
+2. The flow-lost fallback takes the GPS lane with no offset check, and
+   it is the same branch in flight as at touchdown. In log 347 it fired
+   during the landing, where it costs nothing, onto a lane the gate had
+   been refusing for 98 s. Whether it should be gated is a real
+   question and not an obvious one: the alternative when the flow lane
+   dies is the AltHold demotion with no position at all, and a lane
+   35 m out at least holds station. Needs deciding before it happens at
+   height rather than on the ground.
+3. Whether the first-fix handover should be automatic at all. This is
    design note open question 3, and this log is the argument for
    announcing it and leaving it to the pilot: a several-hundred-metre
    position reset mid-flight is a bigger event than anything the ladder
    does, and 2 s is not long enough for a pilot to work out what has
    happened. The gate reduces how often the question arises; it does
    not answer it.
-3. A stale recorded origin still has no provenance check (design note
+4. A stale recorded origin still has no provenance check (design note
    open question 4), and it now matters more: with the gate in, a stale
    origin blocks an honest handover rather than silently corrupting
    home. A pre-arm comparing the recorded origin against the last known
    GPS position would catch the drive-to-a-new-site case.
-4. Indoor flow at 1-2 m is still uncharacterised. This flight held
+5. Indoor flow at 1-2 m is still uncharacterised. This flight held
    0.9 m for 130 s at quality 134 with sub-decimetre position, which is
    better than session 3's open item feared, but it is one flight in
    one room.
-5. Sessions 3 and 4 items stand: `SRCF_VEL_THR = 3.0` unflown, no
+6. An origin-free cross-check would decide these cases without the
+   origin being right at all, and both logs carry the evidence for one.
+   Displacement is frame-free: over 130.1 to 142.1 s in log 347 the
+   receiver moved 6.6 m while the flow lane moved 5 cm, and over the
+   armed flight it walked 195 m against the flow lane's 5 cm. Altitude
+   is frame-free the same way and is the loudest channel of the three -
+   log 347's reported altitude spanned 61.7 m and log 346's 17.7 m,
+   against a rangefinder that never left a metre - and it is not fused
+   at all with `EK3_SRC1_POSZ = 1`, so it costs nothing today and a
+   spoof has to corrupt it consistently to hide. Neither is a
+   replacement for the offset bound, which is what catches a settled
+   capture that sits still; they are what would let a vehicle with an
+   approximate origin fly in from outside. Nothing has been built.
+7. Sessions 3 and 4 items stand: `SRCF_VEL_THR = 3.0` unflown, no
    GPS-loss cycle at cruise, the offset detector's long soak, and the
    altitude-hold and ground-effect items on the octaquad.
