@@ -296,19 +296,39 @@ does not. Left open rather than patched off one landing.
    0.9 m for 130 s at quality 134 with sub-decimetre position, which is
    better than session 3's open item feared, but it is one flight in
    one room.
-6. An origin-free cross-check would decide these cases without the
-   origin being right at all, and both logs carry the evidence for one.
-   Displacement is frame-free: over 130.1 to 142.1 s in log 347 the
-   receiver moved 6.6 m while the flow lane moved 5 cm, and over the
-   armed flight it walked 195 m against the flow lane's 5 cm. Altitude
-   is frame-free the same way and is the loudest channel of the three -
-   log 347's reported altitude spanned 61.7 m and log 346's 17.7 m,
-   against a rangefinder that never left a metre - and it is not fused
-   at all with `EK3_SRC1_POSZ = 1`, so it costs nothing today and a
-   spoof has to corrupt it consistently to hide. Neither is a
-   replacement for the offset bound, which is what catches a settled
-   capture that sits still; they are what would let a vehicle with an
-   approximate origin fly in from outside. Nothing has been built.
+6. An origin-free cross-check was prototyped as a replay over eleven
+   logs and mostly does not work. Two were tried on a sliding window,
+   both frame-free so neither needs the origin: the vector displacement
+   of the two lanes against each other, and the change in reported GPS
+   altitude against baro. Measured at a 5 s window, the longest that
+   fits the budget below:
+
+   | | horiz mismatch / max(travelled, 2 m) | vert mismatch |
+   |---|---|---|
+   | worst benign of 9 flights | 2.84 (log 337) | 4.2 m (log 330) |
+   | log 346, decision window | 1.33 | 2.0 m |
+   | log 347, decision window | 3.33 | 25.5 m |
+
+   Displacement does not separate at any window length tried (20, 8,
+   5 s): the bad case hovers so the floor governs it, while benign fast
+   flight travels far enough to divide the ratio down. Altitude catches
+   log 347 at six times the benign worst and is silent on log 346,
+   which is the flight that crashed. The offset bound catches both.
+
+   The reason is the budget rather than the test. `XKF4.AID` puts the
+   GPS lane at `AID_ABSOLUTE` from 159.7 s in log 346 against a
+   handover at 166.687 - **7.0 s** - and a slow wander cannot be
+   observed in seven seconds. log 347 only looks easy because it never
+   handed over and the check had 108 s.
+
+   So the lever for flying in from outside on an approximate origin is
+   time, not a sharper instantaneous test: keep flying on flow, which
+   both flights did safely, and require an origin-free check to hold
+   for tens of seconds before accepting a fix the offset bound would
+   reject. Untestable on log 346, whose fix existed for 7 s, but it
+   would have prevented that crash by never firing the handover.
+
+   Replay tool: `xcheck_replay.py`.
 7. Sessions 3 and 4 items stand: `SRCF_VEL_THR = 3.0` unflown, no
    GPS-loss cycle at cruise, the offset detector's long soak, and the
    altitude-hold and ground-effect items on the octaquad.
