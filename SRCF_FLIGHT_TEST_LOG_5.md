@@ -264,15 +264,89 @@ The alternative is the AltHold demotion with no position, so which is
 right is not obvious: a lane 35 m out still holds station, and nothing
 does not. Left open rather than patched off one landing.
 
+## 5c: an honest fix refused - log 348
+
+The inside-to-outside flight, on `d8be1f94`. Armed indoors on the flow
+lane at 22.5 s, flew out, and never took the GPS lane:
+
+```
+33.30  EKF3 IMU0 is using GPS
+43.48  SRCF: GPS acquired 40m off, staying on flow
+```
+
+No flyaway - the vehicle flew the whole 305 s on flow and landed. But
+the fix it refused was a good one. Outside, from 170 s on, the receiver
+held `Status 4` with 14-18 satellites, HDop 0.76-0.89, `HAcc` down to
+0.22 m, and a position that settled to a few metres for 85 s.
+
+The origin was the problem. Back-solving the takeoff point from that
+fix and the flow lane's own displacement - the flow lane reports
+displacement from where it began aiding, so subtracting it from a
+trusted fix gives where the vehicle actually started:
+
+| | |
+|---|---|
+| mean GPS position, 180-265 s | 35.1872560, -79.3713662, 140.5 m |
+| flow lane displacement since takeoff | N -20.4 m, E +3.9 m |
+| implied takeoff point | 35.1874390, -79.3714087 |
+| recorded origin | 35.1876869, -79.3717117, 89.3 m |
+| **origin error** | **39.0 m horizontal, -51.2 m vertical** |
+
+The firmware said 40 m. So the gate was correct about the disagreement
+and wrong about which side of it was lying, which is the failure this
+change bought and it has now happened.
+
+`AHRS_OPTIONS` was still 24, so bit 3 was still rewriting the origin
+from each flight. It has moved every time: 35.18744/-79.37126/147 in
+log 346, 35.18748/-79.37127/139 in log 347, 35.18769/-79.37171/89 here.
+An origin recorded on a flight flown under a repeater is a repeater's
+idea of where the vehicle was.
+
+Before the gate existed a bad origin only put home in the wrong place.
+It now blocks the handover as well, so `RECORD_ORIGIN` and this feature
+are actively hostile to each other and the origin should be pinned by
+hand with bit 3 cleared.
+
+### What would have caught it, and what would not
+
+Two candidate discriminators were tested against the logs and both fail:
+
+- Offset stability. A wrong datum ought to give a constant offset where
+  a wrong fix wanders, but measured over each flight's usable window
+  log 348 spread 38.7 m against log 347's 26.3 m - the bad datum varies
+  *more*, because the vehicle flew 20 m and the fix improved from 5 to
+  19 satellites during it.
+- Displacement and altitude consistency, from open item 6, for the same
+  reason it failed there: it cannot run for long enough before the
+  handover decision is due.
+
+What was plainly visible is the origin itself. From 8.1 to 18.5 s, on
+the ground and four seconds before arming, the receiver reported a 3D
+fix at 144-153 m altitude against a recorded origin of 89.3 m. Nothing
+compares those two numbers. A disarmed check that did would have caught
+this before the props turned, and it is design note open question 4.
+
+Its limit is worth stating: it validates a datum against whatever fix
+is on offer, so under a repeater it would compare a good origin against
+a bad fix and cry wolf. It belongs as a warning the pilot can weigh,
+not a refusal.
+
 ## Still open
 
-1. The gate has now refused once in the field (log 347, 35 m at
-   12.4-34.8 sigma) and has never been tested near its bound. Every
-   case so far - 26 m, 35 m, and 100 m in SITL - has been ten times the
-   threshold or more. A repeater closer to the true position, or an
-   origin a few metres out, would sit near 6 and decide the flight;
-   that case is untested in both directions.
-2. The flow-lost fallback takes the GPS lane with no offset check, and
+1. The gate has never passed a fix. Three field flights and the SITL
+   test are all refusals - 26 m, 35 m, 40 m, 100 m - and log 348 shows
+   it refusing an excellent one (18 satellites, HDop 0.76, `HAcc`
+   0.22 m) because the datum was 39 m out. Nothing has yet demonstrated
+   the accept path on an aircraft, and until an origin is pinned
+   accurately nothing can. Its behaviour near the bound is also still
+   untested: every case so far is six times the threshold or more.
+2. The pilot has no way through a refusal. Log 348's pilot could see a
+   good fix and had no control that would take it; the flight ended on
+   flow because the monitor had decided. `RCx_OPTION = 90` already
+   means "pilot intervenes in source selection" and already clears a
+   spoof latch, so it is the obvious lever, but it does nothing in
+   `FLOW_NO_GPS` today.
+3. The flow-lost fallback takes the GPS lane with no offset check, and
    it is the same branch in flight as at touchdown. In log 347 it fired
    during the landing, where it costs nothing, onto a lane the gate had
    been refusing for 98 s. Whether it should be gated is a real
@@ -280,23 +354,23 @@ does not. Left open rather than patched off one landing.
    dies is the AltHold demotion with no position at all, and a lane
    35 m out at least holds station. Needs deciding before it happens at
    height rather than on the ground.
-3. Whether the first-fix handover should be automatic at all. This is
+4. Whether the first-fix handover should be automatic at all. This is
    design note open question 3, and this log is the argument for
    announcing it and leaving it to the pilot: a several-hundred-metre
    position reset mid-flight is a bigger event than anything the ladder
    does, and 2 s is not long enough for a pilot to work out what has
    happened. The gate reduces how often the question arises; it does
    not answer it.
-4. A stale recorded origin still has no provenance check (design note
+5. A stale recorded origin still has no provenance check (design note
    open question 4), and it now matters more: with the gate in, a stale
    origin blocks an honest handover rather than silently corrupting
    home. A pre-arm comparing the recorded origin against the last known
    GPS position would catch the drive-to-a-new-site case.
-5. Indoor flow at 1-2 m is still uncharacterised. This flight held
+6. Indoor flow at 1-2 m is still uncharacterised. This flight held
    0.9 m for 130 s at quality 134 with sub-decimetre position, which is
    better than session 3's open item feared, but it is one flight in
    one room.
-6. An origin-free cross-check was prototyped as a replay over eleven
+7. An origin-free cross-check was prototyped as a replay over eleven
    logs and mostly does not work. Two were tried on a sliding window,
    both frame-free so neither needs the origin: the vector displacement
    of the two lanes against each other, and the change in reported GPS
@@ -329,6 +403,6 @@ does not. Left open rather than patched off one landing.
    would have prevented that crash by never firing the handover.
 
    Replay tool: `xcheck_replay.py`.
-7. Sessions 3 and 4 items stand: `SRCF_VEL_THR = 3.0` unflown, no
+8. Sessions 3 and 4 items stand: `SRCF_VEL_THR = 3.0` unflown, no
    GPS-loss cycle at cruise, the offset detector's long soak, and the
    altitude-hold and ground-effect items on the octaquad.
