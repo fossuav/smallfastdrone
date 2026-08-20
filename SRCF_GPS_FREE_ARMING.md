@@ -1,9 +1,9 @@
 # SRCF GPS-free arming - design note
 
 Branch `SmallFastDrone-4.7.0-gps-optflow-fallback`. Written 2026-08-19
-from code reading, then implemented and measured in SITL the same day.
-Numbers below marked "measured" come from `SRCFArmWithoutGPS`. Nothing
-has flown.
+from code reading, implemented and measured in SITL the same day, then
+bench tested on the small quad and extended on 2026-08-20. Numbers below
+are SITL measurements unless they say otherwise. Nothing has flown.
 
 Goal: arm indoors with no GPS fix, fly out of the door, and have the
 GPS lane take over when it acquires - the reverse of the ladder SRCF
@@ -227,8 +227,8 @@ rung is still SITL-only.
 
 ## What was built
 
-Six commits, `a96c9c0f41..6f9393bf5d`, in the order above plus DAL and
-Replay support for the alignment so a log still replays.
+`a96c9c0f41..dc246ea71a`, in the order above plus DAL and Replay support
+for the alignment so a log still replays.
 
 Two things came out of the build that the design did not anticipate.
 
@@ -255,6 +255,81 @@ by measuring the right record.
 | lane separation after handover | 46.3 m | 1.4-1.6 m |
 | home error against GPS truth | 30.7 m | 0.0 m |
 
+## The bench session
+
+Flashed to the small quad with the OSD lane panel enabled. Three things
+came out of it.
+
+**The feature is invisible until `SRCF_ENABLE = 2`.** The first bench
+test saw no ground lane switch at all, because the parameter was left at
+1, which is the opt-in behaving exactly as designed - at 1 nothing about
+the ground changes. It is the first thing to check, and it is worth
+saying out loud because "I flashed the firmware" is not enough.
+
+**The ground selection is very asymmetric.** Killing GPS on a switch
+took about 12 s to move to the flow lane; restoring it moved back in
+about 3 s. Reproduced and attributed in SITL:
+
+| | GPS killed | GPS restored |
+|---|---|---|
+| lane 0 drops/regains `horiz_pos_abs` | 10.6 s | 1.0 s |
+| SRCF debounce after that | 1.8 s | 1.8 s |
+| total to lane switch | 12.4 s | 2.8 s |
+
+The debounce contributes the same 1.8 s either way, so the asymmetry is
+entirely the filter: `horiz_pos_abs` is `!posTimeout && PV_AidingMode ==
+AID_ABSOLUTE`, and EKF3 dead reckons for about 10 s before conceding,
+then re-acquires on one fix. None of it applies in flight, where the
+ladder runs on receiver status and sessions 2 and 3 measured 0.20-0.26 s.
+Worth keeping straight: the two look identical from the OSD.
+
+**Nothing on the OSD changed during those 12 s**, which is what the next
+section is about.
+
+## Position type on the OSD
+
+The lane number says which sensors are navigating but not what the answer
+is worth, and a lane coasting on a dead GPS looked exactly like a healthy
+one. The panel now reads `EKF<n> <TYPE>`:
+
+| | |
+|---|---|
+| `ABS` | absolute, fusing its source |
+| `CST` | absolute but coasting - no GPS fusion for 4 s, running on the last fix |
+| `REL` | relative only, drifts without bound. The flow lane |
+| `DRK` | wind or drag relative |
+| `NON` | no horizontal position |
+
+`DEAD_RECKONING` is the wrong flag for this and it is worth recording why,
+because it is the obvious one to reach for. EKF3 sets it as
+`(PV_AidingMode != AID_NONE) && doingWindRelNav && !((doingFlowNav &&
+gndOffsetValid) || doingNormalGpsNav || doingBodyVelNav)`
+(`AP_NavEKF3_Control.cpp:850`) - it is wind or drag relative navigation
+and is explicitly cleared whenever flow is navigating, and
+`doingWindRelNav` needs `assume_zero_sideslip()`, false on a copter. A
+field driven by it would read blank for the entire flow-lane flight. The
+state that matters is `horiz_pos_rel && !horiz_pos_abs`.
+
+`CST` is what fills the 12 s gap. `using_gps` clears 4 s after the last
+GPS fusion (`AP_NavEKF3_Control.cpp:842`) against `posTimeout` for
+`horiz_pos_abs`, so measured against a kill at t=0:
+
+| t+ | |
+|---|---|
+| 4.6 s | `CST` |
+| 10.6 s | `horiz_pos_abs` drops |
+| 12.4 s | lane switch, `REL` |
+
+so the panel reacts at 4.6 s where it used to react at 12.4 s. It stays
+`ABS` until then, which is honest rather than a compromise - the position
+really is still built on a fix a few seconds old.
+
+Gated on `ahrs.using_gps()`, the primary lane's *configured* sources,
+else a beacon or extnav lane - absolute position, never uses GPS - reads
+as coasting for its whole flight. Flashes on `CST` and `NON`, where the
+position on screen is not being held up by a source, and not on `REL`,
+where a flow lane is working as configured.
+
 ## Test status
 
 `SRCFArmWithoutGPS` covers the whole path: no GPS at boot, arm and take
@@ -263,30 +338,31 @@ the handover, the lane separation afterwards and the home error. It
 asserts the separation rather than the statustexts, because without the
 alignment every message still arrives and only the frames are wrong.
 
+`SRCFGroundLaneFollowsGPS` covers the bench case that
+`SRCFArmWithoutGPS` does not: GPS present at boot, killed on the ground,
+restored. Loose timeouts on purpose - it asserts the direction of travel,
+not the timing.
+
+`SRCFCoastingShown` asserts the *lead time* of `CST` rather than that it
+occurs, because the whole value is that it appears while the lane number
+still says nothing; a version that only fired alongside the lane switch
+would pass a weaker test and be useless. It reads `XKF4.SS`, since
+EKF_STATUS_REPORT does not carry `using_gps`.
+
+There is no way to read the OSD panel back without an SFML build, so both
+OSD assertions pin the panel's inputs rather than its output.
+
 Green alongside the existing suite: SRCFGPSLossLadder, SRCFGPSSpoof,
 SRCFSlowSpoofPositionOffset, SRCFStaticSpoofNoRecovery,
 SRCFDisabledRegression, SRCFRCFailsafeDrift, SRCFBrakeNavLossDemote,
 EKF3SRCPerCore, OpticalFlow.
 
-## Test plan
+## What flying it still needs
 
-SITL first, and it is genuinely testable there:
-
-- `SRCFArmWithoutGPS`: boot with `SIM_GPS1_ENABLE=0`, arm in Loiter on
-  the flow lane, take off, enable GPS, assert the lane switch, that home
-  gets set, and that `PD` is small **after** the switch rather than
-  before it. The last assertion is the one that fails without the
-  alignment.
-- A regression that with GPS present at boot nothing changes: primary
-  lane 0, no new statustexts, `SRCFGPSLossLadder` unaffected.
-- `wait_ready_to_arm` needs a no-GPS variant. Session 2 already
-  established the SIMSTATE and dfreader workarounds for asserting
-  without a fix.
-
-Field, none of it flown, and this is where the honest gaps are. Everything sessions 1-4
-measured was 5-9 m over textured ground with GPS present. Indoor flow at
-1-2 m is the regime session 3 listed as unresolved (focus height, ground
-effect), and `EK3_FLOW_GAIN_H = 4` gives
+None of this has flown, and that is where the gaps are. Everything
+sessions 1-4 measured was 5-9 m over textured ground with GPS present.
+Indoor flow at 1-2 m is the regime session 3 listed as unresolved (focus
+height, ground effect), and `EK3_FLOW_GAIN_H = 4` gives
 `gainHgt / max(HAGL, gainHgt) = 1.0` below 4 m, so there is no detune at
 all - the configuration that produced the 2.4 s roll limit cycle at 7-9 m
 with gain 12. Expect to have to measure a low-altitude value.
@@ -307,18 +383,30 @@ and this manoeuvre is exactly that transition.
    a real vehicle, where `calcGpsGoodToAlign` can differ per lane on the
    per-core yaw and mag test ratios - which is exactly what session 4's
    eudrone showed. No guard has been added for something unproven.
-1. What is the pilot's escape between arming and the first fix? AltHold
+1. The ground lane decision still has no log trace. `source_fallback_update`
+   returns from the disarmed branch before the logging block, which did not
+   matter until the ground behaviour became a feature. An attempt to log
+   `SRCF` while disarmed was reverted: the call site provably executes - the
+   arming statustext is sent on the line before it - but neither
+   `WriteStreaming` nor plain `Write` produced a record, with
+   `LOG_FILE_RATEMAX` and `LOG_DARM_RATEMAX` both 0, while the same helper
+   logs normally once armed. `ShouldLog` and the rate limiter both read as
+   though they should pass. Unexplained, so nothing was shipped. Until it is
+   solved, a lane that refuses to move says nothing in the log about which
+   gate held, and the OSD position type is the only diagnosis available.
+2. What is the pilot's escape between arming and the first fix? AltHold
    plus manual flying is the honest answer today, and it should be
-   written down rather than assumed.
-2. Should the first-fix switch be automatic at all, or should it be
+   written down rather than assumed. `CST` and `REL` at least tell the
+   pilot which world they are in, which they did not before.
+3. Should the first-fix switch be automatic at all, or should it be
    announced and left to the pilot? Automatic matches the rest of SRCF;
    a several-hundred-metre position reset mid-flight is a bigger event
    than anything the ladder does today.
-3. How is a stale recorded origin detected? Nothing in the parameters
+4. How is a stale recorded origin detected? Nothing in the parameters
    carries provenance or age. A pre-arm that compares the recorded
    origin against the last known GPS position would catch the drive-to-a-
    new-site case, but only if there was a fix at some point.
-4. Does the flow lane need a bound on how far it may dead reckon before
+5. Does the flow lane need a bound on how far it may dead reckon before
    the first fix? Session 3 measured 0.6 m over 102 s at 0.006 m/s in
    the calibrated case, but indoors at low height with a fresh
    calibration is not that case.

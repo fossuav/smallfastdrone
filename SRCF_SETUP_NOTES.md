@@ -342,13 +342,15 @@ reacts.
 `REL` is the one to read as "drifting". ArduPilot's own dead reckoning
 flag is `DRK` and means something else - it is set only when the filter
 is navigating on airspeed or drag - so a copter on the flow lane shows
-`REL`, not `DRK`. The GCS
-messages above flash once and are gone; this is the one persistent
+`REL`, not `DRK`.
+
+The GCS messages above flash once and are gone; this is the one persistent
 indicator of what is navigating, so put it on your flight screen for
 the loss ladder and the spoof work. It shows the lane, not a sensor
-name, and does not flash on a non-zero lane - what a lane means is
-set by your source sets, so know your own mapping. It is deliberately
-not satellite count or HDOP: under a spoof both read healthy by
+name - what a lane means is set by your source sets, so know your own
+mapping. Flashing is driven by the position type and never by the lane
+number: a non-zero lane is not in itself a fault. It is deliberately not
+satellite count or HDOP: under a spoof both read healthy by
 construction.
 
 ## 7. Reading the logs
@@ -407,8 +409,10 @@ slow fallback in the air.
 One practical consequence: near a doorway, where a fix comes and goes, the
 asymmetry biases the lane you end up armed on towards GPS. That is not
 wrong - a lane reporting absolute position really is fusing GPS - but if
-you intend to fly indoors, check the OSD lane panel before you arm rather
-than assuming.
+you intend to fly indoors, read the OSD lane panel before you arm rather
+than assuming. `ABS` there means the fix is live; `CST` means the lane is
+still holding an absolute position but has not fused GPS for 4 s, which
+is the state the whole 12 s window sits in.
 
 What you do not have until step 3 completes:
 
@@ -427,6 +431,30 @@ driven to a new site it is stale and nothing warns you. A GCS
 SET_GPS_GLOBAL_ORIGIN at the actual takeoff point is the accurate
 version. Either way the handover itself is safe - the lane alignment
 does not depend on the origin being right - but home and the fence do.
+
+### If the lane will not move to flow
+
+In order of how often it is the answer:
+
+1. `SRCF_ENABLE` is 1, not 2. At 1 nothing about the ground changes, by
+   design. This is the most common cause by a distance.
+2. Give it time. Nothing happens until the GPS lane gives up absolute
+   position, which is about 10 s, plus 2 s of debounce. Watch the OSD
+   position type: `ABS` to `CST` at around 4 s tells you the kill was
+   seen and the clock is running.
+3. The flow lane is not ready to be armed on. It needs healthy flow and
+   a relative position estimate, and sitting on the floor is the hardest
+   place to get either - the rangefinder may be under its minimum range
+   and flow quality is poor that close to a surface. If the panel shows
+   `NON` rather than `REL` after the GPS lane drops, this is why: there
+   was nothing to switch to.
+4. Check how you killed GPS. The GPS Disable switch (`RCx_OPTION = 65`)
+   is the clean lever; pulling an antenna leaves the receiver reporting
+   a fix for a while.
+
+There is no log trace of the ground decision - the monitor returns before
+it writes its `SRCF` record while disarmed - so the OSD panel and the
+statustexts are the whole diagnosis for now.
 
 None of this has flown. It is SITL-validated only: `SRCFArmWithoutGPS`
 arms with no GPS, takes off in Loiter on flow, acquires in flight, and
