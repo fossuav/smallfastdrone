@@ -60,6 +60,7 @@ static struct {
     bool gps_untrusted;         // spoof latch, cleared on disarm or pilot source set change
     bool switch_warned;         // lane switch command failed warning sent
     bool align_pending;         // pull the flow lane into the GPS lane's frame once the switch lands
+    bool origin_before_arming;  // an origin existed before takeoff, so both lanes share an earth frame
     uint8_t ground_lane_count;  // consecutive ticks the armed-on lane choice has differed
     uint8_t gps_bad_count;
     uint8_t flow_bad_count;
@@ -89,6 +90,23 @@ static void srcf_reset_detectors()
     srcf_state.recovery_start_ms = 0;
     srcf_state.offset_block_ms = 0;
     srcf_state.offset_warned = false;
+}
+
+// A receiver sitting in the wrong place is otherwise indistinguishable from
+// one that never came back: nothing is sent and GPS simply never arrives.
+// Say so once the offset bound alone has held the handover off for as long as
+// the handover itself would have taken, so the message means "this would have
+// switched by now".
+static void srcf_offset_block_warn(uint32_t now_ms, uint32_t hold_ms, float pos_div, const char *how)
+{
+    if (srcf_state.offset_block_ms == 0) {
+        srcf_state.offset_block_ms = now_ms;
+    } else if (!srcf_state.offset_warned &&
+               (now_ms - srcf_state.offset_block_ms > hold_ms)) {
+        srcf_state.offset_warned = true;
+        gcs().send_text(MAV_SEVERITY_WARNING, "SRCF: GPS %s %.0fm off, staying on flow",
+                        how, (double)pos_div);
+    }
 }
 
 // command the EKF primary lane and arm the failsafe holdoff
@@ -178,6 +196,11 @@ void Copter::source_fallback_update()
         srcf_state.gps_untrusted = false;
         srcf_state.switch_warned = false;
         srcf_state.align_pending = false;
+        // an origin that predates takeoff puts the flow lane in a real earth
+        // frame rather than one referenced to wherever it began aiding, which
+        // is what makes the cross-lane offset testable at the first fix
+        Location origin;
+        srcf_state.origin_before_arming = ahrs.get_origin(origin);
         srcf_reset_detectors();
         srcf_state.last_source_set = ahrs.get_posvelyaw_source_set();
         return;
@@ -346,13 +369,29 @@ void Copter::source_fallback_update()
             break;
         }
         if (srcf_state.lane_state == LaneState::FLOW_NO_GPS) {
-            // First acquisition, not a recovery. The lanes have no common
-            // frame yet - the flow lane is referenced to where it started
-            // aiding and the GPS lane to the origin it has just set - so the
-            // consistency gates would be comparing that offset rather than a
-            // disagreement, and the offset bound would reject the handover
-            // outright. Wait only for the GPS lane to hold position.
-            if (gps_lane_usable) {
+            // First acquisition, not a recovery. Whether the cross-lane
+            // offset means anything depends on where the flow lane's frame
+            // came from. Armed with no origin at all it is referenced to
+            // wherever relative aiding began while the GPS lane is referenced
+            // to the origin it has just set, so the difference is the
+            // distance flown since arming and the bound would reject an
+            // honest handover outright. With an origin set before takeoff the
+            // two share an earth frame and the offset is a real disagreement:
+            // field log 346 armed indoors on a recorded origin, held the
+            // lanes 25.8m apart at 10-15 sigma for the whole hold on a GPS
+            // repeater, took the handover unchallenged and flew into a wall
+            // 2.1s later. The velocity and rate detectors saw none of it.
+            const bool offset_ok = !srcf_state.origin_before_arming ||
+                                   (div_ok && pos_sigma_valid &&
+                                    (pos_div < SRCF_RECOV_POS_NSIGMA * pos_sigma));
+
+            if (gps_lane_usable && div_ok && !offset_ok) {
+                srcf_offset_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000), pos_div, "acquired");
+            } else {
+                srcf_state.offset_block_ms = 0;
+            }
+
+            if (gps_lane_usable && offset_ok) {
                 if (srcf_state.recovery_start_ms == 0) {
                     srcf_state.recovery_start_ms = now_ms;
                 }
@@ -386,20 +425,8 @@ void Copter::source_fallback_update()
                                     (vel_div < vel_gate) && (fabsf(pos_rate) < pos_gate);
             const bool recovery_ok = consistent && offset_ok;
 
-            // a receiver that comes back in the wrong place is otherwise
-            // indistinguishable from one that never comes back: nothing is
-            // sent and GPS simply never returns. Say so once the offset has
-            // been the only thing holding recovery off for as long as
-            // recovery itself would have taken
             if (consistent && !offset_ok) {
-                if (srcf_state.offset_block_ms == 0) {
-                    srcf_state.offset_block_ms = now_ms;
-                } else if (!srcf_state.offset_warned &&
-                           (now_ms - srcf_state.offset_block_ms > (uint32_t)(g2.srcf_recov_time * 1000))) {
-                    srcf_state.offset_warned = true;
-                    gcs().send_text(MAV_SEVERITY_WARNING, "SRCF: GPS returned %.0fm off, staying on flow",
-                                    (double)pos_div);
-                }
+                srcf_offset_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000), pos_div, "returned");
             } else {
                 srcf_state.offset_block_ms = 0;
             }
