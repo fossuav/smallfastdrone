@@ -509,6 +509,68 @@ load-bearing and log 349 shows it passing a repeater. What the design
 needs is fix quality as a **necessary** condition on the first-fix
 handover rather than a sufficient bypass around the offset bound.
 
+## 5e: two corrections, and what log 350 actually showed
+
+Log 350 flew `0e6b09d0`, whose only live change was the satellite
+requirement. It refused the handover exactly as designed - `SRCF: GPS on
+9 sats, staying on flow` at 159.0 s, 10.1 s after the lane became usable
+- and then took it at 218.0 s anyway, because the satellite count had
+climbed past twelve.
+
+### The count climbs, so it does not separate
+
+The receiver went 8, 9, 10, 11, 12 over thirty seconds and reached 15-17
+for the rest of the flight, with the vehicle stationary at about 1 m
+throughout. Logs 346, 347 and 349 sat at six to nine because their fixes
+were younger, not because an indoor fix is capped there. The reasoning
+in session 5d - that a re-broadcast path lets only the strongest
+satellites through - was wrong; attenuation delays acquisition, it does
+not limit it. `SRCF_FIXQ_SATS` is now off by default.
+
+Log 350's fix was also a much better one: mean position 6.6 m from the
+true takeoff point against 14.0, 16.5 and 24.7 m on the three before it,
+and altitude within 3 m of truth.
+
+### The vehicle was never dragged, in either flight
+
+Session 5d says a repeater dragged the vehicle 20 m in 20 s in log 349.
+That is wrong and it reached a commit message. `RCIN.C2` was 1534-1653
+through the whole excursion - up to 150 us of forward pitch - and
+`PSCN.TPN` walked from -21.3 to -2.3 with the measured position tracking
+it to within 0.3 m. The pilot flew it there. Log 350 is the same:
+stick 1513-1612, target walking, position tracking to 0.3 m.
+
+Log 346, which is the flight that crashed, is genuinely not this.
+`RCIN.C1` and `RCIN.C2` are 1501 - centre - for the whole event, the
+target is frozen at -21.86, and the measured position walks away from it
+to -24.17. Hands off, estimate walking, controller chasing.
+
+That is the distinction that matters and session 5d blurred it: a
+*wandering* fix flies the vehicle into a wall, a *displaced but steady*
+one does not, and logs 349 and 350 were the second kind.
+
+### Both spoof trips were the manoeuvre, not the fix
+
+Session 5d also calls log 349's trip the first field detection that was
+not a false trip. It has the false-trip signature instead. `VD` sat at
+0.15-0.51 through the steady translation and only moved when the pilot
+reversed the sticks:
+
+| log | `VD` while translating | at the reversal | trip |
+|---|---|---|---|
+| 349 | 0.15-0.51 | 0.93, 1.36, 1.72, 1.92 | 254.7 s, roll 1687-1709, pitch 1360 |
+| 350 | 0.08-0.21 | 0.45, 0.98, 1.46, 1.72 | 250.6 s, roll 1543-1585, pitch 1268-1333 |
+
+This is the same mechanism as session 1's log 329 and session 3's
+reversal at 122.6 s, now in a regime nobody has characterised: about 1 m
+AGL, where flow is at its worst and the thresholds in force were
+measured at 5-9 m outdoors. `SRCF_VEL_THR` 1.6 has no margin against a
+brisk stick reversal indoors - both flights reached 1.7.
+
+So the position after four indoor flights is that the handover happened
+twice and flew normally both times, the detector false-tripped twice,
+and the only genuine failure remains log 346's wandering fix.
+
 ## Still open
 
 1. The gate has never passed a fix. Three field flights and the SITL
