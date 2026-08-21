@@ -396,6 +396,44 @@ most of its time in that state was still indoors under the repeater.
 The tails overlap. It belongs as confirmation once the fix is already
 trusted, not as the gate.
 
+## Replaying the GPS checks, and a result that was an artifact
+
+Logs 346-348 carry DAL data, so `gpsGoodToAlign` can be recomputed under
+different `EK3_GPS_CHECK` and `EK3_CHECK_SCALE` rather than argued about.
+The baseline column reproduces each flight's logged value exactly - 11.0,
+45.1 and 257.5 s - which is what makes the rest of the table believable.
+
+Longest unbroken `gpsGoodToAlign` on the GPS lane, seconds:
+
+| log | scale 100, checks 31 | 100, all | 50, 31 | 50, all | 20, 31 | 20, all |
+|---|---|---|---|---|---|---|
+| 346 repeater | 11 | 11 | 0 | 0 | 0 | 0 |
+| 347 repeater | 45 | 45 | 33 | 33 | 0 | 0 |
+| 348 honest | 257 | 249 | 201 | 201 | 0 | 0 |
+
+**Enabling every GPS check does almost nothing**, and an earlier note here
+saying it dropped log 346 from 11 s to 0 was wrong. That figure came from a
+replay of a log sitting on the Windows mount, where the tool ran I/O
+starved for hours and the sweep picked up a stale output file. Copied to
+local disk the same replay takes 0.8 s and gives 11. The reason the extra
+bits change nothing is that they are the on-ground drift and speed checks,
+and every long pass in this table is in flight where they do not run.
+
+`EK3_CHECK_SCALE` is the only lever that moves anything, and 20 is too far:
+it takes the honest fix to zero as well. 50 is the setting that separates -
+the repeaters manage 0 s and 33 s against 201 s - and it is a mild change,
+leaving 2.5 m of horizontal accuracy and 0.5 m/s of speed accuracy against
+a receiver measured at 0.49 m and 0.26 m/s on good flights.
+
+So the pair is `EK3_CHECK_SCALE = 50` with a 60 s hold: 1.8x margin over
+the repeater and 3.4x under the honest fix. `EK3_GPS_CHECK` can stay at 31.
+
+The lesson worth keeping is about the tool rather than the parameter. A
+replay that is starved of input still exits zero, and a sweep that reads
+whatever log file is newest will report its neighbour's answer. The
+baseline column exists to catch exactly that, and it did - a run that
+cannot reproduce the flown value is not evidence about anything else.
+
 ## Still open
 
 1. The gate has never passed a fix. Three field flights and the SITL
