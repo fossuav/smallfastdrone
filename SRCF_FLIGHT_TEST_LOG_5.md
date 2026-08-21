@@ -571,6 +571,45 @@ So the position after four indoor flights is that the handover happened
 twice and flew normally both times, the detector false-tripped twice,
 and the only genuine failure remains log 346's wandering fix.
 
+### The repeater was on for log 350
+
+Which is the useful part. It delivered 15-17 satellites, `HAcc` 1.23 and
+a mean position 6.6 m from the true takeoff point - almost certainly the
+roof antenna's own offset, converged on accurately once the receiver had
+a good lock, where the 14-25 m of logs 346, 347 and 349 is scatter
+around that same point from a poorer one. A repeater is therefore not
+identifiable by satellite count, by reported accuracy, or by how far off
+it is. What separates the one dangerous flight from the rest is that its
+fix *wandered*.
+
+Set against that, the ladder now reads as working. Log 346's 26 m at
+10.6-14.7 sigma is what the offset bound refuses, and it did not exist
+on that build; logs 347 and 348 were refused and flew on; logs 349 and
+350 were accepted on small offsets and flew normally. The only false
+refusal was the corrupt origin, and that is fixed.
+
+### The detectors have no margin indoors
+
+Whole armed flight, both indoor flights, against gates of 1.6 and 1.9:
+
+| log | `VD` p95/p99/max | `PR` p95/p99/max |
+|---|---|---|
+| 349 | 1.01 / 1.89 / 1.99 | 0.96 / 1.61 / 1.82 |
+| 350 | 1.43 / 1.69 / 1.74 | 1.04 / 1.45 / 1.59 |
+
+Ordinary manoeuvring at about 1 m AGL crosses the velocity gate and
+comes within 4% of the position-rate one. Two flights, two trips. The
+thresholds were measured at 5-9 m outdoors, and session 3 already said
+flow near the ground is its own problem; the indoor case forces the
+regime the setup notes tell people to avoid.
+
+The 30% rule over the worst benign excursion puts `SRCF_VEL_THR` at
+about 2.6 and `SRCF_POSR_THR` at about 2.4 for this regime. The cost is
+explicit: session 2's velocity-consistent spoof sustained `VD` at 1.77,
+so at 2.6 there is no velocity spoof detection indoors at all. That is
+the honest trade rather than a tuning choice - at 1 m the flow lane is
+too noisy to support a threshold that would catch anything.
+
 ## Still open
 
 1. The gate has never passed a fix. Three field flights and the SITL
