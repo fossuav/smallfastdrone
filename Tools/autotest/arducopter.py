@@ -4438,6 +4438,54 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.land_and_disarm(timeout=120)
 
+    def SRCFJammingExpectedWaitsForChecks(self):
+        '''EK3_OPTIONS JammingExpected makes the GPS lane re-pass its checks before using a returning fix'''
+        # The mechanism already exists: on a GPS gap longer than 2s the EKF
+        # sets waitingForGpsChecks, which blocks the measurement from even
+        # reaching the buffer and forces the EK3_GPS_CHECK suite to pass for
+        # 10s continuously before GPS is used again. That is exactly the guard
+        # a returning fix needs, and it is the EKF's own tested machinery.
+        #
+        # It was inert under per-core source sets. The condition asks whether
+        # this core can dead reckon, which needs flow fusion on the same core,
+        # and the GPS lane has none - only IMU1 fuses flow in field logs 346,
+        # 347 and 348, and XKFS.GPS_CHK_WAIT is 0 throughout all three. The
+        # question that matters is whether the vehicle can afford to wait, and
+        # it can, because the flow lane is flying it.
+        self.configure_source_fallback_per_core()
+        self.set_parameters({
+            "SRCF_ENABLE": 2,
+            "EK3_OPTIONS": 3,       # manual lane switching, plus JammingExpected
+            "SIM_GPS1_ENABLE": 0,
+        })
+        self.reboot_sitl()
+        self.context_collect('STATUSTEXT')
+
+        self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=60, check_context=True)
+        self.takeoff(10, mode='LOITER', require_absolute=False)
+
+        self.progress("Acquiring GPS after a gap, with JammingExpected set")
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        # it must not deadlock: the checks pass on SITL's GPS, so the handover
+        # still happens, just after the lane has satisfied them
+        self.wait_statustext("SRCF: GPS acquired, using GPS lane", timeout=180, check_context=True)
+        self.land_and_disarm(timeout=120)
+
+        # the assertion that matters is that the wait engaged at all, since
+        # before the fix it could not
+        waited = False
+        dfreader = self.dfreader_for_current_onboard_log()
+        while True:
+            m = dfreader.recv_match(type=['XKFS'])
+            if m is None:
+                break
+            if m.C == 0 and m.GPS_CHK_WAIT:
+                waited = True
+                break
+        if not waited:
+            raise NotAchievedException(
+                "GPS lane never waited for its checks; JammingExpected is still inert")
+
     def SRCFGroundLaneFollowsGPS(self):
         '''at SRCF_ENABLE=2 the lane armed on follows GPS availability while disarmed, both ways'''
         # The in-flight ladder runs on receiver status and switches in ~0.25s.
@@ -18815,6 +18863,7 @@ return update, 1000
             self.SRCFFirstFixOffsetBound,
             self.SRCFFixQualityOverridesOrigin,
             self.SRCFStrictGPSChecks,
+            self.SRCFJammingExpectedWaitsForChecks,
             self.SRCFGroundLaneFollowsGPS,
             self.SRCFCoastingShown,
             self.SRCFDisabledRegression,
