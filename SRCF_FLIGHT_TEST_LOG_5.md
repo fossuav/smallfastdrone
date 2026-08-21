@@ -8,20 +8,31 @@ against the build named in it.
 Read this before the rest: **five claims in this file were wrong and are
 corrected further down, and the corrections are the useful part.** In
 order - a repeater dragging the vehicle in log 349 (it was pilot input),
-the first genuine spoof detection (both trips were manoeuvre-timed but
-turned out to be real, then the reading changed twice), satellite count
-separating a repeater from open sky (it tracks acquisition age), enabling
-every `EK3_GPS_CHECK` bit helping (a replay artifact from a starved I/O
-path), and innovation leading the handover by 74 s (a stale logged field).
-Each was caught by measuring rather than by argument, and the checks that
-caught them are worth more than the claims were.
+those trips being false because they landed on a stick reversal (they
+were real, and 5k explains why the timing looks that way), satellite
+count separating a repeater from open sky (it tracks acquisition age),
+enabling every `EK3_GPS_CHECK` bit helping (a replay artifact from a
+starved I/O path), and innovation leading the handover by 74 s (a stale
+logged field). Each was caught by measuring rather than by argument, and
+the checks that caught them are worth more than the claims were.
 
-Where it ended, after eight flights: the offset bound refuses displaced
-and wandering fixes and accepts close ones, a corrected origin removed
-the false refusals, and nothing the receiver reports about itself
-discriminates a bad fix - log 353 refused one reporting 27 satellites at
-0.88 m whose position disagreed with measured motion threefold. The one
-crash is prevented by not handing over, never by detecting faster.
+Where it ended, after nine flights (346-353 and 355), all indoors under
+a GPS repeater:
+
+- The offset bound refuses displaced and wandering fixes and accepts
+  close ones. It would have prevented the one crash and postdates it.
+- The origin has to be pinned by hand. `RECORD_ORIGIN` corrupted it on
+  three consecutive flights and a wrong datum now refuses honest fixes
+  rather than merely misplacing home.
+- Nothing the receiver reports about itself discriminates a bad fix. Log
+  353 refused one reporting 27 satellites at 0.88 m whose position
+  disagreed with measured motion threefold.
+- **A bad fix is only visible when the vehicle moves.** Static, it is
+  indistinguishable from a good one, which is why the handover - decided
+  from a hover - is the hardest moment to judge and why three sections
+  of this file misread the same evidence.
+- A two second failure is prevented by not handing over, never by
+  detecting faster.
 
 Session 5 proper, the crash: the first flight of the GPS-free arming path anywhere but
 SITL, and it ended in a wall. The vehicle armed indoors on a recorded
@@ -935,8 +946,9 @@ without holding.
 ## Still open
 
 1. **The gate has never passed an honest fix outdoors.** It has accepted
-   three times - logs 349, 350 and 352 - and every one was indoors on a
-   repeater. The case the feature exists for, flying out of a building
+   four times - logs 349, 350, 352 and 355 - and every one was indoors on
+   a repeater. Log 355's was the best of them, holding `PD` at 0.10-0.54
+   m for thirty seconds before the fix failed to track a translation. The case the feature exists for, flying out of a building
    and taking up a fix that is right because it genuinely is, has not
    been flown. Log 348 came closest and was refused on a bad origin.
 2. **A two second failure cannot be detected, only refused.** Log 346
@@ -982,6 +994,12 @@ without holding.
 - Indoor flow at about 1 m is characterised: log 351 held 378 s
   continuously, quality 101-157, `RFND.Stat` 4 for all 7100 samples,
   and gave out only below the rangefinder's minimum range.
+- Manoeuvring is what exposes a bad fix, and the detector thresholds
+  should not be relaxed to accommodate it. Logs 349, 350, 353 and 355
+  all show the GPS lane failing to track real motion - understating a
+  translation two to threefold, then overshooting - and the trips land
+  on stick input because a hovering vehicle gives a bad fix nothing to
+  fail at.
 - Velocity divergence, displacement, altitude consistency, GPS
   self-consistency and position innovation were all tried as
   discriminators and none separates. `vd_envelope.py`,

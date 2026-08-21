@@ -470,6 +470,14 @@ wrong. Neither can velocity divergence, displacement between the lanes,
 altitude consistency, the receiver against itself, or the GPS lane's own
 position innovation - all tried, all overlapping.
 
+A bad fix is only visible when the vehicle moves. Static, it is
+indistinguishable from a good one - log 355 held `PD` at 0.10-0.54 m for
+thirty seconds after its handover and then the same fix understated a
+1 m/s translation threefold. That is why the handover, which this note
+places at the end of a hover, is the hardest possible moment to judge a
+fix, and why the offset bound rather than any quality test is what
+guards it.
+
 Detecting faster does not help the case that crashed. The cross-lane
 velocity difference was 0.65 at impact and needed about 4 s to build
 against a 2.1 s failure, and the commanded switch itself lands in 4.4 ms.

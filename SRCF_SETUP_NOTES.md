@@ -310,6 +310,17 @@ One change per flight. Each stage gates the next.
    `SRCF_POSD_NSIG = 0`: read the flight's max `PD/PSig` ratio, then
    enable at 4 and repeat the soak before relying on it.
 
+**Fly a translation after any handover, before you trust it.** A fix
+that is displaced, lagging or smoothed looks exactly like a good one
+while the vehicle hovers - there is nothing for it to fail at. It shows
+up the moment you move: across field logs 349, 350, 353 and 355 the GPS
+lane understated a real translation two to threefold and then overshot
+once the vehicle stopped, and `VD` caught each one. So the test for a
+fix you have just accepted is a deliberate few metres of travel with an
+eye on `VD`, not a longer hover. This also means the handover decision
+itself, taken from a hover, is the worst moment to judge a fix, which is
+why the offset bound rather than any quality check is what guards it.
+
 Not yet flown by anyone, deliberately left to arithmetic: a GPS-loss
 cycle at cruise speed. A 3-5% residual flow scale error at 8.3 m/s is
 15-25 m of drift per minute of outage. Measure it before the mission
@@ -394,6 +405,11 @@ once a fix arrives in flight. At 1 the monitor always arms on the GPS
 lane, which is the behaviour every field session so far has flown.
 
 What happens, in order:
+
+Expect to wait. Indoors under a repeater the receiver took 110 s from
+boot to a fix the EKF would use in field log 355, and 53-114 s in the
+others. The vehicle arms and flies on flow throughout; it is the
+handover that waits.
 
 1. On the ground with no usable GPS lane and a usable flow lane, the
    monitor moves the primary to the flow lane after 2 s and says
