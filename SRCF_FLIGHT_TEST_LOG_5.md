@@ -339,6 +339,63 @@ is on offer, so under a repeater it would compare a good origin against
 a bad fix and cry wolf. It belongs as a warning the pilot can weigh,
 not a refusal.
 
+### What signal to use
+
+Five candidates, measured over logs 346, 347 and 348 rather than argued.
+
+**EKF innovations do not work**, which is worth recording because they
+are the obvious thing to reach for. GPS-lane test ratios never came
+near failing - `XKF4.SP` peaked at 0.24, 0.46 and 0.60 - and the
+honest flight had the *largest* raw innovations of the three, `IPN`
+and `IPE` to -9.8/+13.0 and -20.0/+8.9 m. Once a lane aligns to a
+source its position state is driven by that source, so it has no
+independent truth to innovate against. That is why SRCF compares two
+lanes in the first place.
+
+**`EK3_OPTIONS` bit 0 (JammingExpected) is structurally inert here.**
+It re-requires the preflight GPS checks after a fix is lost, but only
+where `canDeadReckon`, which needs `doingFlowNav` on the same core.
+Under per-core source sets lane 0 has no flow, so the condition is
+false on the GPS lane in every SRCF configuration.
+
+**`EK3_GPS_CHECK` has the relevant checks switched off.** The default
+31 is bits 0-4; the three a repeater violates - bit 5 pos drift, bit 6
+vert speed, bit 7 horiz speed - are exactly the ones excluded, because
+they also fail when the vehicle is moving at alignment. Log 347's
+receiver walked 195 m and reported 2.7 m/s while parked, so they would
+have caught it. Whether 255 also blocks the honest in-flight alignment
+of an inside-to-outside flight cannot be answered from a log, since
+the checks run inside the filter. It needs a SITL A/B before anyone
+sets it.
+
+**`gpsGoodToAlign` alone is not enough**, though it does carry signal.
+`XKFS.GPS_GTA` is computed continuously, before and after alignment,
+and was true 5.5%, 39.5% and 84.6% of the time. But log 347 holds it
+unbroken for 45.1 s, so any hold short of 60 s lets a repeater through
+and 60 s leaves only 33% margin.
+
+**`gpsGoodToAlign` and a raw quality floor together separate
+completely.** Longest unbroken run of each:
+
+| log | `GPS_GTA` | >=12 sats and `HAcc` <=1.0 m | both |
+|---|---|---|---|
+| 346 repeater | 11 s | 0 | **0** |
+| 347 repeater | 45 s | 0 | **0** |
+| 348 in to out | 257 s | 132 s | **132 s** |
+
+Neither repeater flight holds both for a single sample. The two are
+independent - one is the filter's own verdict on GPS velocity
+consistency, the other the receiver's constellation and accuracy - so
+the conjunction is not double-counting one measurement.
+
+**Comparing the lanes over time is directionally right and not
+sufficient.** Restricted to the first-fix state with the lane usable,
+displacement mismatch over a 60 s window runs at a median of 18.0 m on
+log 347 against 3.0 m on log 348, but log 348 peaks at 26.1 m because
+most of its time in that state was still indoors under the repeater.
+The tails overlap. It belongs as confirmation once the fix is already
+trusted, not as the gate.
+
 ## Still open
 
 1. The gate has never passed a fix. Three field flights and the SITL
