@@ -154,9 +154,23 @@ EKF3 IMU1 started relative aiding
 | `SRCF_VEL_THR` | 1.6 | 1.6 low-speed; 3.0 for 30 km/h | cross-lane velocity difference gate, m/s |
 | `SRCF_POSR_THR` | 1.9 | 2.6 | cross-lane position growth rate gate, m/s |
 | `SRCF_POSD_NSIG` | 0 (off) | unflown; start at 4 | position offset detector, in sigmas |
-| `SRCF_CNF_TIME` | 2.0 | 2.0 | confirmation window; 20 votes at the 10 Hz monitor |
+| `SRCF_CNF_TIME` | 2.0 | 1.5 | confirmation window; votes at the 10 Hz monitor |
 | `SRCF_RECOV_TIME` | 10.0 | 10.0 | GPS must be healthy this long before return |
 | `SRCF_NSIGMA` | 2.5 | 2.5 (measured inert) | adaptive floor; fixed thresholds always win in practice |
+| `SRCF_FIXQ_TIME` | 0 (off) | unflown | accept a large offset once the fix has proven itself, section 8 |
+| `SRCF_FIXQ_SATS` | 0 (off) | leave at 0 | satellite floor on the first fix; the separation it was built on did not hold |
+
+`SRCF_CNF_TIME` 1.5 rather than 2.0 is a session 5 change with one
+flight behind it. Replayed over the log set the real detections reached
+19 votes of 20 - a single sample of margin - and 1.5 gives them four
+without any benign flight tripping. Log 353 flew it clean with `VD`
+reaching 1.88 against a 1.6 gate.
+
+`SRCF_FIXQ_SATS` exists and should stay at 0. It was added on a
+measured separation between a repeater's satellite count and open sky's,
+and log 350 then watched one climb from 8 to 17 while stationary
+indoors: the count tracks how long the receiver has been acquiring, not
+where the signal came from.
 
 The three detectors, and what each can and cannot see:
 
@@ -395,6 +409,24 @@ What happens, in order:
    moment, so `PD` and the spoof detectors mean afterwards what they mean
    on an ordinary flight.
 
+**Pin the origin and turn off `RECORD_ORIGIN`.** `AHRS_OPTIONS` bit 3
+rewrites the origin from each flight, and across field logs 346, 347 and
+348 it moved every time - 147 m, then 139, then 89, the last recorded
+from a flight flown under a GPS repeater. With the offset bound in
+place a wrong origin no longer just misplaces home, it refuses the
+handover: log 348 refused an excellent fix (18 satellites, `HAcc`
+0.22 m) because the datum was 39.0 m horizontal and 51.2 m vertical out.
+Set `AHRS_OPTIONS` to 16, and set `AHRS_ORIGIN_LAT/LON/ALT` by hand to
+the actual takeoff point. If you have a log from the site, back-solve it:
+take a trusted fix and subtract the flow lane's displacement since
+arming, which is what `origin_backsolve.py` does.
+
+The tolerance is not generous. The bound is six times the lanes'
+combined position sigma, and that sigma is about 1 m early in a flight,
+so a datum more than five or six metres out will refuse a good fix. It
+loosens as the flow lane dead reckons, so the same origin error can be
+refused at the start of a flight and accepted later.
+
 If you set an origin before takeoff (below), the handover also has to pass
 the same offset bound the ordinary recovery uses, and a fix that disagrees
 with the flow lane by more than the two lanes could honestly be apart is
@@ -498,14 +530,34 @@ has one, switch it off for this work.
   seconds when calibrated; over minutes, drift is bounded by your
   residual scale error times distance flown.
 - The AltHold demotion rung (both lanes lost) has only been exercised
-  in SITL.
+  in SITL in flight, but it now fires on every GPS-free landing: log 351
+  lost the flow lane at 0.06 m AGL, below `RNGFND1_MIN`, and changed
+  `LOITER` to `ALT_HOLD` 6.7 s before touchdown was declared. Expect to
+  lose position hold in the last few centimetres.
 - Flow near the ground is its own problem set (focus height, ground
   effect); do the low work in ALT_HOLD and the SRCF work at 5-9 m.
-- Arming without GPS (`SRCF_ENABLE = 2`, section 8) has flown once and
-  crashed, on a GPS repeater indoors. The hover on flow was fine; the
-  handover to the fix was not. It is also the one part of SRCF whose
+- Arming without GPS (`SRCF_ENABLE = 2`, section 8) has flown eight
+  times indoors, all under a GPS repeater. One crashed - the first, with
+  no offset bound on the handover. Since the bound went in it has
+  refused three fixes and accepted three, and the accepted ones flew
+  normally. The hover on flow is not the problem; the handover is. It is also the one part of SRCF whose
   takeoff happens at low height on flow alone, which is the regime the
   previous limit is about.
 - The first fix of a GPS-free arm is trusted where the vehicle armed
   with no origin, because the two lanes have no frame in common to
   compare. Set an origin before takeoff and the offset bound applies.
+- **Nothing the receiver reports about itself tells you whether its
+  position is right.** Satellite count, HDOP, `HAcc`, `VAcc`, speed
+  accuracy, `EK3_CHECK_SCALE` and the filter's own `gpsGoodToAlign` were
+  each measured across the log set and each of them passes a fix that is
+  wrong. Log 353 refused one reporting 27 satellites at 0.88 m whose
+  position disagreed with measured motion by threefold. Do not judge a
+  fix by its own paperwork, and do not add a gate that does.
+- The flow lane's floor is `RNGFND1_MIN`, not flow quality. Log 351 held
+  378 s continuously at about 1 m with quality 101-157 and every
+  rangefinder sample good, and gave out only when the vehicle descended
+  below the sensor's minimum range.
+- A two second failure cannot be detected in time, only refused. Log
+  346 ran from handover to wall in 2.1 s with the cross-lane velocity
+  difference at 0.65 when it hit; the signal needs about 4 s to build.
+  The offset bound is the whole defence for that case.

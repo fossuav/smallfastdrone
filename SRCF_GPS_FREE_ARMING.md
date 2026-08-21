@@ -431,7 +431,47 @@ and this manoeuvre is exactly that transition.
    carries provenance or age. A pre-arm that compares the recorded
    origin against the last known GPS position would catch the drive-to-a-
    new-site case, but only if there was a fix at some point.
+
+   Session 5 made this urgent and then worked around it. `RECORD_ORIGIN`
+   rewrote the origin on three consecutive flights, once from a flight
+   flown under a GPS repeater, ending 39.0 m horizontal and 51.2 m
+   vertical from the takeoff point - and with the offset bound in place
+   that refuses an honest handover rather than merely misplacing home.
+   The workaround is to clear bit 3 and pin the origin by hand. A check
+   would still be better: on the ground in log 348 the receiver reported
+   144-153 m altitude against a recorded origin of 89.3, four seconds
+   before it armed, and nothing compared the two.
 5. Does the flow lane need a bound on how far it may dead reckon before
    the first fix? Session 3 measured 0.6 m over 102 s at 0.006 m/s in
    the calibrated case, but indoors at low height with a fresh
    calibration is not that case.
+
+## What session 5 settled
+
+Eight indoor flights, all under a GPS repeater, in
+`SRCF_FLIGHT_TEST_LOG_5.md`.
+
+The first-fix handover does need a bound, and it is the offset one. Log
+346 took a fix 26 m out at 10.6-14.7 sigma and flew into a wall 2.1 s
+later; that is exactly what the bound refuses, and it postdates the
+flight. Since it went in, three fixes have been refused and three
+accepted, and the accepted ones flew normally.
+
+The origin has to be accurate for the bound to mean anything, and
+`RECORD_ORIGIN` is hostile to that - see open question 4.
+
+Nothing the receiver reports about itself can substitute. Satellite
+count, HDOP, `HAcc`, `VAcc`, speed accuracy, `EK3_CHECK_SCALE` and
+`gpsGoodToAlign` were each measured; each passes a fix whose position is
+wrong. Neither can velocity divergence, displacement between the lanes,
+altitude consistency, the receiver against itself, or the GPS lane's own
+position innovation - all tried, all overlapping.
+
+Detecting faster does not help the case that crashed. The cross-lane
+velocity difference was 0.65 at impact and needed about 4 s to build
+against a 2.1 s failure, and the commanded switch itself lands in 4.4 ms.
+Confirmation time and the post-switch mute are both irrelevant to it.
+
+`EK3_OPTIONS` bit 0 was inert under per-core source sets and now is not:
+it asked whether the GPS lane could dead reckon, which needs flow on the
+same core, where the question is whether the vehicle can wait.

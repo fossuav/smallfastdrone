@@ -1,10 +1,29 @@
 # SRCF field test log - session 5
 
 Branch `SmallFastDrone-4.7.0-gps-optflow-fallback`. Vehicle
-SmallFastDronev1. Log 346, 2026-08-20. Flown against `23a05a44`; the
-code change at the end follows it.
+SmallFastDronev1. Logs 346-353, 2026-08-20/21, indoors under a GPS
+repeater. Sections 5b onward were written as the session went, each
+against the build named in it.
 
-Outcome: the first flight of the GPS-free arming path anywhere but
+Read this before the rest: **five claims in this file were wrong and are
+corrected further down, and the corrections are the useful part.** In
+order - a repeater dragging the vehicle in log 349 (it was pilot input),
+the first genuine spoof detection (both trips were manoeuvre-timed but
+turned out to be real, then the reading changed twice), satellite count
+separating a repeater from open sky (it tracks acquisition age), enabling
+every `EK3_GPS_CHECK` bit helping (a replay artifact from a starved I/O
+path), and innovation leading the handover by 74 s (a stale logged field).
+Each was caught by measuring rather than by argument, and the checks that
+caught them are worth more than the claims were.
+
+Where it ended, after eight flights: the offset bound refuses displaced
+and wandering fixes and accepts close ones, a corrected origin removed
+the false refusals, and nothing the receiver reports about itself
+discriminates a bad fix - log 353 refused one reporting 27 satellites at
+0.88 m whose position disagreed with measured motion threefold. The one
+crash is prevented by not handing over, never by detecting faster.
+
+Session 5 proper, the crash: the first flight of the GPS-free arming path anywhere but
 SITL, and it ended in a wall. The vehicle armed indoors on a recorded
 origin with GPS switched off, hovered 130 s on the flow lane, and GPS
 was then re-enabled - indoors, under a GPS repeater. The fix that came
@@ -872,127 +891,56 @@ real stick input and no false trip at the shortened window.
 
 ## Still open
 
-1. The gate has never passed a fix. Three field flights and the SITL
-   test are all refusals - 26 m, 35 m, 40 m, 100 m - and log 348 shows
-   it refusing an excellent one (18 satellites, HDop 0.76, `HAcc`
-   0.22 m) because the datum was 39 m out. Nothing has yet demonstrated
-   the accept path on an aircraft, and until an origin is pinned
-   accurately nothing can. Its behaviour near the bound is also still
-   untested: every case so far is six times the threshold or more.
-2. Fix quality separates a repeater from open sky, and is now used.
-   Longest unbroken run meeting a given bar, from `gate_replay.py`:
-
-   | log | >=8 sats, `HAcc` <=2.0 | >=12, <=1.0 | >=14, <=0.5 |
-   |---|---|---|---|
-   | 346 repeater | 17 s | **0** | 0 |
-   | 347 repeater | 16 s | **0** | 0 |
-   | 348 in to out | 172 s | 132 s | 75 s |
-   | 332 open sky | 389 s | 389 s | 365 s |
-   | 333 | 250 s | 250 s | 165 s |
-   | 336 | 288 s | 288 s | 191 s |
-
-   At twelve satellites and `HAcc` 1.0 m the repeater never produces a
-   single sample in either flight while real sky sustains it for
-   minutes. Replaying the handover with "accept a large offset once the
-   fix has held that bar for 30 s" refuses both repeater flights and
-   accepts log 348 at t+171 s, once it is outside - which is the
-   inside-to-outside case working without the origin being right.
-
-   The cost is real and belongs in the decision: a synthesised spoof
-   can report twenty satellites and sub-metre accuracy, so this
-   bypasses the offset bound for exactly the attacker the bound was
-   built for. What it does not bypass is the rest of the ladder, which
-   resumes after the handover; the bound's unique value is a static
-   capture that never moves, so the residual exposure is a static
-   capture that also fakes excellent quality.
-
-   Shipped as `SRCF_FIXQ_TIME`, default 30 s, with the twelve satellite
-   and 1 m bars as constants. Two things came out of building it that
-   the replay did not predict.
-
-   The offset bound loosens as the flight goes on. It is six times the
-   lanes' combined position sigma and that grows without bound while the
-   flow lane dead reckons: 13.8 m by 195 s in SITL, so 83 m of
-   tolerance. A 40 m origin error was accepted by the bound alone
-   part-way through the flight and never reached the quality path at
-   all. Log 348 did not show this because the vehicle barely moved -
-   `PSig` stayed at 1.16-2.90 m for its whole 300 s - but a flight that
-   covers ground will eventually accept a stale origin just by lasting
-   long enough. That cuts both ways: it is a hole in the bound and a
-   self-heal for the false refusal.
-
-   `EK3_GPS_CHECK` cannot be set to the 255 its own description names,
-   because `_gpsCheck` is an `AP_Int8`. All bits is -1.
-
-   The A/B on it came out positive: `SRCFStrictGPSChecks` flies the
-   GPS-free arm with every check enabled and still takes up GPS in
-   flight, so bits 5-7 do not block the honest in-flight alignment.
-   That is SITL evidence only - its GPS is clean, and the drift and
-   speed checks are exactly the ones a moving vehicle strains - so it
-   is a reason to try -1 in the field, not a reason to assume it.
-3. The pilot has no way through a refusal. Log 348's pilot could see a
-   good fix and had no control that would take it; the flight ended on
-   flow because the monitor had decided. `RCx_OPTION = 90` already
-   means "pilot intervenes in source selection" and already clears a
-   spoof latch, so it is the obvious lever, but it does nothing in
-   `FLOW_NO_GPS` today.
-4. The flow-lost fallback takes the GPS lane with no offset check, and
-   it is the same branch in flight as at touchdown. In log 347 it fired
-   during the landing, where it costs nothing, onto a lane the gate had
-   been refusing for 98 s. Whether it should be gated is a real
-   question and not an obvious one: the alternative when the flow lane
-   dies is the AltHold demotion with no position at all, and a lane
-   35 m out at least holds station. Needs deciding before it happens at
-   height rather than on the ground.
-5. Whether the first-fix handover should be automatic at all. This is
-   design note open question 3, and this log is the argument for
-   announcing it and leaving it to the pilot: a several-hundred-metre
-   position reset mid-flight is a bigger event than anything the ladder
-   does, and 2 s is not long enough for a pilot to work out what has
-   happened. The gate reduces how often the question arises; it does
-   not answer it.
-6. A stale recorded origin still has no provenance check (design note
-   open question 4), and it now matters more: with the gate in, a stale
-   origin blocks an honest handover rather than silently corrupting
-   home. A pre-arm comparing the recorded origin against the last known
-   GPS position would catch the drive-to-a-new-site case.
-7. Indoor flow at 1-2 m is still uncharacterised. This flight held
-   0.9 m for 130 s at quality 134 with sub-decimetre position, which is
-   better than session 3's open item feared, but it is one flight in
-   one room.
-8. An origin-free cross-check was prototyped as a replay over eleven
-   logs and mostly does not work. Two were tried on a sliding window,
-   both frame-free so neither needs the origin: the vector displacement
-   of the two lanes against each other, and the change in reported GPS
-   altitude against baro. Measured at a 5 s window, the longest that
-   fits the budget below:
-
-   | | horiz mismatch / max(travelled, 2 m) | vert mismatch |
-   |---|---|---|
-   | worst benign of 9 flights | 2.84 (log 337) | 4.2 m (log 330) |
-   | log 346, decision window | 1.33 | 2.0 m |
-   | log 347, decision window | 3.33 | 25.5 m |
-
-   Displacement does not separate at any window length tried (20, 8,
-   5 s): the bad case hovers so the floor governs it, while benign fast
-   flight travels far enough to divide the ratio down. Altitude catches
-   log 347 at six times the benign worst and is silent on log 346,
-   which is the flight that crashed. The offset bound catches both.
-
-   The reason is the budget rather than the test. `XKF4.AID` puts the
-   GPS lane at `AID_ABSOLUTE` from 159.7 s in log 346 against a
-   handover at 166.687 - **7.0 s** - and a slow wander cannot be
-   observed in seven seconds. log 347 only looks easy because it never
-   handed over and the check had 108 s.
-
-   So the lever for flying in from outside on an approximate origin is
-   time, not a sharper instantaneous test: keep flying on flow, which
-   both flights did safely, and require an origin-free check to hold
-   for tens of seconds before accepting a fix the offset bound would
-   reject. Untestable on log 346, whose fix existed for 7 s, but it
-   would have prevented that crash by never firing the handover.
-
-   Replay tool: `xcheck_replay.py`.
+1. **The gate has never passed an honest fix outdoors.** It has accepted
+   three times - logs 349, 350 and 352 - and every one was indoors on a
+   repeater. The case the feature exists for, flying out of a building
+   and taking up a fix that is right because it genuinely is, has not
+   been flown. Log 348 came closest and was refused on a bad origin.
+2. **A two second failure cannot be detected, only refused.** Log 346
+   ran handover to wall in 2.1 s while `VD` was 0.65 at impact and did
+   not cross its gate until 2.2 s after. No confirmation time or mute
+   change reaches it, so the offset bound is the whole defence for that
+   class and it has one flight of evidence behind it.
+3. **The pilot has no way through a refusal.** Log 353 stayed on flow
+   for its whole flight with the pilot unable to say "I can see it is
+   fine, take it". `RCx_OPTION = 90` already means the pilot is
+   intervening in source selection and does nothing in `FLOW_NO_GPS`.
+4. **The flow-lost fallback takes the GPS lane with no offset check.**
+   Same branch in flight as at touchdown, and in log 347 it fired during
+   landing onto a lane the gate had refused for 98 s. Whether it should
+   be gated is not obvious: the alternative when flow dies is AltHold
+   with no position at all.
+5. **Whether the first-fix handover should be automatic.** Design note
+   open question 3, and stronger now: the pilot knows whether they are
+   indoors and the monitor does not, and none of the automatic
+   discriminators tried in this session work.
+6. **A stale recorded origin has no provenance check.** Pinning it by
+   hand fixed the symptom on this airframe; `RECORD_ORIGIN` overwrote it
+   on three consecutive flights before that, once from a repeater's idea
+   of where the vehicle was.
+7. **The demote fires during touchdown.** Log 351 lost the flow lane at
+   0.06 m AGL - below `RNGFND1_MIN` - and changed `LOITER` to `ALT_HOLD`
+   6.7 s before `LAND_COMPLETE_MAYBE`, so position hold drops out in the
+   last centimetres of every GPS-free landing.
+8. **`SRCF_CNF_TIME` at 1.5 has one flight.** Log 353 flew it clean with
+   `VD` reaching 1.88 against a 1.6 gate, but the replay behind the
+   change reproduces the logged vote peaks and is one tick conservative,
+   so read it as "no worse than 2.0" rather than proven.
 9. Sessions 3 and 4 items stand: `SRCF_VEL_THR = 3.0` unflown, no
    GPS-loss cycle at cruise, the offset detector's long soak, and the
    altitude-hold and ground-effect items on the octaquad.
+
+### Settled this session, so nobody re-opens them
+
+- Receiver-reported quality does not discriminate. Satellite count,
+  HDOP, `HAcc`, `VAcc`, speed accuracy, `EK3_CHECK_SCALE` and
+  `gpsGoodToAlign` were each measured and each says "excellent" on a fix
+  whose position is wrong.
+- Indoor flow at about 1 m is characterised: log 351 held 378 s
+  continuously, quality 101-157, `RFND.Stat` 4 for all 7100 samples,
+  and gave out only below the rangefinder's minimum range.
+- Velocity divergence, displacement, altitude consistency, GPS
+  self-consistency and position innovation were all tried as
+  discriminators and none separates. `vd_envelope.py`,
+  `innov_detector.py`, `xcheck_replay.py`, `gate_replay.py` and
+  `cnf_time_sweep.py` are how, and they run in seconds from local disk.
