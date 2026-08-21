@@ -405,7 +405,7 @@ trusted, not as the gate.
    the accept path on an aircraft, and until an origin is pinned
    accurately nothing can. Its behaviour near the bound is also still
    untested: every case so far is six times the threshold or more.
-2. Fix quality separates a repeater from open sky and is not yet used.
+2. Fix quality separates a repeater from open sky, and is now used.
    Longest unbroken run meeting a given bar, from `gate_replay.py`:
 
    | log | >=8 sats, `HAcc` <=2.0 | >=12, <=1.0 | >=14, <=0.5 |
@@ -431,6 +431,31 @@ trusted, not as the gate.
    resumes after the handover; the bound's unique value is a static
    capture that never moves, so the residual exposure is a static
    capture that also fakes excellent quality.
+
+   Shipped as `SRCF_FIXQ_TIME`, default 30 s, with the twelve satellite
+   and 1 m bars as constants. Two things came out of building it that
+   the replay did not predict.
+
+   The offset bound loosens as the flight goes on. It is six times the
+   lanes' combined position sigma and that grows without bound while the
+   flow lane dead reckons: 13.8 m by 195 s in SITL, so 83 m of
+   tolerance. A 40 m origin error was accepted by the bound alone
+   part-way through the flight and never reached the quality path at
+   all. Log 348 did not show this because the vehicle barely moved -
+   `PSig` stayed at 1.16-2.90 m for its whole 300 s - but a flight that
+   covers ground will eventually accept a stale origin just by lasting
+   long enough. That cuts both ways: it is a hole in the bound and a
+   self-heal for the false refusal.
+
+   `EK3_GPS_CHECK` cannot be set to the 255 its own description names,
+   because `_gpsCheck` is an `AP_Int8`. All bits is -1.
+
+   The A/B on it came out positive: `SRCFStrictGPSChecks` flies the
+   GPS-free arm with every check enabled and still takes up GPS in
+   flight, so bits 5-7 do not block the honest in-flight alignment.
+   That is SITL evidence only - its GPS is clean, and the drift and
+   speed checks are exactly the ones a moving vehicle strains - so it
+   is a reason to try -1 in the field, not a reason to assume it.
 3. The pilot has no way through a refusal. Log 348's pilot could see a
    good fix and had no control that would take it; the flight ended on
    flow because the monitor had decided. `RCx_OPTION = 90` already
