@@ -50,11 +50,19 @@ handover, with the vehicle demonstrably parked:
 | reported altitude spread | 17.7 m (124.8 to 142.5) |
 | distance from the flow lane | 25.3-26.7 m |
 
-Sat count and HDOP are the two numbers a pilot has on the GCS and both
-were immaculate. The receiver's own accuracy estimate bottomed out at
-1.24 m while it was 26 m out. This is the case the OSD lane panel
-cannot help with either: the GPS lane really was fusing GPS, so the
-panel read `EKF0 ABS` throughout.
+The OSD lane panel cannot help here: the GPS lane really was fusing
+GPS, so it read `EKF0 ABS` throughout.
+
+**Corrected after log 348.** This section originally called those
+numbers immaculate and concluded the quality channels carried nothing.
+That is wrong, and it cost a flight. Judged against what this same
+receiver does under open sky - 20-26 satellites, HDop 0.53-0.62, `HAcc`
+0.20-0.49 m across logs 332-337 - eight satellites and `HAcc` 2.7 m is
+a third of the constellation at five to thirteen times the error. The
+"a spoof reads healthy by construction" rule is about a synthesised
+constellation; a repeater re-broadcasts a real sky view down an
+attenuating path, so it gives fewer satellites and worse accuracy, and
+that is measurable. See open item 2.
 
 ## Why nothing stopped the handover
 
@@ -340,13 +348,39 @@ not a refusal.
    the accept path on an aircraft, and until an origin is pinned
    accurately nothing can. Its behaviour near the bound is also still
    untested: every case so far is six times the threshold or more.
-2. The pilot has no way through a refusal. Log 348's pilot could see a
+2. Fix quality separates a repeater from open sky and is not yet used.
+   Longest unbroken run meeting a given bar, from `gate_replay.py`:
+
+   | log | >=8 sats, `HAcc` <=2.0 | >=12, <=1.0 | >=14, <=0.5 |
+   |---|---|---|---|
+   | 346 repeater | 17 s | **0** | 0 |
+   | 347 repeater | 16 s | **0** | 0 |
+   | 348 in to out | 172 s | 132 s | 75 s |
+   | 332 open sky | 389 s | 389 s | 365 s |
+   | 333 | 250 s | 250 s | 165 s |
+   | 336 | 288 s | 288 s | 191 s |
+
+   At twelve satellites and `HAcc` 1.0 m the repeater never produces a
+   single sample in either flight while real sky sustains it for
+   minutes. Replaying the handover with "accept a large offset once the
+   fix has held that bar for 30 s" refuses both repeater flights and
+   accepts log 348 at t+171 s, once it is outside - which is the
+   inside-to-outside case working without the origin being right.
+
+   The cost is real and belongs in the decision: a synthesised spoof
+   can report twenty satellites and sub-metre accuracy, so this
+   bypasses the offset bound for exactly the attacker the bound was
+   built for. What it does not bypass is the rest of the ladder, which
+   resumes after the handover; the bound's unique value is a static
+   capture that never moves, so the residual exposure is a static
+   capture that also fakes excellent quality.
+3. The pilot has no way through a refusal. Log 348's pilot could see a
    good fix and had no control that would take it; the flight ended on
    flow because the monitor had decided. `RCx_OPTION = 90` already
    means "pilot intervenes in source selection" and already clears a
    spoof latch, so it is the obvious lever, but it does nothing in
    `FLOW_NO_GPS` today.
-3. The flow-lost fallback takes the GPS lane with no offset check, and
+4. The flow-lost fallback takes the GPS lane with no offset check, and
    it is the same branch in flight as at touchdown. In log 347 it fired
    during the landing, where it costs nothing, onto a lane the gate had
    been refusing for 98 s. Whether it should be gated is a real
@@ -354,23 +388,23 @@ not a refusal.
    dies is the AltHold demotion with no position at all, and a lane
    35 m out at least holds station. Needs deciding before it happens at
    height rather than on the ground.
-4. Whether the first-fix handover should be automatic at all. This is
+5. Whether the first-fix handover should be automatic at all. This is
    design note open question 3, and this log is the argument for
    announcing it and leaving it to the pilot: a several-hundred-metre
    position reset mid-flight is a bigger event than anything the ladder
    does, and 2 s is not long enough for a pilot to work out what has
    happened. The gate reduces how often the question arises; it does
    not answer it.
-5. A stale recorded origin still has no provenance check (design note
+6. A stale recorded origin still has no provenance check (design note
    open question 4), and it now matters more: with the gate in, a stale
    origin blocks an honest handover rather than silently corrupting
    home. A pre-arm comparing the recorded origin against the last known
    GPS position would catch the drive-to-a-new-site case.
-6. Indoor flow at 1-2 m is still uncharacterised. This flight held
+7. Indoor flow at 1-2 m is still uncharacterised. This flight held
    0.9 m for 130 s at quality 134 with sub-decimetre position, which is
    better than session 3's open item feared, but it is one flight in
    one room.
-7. An origin-free cross-check was prototyped as a replay over eleven
+8. An origin-free cross-check was prototyped as a replay over eleven
    logs and mostly does not work. Two were tried on a sliding window,
    both frame-free so neither needs the origin: the vector displacement
    of the two lanes against each other, and the change in reported GPS
@@ -403,6 +437,6 @@ not a refusal.
    would have prevented that crash by never firing the handover.
 
    Replay tool: `xcheck_replay.py`.
-8. Sessions 3 and 4 items stand: `SRCF_VEL_THR = 3.0` unflown, no
+9. Sessions 3 and 4 items stand: `SRCF_VEL_THR = 3.0` unflown, no
    GPS-loss cycle at cruise, the offset detector's long soak, and the
    altitude-hold and ground-effect items on the octaquad.
