@@ -1010,6 +1010,13 @@ private:
     // Assess GPS data quality and set gpsGoodToAlign
     void calcGpsGoodToAlign(void);
 
+    // true if this core, or any other allocated core, is navigating without
+    // GPS. Under per-core source sets the lane that would wait for the GPS
+    // checks has no dead reckoning source of its own - the flow lane is a
+    // different core - so what matters is whether the vehicle can afford to
+    // wait, not whether this core can
+    bool vehicleCanDeadReckon(void) const;
+
     // set the class variable true if the delta angle bias variances are sufficiently small
     void checkGyroCalStatus(void);
 

@@ -11,6 +11,16 @@
    We also record the failure reason so that pre_arm_check()
    can give a good report to the user on why arming is failing
 */
+bool NavEKF3_core::vehicleCanDeadReckon(void) const
+{
+    const bool doingBodyVelNav = (imuSampleTime_ms - prevBodyVelFuseTime_ms < 1000);
+    const bool doingFlowNav = (imuSampleTime_ms - prevFlowFuseTime_ms < 1000);
+    if ((doingFlowNav && gndOffsetValid) || assume_zero_sideslip() || doingBodyVelNav) {
+        return true;
+    }
+    return frontend->otherLaneDeadReckoning(core_index);
+}
+
 void NavEKF3_core::calcGpsGoodToAlign(void)
 {
     if (inFlight && !finalInflightYawInit && assume_zero_sideslip() && !use_compass()) {
@@ -232,7 +242,7 @@ void NavEKF3_core::calcGpsGoodToAlign(void)
         gpsGoodToAlign = false;
     }
 
-    if (gpsGoodToAlign && waitingForGpsChecks) {
+    if (waitingForGpsChecks && (gpsGoodToAlign || !vehicleCanDeadReckon())) {
         waitingForGpsChecks = false;
     }
 }

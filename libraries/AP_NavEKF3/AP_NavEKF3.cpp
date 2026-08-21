@@ -1256,6 +1256,24 @@ bool NavEKF3::getLaneDivergencePosSigma(uint8_t lane_index, float &pos_sigma_m) 
     return true;
 }
 
+bool NavEKF3::otherLaneDeadReckoning(uint8_t exclude_core) const
+{
+    if (core == nullptr) {
+        return false;
+    }
+    for (uint8_t i = 0; i < num_cores; i++) {
+        if (i == exclude_core) {
+            continue;
+        }
+        nav_filter_status status;
+        core[i].getFilterStatus(status);
+        if (status.flags.horiz_pos_rel && !status.flags.horiz_pos_abs) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool NavEKF3::getLaneGpsGoodToAlign(uint8_t lane_index) const
 {
     if (core == nullptr || lane_index >= num_cores) {

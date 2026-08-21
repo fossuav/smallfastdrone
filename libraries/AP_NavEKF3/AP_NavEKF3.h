@@ -372,6 +372,10 @@ public:
     // against. Same validity rules as getLaneDivergence
     bool getLaneDivergenceSigma(uint8_t lane_index, float &vel_sigma_mps) const;
 
+    // true if a lane other than the one named is navigating on a relative
+    // position solution, i.e. something else is flying the vehicle without GPS
+    bool otherLaneDeadReckoning(uint8_t exclude_core) const;
+
     // true if a lane's GPS quality checks (EK3_GPS_CHECK) are currently
     // passing. Returns false if the lane is invalid or unallocated
     bool getLaneGpsGoodToAlign(uint8_t lane_index) const;
