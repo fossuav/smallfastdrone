@@ -889,6 +889,49 @@ reached 1.88 against a 1.6 gate, so it crossed, and `VVot` never left
 zero because it did not hold for 1.5 s. That is one indoor flight with
 real stick input and no false trip at the shortened window.
 
+## 5k: manoeuvring is the test - log 355
+
+Same build as 353, `SRCF_CNF_TIME` 1.5, and this time GPS was never
+disabled - it simply took 110 s to find a fix indoors, which is its own
+answer to how long a cold start takes under a repeater.
+
+The handover was the cleanest yet. `PD` was 2.94-3.18 m against `PSig`
+1.32-1.73, about two sigma, accepted at 120.1 s, and for the next thirty
+seconds `PD` sat at 0.10-0.54 m. The two lanes agreed almost exactly.
+
+Then the pilot flew, and it came apart:
+
+| t | flow lane \|V\| | GPS lane \|V\| |
+|---|---|---|
+| 154-156 s | 0.74-1.04 | 0.22-0.47 |
+| 157-159 s | 0.14-0.40 | 1.04-2.01 |
+
+The GPS lane understates a real 1 m/s translation two to threefold while
+it is happening, then overshoots to twice the truth once the vehicle has
+stopped. `VD` crossed 1.6, held for 1.5 s and tripped. The vehicle
+landed normally.
+
+That is the same failure as log 353's span mismatch - GPS reporting
+15.0 m of travel where flow reported 4.8, then 1.9 where flow reported
+5.3 - and it explains what confused three earlier sections of this file.
+**The trips coincide with stick input not because manoeuvring causes
+false trips, but because a stationary vehicle gives a bad fix nothing to
+fail at.** A displaced but static fix and a good one look identical
+until something moves. Sessions 5d and 5e both misread that, first as
+the fix dragging the vehicle and then as the manoeuvre tripping the
+detector; it is neither.
+
+Two things follow. The detector is doing exactly what it should and its
+thresholds should not be relaxed to accommodate manoeuvres, which is
+what 5f nearly concluded. And if you want to know whether a fix is
+trustworthy, fly a translation and watch `VD` - hovering tells you
+almost nothing, which is also why the handover decision, taken from a
+hover, is the hardest moment to judge it.
+
+`SRCF_CNF_TIME` 1.5 has now flown twice, tripping once on a real
+disagreement and staying quiet on log 353 where `VD` reached 1.88
+without holding.
+
 ## Still open
 
 1. **The gate has never passed an honest fix outdoors.** It has accepted
