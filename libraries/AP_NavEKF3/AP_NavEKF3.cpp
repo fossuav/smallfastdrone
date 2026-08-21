@@ -1256,6 +1256,14 @@ bool NavEKF3::getLaneDivergencePosSigma(uint8_t lane_index, float &pos_sigma_m) 
     return true;
 }
 
+bool NavEKF3::getLaneGpsGoodToAlign(uint8_t lane_index) const
+{
+    if (core == nullptr || lane_index >= num_cores) {
+        return false;
+    }
+    return core[lane_index].getGpsGoodToAlign();
+}
+
 bool NavEKF3::alignLanePosition(uint8_t lane_index)
 {
     if (lane_index < MAX_EKF_CORES) {

@@ -173,6 +173,11 @@ public:
     // getVariances() which reports innovation consistency test ratios
     float getVelVarianceNE() const;
 
+    // true while the GPS quality checks selected by EK3_GPS_CHECK are
+    // passing. Recomputed every GPS sample before and after alignment, so
+    // it is a live verdict on the fix rather than an alignment-time one
+    bool getGpsGoodToAlign() const { return gpsGoodToAlign; }
+
     // return the sum of the North and East position state variances in m^2.
     // Grows without bound on a lane that is dead reckoning, which is what
     // makes it the right scale for judging a cross-lane position difference

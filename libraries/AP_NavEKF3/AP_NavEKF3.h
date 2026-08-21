@@ -372,6 +372,10 @@ public:
     // against. Same validity rules as getLaneDivergence
     bool getLaneDivergenceSigma(uint8_t lane_index, float &vel_sigma_mps) const;
 
+    // true if a lane's GPS quality checks (EK3_GPS_CHECK) are currently
+    // passing. Returns false if the lane is invalid or unallocated
+    bool getLaneGpsGoodToAlign(uint8_t lane_index) const;
+
     // get the combined 1-sigma horizontal position uncertainty of a lane and
     // the current primary. Same validity rules as getLaneDivergence
     bool getLaneDivergencePosSigma(uint8_t lane_index, float &pos_sigma_m) const;
