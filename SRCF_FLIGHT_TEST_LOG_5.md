@@ -667,6 +667,65 @@ scaling them is better spent on how fast the detection is: log 346 had
 2.1 s hands-off before the wall, and log 350 took about 5 s from the
 innovation starting to grow.
 
+## 5g: the fast tell is the GPS lane's own innovation
+
+GPS is slow to settle and optical flow plus a rangefinder is effectively
+instant, so the flow lane knows the truth first. That asymmetry is worth
+using: a manoeuvring vehicle grows the GPS lane's position innovation
+through lag alone, but innovation growing *while the flow lane says the
+vehicle is holding station* is a fix walking away from reality.
+
+Measured over nine flights, innovation on the GPS lane restricted to
+samples where the flow lane reports under 0.5 m/s:
+
+| log | environment | p50 | p95 | max |
+|---|---|---|---|---|
+| 332 | open sky | 0.02 | 0.06 | 0.11 |
+| 333 | open sky | 0.04 | 0.13 | 0.21 |
+| 336 | open sky | 0.04 | 0.07 | 0.11 |
+| 337 | open sky | 0.04 | 0.14 | 22.59 |
+| 346 | repeater, crashed | 0.62 | 2.03 | 3.60 |
+| 347 | repeater | 0.62 | 6.75 | 8.40 |
+| 348 | indoor then out | 0.25 | 5.72 | 20.97 |
+| 349 | repeater | 0.28 | 2.47 | 6.18 |
+| 350 | repeater, tripped | 0.23 | 3.65 | 5.76 |
+
+Eighteen to a hundred times apart on the p95. Log 337's 22.59 is three
+bursts totalling nine samples, the longest half a second, so a one second
+sustained requirement excludes all of it.
+
+It is also far earlier than anything the monitor watches now. Innovation
+above 2 m sustained for a second:
+
+| | first seen | GPS lane usable | handover | outcome |
+|---|---|---|---|---|
+| 346 | 92.7 s | 156.7 | 166.7 | impact at 168.8 |
+| 350 | 139.4 s | 148.9 | 218.0 | trip at 250.6 |
+
+Seventy-four and seventy-nine seconds before their handovers. In log 346
+the fix was provably walking from 92.7 s, a minute before anything
+noticed and seventy-six seconds before the wall.
+
+So it is not only a faster detector, it would have refused both
+handovers. And unlike satellite count it is not a proxy for the
+environment - it is the lane reporting that the fix it is being handed
+disagrees with its own prediction, cross-checked against a lane with no
+lag. It needs no origin and no common frame.
+
+Open sky p95 is 0.06-0.14 m, so a bar of 1 m held for a second sits
+seven times above the benign envelope while both repeater flights go
+straight through it.
+
+What it does not do is work while the vehicle is moving: the gate is the
+flow lane reporting nearly stationary, and during sustained flight there
+is nothing to separate lag from a walk. That suits the first-fix
+handover, which happens from a hover, and it suits log 346's hands-off
+case, which is the one that crashed.
+
+Not built. Needs a per-lane innovation accessor, the same shape as the
+divergence and sigma ones, and the benign side rests on four open-sky
+flights.
+
 ## Still open
 
 1. The gate has never passed a fix. Three field flights and the SITL
