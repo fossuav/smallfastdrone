@@ -1316,10 +1316,10 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
 
     // @Param: SRCF_FIXQ_SATS
     // @DisplayName: EKF source fallback first fix minimum satellites
-    // @Description: Satellites a GPS fix must report before the first fix of a GPS-free arm can be taken up at all, whatever the cross-lane offset says. A GPS repeater re-broadcasts through an attenuating path so only the strongest satellites survive it, which makes the count the one channel that separates a repeater from open sky: across field logs 346, 347 and 349 a repeater never exceeded nine, while logs 332, 333, 336 and 337 never dropped below fifteen under open sky. The EKF's own checks cannot express this because their satellite test is fixed at six and is not scaled by EK3_CHECK_SCALE, and neither reported accuracy nor EK3_CHECK_SCALE separates the two: log 349's repeater reported 0.8m horizontal accuracy and held the EKF checks for 64s. Refusing costs nothing while the vehicle is flying on the flow lane, so this is deliberately restrictive. 0 disables the check.
+    // @Description: Satellites a GPS fix must report before the first fix of a GPS-free arm can be taken up at all, whatever the cross-lane offset says. Off by default because the separation it was added for did not survive a longer look: an indoor fix that sat at 8 or 9 satellites for the first minute of field log 350 climbed to 15-17 over the next, which is open-sky territory, so a count that looks decisive early is only telling you the receiver has not finished acquiring. Set it only where a site has been measured to hold a low count for as long as a flight lasts. It is not a spoof check: a synthesised spoof can report any count it likes.
     // @Range: 0 30
     // @User: Advanced
-    AP_GROUPINFO("SRCF_FIXQ_SATS", 39, ParametersG2, srcf_fixq_sats, 12),
+    AP_GROUPINFO("SRCF_FIXQ_SATS", 39, ParametersG2, srcf_fixq_sats, 0),
 #endif
 
     // @Param: FS_ALTH_TMO

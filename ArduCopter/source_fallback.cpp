@@ -326,11 +326,10 @@ void Copter::source_fallback_update()
     // out. Track how long the fix has been better than a repeater can manage
     // while the filter's own GPS checks pass, and let that stand in for the
     // origin being the faulty term.
-    // Satellite count is the one channel that separates a repeater from open
-    // sky - it never exceeded nine across logs 346, 347 and 349 and never
-    // dropped below fifteen on the open-sky flights - and the EKF cannot
-    // express it, its own test being fixed at six and unscaled. Reported
-    // accuracy does not separate them: log 349's repeater claimed 0.8m.
+    // Satellite count looked like it separated an indoor fix from open sky
+    // until log 350 watched one for longer: 8 or 9 for the first minute, then
+    // 15-17 over the next. Off by default for that reason, and kept only
+    // because a site measured to hold a low count may still want it.
     const bool fix_acceptable = (g2.srcf_fixq_sats <= 0) ||
                                 (gps.num_sats() >= (uint8_t)g2.srcf_fixq_sats);
     const bool fix_quality_good = fix_acceptable &&
