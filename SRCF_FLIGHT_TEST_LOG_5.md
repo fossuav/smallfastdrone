@@ -825,6 +825,51 @@ What prevents that class is not detecting faster but not handing over -
 which is the offset bound, and it postdates the flight it would have
 saved.
 
+## 5j: the ladder working, and quality metrics finally buried - log 353
+
+Flown on `15c477c348` with `SRCF_CNF_TIME` at 1.5 and `SRCF_FIXQ_SATS`
+at 0. Armed on flow at 31.4 s, GPS restored at 42.9, the lane usable at
+53.0, and at 63.2 s:
+
+```
+SRCF: GPS acquired 6m off, staying on flow
+```
+
+Refused, and it stayed refused for the whole flight. The vehicle flew
+117 s on flow and landed normally at 148.5 s; the lane switch at 150.4
+and the radio failsafe at 156.3 are both after disarm.
+
+The fix it refused reported, over the 90 s it was on offer:
+
+| | |
+|---|---|
+| satellites | 21-27, median 27 |
+| `HAcc` | 0.65-1.16 m, median 0.88 |
+| reported speed, median | 0.079 m/s |
+
+and the vehicle hovered at 0.92 m indoors throughout. Twenty-seven
+satellites and sub-metre claimed accuracy. Against that, `PD` ran
+4.29-13.19 m with a median of 8.04 against a bound of 5.2-6.9 m.
+
+The disagreement is about motion, not just datum. The pilot was flying -
+`RCIN.C2` spans 1367-1711 - so the flow lane's travel is real, and per
+30 s window the GPS lane says 15.0, 1.9 and 3.5 m where flow says 4.8,
+4.2 and 5.3. It overstates the movement threefold in one window and
+understates it twofold in the next.
+
+So this is the end of the line for receiver-reported quality as a
+discriminator, which four sessions have now approached from every angle:
+satellite count, HDOP, `HAcc`, `VAcc`, speed accuracy, `EK3_CHECK_SCALE`
+and the filter's own `gpsGoodToAlign`. A fix can report the best numbers
+in the whole log set and still disagree with measured motion by a factor
+of three. Only comparing it against something that measures the world
+separately catches that, which is what the offset bound does.
+
+`SRCF_CNF_TIME` at 1.5 also came through its first flight clean. `VD`
+reached 1.88 against a 1.6 gate, so it crossed, and `VVot` never left
+zero because it did not hold for 1.5 s. That is one indoor flight with
+real stick input and no false trip at the shortened window.
+
 ## Still open
 
 1. The gate has never passed a fix. Three field flights and the SITL
