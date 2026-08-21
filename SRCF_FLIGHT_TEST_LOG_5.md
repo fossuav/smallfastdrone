@@ -549,7 +549,12 @@ That is the distinction that matters and session 5d blurred it: a
 *wandering* fix flies the vehicle into a wall, a *displaced but steady*
 one does not, and logs 349 and 350 were the second kind.
 
-### Both spoof trips were the manoeuvre, not the fix
+### Both spoof trips were the fix, not the manoeuvre
+
+**This section originally said the opposite.** It is corrected below; the
+paragraph that follows records what was wrong with it.
+
+
 
 Session 5d also calls log 349's trip the first field detection that was
 not a false trip. It has the false-trip signature instead. `VD` sat at
@@ -561,11 +566,23 @@ reversed the sticks:
 | 349 | 0.15-0.51 | 0.93, 1.36, 1.72, 1.92 | 254.7 s, roll 1687-1709, pitch 1360 |
 | 350 | 0.08-0.21 | 0.45, 0.98, 1.46, 1.72 | 250.6 s, roll 1543-1585, pitch 1268-1333 |
 
-This is the same mechanism as session 1's log 329 and session 3's
-reversal at 122.6 s, now in a regime nobody has characterised: about 1 m
-AGL, where flow is at its worst and the thresholds in force were
-measured at 5-9 m outdoors. `SRCF_VEL_THR` 1.6 has no margin against a
-brisk stick reversal indoors - both flights reached 1.7.
+The reversal is when the disagreement appears, but it is not what
+causes it. Through log 350's trip the raw receiver reported 0.20-0.29
+m/s and the flow lane 0.16-0.36 - they agree - while the GPS *lane*
+reported 1.07-1.52. The lane disagrees with its own measurement.
+
+`XKF3` says why: the GPS lane's position innovation grows monotonically
+to 3.07 m over those five seconds and `XKF4.SV` reaches 1.01, the
+rejection threshold. The receiver's reported position was walking at
+about 0.6 m/s while its reported velocity said 0.2-0.3, so the fix
+contradicts itself, and the filter chasing that walk puts it into the
+velocity state.
+
+That is log 346's mechanism at a smaller scale - a walking fix - and the
+detector caught it. Both trips were correct. Reading them as false trips
+came from matching the reversal in time without asking which lane was
+wrong, which is the same mistake as reading the excursion as a drag
+without checking the sticks.
 
 So the position after four indoor flights is that the handover happened
 twice and flew normally both times, the detector false-tripped twice,
@@ -603,12 +620,52 @@ thresholds were measured at 5-9 m outdoors, and session 3 already said
 flow near the ground is its own problem; the indoor case forces the
 regime the setup notes tell people to avoid.
 
-The 30% rule over the worst benign excursion puts `SRCF_VEL_THR` at
-about 2.6 and `SRCF_POSR_THR` at about 2.4 for this regime. The cost is
-explicit: session 2's velocity-consistent spoof sustained `VD` at 1.77,
-so at 2.6 there is no velocity spoof detection indoors at all. That is
-the honest trade rather than a tuning choice - at 1 m the flow lane is
-too noisy to support a threshold that would catch anything.
+The 30% rule would put `SRCF_VEL_THR` at about 2.6 and `SRCF_POSR_THR`
+at 2.4 for this regime - and both should be left alone, because the
+excursions are the detector working. See the correction above.
+
+## 5f: what the replay said about an adaptive threshold
+
+The plan was to replace the fixed `SRCF_VEL_THR` with one that tracks
+conditions, on the reasoning that no constant can cover a 1 m hover, a
+stick reversal and 30 km/h. Replayed over nine flights, the premise does
+not hold.
+
+**Speed does not predict it, and the sign is backwards.** Worst benign
+`VD` per speed and roll/pitch-rate cell, armed and upright only:
+
+| speed \ rot rad/s | 0-0.25 | 0.25-0.5 | 0.5-1.0 | 1.0+ |
+|---|---|---|---|---|
+| 0-1 m/s | 3.66 | 3.64 | 2.63 | 1.53 |
+| 1-2 m/s | 2.65 | 2.79 | 2.81 | 1.04 |
+| 2-4 m/s | 2.75 | 2.36 | 2.80 | 0.68 |
+| 4-8 m/s | 1.77 | 1.87 | 1.86 | 1.65 |
+
+Divergence is worst when slow, not fast, and rotation rate does not
+order it at all. Session 3's "it scales with velocity" held on one
+octaquad flight and does not survive the pool.
+
+**Height orders it, but as a U.** The worst excursions sit at 0.2-1.0 m
+(logs 348, 349) and at 16-21 m (logs 333, 337), with the quiet band at
+5-9 m - which is where the setup notes already tell people to work.
+
+**And the low-height end is not noise to be accommodated.** It is the
+GPS lane chasing a walking fix, per the correction in 5e. A threshold
+tuned to sit above it would be tuned to ignore the one signature that
+matters.
+
+Two other candidates were tried and neither separates: `EK3_GLITCH_RAD`
+makes no difference at all to the velocity excursion (replayed at 0 and
+25, identical to two decimal places), and testing the receiver against
+itself - reported position rate against reported speed - gives 0.56-0.63
+m/s of median disagreement on logs 346 and 347 but 0.06-0.12 on 349 and
+350, indistinguishable from open sky's 0.09-0.19.
+
+So no threshold change, adaptive or otherwise. The fixed thresholds are
+catching real faults indoors, and the work that would have gone into
+scaling them is better spent on how fast the detection is: log 346 had
+2.1 s hands-off before the wall, and log 350 took about 5 s from the
+innovation starting to grow.
 
 ## Still open
 
