@@ -434,6 +434,81 @@ whatever log file is newest will report its neighbour's answer. The
 baseline column exists to catch exactly that, and it did - a run that
 cannot reproduce the flown value is not evidence about anything else.
 
+## 5d: the handover works, and hands over to the repeater - log 349
+
+Flown on `d8be1f94` again, so no code change, only the two parameters:
+the origin pinned to the back-solved takeoff point with `AHRS_OPTIONS`
+16, and `EK3_CHECK_SCALE` 50.
+
+The origin fix did what it was supposed to. `PD` at the first fix was
+**4.3 m against `PSig` 1.2 m** - 3.6 sigma, inside the bound of 6 - where
+log 348 saw 40 m. The handover completed at 193.6 s, 10.0 s after the
+lane became usable:
+
+```
+183.56  EKF3 IMU0 is using GPS        (114 s after GPS was re-enabled)
+193.59  SRCF: GPS acquired, using GPS lane
+```
+
+That is the first accepted handover on an aircraft, after four refusals.
+
+Then it dragged the vehicle. The flow lane held station for 30 s and
+from 233 s moved **20 m in 20 s** - 19.4 m north, 5.4 m west - with
+Loiter demanding up to -11.2 deg pitch and +16.6 deg roll, still indoors
+at 0.99 m and still on seven satellites. `VD` climbed to 1.72 against
+the 1.6 gate, held it, and the velocity detector latched at 254.7 s:
+
+```
+254.69  SRCF: GPS spoof suspected, using flow lane
+255.49  RC9: MotorEStop HIGH
+```
+
+The ladder worked. That is the first field spoof detection that was not
+a false trip, and it caught a repeater dragging the vehicle 61 s after
+the handover. The pilot stopped the motors 0.8 s later, so whether the
+flow lane would have settled it is still unknown.
+
+### Nothing checked whether the fix was worth taking
+
+The handover was authorised by the offset bound, which passed honestly:
+the origin was right and the repeater's reported position happened to
+agree with it at that moment. Fix quality is not consulted anywhere on
+that path - `SRCF_FIXQ_TIME` is a bypass for when the bound refuses, not
+a condition on accepting. So neither it nor the EKF checks were in a
+position to stop this.
+
+Nor could they have been at that setting. Replayed, log 349 holds
+`gpsGoodToAlign` for 70 s at scale 100 and 64 s at 50, and only 0 s at
+20 - which also takes log 348's honest fix to 0. And its reported
+accuracy was good: `HAcc` 0.8-1.0 m, inside the 1.0 m bar the first
+version of the quality path used. The accuracy half of that test would
+have passed this fix.
+
+### Satellite count is what separates, and it cannot be tuned
+
+| environment | p5 | p50 | max |
+|---|---|---|---|
+| repeater indoors, logs 346, 347, 349 | 6-7 | 8 | 8-9 |
+| log 348, indoor then outdoor | 8 | 15 | 19 |
+| open sky, logs 332, 333, 336, 337 | 15-25 | 18-25 | 22-26 |
+
+Across three repeater flights and four open-sky ones the counts never
+overlap, and the gap between 9 and 15 is wide. It is not a coincidence
+of one site: a repeater re-broadcasts through an attenuating path, so
+only the strongest satellites survive it.
+
+`EK3_CHECK_SCALE` cannot reach this. The satellite check is
+`gps.num_sats() < 6`, hardcoded and deliberately not scaled, so the one
+channel that separates cleanly is the one the EKF's own machinery has no
+knob for. That is the answer to whether the EKF parameters can carry
+this on their own: no, and this is why.
+
+So the twelve-satellite bar was arbitrary in origin and is now the
+best-supported number here, while the accuracy bar beside it is not
+load-bearing and log 349 shows it passing a repeater. What the design
+needs is fix quality as a **necessary** condition on the first-fix
+handover rather than a sufficient bypass around the offset bound.
+
 ## Still open
 
 1. The gate has never passed a fix. Three field flights and the SITL
