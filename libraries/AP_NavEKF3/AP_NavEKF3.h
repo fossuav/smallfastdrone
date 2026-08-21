@@ -372,6 +372,12 @@ public:
     // against. Same validity rules as getLaneDivergence
     bool getLaneDivergenceSigma(uint8_t lane_index, float &vel_sigma_mps) const;
 
+    // horizontal position innovation magnitude and ground speed for one lane.
+    // Together these say whether a lane's own measurement is walking away from
+    // its prediction while something else says the vehicle is holding station.
+    // Returns false if the lane is invalid or unallocated
+    bool getLaneWalkCheck(uint8_t lane_index, float &pos_innov_m, float &speed_ms) const;
+
     // true if a lane other than the one named is navigating on a relative
     // position solution, i.e. something else is flying the vehicle without GPS
     bool otherLaneDeadReckoning(uint8_t exclude_core) const;
