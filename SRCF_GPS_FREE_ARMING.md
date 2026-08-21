@@ -3,7 +3,10 @@
 Branch `SmallFastDrone-4.7.0-gps-optflow-fallback`. Written 2026-08-19
 from code reading, implemented and measured in SITL the same day, then
 bench tested on the small quad and extended on 2026-08-20. Numbers below
-are SITL measurements unless they say otherwise. Nothing has flown.
+are SITL measurements unless they say otherwise, and were written before
+any of it flew. It has since flown eight times indoors - see
+`SRCF_FLIGHT_TEST_LOG_5.md` and the summary at the end of this file,
+which is where this note's own reasoning gets checked against the air.
 
 Goal: arm indoors with no GPS fix, fly out of the door, and have the
 GPS lane take over when it acquires - the reverse of the ladder SRCF
