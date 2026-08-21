@@ -1320,6 +1320,14 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Range: 0 30
     // @User: Advanced
     AP_GROUPINFO("SRCF_FIXQ_SATS", 39, ParametersG2, srcf_fixq_sats, 0),
+
+    // @Param: SRCF_INNOV_THR
+    // @DisplayName: EKF source fallback walking fix threshold
+    // @Description: Horizontal position innovation on the GPS lane, in metres, that means its fix is walking away from where the filter predicts, tested only while the optical flow lane reports the vehicle nearly stationary. A manoeuvring vehicle grows that innovation through GPS lag alone, but the flow lane has no lag, so innovation while it says the vehicle is still is the fix moving rather than the vehicle. Held for SRCF_CNF_TIME it blocks the first fix of a GPS-free arm and counts as a spoof once flying on GPS. Measured over nine flights: open sky sits at 0.06-0.14m at the 95th percentile while a GPS repeater indoors runs 2.5-6.8m, and at 2m it appears 74s before the handover that flew field log 346 into a wall. It is blind while the vehicle is moving, so it is a check on a hovering vehicle rather than a general spoof detector. 0 disables it.
+    // @Units: m
+    // @Range: 0 20
+    // @User: Advanced
+    AP_GROUPINFO("SRCF_INNOV_THR", 40, ParametersG2, srcf_innov_thr, 1.0),
 #endif
 
     // @Param: FS_ALTH_TMO
