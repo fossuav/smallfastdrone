@@ -44,14 +44,6 @@
 // airborne worst of 2.05. Without a floor the gate collapses on the ground
 // and the detector is most likely to false trip where it is least useful.
 #define SRCF_POSD_MIN_SIGMA         2.0f
-// Bars a fix must clear, alongside the EKF's own GPS checks, to be trusted
-// against a suspect origin. Set from the field: across logs 346 and 347 a GPS
-// repeater indoors never produced a single sample meeting these while the
-// filter's checks passed, and log 348 held them for 132s once outside. They
-// are constants rather than parameters because the separation is total at
-// these values and there is nothing to tune between.
-#define SRCF_FIXQ_MIN_SATS          12
-#define SRCF_FIXQ_MAX_HACC          1.0f
 
 static const uint8_t SRCF_GPS_LANE = 0;     // lane running EK3_SRC1 (GPS)
 static const uint8_t SRCF_FLOW_LANE = 1;    // lane running EK3_SRC2 (optical flow)
@@ -107,6 +99,20 @@ static void srcf_reset_detectors()
 // Say so once the offset bound alone has held the handover off for as long as
 // the handover itself would have taken, so the message means "this would have
 // switched by now".
+// the same, for a fix refused on its satellite count. Silence is what made
+// log 348 hard to read from the cockpit, so a refusal always says why
+static void srcf_sats_block_warn(uint32_t now_ms, uint32_t hold_ms, uint8_t sats)
+{
+    if (srcf_state.offset_block_ms == 0) {
+        srcf_state.offset_block_ms = now_ms;
+    } else if (!srcf_state.offset_warned &&
+               (now_ms - srcf_state.offset_block_ms > hold_ms)) {
+        srcf_state.offset_warned = true;
+        gcs().send_text(MAV_SEVERITY_WARNING, "SRCF: GPS on %u sats, staying on flow",
+                        (unsigned)sats);
+    }
+}
+
 static void srcf_offset_block_warn(uint32_t now_ms, uint32_t hold_ms, float pos_div, const char *how)
 {
     if (srcf_state.offset_block_ms == 0) {
@@ -320,11 +326,15 @@ void Copter::source_fallback_update()
     // out. Track how long the fix has been better than a repeater can manage
     // while the filter's own GPS checks pass, and let that stand in for the
     // origin being the faulty term.
-    float fix_hacc = 0.0f;
-    const bool fix_quality_good = ahrs.get_lane_gps_good_to_align(SRCF_GPS_LANE) &&
-                                  (gps.num_sats() >= SRCF_FIXQ_MIN_SATS) &&
-                                  gps.horizontal_accuracy(fix_hacc) &&
-                                  (fix_hacc <= SRCF_FIXQ_MAX_HACC);
+    // Satellite count is the one channel that separates a repeater from open
+    // sky - it never exceeded nine across logs 346, 347 and 349 and never
+    // dropped below fifteen on the open-sky flights - and the EKF cannot
+    // express it, its own test being fixed at six and unscaled. Reported
+    // accuracy does not separate them: log 349's repeater claimed 0.8m.
+    const bool fix_acceptable = (g2.srcf_fixq_sats <= 0) ||
+                                (gps.num_sats() >= (uint8_t)g2.srcf_fixq_sats);
+    const bool fix_quality_good = fix_acceptable &&
+                                  ahrs.get_lane_gps_good_to_align(SRCF_GPS_LANE);
     if (!fix_quality_good) {
         srcf_state.fix_good_since_ms = 0;
     } else if (srcf_state.fix_good_since_ms == 0) {
@@ -415,13 +425,20 @@ void Copter::source_fallback_update()
                                        (pos_div < SRCF_RECOV_POS_NSIGMA * pos_sigma);
             const bool offset_ok = !srcf_state.origin_before_arming || offset_agrees || fix_trusted;
 
-            if (gps_lane_usable && div_ok && !offset_ok) {
+            if (gps_lane_usable && !fix_acceptable) {
+                srcf_sats_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000), gps.num_sats());
+            } else if (gps_lane_usable && div_ok && !offset_ok) {
                 srcf_offset_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000), pos_div, "acquired");
             } else {
                 srcf_state.offset_block_ms = 0;
             }
 
-            if (gps_lane_usable && offset_ok) {
+            // fix quality is necessary, not merely sufficient. Log 349's
+            // handover was authorised by the offset bound alone - the origin
+            // was right and the repeater agreed with it at that instant - and
+            // the repeater then dragged the vehicle 20m before the velocity
+            // detector caught it 61s later.
+            if (gps_lane_usable && fix_acceptable && offset_ok) {
                 if (srcf_state.recovery_start_ms == 0) {
                     srcf_state.recovery_start_ms = now_ms;
                 }

@@ -526,6 +526,7 @@ public:
     AP_Float srcf_nsigma;      // divergence significance, in combined lane sigmas
     AP_Float srcf_posd_nsig;   // cross-lane position offset threshold, in combined lane sigmas
     AP_Float srcf_fixq_time;   // seconds a fix must prove itself before a large offset is accepted
+    AP_Int8  srcf_fixq_sats;   // satellites a first fix must report before it can be taken up
 #endif
 
     // ground effect compensation enable/disable
