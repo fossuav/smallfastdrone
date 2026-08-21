@@ -4275,6 +4275,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         start = self.sitl_start_location()
         self.set_parameters({
             "SRCF_ENABLE": 2,
+            # the offset bound alone is what this asserts. SITL's spoofed fix
+            # still reports a healthy constellation, so the quality path would
+            # eventually accept it - which is the residual exposure named in
+            # the SRCF_FIXQ_TIME description, and SRCFFixQualityOverridesOrigin
+            # is where that path is tested instead.
+            "SRCF_FIXQ_TIME": 0,
             "AHRS_OPTIONS": 16,     # USE_RECORDED_ORIGIN_FOR_NONGPS
             "AHRS_ORIGIN_LAT": start.lat,
             "AHRS_ORIGIN_LON": start.lng,
@@ -4331,6 +4337,103 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.progress("Receiver returns to truth")
         self.set_parameter("SIM_GPS1_SPOOF", 0)
         self.wait_statustext("SRCF: GPS acquired, using GPS lane", timeout=60, check_context=True)
+        self.wait_statustext("EKF3 lane switch 0", timeout=10, check_context=True)
+
+        self.land_and_disarm(timeout=120)
+
+    def SRCFFixQualityOverridesOrigin(self):
+        '''a fix that proves itself is taken up even when it disagrees with the recorded origin'''
+        # Field log 348 flew inside to outside and refused the handover for
+        # the whole flight: the fix outside was excellent - 14-18 satellites,
+        # HDop 0.76, HAcc 0.22 m - but the recorded origin was 39.0 m
+        # horizontal and 51.2 m vertical from the actual takeoff point, so the
+        # offset bound saw a 40 m disagreement and had no way to tell which
+        # side of it was lying.
+        #
+        # What tells them apart is that the offset is large in both cases
+        # while the fix quality is not. Across logs 346 and 347 a GPS repeater
+        # never produced one sample at twelve satellites and 1 m accuracy with
+        # the EKF's own GPS checks passing; log 348 held that for 132 s once
+        # outside.
+        #
+        # This is an A/B inside one flight: the same fix, refused at
+        # SRCF_FIXQ_TIME 0 and taken at 30.
+        self.configure_source_fallback_per_core()
+        start = self.sitl_start_location()
+        self.set_parameters({
+            "SRCF_ENABLE": 2,
+            "SRCF_FIXQ_TIME": 0,        # raised in flight, below
+            "AHRS_OPTIONS": 16,         # USE_RECORDED_ORIGIN_FOR_NONGPS
+            # A deliberately wrong origin. It has to be far enough out that
+            # the offset bound cannot swallow it later in the flight: the
+            # bound is 6 x the lanes' combined position sigma, which grows
+            # without bound as the flow lane dead reckons - 13.8 m by 195 s
+            # here, so 83 m of tolerance. 40 m was accepted by the bound
+            # alone and never exercised the quality path at all.
+            "AHRS_ORIGIN_LAT": start.lat + 0.0013,
+            "AHRS_ORIGIN_LON": start.lng + 0.0015,
+            "AHRS_ORIGIN_ALT": start.alt,
+            # SITL defaults to ten satellites, below the bar a fix has to
+            # clear; this is what an open sky looks like on the real vehicle
+            "SIM_GPS1_NUMSATS": 18,
+            "SIM_GPS1_ENABLE": 0,
+        })
+        self.reboot_sitl()
+        self.context_collect('STATUSTEXT')
+
+        self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=60, check_context=True)
+        self.wait_statustext("AHRS: using recorded origin", timeout=30, check_context=True)
+        self.takeoff(10, mode='LOITER', require_absolute=False)
+
+        self.progress("Acquiring an honest fix against a 40m-wrong origin")
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_statustext("EKF3 IMU0 is using GPS", timeout=120, check_context=True)
+
+        # the offset bound on its own refuses it, and says so after
+        # SRCF_RECOV_TIME of being the only thing in the way
+        self.wait_statustext("m off, staying on flow", timeout=60, check_context=True)
+        if self.statustext_in_collections("SRCF: GPS acquired, using GPS lane"):
+            raise NotAchievedException("handed over before the fix was allowed to prove itself")
+
+        self.progress("Allowing the fix to prove itself")
+        self.set_parameter("SRCF_FIXQ_TIME", 30)
+        # the pilot has to be told the origin is wrong, because home is too
+        self.wait_statustext("out, trusting fix", timeout=120, check_context=True)
+        self.wait_statustext("SRCF: GPS acquired, using GPS lane", timeout=30, check_context=True)
+        self.wait_statustext("EKF3 lane switch 0", timeout=10, check_context=True)
+
+        self.land_and_disarm(timeout=120)
+
+    def SRCFStrictGPSChecks(self):
+        '''every EK3_GPS_CHECK enabled still allows a GPS-free arm to take up GPS in flight'''
+        # EK3_GPS_CHECK defaults to 31, which excludes bits 5-7 - position
+        # drift, vertical speed and horizontal speed - precisely the checks a
+        # GPS repeater violates: log 347's receiver walked 195 m and reported
+        # 2.7 m/s while the vehicle was parked. They are excluded because they
+        # also fail when the vehicle is moving at alignment, and the GPS-free
+        # arm aligns in flight by construction.
+        #
+        # So this is the A/B against SRCFArmWithoutGPS, which flies the same
+        # sequence at the default 31: if this passes, the strict checks cost
+        # nothing here and are worth setting; if it fails, they block the
+        # honest case and the answer has to come from somewhere else.
+        self.configure_source_fallback_per_core()
+        self.set_parameters({
+            "SRCF_ENABLE": 2,
+            # -1, not the 255 the parameter description suggests: _gpsCheck is
+            # an AP_Int8, so 255 does not fit and -1 is the all-bits value
+            "EK3_GPS_CHECK": -1,
+            "SIM_GPS1_ENABLE": 0,
+        })
+        self.reboot_sitl()
+        self.context_collect('STATUSTEXT')
+
+        self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=60, check_context=True)
+        self.takeoff(10, mode='LOITER', require_absolute=False)
+
+        self.progress("Acquiring GPS in flight with every GPS check enabled")
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_statustext("SRCF: GPS acquired, using GPS lane", timeout=180, check_context=True)
         self.wait_statustext("EKF3 lane switch 0", timeout=10, check_context=True)
 
         self.land_and_disarm(timeout=120)
@@ -18710,6 +18813,8 @@ return update, 1000
             self.SRCFStaticSpoofNoRecovery,
             self.SRCFArmWithoutGPS,
             self.SRCFFirstFixOffsetBound,
+            self.SRCFFixQualityOverridesOrigin,
+            self.SRCFStrictGPSChecks,
             self.SRCFGroundLaneFollowsGPS,
             self.SRCFCoastingShown,
             self.SRCFDisabledRegression,
