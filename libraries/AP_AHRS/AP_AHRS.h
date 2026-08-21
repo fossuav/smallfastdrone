@@ -467,6 +467,9 @@ public:
     // move an EKF3 lane's reported position into the frame of the primary
     bool align_lane_position(uint8_t lane_index);
 
+    // true while an EKF3 lane's GPS quality checks are passing
+    bool get_lane_gps_good_to_align(uint8_t lane_index) const;
+
     // get health and filter status of a specific EKF3 lane
     bool get_lane_status(uint8_t lane_index, bool &lane_healthy, nav_filter_status &status) const;
 

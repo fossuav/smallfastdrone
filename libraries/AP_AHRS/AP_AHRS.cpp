@@ -3562,6 +3562,15 @@ bool AP_AHRS::get_lane_divergence_pos_sigma(uint8_t lane_index, float &pos_sigma
 #endif
 }
 
+bool AP_AHRS::get_lane_gps_good_to_align(uint8_t lane_index) const
+{
+#if HAL_NAVEKF3_AVAILABLE
+    return EKF3.getLaneGpsGoodToAlign(lane_index);
+#else
+    return false;
+#endif
+}
+
 // move an EKF3 lane's reported position into the frame of the primary
 bool AP_AHRS::align_lane_position(uint8_t lane_index)
 {
