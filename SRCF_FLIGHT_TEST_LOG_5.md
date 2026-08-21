@@ -527,6 +527,13 @@ overlap, and the gap between 9 and 15 is wide. It is not a coincidence
 of one site: a repeater re-broadcasts through an attenuating path, so
 only the strongest satellites survive it.
 
+**Wrong, and disproved in 5e.** Log 350 watched the same repeater climb
+from 8 satellites to 15-17 over a minute with the vehicle stationary
+indoors, and log 353 saw 27. Attenuation delays acquisition, it does not
+cap the count, so these three flights read low because their fixes were
+young. The table above measures how long each receiver had been
+acquiring. `SRCF_FIXQ_SATS` was built on this and is off by default.
+
 `EK3_CHECK_SCALE` cannot reach this. The satellite check is
 `gps.num_sats() < 6`, hardcoded and deliberately not scaled, so the one
 channel that separates cleanly is the one the EKF's own machinery has no
