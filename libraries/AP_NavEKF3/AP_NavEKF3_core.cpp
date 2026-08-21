@@ -1205,13 +1205,22 @@ void NavEKF3_core::CovariancePrediction(Vector3F *rotVarVecPtr)
             const uint8_t index = stateIndex - 13;
 
             // Don't attempt learning of IMU delta velocity bias if on ground.
-            // In flight: all axes are observable from velocity/position aiding.
+            // In flight with aiding: all axes are observable from velocity/position
+            // aiding.
+            // In flight without aiding (AID_NONE): the synthetic horizontal
+            // observations do not update the bias states (see FuseVelPosNED), so
+            // only a near-vertical axis is observable, from the height reference.
+            // If XY were left observable their variance would grow unconstrained
+            // and the tilt-coupled height innovation would be learned as an XY
+            // bias, tilting the level estimate (a baro dip in forward flight).
             // On ground and stationary: only the gravity-aligned axis (Z for a level
             // vehicle) is observable. XY biases remain unobservable until the vehicle
-            // accelerates horizontally in flight.
+            // accelerates horizontally in aided flight.
             // On ground and moving (e.g. carried or on a boat): inhibit all axes
             // to prevent learning biases from external motion accelerations.
-            const bool is_bias_observable = (fabsF(prevTnb[index][2]) > 0.8f && onGroundNotMoving) || !onGround;
+            const bool axisNearVertical = fabsF(prevTnb[index][2]) > 0.8f;
+            const bool is_bias_observable = (axisNearVertical && onGroundNotMoving) ||
+                                            (!onGround && (PV_AidingMode != AID_NONE || axisNearVertical));
 
             if (!is_bias_observable && !dvelBiasAxisInhibit[index]) {
                 // store variances to be reinstated wben learning can commence later
