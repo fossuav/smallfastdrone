@@ -3813,6 +3813,10 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "SIM_FLOW_ENABLE": 1,
             "FLOW_TYPE": 10,
             "SIM_TERRAIN": 0,
+            # SITL defaults to ten satellites, which no open sky produces:
+            # field logs 332, 333, 336 and 337 run 15-26. SRCF_FIXQ_SATS is
+            # measured against that, so the simulated fix has to be realistic
+            "SIM_GPS1_NUMSATS": 18,
             "SRCF_ENABLE": 1,
             # SRCF is written by WriteStreaming at exactly 10Hz, so the
             # suite-wide LOG_FILE_RATEMAX of 10 drops it on any jitter and
@@ -4373,9 +4377,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "AHRS_ORIGIN_LAT": start.lat + 0.0013,
             "AHRS_ORIGIN_LON": start.lng + 0.0015,
             "AHRS_ORIGIN_ALT": start.alt,
-            # SITL defaults to ten satellites, below the bar a fix has to
-            # clear; this is what an open sky looks like on the real vehicle
-            "SIM_GPS1_NUMSATS": 18,
             "SIM_GPS1_ENABLE": 0,
         })
         self.reboot_sitl()
@@ -4485,6 +4486,49 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if not waited:
             raise NotAchievedException(
                 "GPS lane never waited for its checks; JammingExpected is still inert")
+
+    def SRCFFirstFixNeedsSatellites(self):
+        '''a first fix on too few satellites is refused even when it agrees with the flow lane'''
+        # Field log 349 pinned the origin correctly, so the cross-lane offset
+        # at the first fix was 4.3 m against 1.2 m of sigma - 3.6 sigma,
+        # comfortably inside the bound - and the handover was authorised on
+        # that alone. The fix was a GPS repeater on seven satellites, and it
+        # dragged the vehicle 20 m in 20 s before the velocity detector caught
+        # it 61 s later.
+        #
+        # Nothing consulted the fix. Satellite count is what separates: a
+        # repeater never exceeded nine across logs 346, 347 and 349, while
+        # open sky never dropped below fifteen. So quality is a necessary
+        # condition on the handover, not just a bypass for a refused offset.
+        #
+        # No origin is set here on purpose. Without one the offset bound does
+        # not apply at all, so the satellite count is the only thing that can
+        # refuse the handover and the test cannot pass for the wrong reason.
+        self.configure_source_fallback_per_core()
+        self.set_parameters({
+            "SRCF_ENABLE": 2,
+            "SRCF_FIXQ_SATS": 12,
+            "SIM_GPS1_NUMSATS": 8,      # what a repeater looks like
+            "SIM_GPS1_ENABLE": 0,
+        })
+        self.reboot_sitl()
+        self.context_collect('STATUSTEXT')
+
+        self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=60, check_context=True)
+        self.takeoff(10, mode='LOITER', require_absolute=False)
+
+        self.progress("Acquiring a fix on 8 satellites")
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_statustext("staying on flow", timeout=120, check_context=True)
+        if self.statustext_in_collections("SRCF: GPS acquired, using GPS lane"):
+            raise NotAchievedException("handed over to a fix on 8 satellites")
+
+        self.progress("Same fix, now on 18 satellites")
+        self.set_parameter("SIM_GPS1_NUMSATS", 18)
+        self.wait_statustext("SRCF: GPS acquired, using GPS lane", timeout=120, check_context=True)
+        self.wait_statustext("EKF3 lane switch 0", timeout=10, check_context=True)
+
+        self.land_and_disarm(timeout=120)
 
     def SRCFGroundLaneFollowsGPS(self):
         '''at SRCF_ENABLE=2 the lane armed on follows GPS availability while disarmed, both ways'''
@@ -18864,6 +18908,7 @@ return update, 1000
             self.SRCFFixQualityOverridesOrigin,
             self.SRCFStrictGPSChecks,
             self.SRCFJammingExpectedWaitsForChecks,
+            self.SRCFFirstFixNeedsSatellites,
             self.SRCFGroundLaneFollowsGPS,
             self.SRCFCoastingShown,
             self.SRCFDisabledRegression,
