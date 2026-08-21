@@ -3562,15 +3562,6 @@ bool AP_AHRS::get_lane_divergence_pos_sigma(uint8_t lane_index, float &pos_sigma
 #endif
 }
 
-bool AP_AHRS::get_lane_walk_check(uint8_t lane_index, float &pos_innov_m, float &speed_ms) const
-{
-#if HAL_NAVEKF3_AVAILABLE
-    return EKF3.getLaneWalkCheck(lane_index, pos_innov_m, speed_ms);
-#else
-    return false;
-#endif
-}
-
 bool AP_AHRS::get_lane_gps_good_to_align(uint8_t lane_index) const
 {
 #if HAL_NAVEKF3_AVAILABLE

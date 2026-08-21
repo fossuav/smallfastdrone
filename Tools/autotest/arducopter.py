@@ -4028,11 +4028,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "SRCF_VEL_THR": 1.6,
             "SRCF_POSR_THR": 1.9,
             "SRCF_POSD_NSIG": 0,    # the shipped default
-            # A position-only walk is exactly what the innovation detector
-            # sees, and it confirms first, which leaves this test's counters at
-            # zero and nothing to assert. Off here so the subject of the test
-            # is the detector it names.
-            "SRCF_INNOV_THR": 0,
         })
         self.context_collect('STATUSTEXT')
 
@@ -4532,59 +4527,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("SIM_GPS1_NUMSATS", 18)
         self.wait_statustext("SRCF: GPS acquired, using GPS lane", timeout=120, check_context=True)
         self.wait_statustext("EKF3 lane switch 0", timeout=10, check_context=True)
-
-        self.land_and_disarm(timeout=120)
-
-    def SRCFWalkingFixRefused(self):
-        '''a fix whose own innovation says it is walking is refused'''
-        # GPS takes seconds to settle where optical flow and a rangefinder are
-        # effectively instant, so the flow lane knows the truth first. A
-        # manoeuvring vehicle grows the GPS lane's position innovation through
-        # lag alone, but innovation while the flow lane reports the vehicle
-        # still is the fix walking rather than the vehicle.
-        #
-        # Measured over nine field flights with the flow lane under 0.5 m/s:
-        # open sky sits at 0.06-0.14 m at the 95th percentile, a GPS repeater
-        # indoors at 2.5-6.8 m. In log 346 it passed 2 m at 92.7 s - 74 s
-        # before the handover it should have refused, and 76 s before the wall.
-        #
-        # SIM_GPS1_SPOOF mode 1 walks the reported position and leaves reported
-        # velocity alone, which is the inconsistency the repeater produced:
-        # position moving at 0.6 m/s while velocity said 0.2. A stepped glitch
-        # will not do - each tread spikes the innovation and the filter tracks
-        # it out before the next, which drops the vote again.
-        self.configure_source_fallback_per_core()
-        self.set_parameters({
-            "SRCF_ENABLE": 2,
-            "SRCF_INNOV_THR": 1.0,
-            # The detector only sees a walking fix on the bounded-update path.
-            # Above zero the filter resets position onto the fix instead, which
-            # saws the innovation off before it can build - measured at 2.29,
-            # 0.86, 1.29, 0.26 m under a steady walk. All nine field flights
-            # this was measured on fly 0.
-            "EK3_GLITCH_RAD": 0,
-            "SIM_GPS1_ENABLE": 0,
-        })
-        self.reboot_sitl()
-        self.context_collect('STATUSTEXT')
-
-        self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=60, check_context=True)
-        self.takeoff(10, mode='LOITER', require_absolute=False)
-
-        self.progress("Acquiring a fix that walks under a stationary vehicle")
-        self.set_parameters({
-            "SIM_GPS1_SPOOF": 1,
-            "SIM_GPS1_SPOOF_R": 1.5,
-            "SIM_GPS1_ENABLE": 1,
-        })
-
-        self.wait_statustext("staying on flow", timeout=180, check_context=True)
-        if self.statustext_in_collections("SRCF: GPS acquired, using GPS lane"):
-            raise NotAchievedException("handed over to a fix that was walking")
-
-        self.progress("Fix settles, handover allowed")
-        self.set_parameter("SIM_GPS1_SPOOF", 0)
-        self.wait_statustext("SRCF: GPS acquired, using GPS lane", timeout=180, check_context=True)
 
         self.land_and_disarm(timeout=120)
 
@@ -18967,7 +18909,6 @@ return update, 1000
             self.SRCFStrictGPSChecks,
             self.SRCFJammingExpectedWaitsForChecks,
             self.SRCFFirstFixNeedsSatellites,
-            self.SRCFWalkingFixRefused,
             self.SRCFGroundLaneFollowsGPS,
             self.SRCFCoastingShown,
             self.SRCFDisabledRegression,

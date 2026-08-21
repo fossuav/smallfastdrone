@@ -44,10 +44,6 @@
 // airborne worst of 2.05. Without a floor the gate collapses on the ground
 // and the detector is most likely to false trip where it is least useful.
 #define SRCF_POSD_MIN_SIGMA         2.0f
-// Flow-lane speed under which the vehicle counts as holding station, so that
-// the GPS lane's innovation can be read as the fix moving rather than the
-// vehicle. Field logs put a hovering vehicle's flow lane well inside this.
-#define SRCF_INNOV_STILL_MS         0.5f
 
 static const uint8_t SRCF_GPS_LANE = 0;     // lane running EK3_SRC1 (GPS)
 static const uint8_t SRCF_FLOW_LANE = 1;    // lane running EK3_SRC2 (optical flow)
@@ -66,7 +62,6 @@ static struct {
     bool align_pending;         // pull the flow lane into the GPS lane's frame once the switch lands
     bool origin_before_arming;  // an origin existed before takeoff, so both lanes share an earth frame
     uint32_t fix_good_since_ms; // time the GPS fix first met SRCF_FIXQ_* continuously
-    uint16_t innov_vote;        // walking-fix confirmation vote
     uint8_t ground_lane_count;  // consecutive ticks the armed-on lane choice has differed
     uint8_t gps_bad_count;
     uint8_t flow_bad_count;
@@ -91,7 +86,6 @@ static void srcf_reset_detectors()
     srcf_state.vel_vote = 0;
     srcf_state.pos_vote = 0;
     srcf_state.pos_off_vote = 0;
-    srcf_state.innov_vote = 0;
     srcf_state.hist_idx = 0;
     srcf_state.hist_count = 0;
     srcf_state.recovery_start_ms = 0;
@@ -105,19 +99,6 @@ static void srcf_reset_detectors()
 // Say so once the offset bound alone has held the handover off for as long as
 // the handover itself would have taken, so the message means "this would have
 // switched by now".
-// the same, for a fix whose own innovation says it is walking
-static void srcf_walking_block_warn(uint32_t now_ms, uint32_t hold_ms, float innov)
-{
-    if (srcf_state.offset_block_ms == 0) {
-        srcf_state.offset_block_ms = now_ms;
-    } else if (!srcf_state.offset_warned &&
-               (now_ms - srcf_state.offset_block_ms > hold_ms)) {
-        srcf_state.offset_warned = true;
-        gcs().send_text(MAV_SEVERITY_WARNING, "SRCF: GPS walking %.1fm, staying on flow",
-                        (double)innov);
-    }
-}
-
 // the same, for a fix refused on its satellite count. Silence is what made
 // log 348 hard to read from the cockpit, so a refusal always says why
 static void srcf_sats_block_warn(uint32_t now_ms, uint32_t hold_ms, uint8_t sats)
@@ -362,28 +343,6 @@ void Copter::source_fallback_update()
                              (srcf_state.fix_good_since_ms != 0) &&
                              (now_ms - srcf_state.fix_good_since_ms >= (uint32_t)(g2.srcf_fixq_time * 1000));
 
-    // The GPS lane's own innovation says its measurement is walking away from
-    // its prediction. On a manoeuvring vehicle that is just GPS lag, but the
-    // flow lane has none, so innovation while the flow lane reports the
-    // vehicle still is the fix moving rather than the vehicle. Unlike the
-    // cross-lane tests this needs no common frame and no origin, and it works
-    // before the handover as well as after - which is where it earns its
-    // keep: in field log 346 it was above 2m from 92.7s, 74s before the
-    // handover and 76s before the wall.
-    float lane_innov = 0.0f;
-    float flow_speed = 0.0f;
-    float unused = 0.0f;
-    const bool innov_valid = is_positive(g2.srcf_innov_thr) &&
-                             ahrs.get_lane_walk_check(SRCF_GPS_LANE, lane_innov, unused) &&
-                             ahrs.get_lane_walk_check(SRCF_FLOW_LANE, unused, flow_speed);
-    const bool fix_walking = innov_valid && (flow_speed < SRCF_INNOV_STILL_MS) &&
-                             (lane_innov > g2.srcf_innov_thr);
-    if (fix_walking) {
-        srcf_state.innov_vote = MIN(srcf_state.innov_vote + 1, (uint16_t)MAX(1, (int)(g2.srcf_cnf_time * 10)));
-    } else if (srcf_state.innov_vote > 0) {
-        srcf_state.innov_vote--;
-    }
-
     // one vote integrator per signal: a divergence must persist on the same
     // signal for SRCF_CNF_TIME. A single counter fed by both lets a decaying
     // signal hand over to a rising one and confirm on neither alone.
@@ -413,8 +372,7 @@ void Copter::source_fallback_update()
     case LaneState::GPS_PRIMARY: {
         const bool spoof_confirmed = (srcf_state.vel_vote >= vote_max) ||
                                      (srcf_state.pos_vote >= vote_max) ||
-                                     (srcf_state.pos_off_vote >= vote_max) ||
-                                     (srcf_state.innov_vote >= vote_max);
+                                     (srcf_state.pos_off_vote >= vote_max);
         if ((spoof_confirmed || gps_bad) && flow_usable) {
             if (source_fallback_command_lane(SRCF_FLOW_LANE)) {
                 if (spoof_confirmed) {
@@ -466,9 +424,7 @@ void Copter::source_fallback_update()
                                        (pos_div < SRCF_RECOV_POS_NSIGMA * pos_sigma);
             const bool offset_ok = !srcf_state.origin_before_arming || offset_agrees || fix_trusted;
 
-            if (gps_lane_usable && srcf_state.innov_vote >= vote_max) {
-                srcf_walking_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000), lane_innov);
-            } else if (gps_lane_usable && !fix_acceptable) {
+            if (gps_lane_usable && !fix_acceptable) {
                 srcf_sats_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000), gps.num_sats());
             } else if (gps_lane_usable && div_ok && !offset_ok) {
                 srcf_offset_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000), pos_div, "acquired");
@@ -481,8 +437,7 @@ void Copter::source_fallback_update()
             // was right and the repeater agreed with it at that instant - and
             // the repeater then dragged the vehicle 20m before the velocity
             // detector caught it 61s later.
-            if (gps_lane_usable && fix_acceptable && offset_ok &&
-                srcf_state.innov_vote < vote_max) {
+            if (gps_lane_usable && fix_acceptable && offset_ok) {
                 if (srcf_state.recovery_start_ms == 0) {
                     srcf_state.recovery_start_ms = now_ms;
                 }

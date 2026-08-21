@@ -1256,23 +1256,6 @@ bool NavEKF3::getLaneDivergencePosSigma(uint8_t lane_index, float &pos_sigma_m) 
     return true;
 }
 
-bool NavEKF3::getLaneWalkCheck(uint8_t lane_index, float &pos_innov_m, float &speed_ms) const
-{
-    if (core == nullptr || lane_index >= num_cores) {
-        return false;
-    }
-    Vector3f velInnov, posInnov, magInnov;
-    float tasInnov, yawInnov;
-    if (!core[lane_index].getInnovations(velInnov, posInnov, magInnov, tasInnov, yawInnov)) {
-        return false;
-    }
-    Vector3f vel;
-    core[lane_index].getVelNED(vel);
-    pos_innov_m = posInnov.xy().length();
-    speed_ms = vel.xy().length();
-    return true;
-}
-
 bool NavEKF3::otherLaneDeadReckoning(uint8_t exclude_core) const
 {
     if (core == nullptr) {
