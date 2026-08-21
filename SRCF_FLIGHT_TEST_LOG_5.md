@@ -726,6 +726,51 @@ Not built. Needs a per-lane innovation accessor, the same shape as the
 divergence and sigma ones, and the benign side rests on four open-sky
 flights.
 
+## 5h: the innovation detector was built on a stale number - logs 351, 352
+
+Log 351 flew 390 s on flow with GPS never enabled and ended with
+`SRCF: no nav source, AltHold`, so the flow lane gave out rather than the
+monitor. Log 352 flew the detector from 5g and handed over anyway.
+
+The measurement 5g was built on is wrong. `innovVelPos[3]` and `[4]` are
+written only inside `if (fusePosData)` in `FuseVelPosNED`, so a lane that
+is not fusing position holds whatever it last had - and the GPS lane is
+not fusing before it takes GPS up, which is exactly the window the "74 s
+before the handover" was measured over. It was reading leftovers.
+
+Restricted to samples where the lane really is fusing, the separation
+does survive:
+
+| | open sky (332, 333, 336, 337) | repeater (346, 347, 350, 352) |
+|---|---|---|
+| p50 | 0.02-0.04 | 0.09-1.58 |
+| p95 | 0.06-0.14 | 0.55-7.03 |
+
+but the lead time does not. Against the velocity detector already in the
+monitor:
+
+| log | innovation over 1 m sustained 2 s | `VD` trip | |
+|---|---|---|---|
+| 352 | 166.4 s | 161.3 s | 5.1 s later |
+| 350 | 254.9 s | 250.6 s | 4.3 s later |
+| 346 | 166.8 s | 168.8 s | 2.0 s earlier |
+
+Slower than what exists in two cases of three. And it cannot gate the
+handover at all: before acquisition the innovation is stale, and at
+acquisition the lane resets position onto the fix, so it starts from
+zero however wrong that fix is. Log 352 shows it directly - 2.5-3.6 m
+while stale, collapsing to 0.08 m at 106.5 s and staying under 0.25 m
+through the handover at 112.7 s. Reverted.
+
+The lesson is the one this file keeps relearning in different clothes. A
+logged field is not a measurement until you know when it is written.
+`XKF3` looks like a continuous trace and is a sample-and-hold, and
+nothing in the log says which. The check that would have caught it is
+the same one that caught the replay artifact: reproduce something known
+first. Had the detector been replayed against the flights it was fitted
+to, the reset at acquisition would have shown up before any code was
+written.
+
 ## Still open
 
 1. The gate has never passed a fix. Three field flights and the SITL
