@@ -771,6 +771,60 @@ first. Had the detector been replayed against the flights it was fitted
 to, the reset at acquisition would have shown up before any code was
 written.
 
+## 5i: how tight the switchover timing actually is
+
+The switch itself is not the problem. In log 346 the spoof statustext is
+at 173.6865 and `EKF3 lane switch 1` at 173.6909 - **4.4 ms**. Everything
+else is detection.
+
+**The real detections tripped with one vote of margin.** Replaying the
+vote integrator over the logs reproduces the firmware's own counters
+exactly - logged `VVot` peaks of 19, 19 and 10 on logs 349, 350 and 352
+against replayed 19, 19 and 10 - and 19 of 20 means those trips happened
+by a single sample, 0.1 s. A slightly shorter excursion misses entirely.
+Getting that agreement needs the session 2 artifact modelled: the
+firmware votes, then switches, then logs, so the tick completing a trip
+carries the new state and a replay filtering on `St` is one short.
+
+Trips per flight against `SRCF_CNF_TIME`, six outdoor benign flights and
+the indoor set:
+
+| | 0.5 s | 1.0 s | 1.5 s | 2.0 s |
+|---|---|---|---|---|
+| outdoor benign, 6 flights | 1 flight trips | 1 flight trips | none | none |
+| logs 349, 350 | 3, 3 | 1, 1 | 1, 1 | at the edge |
+| log 352 | 2 | 1 | - | at the edge |
+
+So 1.5 s is where the detections gain margin without a benign flight
+tripping. It is worth having for the cases where detection is the
+mechanism, which is logs 349, 350 and 352 - each had thirty seconds to a
+minute in hand.
+
+**It does not rescue log 346, and neither does the mute.** That failure
+ran from handover to wall in 2.1 s, and the 5 s post-switch mute covers
+all of it, so the obvious move is to exempt `VD` from the mute:
+`alignLanePosition` shifts position states and output history, not
+velocity, so a velocity difference means the same thing either side of a
+switch. Recomputing `VD` from both lanes' `XKF1` velocities through that
+muted window says it would not have helped:
+
+| t (s) | `VD` | |
+|---|---|---|
+| 166.7 | 0.22 | handover |
+| 168.8 | 0.65 | impact |
+| 171.0 | 1.87 | first above 1.6 |
+
+`VD` was 0.65 at the moment of impact and did not cross the threshold
+until 2.2 s after it. Both lanes see a vehicle accelerating from rest
+and agree about it; the disagreement only builds as the GPS lane's
+estimate diverges, which took 4.3 s.
+
+So cross-lane velocity divergence is structurally too slow for a
+two-second failure, and no confirmation time or mute change rescues it.
+What prevents that class is not detecting faster but not handing over -
+which is the offset bound, and it postdates the flight it would have
+saved.
+
 ## Still open
 
 1. The gate has never passed a fix. Three field flights and the SITL
