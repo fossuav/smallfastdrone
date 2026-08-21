@@ -1305,6 +1305,14 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Range: 0 10
     // @User: Advanced
     AP_GROUPINFO("SRCF_POSD_NSIG", 37, ParametersG2, srcf_posd_nsig, 0),
+
+    // @Param: SRCF_FIXQ_TIME
+    // @DisplayName: EKF source fallback fix quality time
+    // @Description: Seconds a GPS fix must continuously satisfy the EKF's own GPS quality checks (EK3_GPS_CHECK) while reporting at least 12 satellites and 1m horizontal accuracy before the first fix of a GPS-free arm is accepted despite disagreeing with the flow lane. A large disagreement means either the fix or the origin is wrong, and a fix of that quality is evidence it is the origin, which is what allows a vehicle to arm indoors on an approximate origin and take up GPS after flying outside. A synthesised spoof can report good quality, so this does not protect against one; what it bypasses is the offset bound alone, and the velocity, rate and offset detectors all resume once the GPS lane is primary. 0 requires the offset bound in all cases.
+    // @Units: s
+    // @Range: 0 120
+    // @User: Advanced
+    AP_GROUPINFO("SRCF_FIXQ_TIME", 38, ParametersG2, srcf_fixq_time, 30),
 #endif
 
     // @Param: FS_ALTH_TMO

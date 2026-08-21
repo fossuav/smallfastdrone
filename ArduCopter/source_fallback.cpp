@@ -44,6 +44,14 @@
 // airborne worst of 2.05. Without a floor the gate collapses on the ground
 // and the detector is most likely to false trip where it is least useful.
 #define SRCF_POSD_MIN_SIGMA         2.0f
+// Bars a fix must clear, alongside the EKF's own GPS checks, to be trusted
+// against a suspect origin. Set from the field: across logs 346 and 347 a GPS
+// repeater indoors never produced a single sample meeting these while the
+// filter's checks passed, and log 348 held them for 132s once outside. They
+// are constants rather than parameters because the separation is total at
+// these values and there is nothing to tune between.
+#define SRCF_FIXQ_MIN_SATS          12
+#define SRCF_FIXQ_MAX_HACC          1.0f
 
 static const uint8_t SRCF_GPS_LANE = 0;     // lane running EK3_SRC1 (GPS)
 static const uint8_t SRCF_FLOW_LANE = 1;    // lane running EK3_SRC2 (optical flow)
@@ -61,6 +69,7 @@ static struct {
     bool switch_warned;         // lane switch command failed warning sent
     bool align_pending;         // pull the flow lane into the GPS lane's frame once the switch lands
     bool origin_before_arming;  // an origin existed before takeoff, so both lanes share an earth frame
+    uint32_t fix_good_since_ms; // time the GPS fix first met SRCF_FIXQ_* continuously
     uint8_t ground_lane_count;  // consecutive ticks the armed-on lane choice has differed
     uint8_t gps_bad_count;
     uint8_t flow_bad_count;
@@ -90,6 +99,7 @@ static void srcf_reset_detectors()
     srcf_state.recovery_start_ms = 0;
     srcf_state.offset_block_ms = 0;
     srcf_state.offset_warned = false;
+    srcf_state.fix_good_since_ms = 0;
 }
 
 // A receiver sitting in the wrong place is otherwise indistinguishable from
@@ -304,6 +314,26 @@ void Copter::source_fallback_update()
     const bool pos_sigma_valid = ahrs.get_lane_divergence_pos_sigma(other_lane, pos_sigma) &&
                                  is_positive(pos_sigma);
 
+    // A disagreement between the lanes says one of the fix and the origin is
+    // wrong, and the offset alone cannot say which: field log 348 refused a
+    // fix holding 18 satellites at 0.22m because the recorded origin was 39m
+    // out. Track how long the fix has been better than a repeater can manage
+    // while the filter's own GPS checks pass, and let that stand in for the
+    // origin being the faulty term.
+    float fix_hacc = 0.0f;
+    const bool fix_quality_good = ahrs.get_lane_gps_good_to_align(SRCF_GPS_LANE) &&
+                                  (gps.num_sats() >= SRCF_FIXQ_MIN_SATS) &&
+                                  gps.horizontal_accuracy(fix_hacc) &&
+                                  (fix_hacc <= SRCF_FIXQ_MAX_HACC);
+    if (!fix_quality_good) {
+        srcf_state.fix_good_since_ms = 0;
+    } else if (srcf_state.fix_good_since_ms == 0) {
+        srcf_state.fix_good_since_ms = now_ms;
+    }
+    const bool fix_trusted = is_positive(g2.srcf_fixq_time) &&
+                             (srcf_state.fix_good_since_ms != 0) &&
+                             (now_ms - srcf_state.fix_good_since_ms >= (uint32_t)(g2.srcf_fixq_time * 1000));
+
     // one vote integrator per signal: a divergence must persist on the same
     // signal for SRCF_CNF_TIME. A single counter fed by both lets a decaying
     // signal hand over to a rising one and confirm on neither alone.
@@ -381,9 +411,9 @@ void Copter::source_fallback_update()
             // lanes 25.8m apart at 10-15 sigma for the whole hold on a GPS
             // repeater, took the handover unchallenged and flew into a wall
             // 2.1s later. The velocity and rate detectors saw none of it.
-            const bool offset_ok = !srcf_state.origin_before_arming ||
-                                   (div_ok && pos_sigma_valid &&
-                                    (pos_div < SRCF_RECOV_POS_NSIGMA * pos_sigma));
+            const bool offset_agrees = div_ok && pos_sigma_valid &&
+                                       (pos_div < SRCF_RECOV_POS_NSIGMA * pos_sigma);
+            const bool offset_ok = !srcf_state.origin_before_arming || offset_agrees || fix_trusted;
 
             if (gps_lane_usable && div_ok && !offset_ok) {
                 srcf_offset_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000), pos_div, "acquired");
@@ -399,6 +429,12 @@ void Copter::source_fallback_update()
                     if (source_fallback_command_lane(SRCF_GPS_LANE)) {
                         srcf_state.align_pending = true;
                         srcf_state.lane_state = LaneState::GPS_PRIMARY;
+                        // taken on the fix rather than on agreement means the
+                        // origin is wrong by that much, and so is home
+                        if (!offset_agrees) {
+                            gcs().send_text(MAV_SEVERITY_WARNING, "SRCF: origin %.0fm out, trusting fix",
+                                            (double)pos_div);
+                        }
                         gcs().send_text(MAV_SEVERITY_CRITICAL, "SRCF: GPS acquired, using GPS lane");
                     }
                 }
@@ -476,7 +512,10 @@ void Copter::source_fallback_update()
     // @Field: GpsB: GPS receiver loss confirmed
     // @Field: FlwU: flow lane usable
     // @Field: GpsL: GPS lane usable
-    AP::logger().WriteStreaming("SRCF", "TimeUS,St,GU,VD,PD,PR,VVot,PVot,OVot,VSig,PSig,GpsB,FlwU,GpsL", "QBBfffHHHffBBB",
+    // @Field: Q: GPS fix meets SRCF_FIXQ_* and the EKF's own GPS checks
+    // the field is named Q rather than FixQ because LogStructure caps the
+    // labels string at 64 bytes and the existing names already fill 61
+    AP::logger().WriteStreaming("SRCF", "TimeUS,St,GU,VD,PD,PR,VVot,PVot,OVot,VSig,PSig,GpsB,FlwU,GpsL,Q", "QBBfffHHHffBBBB",
                                 AP_HAL::micros64(),
                                 (uint8_t)srcf_state.lane_state,
                                 (uint8_t)srcf_state.gps_untrusted,
@@ -488,7 +527,8 @@ void Copter::source_fallback_update()
                                 (double)pos_sigma,
                                 (uint8_t)gps_bad,
                                 (uint8_t)flow_usable,
-                                (uint8_t)gps_lane_usable);
+                                (uint8_t)gps_lane_usable,
+                                (uint8_t)fix_quality_good);
 #endif
 }
 
