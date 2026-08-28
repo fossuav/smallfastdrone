@@ -50,6 +50,35 @@ bool AP_CheckFirmware::all_zero_keys(const struct ap_secure_data *sec_data)
     return true;
 }
 
+/*
+  find the identity region in the bootloader, or return NULL if the
+  bootloader was built without one
+ */
+const struct ap_identity_data *AP_CheckFirmware::find_identity(void)
+{
+    const struct ap_secure_data *sec_data = find_public_keys();
+    if (sec_data == nullptr) {
+        return nullptr;
+    }
+    const uint8_t sig[] = AP_IDENTITY_SIGNATURE;
+    if (memcmp(sec_data->identity.sig, sig, sizeof(sig)) != 0) {
+        return nullptr;
+    }
+    return &sec_data->identity;
+}
+
+/*
+  return true if an identity private key has been written
+ */
+bool AP_CheckFirmware::identity_is_set(const struct ap_identity_data *identity)
+{
+    if (identity == nullptr) {
+        return false;
+    }
+    const uint8_t zero_key[AP_IDENTITY_KEY_LEN] {};
+    return memcmp(identity->private_key, zero_key, AP_IDENTITY_KEY_LEN) != 0;
+}
+
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
 /*
@@ -260,6 +289,39 @@ bool AP_CheckFirmware::set_public_keys(uint8_t key_idx, uint8_t num_keys, const 
     memset(sec_data->public_key[max_keys-1].key, 0, AP_PUBLIC_KEY_LEN*(AP_PUBLIC_KEY_MAX_KEYS-max_keys));
 
     bool ret = write_bootloader(bld);
+    delete bld;
+    return ret;
+}
+
+/*
+  write the identity private key into the bootloader. Write-once: a
+  second write would orphan every applet encrypted to the first key
+ */
+bool AP_CheckFirmware::set_identity(const uint8_t private_key[AP_IDENTITY_KEY_LEN])
+{
+    const uint8_t zero_key[AP_IDENTITY_KEY_LEN] {};
+    if (memcmp(private_key, zero_key, AP_IDENTITY_KEY_LEN) == 0 ||
+        identity_is_set(find_identity())) {
+        return false;
+    }
+    auto *bld = read_bootloader();
+    if (bld == nullptr) {
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Failed to load bootloader into memory");
+        return false;
+    }
+    const uint8_t key[] = AP_PUBLIC_KEY_SIGNATURE;
+    const uint8_t sig[] = AP_IDENTITY_SIGNATURE;
+    struct ap_secure_data *sec_data = (struct ap_secure_data *)memmem(bld->data1, bld->length1, key, sizeof(key));
+    if (sec_data == nullptr || memcmp(sec_data->identity.sig, sig, sizeof(sig)) != 0) {
+        delete bld;
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Failed to find identity signature");
+        return false;
+    }
+    memcpy(sec_data->identity.private_key, private_key, AP_IDENTITY_KEY_LEN);
+
+    bool ret = write_bootloader(bld);
+    // the key now lives only in flash; don't leave a copy in the heap
+    crypto_wipe(sec_data->identity.private_key, AP_IDENTITY_KEY_LEN);
     delete bld;
     return ret;
 }

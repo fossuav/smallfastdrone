@@ -112,12 +112,32 @@ static_assert(sizeof(app_descriptor_signed) == APP_DESCRIPTOR_SIGNED_TOTAL_LENGT
 #define AP_PUBLIC_KEY_MAX_KEYS 10
 #define AP_PUBLIC_KEY_SIGNATURE {0x4e, 0xcf, 0x4e, 0xa5, 0xa6, 0xb6, 0xf7, 0x29}
 
+#define AP_IDENTITY_KEY_LEN 32
+#define AP_IDENTITY_SIGNATURE {0x9d, 0x2b, 0x7e, 0x11, 0xc4, 0x58, 0xa3, 0x6f}
+
+/*
+  per-drone identity: an X25519 private key generated on the board and
+  never emitted. It lives outside public_key[] so that no key command
+  can read, move or overwrite it, and carries its own signature so a
+  bootloader built without the region is not mistaken for one holding
+  a key. All zero means no identity has been written
+ */
+struct PACKED ap_identity_data {
+    uint8_t sig[8] = AP_IDENTITY_SIGNATURE;
+    uint8_t private_key[AP_IDENTITY_KEY_LEN] = {};
+};
+
 struct PACKED ap_secure_data {
     uint8_t sig[8] = AP_PUBLIC_KEY_SIGNATURE;
     struct PACKED {
         uint8_t key[AP_PUBLIC_KEY_LEN] = {};
     } public_key[AP_PUBLIC_KEY_MAX_KEYS];
+    // last, so the signing tools that patch public_key[] in place never reach it
+    struct ap_identity_data identity;
 };
+
+#define AP_SECURE_DATA_TOTAL_LENGTH (8 + AP_PUBLIC_KEY_MAX_KEYS*AP_PUBLIC_KEY_LEN + 8 + AP_IDENTITY_KEY_LEN)
+static_assert(sizeof(ap_secure_data) == AP_SECURE_DATA_TOTAL_LENGTH, "ap_secure_data incorrect length");
 #endif
 
 #ifdef HAL_BOOTLOADER_BUILD
@@ -135,6 +155,13 @@ public:
     static bool check_signature(const mavlink_secure_command_t &pkt);
 #endif
     static const struct ap_secure_data *find_public_keys(void);
+#if AP_SIGNED_FIRMWARE
+    // identity region in the bootloader, nullptr if the bootloader has none
+    static const struct ap_identity_data *find_identity(void);
+    static bool identity_is_set(const struct ap_identity_data *identity);
+    // write-once: refused if an identity already exists or the key is all zero
+    static bool set_identity(const uint8_t private_key[AP_IDENTITY_KEY_LEN]);
+#endif
 
     /*
       in memory structure representing the current bootloader. It has two
