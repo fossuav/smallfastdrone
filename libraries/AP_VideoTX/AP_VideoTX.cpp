@@ -94,26 +94,15 @@ const AP_Param::GroupInfo AP_VideoTX::var_info[] = {
 
 extern const AP_HAL::HAL& hal;
 
-const char * AP_VideoTX::band_names[] = {"A","B","E","F","R","L","1G3_A","1G3_B","X","3G3_A","3G3_B"};
+// the historical hardcoded band/frequency grid and band-name list now live in
+// AP_VideoTX_Table (as the seeded defaults); band/channel -> frequency resolves
+// through the active table (see get_frequency_mhz / get_band_and_channel below).
 
-const uint16_t AP_VideoTX::VIDEO_CHANNELS[AP_VideoTX::MAX_BANDS][VTX_MAX_CHANNELS] =
-{
-    { 5865, 5845, 5825, 5805, 5785, 5765, 5745, 5725}, /* Band A */
-    { 5733, 5752, 5771, 5790, 5809, 5828, 5847, 5866}, /* Band B */
-    { 5705, 5685, 5665, 5645, 5885, 5905, 5925, 5945}, /* Band E */
-    { 5740, 5760, 5780, 5800, 5820, 5840, 5860, 5880}, /* Airwave */
-    { 5658, 5695, 5732, 5769, 5806, 5843, 5880, 5917}, /* Race */
-    { 5362, 5399, 5436, 5473, 5510, 5547, 5584, 5621}, /* LO Race */
-    { 1080, 1120, 1160, 1200, 1240, 1280, 1320, 1360}, /* Band 1G3_A */
-    { 1080, 1120, 1160, 1200, 1258, 1280, 1320, 1360}, /* Band 1G3_B */
-    { 4990, 5020, 5050, 5080, 5110, 5140, 5170, 5200}, /* Band X */
-    { 3330, 3350, 3370, 3390, 3410, 3430, 3450, 3470}, /* Band 3G3_A */
-    { 3170, 3190, 3210, 3230, 3250, 3270, 3290, 3310}  /* Band 3G3_B */
-};
-
-// mapping of power level to milliwatt to dbm
-// valid power levels from SmartAudio spec, the adjacent levels might be the actual values
-// so these are marked as level + 0x10 and will be switched if a dbm message proves it
+// Compile-time seed for the selectable-power cache. init() overwrites this from
+// the @VTX table via load_power_levels_from_table() (which derives dbm/dac from
+// each level's mW), so these values only apply before the table loads and to
+// slots the table does not define. The @VTX table is the single source of truth
+// for the selectable power set - power levels are no longer learned at runtime.
 AP_VideoTX::PowerLevel AP_VideoTX::_power_levels[VTX_MAX_POWER_LEVELS] = {
     // level, mw, dbm, dac
     { 0xFF,  0,    0, 0    }, // only in SA 2.1
@@ -137,6 +126,10 @@ AP_VideoTX::AP_VideoTX()
     singleton = this;
 
     AP_Param::setup_object_defaults(this, var_info);
+
+    // seed the band/frequency + power table with the historical defaults so
+    // band/channel lookups work before (and if no) a stored table is loaded
+    _table.load_defaults();
 }
 
 AP_VideoTX::~AP_VideoTX(void)
@@ -152,6 +145,12 @@ bool AP_VideoTX::init(void)
 
     // PARAMETER_CONVERSION - Added: Sept-2022
     _options.convert_parameter_width(AP_PARAM_INT16);
+
+    // load the stored band/frequency + power table, or persist the seeded
+    // defaults on first boot (falls back to RAM defaults on small-storage boards)
+    _table.init();
+    // seed the selectable power set from the table before resolving _power_mw
+    load_power_levels_from_table();
 
     // find the index into the power table
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
@@ -177,16 +176,24 @@ bool AP_VideoTX::init(void)
     return true;
 }
 
+// band/channel (zero-based) -> frequency in MHz via the active table
+uint16_t AP_VideoTX::get_frequency_mhz(uint8_t band, uint8_t channel)
+{
+    if (singleton == nullptr) {
+        return 0;
+    }
+    return singleton->_table.frequency(band, channel);
+}
+
 bool AP_VideoTX::get_band_and_channel(uint16_t freq, VideoBand& band, uint8_t& channel)
 {
-    for (uint8_t i = 0; i < AP_VideoTX::MAX_BANDS; i++) {
-        for (uint8_t j = 0; j < VTX_MAX_CHANNELS; j++) {
-            if (VIDEO_CHANNELS[i][j] == freq) {
-                band = VideoBand(i);
-                channel = j;
-                return true;
-            }
-        }
+    if (singleton == nullptr) {
+        return false;
+    }
+    uint8_t b;
+    if (singleton->_table.band_and_channel_for_frequency(freq, b, channel)) {
+        band = VideoBand(b);
+        return true;
     }
     return false;
 }
@@ -207,101 +214,134 @@ uint8_t AP_VideoTX::find_current_power() const
     return 0;
 }
 
-// set the power in dbm, rounding appropriately
-void AP_VideoTX::set_power_dbm(uint8_t power, PowerActive active)
+// SmartAudio v1 DAC value for the standard mW levels, 0xFF (unknown) otherwise
+static uint8_t dac_for_mw(uint16_t mw)
 {
-    if (power == _power_levels[_current_power].dbm
-        && _power_levels[_current_power].active == active) {
-        return;
+    switch (mw) {
+    case 25:  return 7;
+    case 200: return 16;
+    case 500: return 25;
+    case 800: return 40;
+    default:  return 0xFF;
     }
-
-    for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
-        if (power == _power_levels[i].dbm) {
-            _current_power = i;
-            _power_levels[i].active = active;
-            debug("learned power %ddbm", power);
-            // now unlearn the "other" power level since we have no other way of guessing
-            // the supported levels
-            if ((_power_levels[i].level & 0xF0) == 0x10) {
-                _power_levels[i].level = _power_levels[i].level & 0xF;
-            }
-            if (i > 0 && _power_levels[i-1].level == _power_levels[i].level) {
-                debug("invalidated power %dwm, level %d is now %dmw", _power_levels[i-1].mw, _power_levels[i].level, _power_levels[i].mw);
-                _power_levels[i-1].level = 0xFF;
-                _power_levels[i-1].active = PowerActive::Inactive;
-            } else if (i < VTX_MAX_POWER_LEVELS-1 && _power_levels[i+1].level == _power_levels[i].level) {
-                debug("invalidated power %dwm, level %d is now %dmw", _power_levels[i+1].mw, _power_levels[i].level, _power_levels[i].mw);
-                _power_levels[i+1].level = 0xFF;
-                _power_levels[i+1].active = PowerActive::Inactive;
-            }
-            return;
-        }
-    }
-    // learn the non-standard power
-    _current_power = update_power_dbm(power, active);
 }
 
-// add an active power setting in dbm
-uint8_t AP_VideoTX::update_power_dbm(uint8_t power, PowerActive active)
+// rebuild the selectable power set from the user-defined power table so the
+// existing per-protocol send paths (Tramp mW, SmartAudio level/dbm/dac) and the
+// 6-position switch all operate over the table's levels. The table "value" is
+// treated as mW (Tramp-native); dbm/dac are derived for SmartAudio.
+void AP_VideoTX::load_power_levels_from_table()
 {
-    for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
-        if (power == _power_levels[i].dbm) {
-            if (_power_levels[i].active != active) {
-                _power_levels[i].active = active;
-                debug("%s power %ddbm", active == PowerActive::Active ? "learned" : "invalidated", power);
-            }
-            return i;
-        }
+    const uint8_t n = _table.num_power_levels();
+    if (n == 0) {
+        return;  // no user power table: keep the compiled learned defaults
     }
-    // handed a non-standard value, use the last slot
-    _power_levels[VTX_MAX_POWER_LEVELS-1].dbm = power;
-    _power_levels[VTX_MAX_POWER_LEVELS-1].level = 255;
-    _power_levels[VTX_MAX_POWER_LEVELS-1].dac = 255;
-    _power_levels[VTX_MAX_POWER_LEVELS-1].mw = uint16_t(roundf(powf(10, power * 0.1f)));
-    _power_levels[VTX_MAX_POWER_LEVELS-1].active = active;
-    debug("non-standard power %ddbm -> %dmw", power, _power_levels[VTX_MAX_POWER_LEVELS-1].mw);
-    return VTX_MAX_POWER_LEVELS-1;
-}
-
-// add all active power setting in dbm
-void AP_VideoTX::update_all_power_dbm(uint8_t nlevels, const uint8_t power[])
-{
-    for (uint8_t i = 0; i < nlevels; i++) {
-        update_power_dbm(power[i], PowerActive::Active);
-    }
-    // invalidate the remaining ones
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
-        if (_power_levels[i].active == PowerActive::Unknown) {
+        if (i < n) {
+            const uint16_t mw = _table.power_value(i);
+            _power_levels[i].mw = mw;
+            _power_levels[i].dbm = mw > 0 ? uint8_t(roundf(10.0f * log10f(float(mw)))) : 0;
+            _power_levels[i].dac = dac_for_mw(mw);
+            _power_levels[i].level = i;
+            _power_levels[i].active = mw > 0 ? PowerActive::Active : PowerActive::Inactive;
+        } else {
             _power_levels[i].active = PowerActive::Inactive;
         }
     }
 }
 
-// mark the level matching the given mW as supported, stashing a non-standard
-// value in the custom slot; does not change the currently selected power
-void AP_VideoTX::update_power_mw(uint16_t power_mw, PowerActive active)
+void AP_VideoTX::on_table_updated()
+{
+    // the band/frequency side reads the table live, only the cached power set
+    // needs rebuilding when the table is replaced at runtime (via @VTX FTP)
+    load_power_levels_from_table();
+}
+
+void AP_VideoTX::get_power_label(uint8_t index, char *out, size_t out_len) const
+{
+    // index is one-based over the selectable levels, matching get_*_for_index:
+    // resolve through the same non-zero slot mapping so the label and the mW
+    // for a given index always refer to the same table entry
+    uint8_t slot;
+    if (table_power_slot(index, slot)) {
+        _table.power_label(slot, out, out_len);
+        return;
+    }
+    if (out_len > 0) {
+        out[0] = 0;
+    }
+}
+
+// Point the current-power cursor at the level an analog VTX reports it is
+// transmitting. The selectable set is owned by the @VTX table (see
+// load_power_levels_from_table), so nothing is "learned" here: we only sync the
+// cursor to the matching table-derived slot so get_power_mw() reflects reality.
+// A value the table does not contain is stashed in the reserved custom slot.
+void AP_VideoTX::set_power_dbm(uint8_t power)
 {
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
-        if (power_mw == _power_levels[i].mw) {
-            _power_levels[i].active = active;
+        if (power == _power_levels[i].dbm) {
+            _current_power = i;
             return;
         }
     }
-    if (power_mw == 0) {
-        return;
-    }
-    // non-standard value: use the custom slot
     PowerLevel &slot = _power_levels[VTX_MAX_POWER_LEVELS - 1];
-    slot.mw = power_mw;
-    slot.dbm = uint8_t(roundf(10.0f * log10f(float(power_mw))));
+    slot.dbm = power;
+    slot.mw = uint16_t(roundf(powf(10, power * 0.1f)));
     slot.level = 255;
     slot.dac = 255;
-    slot.active = active;
+    _current_power = VTX_MAX_POWER_LEVELS - 1;
 }
 
-// number of supported (active) power levels
+// whether the user @VTX table is the authoritative source of the selectable
+// power set. On this fork init() always seeds a default table, so this is
+// normally true; it only falls back to the learned ladder if the table somehow
+// defines no usable (non-zero) power level.
+bool AP_VideoTX::have_power_table() const
+{
+    for (uint8_t i = 0; i < _table.num_power_levels(); i++) {
+        if (_table.power_value(i) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// map a one based selectable index to a @VTX table slot, skipping unused
+// (0 mW) entries. This keeps every power-index accessor consistent with the
+// documented contract and the configurator: index i == the i-th NON-ZERO power
+// level in the order the table lists them.
+bool AP_VideoTX::table_power_slot(uint8_t index, uint8_t &slot) const
+{
+    uint8_t count = 0;
+    const uint8_t n = _table.num_power_levels();
+    for (uint8_t i = 0; i < n; i++) {
+        if (_table.power_value(i) == 0) {
+            continue;
+        }
+        if (++count == index) {
+            slot = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+// number of supported (selectable) power levels. Resolved against the ordered
+// @VTX table when one is defined, so it is deterministic and matches the
+// configurator; only when no table power levels exist does it reflect the
+// runtime-learned _power_levels[] ladder.
 uint8_t AP_VideoTX::get_num_power_levels() const
 {
+    if (have_power_table()) {
+        uint8_t count = 0;
+        for (uint8_t i = 0; i < _table.num_power_levels(); i++) {
+            if (_table.power_value(i) != 0) {
+                count++;
+            }
+        }
+        return count;
+    }
     uint8_t count = 0;
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
         if (_power_levels[i].active == PowerActive::Active) {
@@ -311,9 +351,15 @@ uint8_t AP_VideoTX::get_num_power_levels() const
     return count;
 }
 
-// mW for a one based index into the supported levels (ascending), 0 if unknown
+// mW for a one based index into the supported levels, 0 if unknown. Table
+// order when a user table is defined (index i -> i-th non-zero table entry),
+// otherwise the learned ladder.
 uint16_t AP_VideoTX::get_power_mw_for_index(uint8_t index) const
 {
+    if (have_power_table()) {
+        uint8_t slot;
+        return table_power_slot(index, slot) ? _table.power_value(slot) : 0;
+    }
     uint8_t count = 0;
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
         if (_power_levels[i].active == PowerActive::Active && ++count == index) {
@@ -323,9 +369,24 @@ uint16_t AP_VideoTX::get_power_mw_for_index(uint8_t index) const
     return 0;
 }
 
-// one based index into the supported levels for a mW value, 0 if not matched
+// one based index into the supported levels for a mW value, 0 if not matched.
+// Table order when a user table is defined, otherwise the learned ladder.
 uint8_t AP_VideoTX::get_power_index_for_mw(uint16_t power_mw) const
 {
+    if (have_power_table()) {
+        uint8_t count = 0;
+        for (uint8_t i = 0; i < _table.num_power_levels(); i++) {
+            const uint16_t v = _table.power_value(i);
+            if (v == 0) {
+                continue;
+            }
+            count++;
+            if (v == power_mw) {
+                return count;
+            }
+        }
+        return 0;
+    }
     uint8_t count = 0;
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
         if (_power_levels[i].active == PowerActive::Active) {
@@ -359,37 +420,25 @@ void AP_VideoTX::set_power_mw(uint16_t power)
     _current_power = VTX_MAX_POWER_LEVELS - 1;
 }
 
-// set the power "level"
-void AP_VideoTX::set_power_level(uint8_t level, PowerActive active)
+// sync the current-power cursor to the SmartAudio v2 "level" the VTX reports;
+// the selectable set is owned by the @VTX table, nothing is learned here
+void AP_VideoTX::set_power_level(uint8_t level)
 {
-    if (level == _power_levels[_current_power].level
-        && _power_levels[_current_power].active == active) {
-        return;
-    }
-
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
         if (level == _power_levels[i].level) {
             _current_power = i;
-            _power_levels[i].active = active;
-            debug("learned power level %d: %dmw", level, get_power_mw());
-            break;
+            return;
         }
     }
 }
 
-// set the power dac
-void AP_VideoTX::set_power_dac(uint16_t power, PowerActive active)
+// sync the current-power cursor to the SmartAudio v1 "dac" the VTX reports
+void AP_VideoTX::set_power_dac(uint16_t power)
 {
-    if (power == _power_levels[_current_power].dac
-        && _power_levels[_current_power].active == active) {
-        return;
-    }
-
     for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
         if (power == _power_levels[i].dac) {
             _current_power = i;
-            _power_levels[i].active = active;
-            debug("learned power %dmw", get_power_mw());
+            return;
         }
     }
 }
@@ -581,8 +630,8 @@ bool AP_VideoTX::set_defaults()
 void AP_VideoTX::announce_vtx_settings() const
 {
     // Output a friendly message so the user knows the VTX has been detected
-    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "VTX: %s%d %dMHz, PWR: %dmW",
-        band_names[_band.get()], _channel.get() + 1, _frequency_mhz.get(),
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "VTX: %c%d %dMHz, PWR: %dmW",
+        _table.band_letter(_band.get()), _channel.get() + 1, _frequency_mhz.get(),
         has_option(VideoOptions::VTX_PITMODE) ? 0 : _power_mw.get());
 }
 
@@ -593,26 +642,27 @@ void AP_VideoTX::change_power(int8_t position)
     if (!_enabled || position < 0 || position > 5) {
         return;
     }
-    // first find out how many possible levels there are
+    // build the selectable set from the authoritative power levels (the ordered
+    // @VTX table when one is defined, otherwise the learned ladder) via the
+    // shared accessors, keeping only levels within the configured maximum. This
+    // keeps the low/mid/high position path consistent with the exact-index path
+    // and the OSD, all resolving against the same source of truth.
+    const uint8_t n = get_num_power_levels();
+    uint16_t levels[VTX_MAX_POWER_LEVELS];
     uint8_t num_active_levels = 0;
-    for (uint8_t i = 0; i < VTX_MAX_POWER_LEVELS; i++) {
-        if (_power_levels[i].active != PowerActive::Inactive && _power_levels[i].mw <= _max_power_mw) {
-            num_active_levels++;
+    for (uint8_t i = 1; i <= n && num_active_levels < VTX_MAX_POWER_LEVELS; i++) {
+        const uint16_t mw = get_power_mw_for_index(i);
+        if (mw != 0 && mw <= _max_power_mw) {
+            levels[num_active_levels++] = mw;
         }
     }
-    // iterate through to find the level
-    uint16_t level = constrain_int16(roundf((num_active_levels * (position + 1)/ 6.0f) - 1), 0, num_active_levels - 1);
-    debug("looking for pos %d power level %d from %d", position, level, num_active_levels);
+
     uint16_t power = 0;
-    for (uint8_t i = 0, j = 0; i < num_active_levels; i++, j++) {
-        while (j < VTX_MAX_POWER_LEVELS-1 && _power_levels[j].active == PowerActive::Inactive) {
-            j++;
-        }
-        if (i == level) {
-            power = _power_levels[j].mw;
-            debug("selected power %dmw", power);
-            break;
-        }
+    if (num_active_levels > 0) {
+        // map the 6 switch positions proportionally across the available levels
+        const uint16_t level = constrain_int16(roundf((num_active_levels * (position + 1) / 6.0f) - 1), 0, num_active_levels - 1);
+        power = levels[level];
+        debug("pos %d -> level %d/%d = %dmw", position, level, num_active_levels, power);
     }
 
     if (position == 5 && power < _max_power_mw) {
