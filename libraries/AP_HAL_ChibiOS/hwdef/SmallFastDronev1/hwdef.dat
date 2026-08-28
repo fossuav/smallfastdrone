@@ -42,3 +42,7 @@ define AP_RANGEFINDER_NOOPLOOP_ENABLED 0
 define AP_MOUNT_BACKEND_DEFAULT_ENABLED 0
 define ARMING_DELAY_MSEC 0
 define AP_ARMING_IMU_CONSISTENCY_CHECK_TIME_MS 2000
+
+# secure builds ship keyed: no MAVLink key management, an empty key set
+# fails closed, and the per-drone identity commands are available
+define AP_CHECK_FIRMWARE_FIXED_KEYS 1
