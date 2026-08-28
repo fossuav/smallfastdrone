@@ -226,8 +226,13 @@ bool AP_CheckFirmware::check_signature(const mavlink_secure_command_t &pkt)
         return false;
     }
     if (all_zero_keys(sec_data)) {
+#if AP_CHECK_FIRMWARE_FIXED_KEYS
+        // a keyed build with no keys is a build mistake, not an open door
+        return false;
+#else
         // allow through if no keys are setup
         return true;
+#endif
     }
     if (pkt.sig_length != 64) {
         // monocypher signatures are 64 bytes
