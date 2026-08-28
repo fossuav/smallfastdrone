@@ -255,6 +255,7 @@ bool AP_CheckFirmware::check_signature(const mavlink_secure_command_t &pkt)
     return false;
 }
 
+#if !AP_CHECK_FIRMWARE_FIXED_KEYS
 /*
   set public keys in bootloader
  */
@@ -292,6 +293,7 @@ bool AP_CheckFirmware::set_public_keys(uint8_t key_idx, uint8_t num_keys, const 
     delete bld;
     return ret;
 }
+#endif // !AP_CHECK_FIRMWARE_FIXED_KEYS
 
 /*
   write the identity private key into the bootloader. Write-once: a
@@ -386,6 +388,7 @@ void AP_CheckFirmware::handle_secure_command(mavlink_channel_t chan, const mavli
         break;
     }
 
+#if !AP_CHECK_FIRMWARE_FIXED_KEYS
     case SECURE_COMMAND_SET_PUBLIC_KEYS: {
         if (pkt.data_length < AP_PUBLIC_KEY_LEN+1) {
             reply.result = MAV_RESULT_FAILED;
@@ -441,6 +444,7 @@ void AP_CheckFirmware::handle_secure_command(mavlink_channel_t chan, const mavli
         delete[] data;
         break;
     }
+#endif // !AP_CHECK_FIRMWARE_FIXED_KEYS
     }
 
 send_reply:
