@@ -138,6 +138,17 @@ struct PACKED ap_secure_data {
 
 #define AP_SECURE_DATA_TOTAL_LENGTH (8 + AP_PUBLIC_KEY_MAX_KEYS*AP_PUBLIC_KEY_LEN + 8 + AP_IDENTITY_KEY_LEN)
 static_assert(sizeof(ap_secure_data) == AP_SECURE_DATA_TOTAL_LENGTH, "ap_secure_data incorrect length");
+
+/*
+  identity operations for SECURE_COMMAND, numbered clear of the
+  SECURE_COMMAND_OP enum in the MAVLink XML. Neither is signed: the
+  tool driving them holds no key, generation is write-once and no
+  reply carries a secret. Both reply with the STM32 UID followed by
+  the X25519 public key
+ */
+#define SECURE_COMMAND_GENERATE_IDENTITY 0x53464401U
+#define SECURE_COMMAND_GET_IDENTITY      0x53464402U
+#define AP_IDENTITY_UID_LEN 12
 #endif
 
 #ifdef HAL_BOOTLOADER_BUILD

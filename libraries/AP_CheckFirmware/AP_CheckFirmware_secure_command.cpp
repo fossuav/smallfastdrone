@@ -333,6 +333,67 @@ bool AP_CheckFirmware::set_identity(const uint8_t private_key[AP_IDENTITY_KEY_LE
     return ret;
 }
 
+#if AP_CHECK_FIRMWARE_IDENTITY_ENABLED
+/*
+  fill a reply with the board UID and the identity public key, derived
+  from the private key in flash so the two cannot disagree
+ */
+static bool fill_identity_reply(mavlink_secure_command_reply_t &reply)
+{
+    const struct ap_identity_data *identity = AP_CheckFirmware::find_identity();
+    if (!AP_CheckFirmware::identity_is_set(identity)) {
+        return false;
+    }
+    uint8_t uid_len = AP_IDENTITY_UID_LEN;
+    if (!hal.util->get_system_id_unformatted(reply.data, uid_len) || uid_len != AP_IDENTITY_UID_LEN) {
+        return false;
+    }
+    crypto_x25519_public_key(&reply.data[AP_IDENTITY_UID_LEN], identity->private_key);
+    reply.data_length = AP_IDENTITY_UID_LEN + AP_IDENTITY_KEY_LEN;
+    return true;
+}
+
+/*
+  generate the identity from the hardware RNG and store it. Denied
+  while armed, since the store rewrites the bootloader sector
+ */
+static MAV_RESULT generate_identity(mavlink_secure_command_reply_t &reply)
+{
+    if (hal.util->get_soft_armed() ||
+        AP_CheckFirmware::identity_is_set(AP_CheckFirmware::find_identity())) {
+        return MAV_RESULT_DENIED;
+    }
+    uint8_t private_key[AP_IDENTITY_KEY_LEN];
+    if (!hal.util->get_true_random_vals(private_key, sizeof(private_key), 100000)) {
+        return MAV_RESULT_FAILED;
+    }
+    // X25519 clamp, so what is stored is the scalar that gets used
+    private_key[0] &= 248;
+    private_key[31] &= 127;
+    private_key[31] |= 64;
+    const bool stored = AP_CheckFirmware::set_identity(private_key);
+    crypto_wipe(private_key, sizeof(private_key));
+    if (!stored || !fill_identity_reply(reply)) {
+        return MAV_RESULT_FAILED;
+    }
+    return MAV_RESULT_ACCEPTED;
+}
+#endif // AP_CHECK_FIRMWARE_IDENTITY_ENABLED
+
+/*
+  identity operations are unsigned by design, see AP_CheckFirmware.h
+ */
+static bool signature_required(uint32_t operation)
+{
+#if AP_CHECK_FIRMWARE_IDENTITY_ENABLED
+    return operation != SECURE_COMMAND_GENERATE_IDENTITY &&
+           operation != SECURE_COMMAND_GET_IDENTITY;
+#else
+    (void)operation;
+    return true;
+#endif
+}
+
 /*
   handle a SECURE_COMMAND
  */
@@ -347,7 +408,7 @@ void AP_CheckFirmware::handle_secure_command(mavlink_channel_t chan, const mavli
         reply.result = MAV_RESULT_DENIED;
         goto send_reply;
     }
-    if (!check_signature(pkt)) {
+    if (signature_required(pkt.operation) && !check_signature(pkt)) {
         reply.result = MAV_RESULT_DENIED;
         goto send_reply;
     }
@@ -450,6 +511,18 @@ void AP_CheckFirmware::handle_secure_command(mavlink_channel_t chan, const mavli
         break;
     }
 #endif // !AP_CHECK_FIRMWARE_FIXED_KEYS
+
+#if AP_CHECK_FIRMWARE_IDENTITY_ENABLED
+    case SECURE_COMMAND_GENERATE_IDENTITY: {
+        reply.result = (pkt.data_length == 0) ? generate_identity(reply) : MAV_RESULT_FAILED;
+        break;
+    }
+
+    case SECURE_COMMAND_GET_IDENTITY: {
+        reply.result = (pkt.data_length == 0 && fill_identity_reply(reply)) ? MAV_RESULT_ACCEPTED : MAV_RESULT_FAILED;
+        break;
+    }
+#endif // AP_CHECK_FIRMWARE_IDENTITY_ENABLED
     }
 
 send_reply:
