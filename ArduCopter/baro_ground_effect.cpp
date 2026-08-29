@@ -10,7 +10,7 @@ void Copter::update_ground_effect_detector(void)
     // contaminates the baro, so allow the deweight window through the spool-up.
     const bool in_throw = flightmode->mode_number() == Mode::Number::THROW;
     gndeff.enable_takeoff_comp(!in_throw || !ap.land_complete);
-    gndeff.set_high_vibrations(vibration_check.high_vibes);
+    gndeff.set_high_vibrations(vibe_comp_active());
 
     // ALT_HOLD has manual attitude and no NE controller, so a near-level
     // attitude target stands in for "pilot is asking for slow horizontal"
