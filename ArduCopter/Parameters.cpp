@@ -1178,6 +1178,16 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Increment: 0.1
     AP_GROUPINFO("PILOT_TKO_ALT_M", 20, ParametersG2, pilot_takeoff_alt_m, PILOT_TKO_ALT_M_DEFAULT),
 
+#if MODE_VALT_ENABLED
+    // @Param: VALT_POS_EXPO
+    // @DisplayName: VALT position-authority blend expo
+    // @Description: In VALT (velocity alt hold) this blends position control back in near stick centre and near the stick edges. 0 is the hard cutoff: pure velocity control whenever the stick is off centre. Above 1 the position authority follows a valley in stick deflection, full at centre (altitude hold) and at full deflection (a position trajectory that backstops a velocity-loop failure) and lowest in between; higher values widen the velocity region. Values above 0 up to and including 1 give full position authority at every stick position, which is altitude hold without surface tracking.
+    // @Range: 0 8
+    // @Increment: 0.5
+    // @User: Advanced
+    AP_GROUPINFO("VALT_POS_EXPO", 29, ParametersG2, valt_pos_expo, 0),
+#endif
+
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 
     AP_GROUPEND
