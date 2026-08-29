@@ -2935,7 +2935,7 @@ uint32_t AP_AHRS::getLastPosDownReset(float &posDelta)
 
 // Resets the baro so that it reads zero at the current height
 // Resets the EKF height to zero
-// Adjusts the EKf origin height so that the EKF height + origin height is the same as before
+// Adjusts the EKF reference height so that the reported height stays consistent
 void AP_AHRS::resetHeightDatum(void)
 {
     // support locked access functions to AHRS data
@@ -2950,6 +2950,12 @@ void AP_AHRS::resetHeightDatum(void)
 #if AP_AHRS_SIM_ENABLED
     sim.resetHeightDatum();
 #endif
+
+    // republish the location so that home set from get_location() straight
+    // after this call sees the post-reset height.  Only the location is
+    // refreshed, not the whole of update_state(): the rest of that is
+    // attitude and origin publication that must stay on the main thread
+    state.location_ok = _get_location(state.location);
 }
 
 // send a EKF_STATUS_REPORT for configured EKF
