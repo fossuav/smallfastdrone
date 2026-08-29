@@ -782,6 +782,9 @@ private:
     // force symmetry on the state covariance matrix
     void ForceSymmetry();
 
+    // return true if the delta velocity bias for body axis index can be learned
+    bool is_dvel_bias_axis_observable(uint8_t index) const;
+
     // constrain variances (diagonal terms) in the state covariance matrix
     void ConstrainVariances();
 
