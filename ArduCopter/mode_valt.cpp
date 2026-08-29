@@ -11,14 +11,29 @@
  * position P loop is bypassed (velocity control).  VALT_POS_EXPO blends how
  * hard that snap is with stick deflection, so position authority returns near
  * centre (altitude hold) and at full deflection (position backstop); 0 keeps
- * the original hard cutoff.
+ * the original hard cutoff.  In ground effect the position correction is
+ * limited instead, so an estimate step at ground contact cannot command a launch.
  */
+
+// position correction limit in ground effect, still above the 0.03-0.05 m/s
+// drift seen with no position authority at all
+#define VALT_GNDEFF_CORR_SPEED_MS 0.1f
 
 // velocity-controlled Flying state
 void ModeVelAltHold::alt_hold_run_flying(float &target_roll_rad, float &target_pitch_rad, float target_climb_rate_ms)
 {
     // get avoidance adjusted climb rate
     target_climb_rate_ms = get_avoidance_adjusted_climbrate_ms(target_climb_rate_ms);
+
+    // rotor wash steps the baro by metres at ground contact; limiting the
+    // correction saturates that error instead of turning it into a climb.
+    // ModeAltHold::run() only refreshes the trajectory limits, so the
+    // unlimited value has to be restored here
+    if (ahrs.get_takeoff_expected() || ahrs.get_touchdown_expected()) {
+        pos_control->D_set_correction_speed_accel_m(VALT_GNDEFF_CORR_SPEED_MS, VALT_GNDEFF_CORR_SPEED_MS, get_pilot_accel_D_mss());
+    } else {
+        pos_control->D_set_correction_speed_accel_m(get_pilot_speed_dn_ms(), get_pilot_speed_up_ms(), get_pilot_accel_D_mss());
+    }
 
     // Send the commanded climb rate to the position controller
     pos_control->D_set_pos_target_from_climb_rate_ms(target_climb_rate_ms);
