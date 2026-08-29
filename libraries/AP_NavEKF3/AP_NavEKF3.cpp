@@ -1470,10 +1470,6 @@ bool NavEKF3::getOriginLLH(Location &loc) const
     if (!core) {
         return false;
     }
-    if (common_origin_valid) {
-        loc = common_EKF_origin;
-        return true;
-    }
     if (!core[primary].getOriginLLH(loc)) {
         return false;
     }
