@@ -3255,6 +3255,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         # forward-looking: the origin-moving reset this replaces produced the
         # same outputs here, so this fails only if the reference-height
         # handling regresses, not against master
+        '''verify Plane update_home() does not corrupt AMSL altitude when landed at different elevation'''
         # Plane::update_home() runs every 5 s while disarmed with a GPS
         # fix and resets the EKF height datum.  After landing at a
         # different elevation from the EKF origin the reset must not move
@@ -3282,6 +3283,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.arm_vehicle()
         # the VTOL descent alone is ~190 m at Q_WP_SPD_DN; measured 434 s
         self.wait_disarmed(timeout=900)
+        self.wait_disarmed(timeout=600)
 
         landed = self.assert_receive_message('GLOBAL_POSITION_INT')
         pre_update_amsl_mm = landed.alt
