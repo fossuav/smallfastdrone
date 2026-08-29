@@ -163,6 +163,12 @@ public:
     virtual bool is_taking_off() const;
     static void takeoff_stop() { takeoff.stop(); }
 
+    // whether mid-stick on the ground spools the motors up ready for take off.
+    // Modes where mid-stick is a resting hold state return false and stay in
+    // ground idle until a climb is commanded, which keeps a spooled but not
+    // taking off airframe away from the land detector's take-off guard
+    virtual bool spool_up_at_zero_climb_on_ground() const { return true; }
+
     virtual bool is_landing() const { return false; }
 
     // mode requires terrain to be present to be functional
@@ -1965,6 +1971,9 @@ protected:
     // velocity-controlled Flying state: no surface tracking,
     // pos_desired override for velocity control
     void alt_hold_run_flying(float &target_roll_rad, float &target_pitch_rad, float target_climb_rate_ms) override;
+
+    // mid-stick is the resting hold state, not a take-off cue
+    bool spool_up_at_zero_climb_on_ground() const override { return false; }
 
 };
 #endif
