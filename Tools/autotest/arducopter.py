@@ -11594,6 +11594,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             # the default timeout is one second of wallclock against a 5 Hz
             # stream, which a loaded host loses without the vehicle misbehaving
             m = self.assert_receive_message('GLOBAL_POSITION_INT', timeout=10)
+            m = self.assert_receive_message('GLOBAL_POSITION_INT')
             peak = max(peak, abs(m.relative_alt * 0.001))
             count += 1
         if count < 5:
@@ -11782,6 +11783,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # relative_alt alone cannot tell, because the arm-time home move
         # zeroes it on master too, leaving home at the drifted altitude
         self.assert_baro_drift_cleared_at_arm()
+        self.assert_baro_drift_cleared_at_arm()
+        # the reset re-anchors the reference height to the GPS altitude,
+        # so unlike master the drift must also be gone from the reported
+        # AMSL (relative_alt alone cannot tell: the arm-time home move
+        # zeroes it on master too, leaving home at the drifted altitude)
+        self.assert_reported_amsl_matches_gps()
 
         self.start_subtest("GPS sets home, then the receiver dies")
         # a dead receiver fails the GPS prearm checks even in STABILIZE,
@@ -11851,6 +11858,17 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # SIM_BARO_DRIFT accumulates into an offset that setting the rate back
         # to zero does not undo, and the recorded origin is still in force
         self.reboot_sitl()
+        origin_alt_mm = self.poll_message('GPS_GLOBAL_ORIGIN').altitude
+        # home is never set without GPS so this arm resets via the
+        # pre-existing no-home branch; the reported height falls back to
+        # the recalibrated baro, and the reset's no-GPS path must leave
+        # the reported origin altitude alone
+        self.assert_baro_drift_cleared_at_arm()
+        origin_alt2_mm = self.poll_message('GPS_GLOBAL_ORIGIN').altitude
+        if abs(origin_alt2_mm - origin_alt_mm) > 1000:
+            raise NotAchievedException(
+                "Origin altitude moved %.1f m across the datum reset" %
+                ((origin_alt2_mm - origin_alt_mm) * 0.001))
 
     def EKFSource(self):
         '''Check EKF Source Prearms work'''
@@ -17643,6 +17661,21 @@ return update, 1000
             # post-test reboot_sitl() location check passes
             self.customise_SITL_commandline([])
 
+    def assert_origin_frame_consistent(self):
+        '''reported origin altitude, local down position and AMSL must agree'''
+        origin_alt_m = self.poll_message('GPS_GLOBAL_ORIGIN').altitude * 0.001
+        gpi = self.assert_receive_message('GLOBAL_POSITION_INT')
+        z_m = self.assert_receive_message('LOCAL_POSITION_NED').z
+        amsl_m = gpi.alt * 0.001
+        err_m = origin_alt_m - z_m - amsl_m
+        self.progress("Origin alt %.1f m, local z %.1f m, AMSL %.1f m (mismatch %.2f m)" %
+                      (origin_alt_m, z_m, amsl_m, err_m))
+        if abs(err_m) > 2.0:
+            raise NotAchievedException(
+                "AMSL %.1f m does not match origin alt %.1f m minus local z %.1f m" %
+                (amsl_m, origin_alt_m, z_m))
+        return origin_alt_m, z_m
+
     def AmslAltPreservedOnRearmAtDifferentElevation(self):
         '''re-arm at different elevation without corrupting AMSL altitude'''
         # Arm with home auto-set but not locked, fly to a lower elevation,
@@ -17651,6 +17684,7 @@ return update, 1000
         # an AMSL mission flown after the re-arm targets the wrong altitude.
         self.install_terrain_handlers_context()
         # KalaupapaCliffs sits at 165 m AMSL; the flight lands ~90 m lower
+        # KalaupapaCliffs is ~165 m above the sea to its north
         self.customise_SITL_commandline(["--home", "KalaupapaCliffs"], wipe=True)
         self.set_parameters({
             "AUTO_OPTIONS": 3,
@@ -17664,6 +17698,7 @@ return update, 1000
         # EK2_ENABLE needs a reboot; go through customise_SITL_commandline so
         # the custom home survives it, and without wipe so the parameters do
         self.customise_SITL_commandline(["--home", "KalaupapaCliffs"])
+        })
         self.wait_ready_to_arm()
 
         cliff_alt_amsl_mm = self.assert_receive_message('GLOBAL_POSITION_INT').alt
@@ -17683,6 +17718,7 @@ return update, 1000
             raise NotAchievedException(
                 "Expected >50 m altitude drop cliff-top -> landing, got %.1f m" %
                 drop_m)
+        pre_origin_alt_m, pre_z_m = self.assert_origin_frame_consistent()
 
         # home is still auto-set at the cliff top and not locked, so
         # this takes the !home_is_locked() branch of the arming code
@@ -17710,6 +17746,16 @@ return update, 1000
             raise NotAchievedException(
                 "Expected an EKF_ALT_RESET at the mission arm and at the "
                 "re-arm, got %u" % resets)
+        post_origin_alt_m, post_z_m = self.assert_origin_frame_consistent()
+
+        self.disarm_vehicle(force=True)
+
+        # the reset must not relabel the origin frame: the origin stays
+        # put and height above it is unchanged
+        if abs(post_origin_alt_m - pre_origin_alt_m) > 2.0 or abs(post_z_m - pre_z_m) > 2.0:
+            raise NotAchievedException(
+                "Origin frame moved across rearm (origin alt %.1f -> %.1f m, local z %.1f -> %.1f m)" %
+                (pre_origin_alt_m, post_origin_alt_m, pre_z_m, post_z_m))
 
         delta_m = abs(post_rearm_amsl_mm - pre_rearm_amsl_mm) * 0.001
         if delta_m > 10.0:
