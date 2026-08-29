@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import math
+import operator
 import os
 import shutil
 import tempfile
@@ -287,6 +288,37 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # use mode number directly since pymavlink does not know VALT
         VALT = 29
 
+        # --- VALT take-off from the ground -------------------------------
+        # Regression guard for spool_up_at_zero_climb_on_ground(): VALT keeps
+        # the motors in ground idle at mid-stick (its resting hold state), so a
+        # neutral stick must NOT take off, while a deliberate climb command must
+        # spool up from ground idle and lift off cleanly.
+        self.progress("VALT take-off from the ground")
+        self.change_mode(VALT)
+        self.set_rc(3, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+
+        # mid-stick: AltHold spools the motors up ready for take-off, VALT
+        # stays in ground idle, so its motor output must sit below AltHold's
+        self.set_rc(3, 1500)
+        self.change_mode('ALT_HOLD')
+        self.delay_sim_time(3, "let the motors spool in AltHold")
+        spooled = self.assert_receive_message('SERVO_OUTPUT_RAW').servo1_raw
+        self.change_mode(VALT)
+        self.wait_servo_channel_value(1, spooled - 20, timeout=5, comparator=operator.lt)
+        self.wait_altitude(-1, 1, relative=True, minimum_duration=3, timeout=4)
+        if not self.armed():
+            raise NotAchievedException("VALT disarmed on the ground at mid-stick")
+
+        # a deliberate climb command must spool up from ground idle and lift off
+        self.progress("Commanding climb from the ground")
+        self.set_rc(3, 1800)
+        self.wait_altitude(5, 15, relative=True, timeout=30)
+        self.set_rc(3, 1500)
+        self.do_RTL()
+
+        # --- in-flight behaviour (take off in ALT_HOLD, then switch to VALT) ---
         self.takeoff(10, mode="ALT_HOLD")
         self.change_mode(VALT)
 
