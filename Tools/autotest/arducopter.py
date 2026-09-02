@@ -18617,17 +18617,22 @@ return update, 1000
         params = self.autoacro_display_params(0.025, trigger_ch=7,  # RealFlight hover (ThO)
                                               loop_drag_g=0.40)
         params["LOG_BITMASK"] = 0x10FFFF  # full-rate for the offline box/trajectory check
-        # The display band constraint is 10..50 m AGL (2026-07-24). 52 commanded
-        # attains ~50 (the RealFlight takeoff undershoots ~2 and the thrust cal's
-        # idle probe sags ~4), which is the band top. The untrimmed show overran the
-        # band by ~8 m, bought back by the two descender budgets: JF_DROP 6 and the
-        # schedule's split-S pinned to size 8. The split-S drop is airframe-specific
-        # -- RealFlight flies its arc tight, 1.44x measured against the native 2.2x
-        # -- so SS_DROP declares the measured spend for the size-8 figure.
+        # The display band constraint is 10..50 m AGL (2026-07-24), and the show
+        # is placed in it by this one number. 39, re-measured 2026-09-02 against
+        # the float-loop opener: at the old 52 the display flew 36..63 (n=3), so
+        # it overran the ceiling by 13 with the whole band shifted up rather than
+        # stretched. The show occupies 23-27 m of the 40 m band, so 13 m lower
+        # puts it at 23..50. The 52 was picked for the 07-29 choreography, whose
+        # opener did not climb above its entry -- the float loop does, by ~6 m,
+        # which is most of why the same number stopped working.
+        # The two descender budgets stay as trimmed on 07-29. The split-S drop is
+        # airframe-specific -- RealFlight flies its arc tight, 1.44x measured
+        # against the native 2.2x -- so SS_DROP declares the measured spend for
+        # the size-8 figure.
         params["AUTA_JF_DROP"] = 6
         params["AUTA_SS_DROP"] = 12
         self.set_parameters(params)
-        self.fly_autoacro_display(takeoff_alt=52, trigger_ch=7)
+        self.fly_autoacro_display(takeoff_alt=39, trigger_ch=7)
 
     def RealFlightAutoAcroReversalPair(self, model, home):
         '''
