@@ -2933,34 +2933,71 @@ uint32_t AP_AHRS::getLastPosDownReset(float &posDelta)
     return 0;
 }
 
-// Resets the baro so that it reads zero at the current height
-// Resets the EKF height to zero
-// Adjusts the EKF reference height so that the reported height stays consistent
-void AP_AHRS::resetHeightDatum(void)
+bool AP_AHRS::resetHeightDatum(void)
 {
     // support locked access functions to AHRS data
     WITH_SEMAPHORE(_rsem);
 
-#if HAL_NAVEKF3_AVAILABLE
-    EKF3.resetHeightDatum();
-#endif
+    // the configured backend decides, so a backend not in use cannot move the
+    // barometer under one that just refused - for the callers that leave the
+    // barometer to this function; Plane and the field elevation path
+    // recalibrate it either way.  One with no datum of its own, DCM or SIM or
+    // external, has no refusal to honour and does not hold the others off
+    const EKFType configured = configured_ekf_type();
+    bool configured_decides = false;
+    bool configured_reset = false;
+    switch (configured) {
 #if HAL_NAVEKF2_AVAILABLE
-    EKF2.resetHeightDatum();
+    case EKFType::TWO:
+        configured_decides = true;
+        configured_reset = EKF2.resetHeightDatum();
+        break;
 #endif
-#if AP_AHRS_SIM_ENABLED
-    sim.resetHeightDatum();
+#if HAL_NAVEKF3_AVAILABLE
+    case EKFType::THREE:
+        configured_decides = true;
+        configured_reset = EKF3.resetHeightDatum();
+        break;
 #endif
+    default:
+        break;
+    }
+    // report whether a reset happened at all, since a backend with no datum
+    // never performs one and the caller still has an event to log
+    bool ret = configured_reset;
+
+    if (configured_reset || !configured_decides) {
+        // the barometer is shared, so a backend that did not make the decision
+        // still has to follow the datum that moved under it.  It cannot detect
+        // that for itself, and the error persists for as long as it runs.  A
+        // follower with its own reason to refuse is left on the old datum for
+        // the same reason, which needs two backends with divergent height
+        // source configuration to reach
+#if HAL_NAVEKF2_AVAILABLE
+        if (configured != EKFType::TWO) {
+            ret |= EKF2.resetHeightDatum();
+        }
+#endif
+#if HAL_NAVEKF3_AVAILABLE
+        if (configured != EKFType::THREE) {
+            ret |= EKF3.resetHeightDatum();
+        }
+#endif
+    }
 
     // republish the location so that home set from get_location() straight
     // after this call sees the post-reset height.  Only the location is
     // refreshed, not the whole of update_state(): the rest of that is
     // attitude and origin publication that must stay on the main thread.
-    // Filled via a temporary because this can run off the main thread, which
-    // reads the published state without the semaphore.
+    // Filled via a temporary because this runs off the main thread when
+    // arming comes from scripting or DDS, and get_location() reads it
+    // without the semaphore
     Location loc;
     const bool loc_ok = _get_location(loc);
     state.location = loc;
     state.location_ok = loc_ok;
+
+    return ret;
 }
 
 // send a EKF_STATUS_REPORT for configured EKF
