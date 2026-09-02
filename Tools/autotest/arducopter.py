@@ -17801,6 +17801,11 @@ return update, 1000
         self.change_mode('STABILIZE')
         self.set_rc(3, 1000)
         self.disarm_vehicle(force=True)
+        self.takeoff(150, mode='GUIDED', altitude_max=160)
+        self.change_mode('STABILIZE')
+        self.set_rc(3, 1000)
+        self.disarm_vehicle(force=True)
+        self.set_message_rate_hz('LOCAL_POSITION_NED', 20)
         # let the fall develop so that a velocity reset would show
         pre = self.assert_receive_message(
             'LOCAL_POSITION_NED', condition='LOCAL_POSITION_NED.vz > 5', timeout=10)
@@ -17819,6 +17824,10 @@ return update, 1000
         # catches.  The z bound is only a sanity check: getPosD() subtracts
         # ekfGpsRefHgt, which the reset moves by the height it zeroes, so the
         # two cancel and a datum reset alone cannot step it
+        # still falling, so vz must not step towards zero and z may only
+        # grow by the fall itself (20-30 m here); a datum reset zeroes
+        # the velocity, and relabelling the origin frame would step z by
+        # the whole height
         if pre.vz - min_vz > 1.0:
             raise NotAchievedException(
                 "Vertical velocity stepped from %.1f to %.1f m/s across the re-arm" %
@@ -17870,6 +17879,7 @@ return update, 1000
         # fly_guided_move_to waits on horizontal distance and groundspeed, so
         # most of the descent can be left to this wait at the default WP_SPD_DN
         self.wait_altitude(ground_amsl_m + 15, ground_amsl_m + 25, timeout=240,
+        self.wait_altitude(ground_amsl_m + 15, ground_amsl_m + 25, timeout=60,
                            altitude_source='SIM_STATE.alt')
         self.land_and_disarm()
 
@@ -17891,6 +17901,7 @@ return update, 1000
         # SIM_BARO_DRIFT accumulates into an offset that setting it back to
         # zero does not undo, so hand the next test a clean barometer
         self.reboot_sitl()
+        self.assert_reported_amsl_matches_gps()
 
     def testcan(self):
         ret = ([
