@@ -2936,26 +2936,43 @@ uint32_t AP_AHRS::getLastPosDownReset(float &posDelta)
 // Resets the baro so that it reads zero at the current height
 // Resets the EKF height to zero
 // Adjusts the EKF reference height so that the reported height stays consistent
-void AP_AHRS::resetHeightDatum(void)
+// Returns true if the configured backend performed the reset
+bool AP_AHRS::resetHeightDatum(void)
 {
     // support locked access functions to AHRS data
     WITH_SEMAPHORE(_rsem);
 
-#if HAL_NAVEKF3_AVAILABLE
-    EKF3.resetHeightDatum();
-#endif
+    // only the configured backend resets.  resetHeightDatum() recalibrates
+    // the shared barometer, so letting a backend that is not in use decide
+    // would move the height input of one that has just refused
+    bool ret = false;
+    switch (configured_ekf_type()) {
 #if HAL_NAVEKF2_AVAILABLE
-    EKF2.resetHeightDatum();
+    case EKFType::TWO:
+        ret = EKF2.resetHeightDatum();
+        break;
+#endif
+#if HAL_NAVEKF3_AVAILABLE
+    case EKFType::THREE:
+        ret = EKF3.resetHeightDatum();
+        break;
 #endif
 #if AP_AHRS_SIM_ENABLED
-    sim.resetHeightDatum();
+    case EKFType::SIM:
+        ret = sim.resetHeightDatum();
+        break;
 #endif
+    default:
+        break;
+    }
 
     // republish the location so that home set from get_location() straight
     // after this call sees the post-reset height.  Only the location is
     // refreshed, not the whole of update_state(): the rest of that is
     // attitude and origin publication that must stay on the main thread
     state.location_ok = _get_location(state.location);
+
+    return ret;
 }
 
 // send a EKF_STATUS_REPORT for configured EKF
