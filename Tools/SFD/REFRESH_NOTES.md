@@ -279,6 +279,14 @@ re-adds the parent's tests and every method lands twice (#32972 on #32768 did th
 The script now walks the already-applied list and prefers the newest applied
 ancestor's head as the base. Watch for duplicate `def` names after a rebuild.
 
+## Promoting the refreshed branch
+
+`refresh.sh promote <branch>` backs the old tip up to `<branch>` with the next free
+index (`SmallFastDrone-4.7.1-beta` -> `SmallFastDrone-4.7.1.1-beta`) and then moves
+the branch. A refresh always rewrites history, so the backup is the only way back -
+do not move the branch with `git branch -f` by hand. The follow-up push is a force
+push and needs its own grant.
+
 ## Local work NOT in prs.txt (re-fold after a from-scratch refresh)
 
 A from-scratch refresh rebuilds ONLY the prs.txt stack on a vanilla 4.7 base; the

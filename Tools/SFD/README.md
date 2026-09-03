@@ -27,7 +27,27 @@ Tools/SFD/refresh.sh rebuild-tests  # phase 2b: rebuild hot files from PR heads
 Tools/SFD/refresh.sh rerere-save    # prune + archive resolutions to rr-cache.tar.gz
 Tools/SFD/refresh.sh lock           # record the PR head SHAs to applied.lock
 git add Tools/SFD/rr-cache.tar.gz Tools/SFD/applied.lock && git commit -m "Tools: refresh SFD rerere cache + lock"
+
+# finally, move the shipping branch onto the refreshed one:
+Tools/SFD/refresh.sh promote SmallFastDrone-4.7.1-beta
 ```
+
+## Backups
+
+A refresh rebuilds the stack from scratch, so promoting it **rewrites** the branch
+it replaces - the old commits are unreachable the moment the branch moves. Never
+move a branch by hand; use `promote`, which parks the old tip first:
+
+```sh
+Tools/SFD/refresh.sh promote <branch> [source]   # backup + move (source defaults to HEAD)
+Tools/SFD/refresh.sh backup  [branch]            # just the backup
+```
+
+The backup is `<branch>` with the next free index spliced in before the `-beta`
+suffix, so `SmallFastDrone-4.7.1-beta` parks as `SmallFastDrone-4.7.1.1-beta`,
+then `.2`, and so on. Indices are compared numerically, so `.10` follows `.9`.
+Backups are local branches; pushing one needs the usual `/prepare-for-push` grant.
+To undo a promote, point the branch back at its backup.
 
 ### Portable rerere + incremental refresh
 

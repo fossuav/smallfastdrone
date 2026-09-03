@@ -26,6 +26,7 @@
 #   Tools/SFD/refresh.sh fetch     # fetch all PR heads listed in prs.txt
 #   Tools/SFD/refresh.sh plan      # compute the ordered apply list
 #   Tools/SFD/refresh.sh run       # cherry-pick; stop on each new conflict
+#   Tools/SFD/refresh.sh promote <branch>  # back up <branch>, then move it here
 #   Tools/SFD/refresh.sh survey    # like run but auto-resolve to base + log
 #   Tools/SFD/refresh.sh status    # progress / remaining
 #
@@ -223,6 +224,46 @@ do_rebuild_tests() {
   echo "DONE (rebuild-tests): hot files rebuilt from PR heads"
 }
 
+# A refresh rewrites the branch it replaces, so never move one without first
+# parking the old tip. backup names the copy <stem>.<n><suffix> with the next free
+# index (SmallFastDrone-4.7.1-beta -> SmallFastDrone-4.7.1.1-beta); promote does
+# the backup and the move together so the backup cannot be forgotten.
+backup_name() {
+  local br="$1" stem suffix n=0 b i
+  case "$br" in
+    *-beta) stem="${br%-beta}"; suffix="-beta";;
+    *)      stem="$br"; suffix="";;
+  esac
+  for b in $(git for-each-ref --format='%(refname:short)' "refs/heads/$stem.*$suffix" 2>/dev/null); do
+    i="${b#"$stem."}"; i="${i%"$suffix"}"
+    case "$i" in ''|*[!0-9]*) continue;; esac
+    [ "$i" -gt "$n" ] && n="$i"
+  done
+  echo "$stem.$((n+1))$suffix"
+}
+
+do_backup() {
+  local br="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+  git rev-parse --verify -q "$br" >/dev/null || { echo "no such branch: $br"; return 1; }
+  local dst; dst="$(backup_name "$br")"
+  git branch "$dst" "$br" || return 1
+  echo "backed up $br ($(git rev-parse --short "$br")) -> $dst"
+}
+
+do_promote() {
+  local target="${1:-}" source="${2:-$(git rev-parse --abbrev-ref HEAD)}"
+  [ -n "$target" ] || { echo "usage: refresh.sh promote <target-branch> [source-branch]"; return 1; }
+  git rev-parse --verify -q "$source" >/dev/null || { echo "no such branch: $source"; return 1; }
+  if git rev-parse --verify -q "$target" >/dev/null; then
+    do_backup "$target" || return 1
+  else
+    echo "$target does not exist yet - nothing to back up"
+  fi
+  git branch -f "$target" "$source" || return 1
+  echo "$target now at $(git rev-parse --short "$target") (was $source)"
+  echo "NOTE: the remote still has the old history - that push is a force push."
+}
+
 case "${1:-run}" in
   fetch)  do_fetch ;;
   plan)   do_plan ;;
@@ -232,7 +273,9 @@ case "${1:-run}" in
   tests)  ensure_rerere; : > "$ST/tconflicts.log"; rm -f "$ST/tprog.idx"; do_tests ;;
   rebuild-tests) ensure_rerere; do_rebuild_tests ;;
   lock)   do_lock ;;
+  backup) shift; do_backup "${1:-}" ;;
+  promote) shift; do_promote "${1:-}" "${2:-}" ;;
   rerere-save) do_rerere_save ;;
   status) echo "progress $(prog)/$(wc -l < "$ST/apply.txt" 2>/dev/null || echo '?'); $(git rev-list --count "$BASE"..HEAD 2>/dev/null) commits on branch" ;;
-  *) echo "usage: refresh.sh {fetch|plan|changed|run|survey|tests|rebuild-tests|lock|rerere-save|status}"; exit 1 ;;
+  *) echo "usage: refresh.sh {fetch|plan|changed|run|survey|tests|rebuild-tests|backup|promote|lock|rerere-save|status}"; exit 1 ;;
 esac
