@@ -242,10 +242,16 @@ Two failures remain:
 - **HeightDatumKeptOnMidairRearm** - the PR's own assertions all pass: vertical
   velocity holds across the re-arm (14.5 -> 14.5 m/s, and 17.1 -> 17.1 on the
   second) and the down position does not step. It fails on the test's recovery
-  tail, which requires the descent arrested above 30 m; the vehicle arrests at
-  12.6 m. That is the test's margin, not the datum behaviour the PR is about.
-  NOT relaxed locally - find out why 4.7's recovery from a 17 m/s fall is slower
-  before moving the threshold.
+  tail, which requires the descent arrested above 30 m. Measured across four runs:
+  12.6, 1.3, 12.0 and 2.8 m - always far short, with a spread that says the
+  recovery from a ~17 m/s fall is marginal here rather than near the threshold.
+  NOT relaxed locally: a 30 m floor missed by an order of magnitude is not a
+  threshold that wants nudging, so find out why the ALT_HOLD recovery is that slow
+  on 4.7 first.
+- **GroundEffectCompensation_takeOffExpected** - FLAKY, not a regression. Failed
+  once at 8.7998 s against a "longer than 9 s" floor, then passed on both re-runs.
+  Our only change to it is pinning GNDEFF_TMO=0 so the release depends on altitude
+  alone; the 2% miss is SITL timing variance.
 - **ThrowDropSourceSwitch / ThrowModeNoGPS** - both hang waiting for "Stabilizing
   throw height". PRE-EXISTING, established by A/B rather than assumed: the test
   body is byte-identical on the pre-refresh branch, mode_throw.cpp is identical
