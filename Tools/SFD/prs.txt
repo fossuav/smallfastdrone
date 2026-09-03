@@ -1,0 +1,46 @@
+# SFD refresh PR manifest
+#
+# Ordered list of the IN-FLIGHT upstream ArduPilot/ardupilot pull requests that
+# make up the Small Fast Drone feature set. refresh.sh cherry-picks these onto
+# SmallFastDrone-4.7-base (override with SFD_BASE), which already bakes in the
+# merged-upstream PRs + #33115 + the permanent SFD-local hwdef. See REFRESH_NOTES.md.
+# Promoted into the base when they merged upstream: #29768, #32045, #32472, #33587.
+#
+# Format: one PR number per line; "#" starts a comment. Blank lines ignored.
+# Excluded for now: Throw Mode RPM (#32955, may no longer be needed) and the
+# local throw-mode work.
+
+# --- In review ---
+31005   # Fence: min alt disarm (still open despite the old "merged" label)
+32232   # Ground clearance fusion fix + rangefinder on-ground reading till takeoff
+31274   # Motortest error rate + ESC error-rate gate in are_motors_running()
+32391   # Separate LEVEL arming check
+32398   # Customizable ARM_DELAY
+32238   # Fast boot parameter
+32471   # Hover Z-bias learning (VRF)
+32768   # Baro drift reset on arming
+32553   # Terrain offset reset on ground-effect clear
+32972   # Protect height fusion from baro ground effect at takeoff
+32514   # Reset EKF failsafe gate on source set change
+
+# --- Submitted, limited review ---
+27893   # Fast rates (1/3)
+29000   # Fast rates (2/3)
+30980   # Fast rates (3/3)
+30841   # ESC logging control
+31216   # iFlight Borg H7
+31770   # DFU mode via system bootloader
+32401   # Pending arm on switch
+32473   # Acro bias inhibit
+32270   # VALT velocity alt-hold mode (VALT_POS_EXPO at index 29 to match the branch)
+33318   # AC_Loiter brake/drag feed-forward fix
+33359   # AGL KF rangefinder height switch + fuse aglKfH as the height observation
+33478   # AGL KF velocity velD fusion
+33585   # Optflow flat-ground above rangefinder range (bit 5; must stay after #33478 for bit 4)
+33484   # Optical flow axis lockout recovery + focus-height floor
+33497   # HereFlow output rate correction FLOW_HF_RATEF
+33498   # Inhibit Z gyro bias without yaw source
+33507   # AGL KF accel-Z bias estimation
+33543   # AP_Param loaded defaults count
+33568   # Optical flow relative-aiding fallback on GPS loss
+33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H
