@@ -3728,7 +3728,7 @@ float AP_AHRS::get_hover_z_bias_correction(uint8_t imu_index) const
 {
 #if HAL_NAVEKF3_AVAILABLE
     if (active_EKF_type() == EKFType::THREE) {
-        return ekf3.EKF3.getHoverZBiasCorrection(imu_index);
+        return EKF3.getHoverZBiasCorrection(imu_index);
     }
 #endif
     return 0.0f;
@@ -3740,7 +3740,7 @@ bool AP_AHRS::set_hover_z_bias_correction(uint8_t imu_index, float correction)
 {
 #if HAL_NAVEKF3_AVAILABLE
     if (active_EKF_type() == EKFType::THREE) {
-        return ekf3.EKF3.setHoverZBiasCorrection(imu_index, correction);
+        return EKF3.setHoverZBiasCorrection(imu_index, correction);
     }
 #endif
     return false;
@@ -3753,7 +3753,7 @@ bool AP_AHRS::get_accel_bias_z_for_imu(uint8_t imu_index, float &bias_z) const
 #if HAL_NAVEKF3_AVAILABLE
     if (active_EKF_type() == EKFType::THREE) {
         Vector3f accel_bias;
-        if (ekf3.EKF3.getAccelBiasForIMU(imu_index, accel_bias)) {
+        if (EKF3.getAccelBiasForIMU(imu_index, accel_bias)) {
             bias_z = accel_bias.z;
             return true;
         }
@@ -3767,7 +3767,7 @@ void AP_AHRS::set_inhibit_accel_bias_learning(bool inhibit)
 {
 #if HAL_NAVEKF3_AVAILABLE
     if (active_EKF_type() == EKFType::THREE) {
-        ekf3.EKF3.setInhibitAccelBiasLearning(inhibit);
+        EKF3.setInhibitAccelBiasLearning(inhibit);
     }
 #endif
 }
