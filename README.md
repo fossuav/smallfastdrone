@@ -46,6 +46,7 @@ under review upstream, or work local to this repo with no PR yet.
 
 - Recorded Origin Fix (https://github.com/ArduPilot/ardupilot/pull/32469) - **merged**
 - EK3_MAG_CAL=7 Ground and In-flight Mode (https://github.com/ArduPilot/ardupilot/pull/32200) - **merged**
+- Yaw Anchoring while Ground-Learning in MAG_CAL=7 (https://github.com/ArduPilot/ardupilot/pull/34057) - **merged**
 - EKF Zero Velocity Fusion (https://github.com/ArduPilot/ardupilot/pull/32396) - **merged**
 - Zero Velocity Fusion Takeoff Fix (https://github.com/ArduPilot/ardupilot/pull/33115) - **merged**
 - EKF Bootstrap Reset (https://github.com/ArduPilot/ardupilot/pull/32202) - **merged**
@@ -54,6 +55,7 @@ under review upstream, or work local to this repo with no PR yet.
 - Hover Z-Bias Learning (https://github.com/ArduPilot/ardupilot/pull/32471)
 - Acro Bias Inhibit (https://github.com/ArduPilot/ardupilot/pull/32473)
 - EKF Failsafe Gate Reset on Source Set Change (https://github.com/ArduPilot/ardupilot/pull/32514)
+- No XY Accel Bias Learning in Unaided Flight (https://github.com/ArduPilot/ardupilot/pull/34209)
 
 ### Barometer & Ground Effect ###
 
@@ -71,10 +73,14 @@ under review upstream, or work local to this repo with no PR yet.
 - Fast Rates (https://github.com/ArduPilot/ardupilot/pull/27893, https://github.com/ArduPilot/ardupilot/pull/29000, https://github.com/ArduPilot/ardupilot/pull/30980)
 [![Fast rates](https://img.youtube.com/vi/B8Dp2jwDamU/0.jpg)](https://www.youtube.com/playlist?list=PL_O9QDs-WAVyBpf7URQQgCmNQwv_aTcMf)
 - AC_Loiter Brake/Drag Feed-forward Fix (https://github.com/ArduPilot/ardupilot/pull/33318)
+- Rate Target Interpolation in the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34208)
+- Persist the Fixed Notch Conversion to INS_HNTC2 (https://github.com/ArduPilot/ardupilot/pull/34251)
+- NTF Log Units Fix (https://github.com/ArduPilot/ardupilot/pull/34122) - **merged**
 
 ### Flight Modes ###
 
 - VALT Velocity Alt-Hold Mode (https://github.com/ArduPilot/ardupilot/pull/32270)
+- Advanced Land Failsafe, LAND_FS_OPTIONS (https://github.com/ArduPilot/ardupilot/pull/34210)
 - Throw mode improvements - local to this branch, no PR yet: drop detection and
   recovery, quaternion uprighting, operation without GPS, next-mode selection,
   EKF source-set switching on completion, stage feedback on the OSD and to the
@@ -102,6 +108,12 @@ under review upstream, or work local to this repo with no PR yet.
 
 - ESC Logging Control (https://github.com/ArduPilot/ardupilot/pull/30841)
 - Motortest Error Rate (https://github.com/ArduPilot/ardupilot/pull/31274)
+- Reject Invalid GCR Quintets in DShot Telemetry (https://github.com/ArduPilot/ardupilot/pull/33990) - **merged**
+
+### Sensors & Calibration ###
+
+- IIS2MDC Compass Correctness Fixes and Enable by Default (https://github.com/ArduPilot/ardupilot/pull/33780) - **merged**
+- Keep the Board Rotation on the Accel during Gyro Calibration (https://github.com/ArduPilot/ardupilot/pull/33988) - **merged**
 
 ### Boards & Boot ###
 
