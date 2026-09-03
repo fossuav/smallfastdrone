@@ -894,7 +894,8 @@ void NavEKF3_core::ResetVelocityToFlow(const of_elements &ofDataDelayed, ftype r
     stateStruct.velocity.y = velNED.y;
 
     // reset the velocity covariance to the flow-derived velocity uncertainty (flow rate noise * range)
-    zeroStatesVarCov(4, 5);
+    zeroRows(P, 4, 5);
+    zeroCols(P, 4, 5);
     P[4][4] = P[5][5] = sq(MAX(frontend->_flowNoise, 0.05f) * range);
 
     // propagate the reset through the output observer buffer
