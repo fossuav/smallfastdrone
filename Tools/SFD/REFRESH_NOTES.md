@@ -223,6 +223,20 @@ both takeoff(altitude_max=) (4.7 bounds with max_err) and
 SITL_START_LOCATION.get_alt_m(AltFrame) (4.7 keeps mavutil.location, whose alt is
 already AMSL, and fly_guided_move_to reads destination.alt).
 
+The nine PRs folded in from the 4.7 branch were tested too: EK3NoAidAccelBiasXY,
+SITLGyroRate, ModeLandAdvancedFailsafe, LandFailsafeRunaway, GPSBlendingAffinity
+and DynamicNotches all pass, after three harness adaptations (see the fold-in
+section).
+
+GyroFFTHarmonic fails, but NOT because of them - A/B'd against the commit before
+the fold-in, where it fails the same way (post-processed peak 137.690430 Hz in
+both runs, onboard 272.9 vs 277.9 Hz which is just hover variation). It asserts
+that the onboard filter and a post-processed FFT agree on the peak, and the
+onboard value is close to twice the post-processed one. The test scales its FFT
+with a hardcoded `1000. / 1024.`, so a batch-sampler rate above 1 kHz would read
+half; that is a hypothesis, not a diagnosis. Pre-existing on this branch and
+unrelated to the refresh or the fold-in.
+
 Two failures remain:
 
 - **HeightDatumKeptOnMidairRearm** - the PR's own assertions all pass: vertical
