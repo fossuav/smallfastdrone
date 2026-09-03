@@ -382,17 +382,19 @@ conversion, every THROW_ parameter is present (indices differ but all stay under
 the 64 group limit) and the next-mode whitelist already matches, including ACRO
 and VALT. The tests were the whole gap and are now taken from the 4.7 branch.
 
-### Genuinely missing, all local work with no PR behind it
+### The three differences, and what we are doing about them
 
-- **Gyro recalibration in the EKF bootstrap reset.** The 4.7 branch's
-  `InitialiseFilterBootstrap()` recalibrates the gyros when it finds the vehicle
-  stationary on the ground (`calibrate_gyros()`, which blocks and needs the vehicle
-  still). Not in upstream master, not in the #32202 head, not here - it only ever
-  existed on that branch. Two commits: the on_ground_stationary block, and
-  init_gyro() -> calibrate_gyros().
+- **Gyro recalibration in the EKF bootstrap reset** - DELIBERATELY NOT CARRIED.
+  The 4.7 branch's `InitialiseFilterBootstrap()` recalibrates the gyros when it
+  finds the vehicle stationary on the ground (`calibrate_gyros()`, which blocks and
+  needs the vehicle still). It was dropped from #32202 before that PR merged, so
+  its absence here is intentional, not an oversight - do not re-add it on a future
+  audit. Revisit only if the bootstrap reset misbehaves without it.
 - **XKVL logging** - optical-flow control limits (2 files, ~53 lines).
 - **XKFR logging** - the rangefinder height-switch decision (4 files, ~81 lines).
-  Both are diagnostics for the AGL KF work this branch carries.
+  Both are diagnostics for the AGL KF work this branch carries. Left out for now;
+  the plan is to offer them upstream as the AGL KF PRs they diagnose merge, rather
+  than carry them locally.
 
 ### DFU bootloader binaries
 
