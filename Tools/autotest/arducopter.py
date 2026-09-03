@@ -19319,10 +19319,10 @@ return update, 1000
         # so LAND reads its height above home as negative and descends at
         # the minimum rate, which from 100 m outlasts the disarm wait
         start = self.sitl_start_location()
-        ground_amsl_m = start.get_alt_m(AltFrame.ABSOLUTE)
+        ground_amsl_m = start.alt
         self.change_mode('GUIDED')
         self.fly_guided_move_to(
-            Location(start.lat, start.lng, ground_amsl_m + 20, AltFrame.ABSOLUTE),
+            mavutil.location(start.lat, start.lng, ground_amsl_m + 20, 0),
             timeout=120)
         self.wait_altitude(ground_amsl_m + 15, ground_amsl_m + 25, timeout=60,
                            altitude_source='SIM_STATE.alt')
