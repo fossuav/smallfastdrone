@@ -8743,7 +8743,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
-    def hover_and_check_matched_frequency(self, dblevel=-15, minhz=200, maxhz=300, fftLength=32, peakhz=None):
     def SITLGyroRate(self):
         '''SITL gyro rate follows INS_GYRO_RATE with fast sampling enabled'''
         self.set_parameters({
