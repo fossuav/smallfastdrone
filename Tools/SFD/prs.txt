@@ -44,3 +44,7 @@
 33543   # AP_Param loaded defaults count
 33568   # Optical flow relative-aiding fallback on GPS loss
 33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H
+34251   # Persist the fixed notch conversion to INS_HNTC2 (Copter + Plane)
+34209   # EKF3: do not learn XY accel bias in unaided flight
+34208   # Copter: interpolate the rate target in the fast rate thread
+34210   # Copter: advanced land failsafe (LAND_FS_OPTIONS bit 0)
