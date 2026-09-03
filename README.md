@@ -114,6 +114,7 @@ under review upstream, or work local to this repo with no PR yet.
 
 - IIS2MDC Compass Correctness Fixes and Enable by Default (https://github.com/ArduPilot/ardupilot/pull/33780) - **merged**
 - Keep the Board Rotation on the Accel during Gyro Calibration (https://github.com/ArduPilot/ardupilot/pull/33988) - **merged**
+- ICP201XX Lower Noise Mode and FIR Settling Fix (https://github.com/ArduPilot/ardupilot/pull/34120) - **merged**
 
 ### Boards & Boot ###
 
