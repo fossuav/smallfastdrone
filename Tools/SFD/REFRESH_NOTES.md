@@ -205,15 +205,42 @@ repeat, once per vehicle class), a dangling-registration scan, and a suite load.
 
 ### Validation
 
-2026-09-03 refresh: NOT run. The suites load and every reconstructed body matches
-its PR head, but no SITL test has been executed on this branch. The pass/fail
-record below is from the previous refresh and is retained only as a starting
-point - treat it as a hypothesis, not a result.
+2026-09-03 refresh: the 30 SFD-specific tests were run (28 Copter, 1 Plane,
+1 QuadPlane). 27 pass. Plane's EK3HeightDatumResetFlushesBuffers and QuadPlane's
+AmslAltPreservedAfterUpdateHomeAtDifferentElevation both pass - the former was
+recorded as flaky on the previous refresh and did not reproduce here.
 
-Previous refresh: copter's 15 reconstructed tests passed, including
-`EK3_FlowAxisLockoutRecovery`. `EK3HeightDatumResetFlushesBuffers` was flaky rather
-than regressed - its #32770 threshold is 0.1 m and the post-reset transient sits
-right on it (0.073 m pass, 0.107 m fail across runs).
+Four failures were found; three were 4.7-backport artifacts in tests written
+against master and are fixed (see the backport section): ThrowModeNoGPS set
+SIM_GPS_DISABLE (4.7: SIM_GPS1_ENABLE), and HeightDatumKeptOnMidairRearm used
+both takeoff(altitude_max=) (4.7 bounds with max_err) and
+SITL_START_LOCATION.get_alt_m(AltFrame) (4.7 keeps mavutil.location, whose alt is
+already AMSL, and fly_guided_move_to reads destination.alt).
+
+Two failures remain:
+
+- **HeightDatumKeptOnMidairRearm** - the PR's own assertions all pass: vertical
+  velocity holds across the re-arm (14.5 -> 14.5 m/s, and 17.1 -> 17.1 on the
+  second) and the down position does not step. It fails on the test's recovery
+  tail, which requires the descent arrested above 30 m; the vehicle arrests at
+  12.6 m. That is the test's margin, not the datum behaviour the PR is about.
+  NOT relaxed locally - find out why 4.7's recovery from a 17 m/s fall is slower
+  before moving the threshold.
+- **ThrowDropSourceSwitch / ThrowModeNoGPS** - both hang waiting for "Stabilizing
+  throw height". PRE-EXISTING, established by A/B rather than assumed: the test
+  body is byte-identical on the pre-refresh branch, mode_throw.cpp is identical
+  between the two branches, and running it on SmallFastDrone-4.7.1.1-beta gives
+  the same exception and the same statustext sequence, down to the same impact
+  velocity (SIM Hit ground at 17.08423 m/s).
+
+  Observed sequence: "Throw detected" fires, then "Throw: freefall lost,
+  resetting" returns the state machine to Detecting and the vehicle falls to the
+  ground. The reset is the `stage == Throw_Wait_Throttle_Unlimited &&
+  !throw_in_freefall()` branch. Its comment asserts "Throttle is zero during this
+  stage so accel is a clean indicator", which is worth checking against the
+  test's MOT_SPOOL_TIME=2 - but the mechanism is NOT proven, only the failure is.
+  This supersedes the earlier "EKF const-pos stall (flags 167)" note, which was a
+  hypothesis that the statustext evidence does not support.
 
 ### VibrationRectificationBiasLearning - two #32471 bugs (one fixed, one skipped)
 
@@ -261,15 +288,16 @@ resolution so git cherry flags them. The cause was the gate over-reach above.)
 - Phase 2 tests: `tests` then `rebuild-tests`. All four hot files compile and the
   four suites load with no duplicate or dangling test names (copter 339, plane 176,
   quadplane 80, heli 29).
-- NOT yet run: the SITL tests themselves. The previous refresh's pass/fail record
-  does not carry over - re-run the reconstructed tests before trusting them.
+- SITL tests: run, 27 of 30 pass. See Validation above for the two remaining
+  failures and the three backport artifacts that were fixed.
 - Next:
-  1. Run the reconstructed tests, starting with `VibrationRectificationBiasLearning`
-     (see the VRF note above), `BaroGroundEffectAtTakeoff` and
-     `EK3_FlowAxisLockoutRecovery`.
-  2. Rebuild the DFU bootloader binaries for the boards that gained ENABLE_DFU_BOOT.
-  3. Root-cause the EKF const-pos stall (EKF stuck at flags 167, no horizontal
-     aiding) behind ThrowDropSourceSwitch and the GroundEffectCompensation tests.
+  1. ThrowDropSourceSwitch / ThrowModeNoGPS: the throw state machine resets out of
+     Throw_Wait_Throttle_Unlimited on the freefall check and the vehicle falls to
+     the ground. Pre-existing (A/B'd against the pre-refresh branch), and it is
+     local throw-mode work, so it is ours to fix.
+  2. HeightDatumKeptOnMidairRearm: work out why the ALT_HOLD recovery from a 17 m/s
+     fall only arrests at 12.6 m against the test's 30 m floor.
+  3. Rebuild the DFU bootloader binaries for the boards that gained ENABLE_DFU_BOOT.
 
 ### Stacked PRs and rebuild-tests
 
