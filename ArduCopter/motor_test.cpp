@@ -97,7 +97,7 @@ void Copter::motor_test_output()
         }
 #if HAL_WITH_ESC_TELEM
         float rpm, error_rate;
-        if (AP::esc_telem().get_raw_rpm(motor_test_seq, rpm, error_rate)
+        if (AP::esc_telem().get_raw_rpm_and_error_rate(motor_test_seq, rpm, error_rate)
             && error_rate > 1.0f
             && now - last_motor_message_ms > 1000) {
             gcs().send_text(MAV_SEVERITY_WARNING,"Motor Test: error rate %f for motor %u at %f rpm", error_rate, motor_test_seq, rpm);
