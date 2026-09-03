@@ -13641,7 +13641,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.progress("Testing throw mode without GPS")
         self.set_parameters({
             "GPS1_TYPE": 0,
-            "SIM_GPS_DISABLE": 1,
+            "SIM_GPS1_ENABLE": 0,
             "EK3_SRC1_POSXY": 0,
             "EK3_SRC1_VELXY": 0,
             "THROW_TYPE": 1,          # drop
@@ -18270,7 +18270,7 @@ return update, 1000
         # auto-set at the first arm and left unlocked so the re-arm takes
         # the !home_is_locked() branch; set_home() would lock it and skip
         # the branch, which is why RudderDisarmMidair does not cover this.
-        self.takeoff(150, mode='GUIDED', altitude_max=160)
+        self.takeoff(150, mode='GUIDED', max_err=10)
         self.change_mode('STABILIZE')
         self.set_rc(3, 1000)
         self.disarm_vehicle(force=True)
