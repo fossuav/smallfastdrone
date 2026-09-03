@@ -298,10 +298,20 @@ reproduces both, so its own test fails against its own code.
    threshold" reading came from a partial version of that fix, and the loiter
    cross-check compared two trees that both lacked the finished one.
 
-   Consequence: **#32473 is stale against #32471** - it silently regresses the
-   feature it builds on and needs rebasing onto the current #32471. And the local
-   autotest skip of subtests D/E is probably unnecessary on this branch, which does
-   carry the covariance commit; re-measure before carrying that skip again.
+   Consequence: **#32473 was stale against #32471** - rebased onto it 2026-09-03.
+   That alone was not enough. D then read 0.000097 rather than 0.000002, still
+   1400x under subtest A's 0.139 on the same flight profile. The second cause is
+   in #32473's own commit: it gated in-flight learning on `takeOffDetected`, which
+   is written only by `detectOptFlowTakeoff()` and so stays false for the whole
+   flight on any vehicle without optical flow. That made the rangefinder, baro and
+   GPS arms of the `heightRefGood` switch unreachable and reduced the gate to
+   `onGroundNotMoving`. Swapped to `inFlight`, which `detectFlight()` maintains for
+   every vehicle: D 0.000097 -> 0.174 against a 0.15 injected bias, A and C
+   unchanged, test passes. Subtest A passes either way because it learns on the
+   ground before takeoff, so D is the only subtest that exercises the air path.
+
+   The local autotest skip of subtests D/E is probably unnecessary on this branch,
+   which does carry the covariance commit; re-measure before carrying that skip again.
 
 (An earlier note here blamed two "not patch-present" commits; that was a red
 herring - those commits are functionally present, just modified by the AHRS-refactor
