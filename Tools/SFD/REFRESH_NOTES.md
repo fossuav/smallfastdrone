@@ -148,11 +148,10 @@ redoing on every refresh. Two kinds, with different long-term homes:
   `AP_NavEKF3_core.cpp` on `inhibitDelVelBiasStates`, so the local revert is no
   longer needed and was not re-applied. Re-check this if the PR head moves again.
 - **autotest VRF skip**. Subtests D/E of `VibrationRectificationBiasLearning`
-  assert hover Z-bias learning that #32471 cannot deliver (observability limit).
-  Still skipped locally; the PR head still carries the assertions. NOTE: the skip
-  was re-applied on the 2026-09-03 refresh without re-measuring - now that the
-  covariance fix is upstream, run the test before assuming the skip is still
-  needed.
+  assert hover Z-bias learning that the branch was thought unable to deliver. That
+  was a misdiagnosis - see the VRF section: with the covariance commit the test
+  reaches 0.19 against a 0.01 threshold and passes. The skip is still applied here
+  and is probably unnecessary; re-measure and drop it.
 
 ## Phase 2 - tests
 
@@ -285,19 +284,24 @@ reproduces both, so its own test fails against its own code.
    four to `inhibitDelVelBiasStates`; bit 2 stays only on the fusion gates. No-op
    whenever bit 2/acro is clear. Lifted learning ~50x but not to threshold.
 
-2. Hover observability limit - SKIPPED, not fixed (autotest, commit 8bfb6d6f17).
-   With ground zero-velocity learning inhibited by bit 2, the only signal is weak
-   baro-position coupling: a convergence probe showed ~0.0004 in 180s (vs 0.01
-   wanted, ~75 min). Subtests D/E ask for the full bias from a 30s hover, which the
-   design cannot deliver. Their thresholds are skipped (the flight still runs). A
-   real fix needs PR-author work (e.g. fuse GPS vertical velocity so the bias is
-   observable in hover) - worth reporting to the #32471 author.
+2. Hover observability limit - THIS DIAGNOSIS WAS WRONG. Corrected 2026-09-03.
+   The claim was that bit 2 leaves only weak baro-position coupling, so subtests
+   D/E could never reach 0.01 from a 30 s hover (~0.0004 in 180 s measured). That
+   is not what limits it. Rebasing #32471 onto master and running the test there
+   gives 0.189 in the same 30 s hover - the assertion is achievable and the test
+   passes.
 
-Cross-checked against the loiter branch (built in a worktree): its subtest D fails
-too, at 0.000002 - the same as this branch before the covariance fix, and worse
-than the fixed 0.000108. So loiter has no missing ingredient; the limitation is in
-#32471 itself, present wherever its code is. Adding #33115 (below) did not move the
-number (0.000103 -> 0.000108).
+   The real discriminator is `AP_NavEKF3: keep accel-bias covariance alive while
+   learning is inhibited`. With it, subtest D reads 0.18-0.19; without it, 0.000002.
+   Measured as a clean A/B on two branches off the same master base differing only
+   by that commit (#32471 has it, #32473 does not). The earlier "~50x but not to
+   threshold" reading came from a partial version of that fix, and the loiter
+   cross-check compared two trees that both lacked the finished one.
+
+   Consequence: **#32473 is stale against #32471** - it silently regresses the
+   feature it builds on and needs rebasing onto the current #32471. And the local
+   autotest skip of subtests D/E is probably unnecessary on this branch, which does
+   carry the covariance commit; re-measure before carrying that skip again.
 
 (An earlier note here blamed two "not patch-present" commits; that was a red
 herring - those commits are functionally present, just modified by the AHRS-refactor
