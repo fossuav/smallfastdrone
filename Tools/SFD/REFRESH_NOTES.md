@@ -305,10 +305,19 @@ reproduces both, so its own test fails against its own code.
    is written only by `detectOptFlowTakeoff()` and so stays false for the whole
    flight on any vehicle without optical flow. That made the rangefinder, baro and
    GPS arms of the `heightRefGood` switch unreachable and reduced the gate to
-   `onGroundNotMoving`. Swapped to `inFlight`, which `detectFlight()` maintains for
-   every vehicle: D 0.000097 -> 0.174 against a 0.15 injected bias, A and C
-   unchanged, test passes. Subtest A passes either way because it learns on the
-   ground before takeoff, so D is the only subtest that exercises the air path.
+   `onGroundNotMoving`. Subtest A passes either way because it learns on the ground
+   before takeoff, so D is the only subtest that exercises the air path.
+
+   Replaced with `!onGround`, which is what the delta velocity bias axis inhibit in
+   `CovariancePrediction()` already uses for this same question. D 0.000097 -> 0.178
+   against a 0.15 injected bias, A and C unchanged, test passes. `inFlight` also
+   measured (D 0.174) and rejected: in the `assume_zero_sideslip()` branch of
+   `detectFlight()` it needs GPS ground speed over 5 m/s plus airspeed, height change
+   or takeoff_expected, so it never sets on a GPS-denied plane. Only the non fly
+   forward branch has the height/rangefinder/time-flying sources, which is why a
+   Copter-only test cannot see the difference. On Copter the two are equivalent here
+   because `takeoff_expected` latches true for the whole armed-on-ground window, so
+   `heightRefGood` is false there for a baro height source either way.
 
    The local autotest skip of subtests D/E is probably unnecessary on this branch,
    which does carry the covariance commit; re-measure before carrying that skip again.
