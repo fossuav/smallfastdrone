@@ -13,21 +13,28 @@ The autopilot software is capable of controlling almost any vehicle system imagi
 However, the need to continously support all vehicle types constrains both flash usage and feature velocity. That might be fine if you are flying a 2 ton, $100k vehicle and absolute reliability is paramount - but for smaller vehicles these constraints can be prohibitive to forward progress - and yet at the same time you also don't want to be flying the master branch the whole time. For a while I have be maintaining branches off the latest stable branch of ArduPilot that also contain features - usually features that I have developed - that are either only available in master or as PRs. These features are particularly geared to the needs to smaller, faster copters - but are also can be applicable to any size of vehicle. Maintaining these
 branches has become somewhat onerous, so I have instead started this new repo giving me greater flexibility in how I managed progress. The intent is:
 
-- To be a derivative of the latest ArduPilot beta release (This branch is for 4.7.x)
+- To be a derivative of the latest ArduPilot release (this branch tracks 4.7.x, currently 4.7.1)
 - For all included features to be open source and eventually be available in either the main ArduPilot repository or one of the fossuav repositories
 - For all additional features to have been flown
 - For all additional features to be documented
 
 ## Included Features ##
 
-The branch is based on ArduPilot 4.7.0-beta7. It also includes the following PRs and features, grouped by function:
+The branch is based on ArduPilot 4.7.1. It also includes the features below,
+grouped by function.
+
+Entries marked **merged** have landed in ArduPilot master since they were picked
+up here, so they will arrive in a future stable release; they are carried on this
+branch because 4.7 predates them. Everything else is an open pull request still
+under review upstream, or work local to this repo with no PR yet.
 
 ### Optical Flow & AGL Kalman Filter ###
 
-- IMU-aided AGL Filter for Optical Flow (https://github.com/ArduPilot/ardupilot/pull/32389)
-- Ground Clearance Fusion Fix (https://github.com/ArduPilot/ardupilot/pull/30490)
+- IMU-aided AGL Filter for Optical Flow (https://github.com/ArduPilot/ardupilot/pull/32389) - **merged**
+- Ground Clearance Fusion Fix (https://github.com/ArduPilot/ardupilot/pull/32232)
 - AGL KF Rangefinder Height Switch (https://github.com/ArduPilot/ardupilot/pull/33359)
 - AGL KF Velocity velD Fusion (https://github.com/ArduPilot/ardupilot/pull/33478)
+- Optical Flow Nav Above Rangefinder Range (https://github.com/ArduPilot/ardupilot/pull/33585)
 - Optical Flow Axis Lockout Recovery and Focus-Height Floor (https://github.com/ArduPilot/ardupilot/pull/33484)
 - HereFlow Output Rate Correction FLOW_HF_RATEF (https://github.com/ArduPilot/ardupilot/pull/33497)
 - Inhibit Z Gyro Bias from Optical Flow without Yaw Source (https://github.com/ArduPilot/ardupilot/pull/33498)
@@ -37,46 +44,59 @@ The branch is based on ArduPilot 4.7.0-beta7. It also includes the following PRs
 
 ### EKF & Inertial Navigation ###
 
-- Recorded Origin Fix (https://github.com/ArduPilot/ardupilot/pull/32469)
-- EK3_MAG_CAL=7 Ground and In-flight Mode (https://github.com/ArduPilot/ardupilot/pull/32200)
-- EKF Zero Velocity Fusion (https://github.com/ArduPilot/ardupilot/pull/32396)
-- Zero Velocity Fusion Takeoff Fix (https://github.com/ArduPilot/ardupilot/pull/33115)
-- EKF Bootstrap Reset (https://github.com/ArduPilot/ardupilot/pull/32202)
-- Low Noise IMU Support (https://github.com/ArduPilot/ardupilot/pull/32399)
+- Recorded Origin Fix (https://github.com/ArduPilot/ardupilot/pull/32469) - **merged**
+- EK3_MAG_CAL=7 Ground and In-flight Mode (https://github.com/ArduPilot/ardupilot/pull/32200) - **merged**
+- EKF Zero Velocity Fusion (https://github.com/ArduPilot/ardupilot/pull/32396) - **merged**
+- Zero Velocity Fusion Takeoff Fix (https://github.com/ArduPilot/ardupilot/pull/33115) - **merged**
+- EKF Bootstrap Reset (https://github.com/ArduPilot/ardupilot/pull/32202) - **merged**
+- Low Noise IMU Support (https://github.com/ArduPilot/ardupilot/pull/32399) - **merged**
+- getLLH Returns GPS Only When GPS Is the Position Source (https://github.com/ArduPilot/ardupilot/pull/32945) - **merged**
 - Hover Z-Bias Learning (https://github.com/ArduPilot/ardupilot/pull/32471)
 - Acro Bias Inhibit (https://github.com/ArduPilot/ardupilot/pull/32473)
+- EKF Failsafe Gate Reset on Source Set Change (https://github.com/ArduPilot/ardupilot/pull/32514)
 
 ### Barometer & Ground Effect ###
 
-- Baro Thrust Compensation Filter (https://github.com/ArduPilot/ardupilot/pull/32392)
-- Baro Height Datum Reset (https://github.com/ArduPilot/ardupilot/pull/32770, supersedes closed https://github.com/ArduPilot/ardupilot/pull/32400)
+- Baro Thrust Compensation Filter (https://github.com/ArduPilot/ardupilot/pull/32392) - **merged**
+- Baro Height Datum Reset (https://github.com/ArduPilot/ardupilot/pull/32770) - **merged** (supersedes closed https://github.com/ArduPilot/ardupilot/pull/32400)
+- Ground Effect Altitude/Timeout (https://github.com/ArduPilot/ardupilot/pull/32472) - **merged**
 - Baro Drift Reset on Arming (https://github.com/ArduPilot/ardupilot/pull/32768)
-- Ground Effect Altitude/Timeout (https://github.com/ArduPilot/ardupilot/pull/32472)
 - Terrain Offset Reset on Ground Effect Clear (https://github.com/ArduPilot/ardupilot/pull/32553)
+- Protect Height Fusion from Baro Ground Effect at Takeoff (https://github.com/ArduPilot/ardupilot/pull/32972)
 
 ### Rates, Notch & Control ###
 
-- Quintuple Notch (https://github.com/ArduPilot/ardupilot/pull/30994)
+- Quintuple Notch (https://github.com/ArduPilot/ardupilot/pull/30994) - **merged**
+- Notch Count Cap for Quintuple Notches (https://github.com/ArduPilot/ardupilot/pull/33587) - **merged**
 - Fast Rates (https://github.com/ArduPilot/ardupilot/pull/27893, https://github.com/ArduPilot/ardupilot/pull/29000, https://github.com/ArduPilot/ardupilot/pull/30980)
 [![Fast rates](https://img.youtube.com/vi/B8Dp2jwDamU/0.jpg)](https://www.youtube.com/playlist?list=PL_O9QDs-WAVyBpf7URQQgCmNQwv_aTcMf)
 - AC_Loiter Brake/Drag Feed-forward Fix (https://github.com/ArduPilot/ardupilot/pull/33318)
 
+### Flight Modes ###
+
+- VALT Velocity Alt-Hold Mode (https://github.com/ArduPilot/ardupilot/pull/32270)
+- Throw mode improvements - local to this branch, no PR yet: drop detection and
+  recovery, quaternion uprighting, operation without GPS, next-mode selection,
+  EKF source-set switching on completion, stage feedback on the OSD and to the
+  GCS, and mid-stick arming with the motors stopped
+
 ### Fences ###
 
-- Fence Improvements (https://github.com/ArduPilot/ardupilot/pull/31005, https://github.com/ArduPilot/ardupilot/pull/31619)
+- Fence Alt-Frame Thresholds (https://github.com/ArduPilot/ardupilot/pull/31619) - **merged**
+- Fence Min-Alt Disarm (https://github.com/ArduPilot/ardupilot/pull/31005)
 
 ### Arming ###
 
-- Arming Consistency Check Fix (https://github.com/ArduPilot/ardupilot/pull/32022)
+- Arming Consistency Check Fix (https://github.com/ArduPilot/ardupilot/pull/32022) - **merged**
 - Separate LEVEL Arming Check (https://github.com/ArduPilot/ardupilot/pull/32391)
 - Customizable ARM_DELAY (https://github.com/ArduPilot/ardupilot/pull/32398)
 - Pending Arm on Switch (https://github.com/ArduPilot/ardupilot/pull/32401)
 
 ### VTX ###
 
-- VTX Max Power (https://github.com/ArduPilot/ardupilot/pull/31500)
-- VTX Actual Power Reporting (https://github.com/ArduPilot/ardupilot/pull/32937)
-- MSP VTX Support (https://github.com/ArduPilot/ardupilot/pull/29768)
+- VTX Max Power (https://github.com/ArduPilot/ardupilot/pull/31500) - **merged**
+- VTX Actual Power Reporting (https://github.com/ArduPilot/ardupilot/pull/32937) - **merged**
+- MSP VTX Support (https://github.com/ArduPilot/ardupilot/pull/29768) - **merged**
 
 ### ESC, Motors & Logging ###
 
@@ -88,12 +108,14 @@ The branch is based on ArduPilot 4.7.0-beta7. It also includes the following PRs
 - iFlight Borg H7 (https://github.com/ArduPilot/ardupilot/pull/31216)
 - DFU Mode via System Bootloader (https://github.com/ArduPilot/ardupilot/pull/31770)
 - Fast Boot Parameter (https://github.com/ArduPilot/ardupilot/pull/32238)
+- Per-board feature enables for MambaH743v4, MatekH743 (and bdshot),
+  MicoAir405v2, MicoAir743v2, MicoAir743-AIO, BETAFPV-F405, BlitzF745 (and AIO)
+  and ARK_FPV - local to this branch, no PR
 
 ### Scripting & Parameters ###
 
-- Scripting OSD (https://github.com/ArduPilot/ardupilot/pull/32045)
+- Scripting OSD (https://github.com/ArduPilot/ardupilot/pull/32045) - **merged**
 - Loaded Defaults Count Fix (https://github.com/ArduPilot/ardupilot/pull/33543)
-
 
 ## SmallFastDronev1 Target ##
 
