@@ -364,6 +364,44 @@ comment conversion - there is no functional throw gap in the code. The throw
 *tests* do differ, and the old branch's versions are the newer ones; see the
 Validation section.
 
+## Audit against SmallFastDrone-4.7-beta (2026-09-03)
+
+Compared the 4.7 branch subject-by-subject and then by content. 81 subjects differ,
+but nearly all are squashed or renamed equivalents of work this branch carries -
+verified by grepping for the feature rather than trusting the subject. Confirmed
+present (in several cases this branch is ahead): the EK3_OPTIONS ground-clearance
+and height-estimator bits, arm-time height datum reset, IIS2MDC offset
+cancellation, the attitude-controller rate-target logging, VTX_TYPES handling, the
+SITL gyro rate following INS_GYRO_RATE, EKFC ekf_check logging, the rangefinder
+unknown-type guard, the SPI period work, the SFD IMU consistency window, the
+TerrainLoiterToCircle bounds, and the ChibiOS pin (identical across both branches
+and upstream 4.7).
+
+Throw mode is fully reconciled: mode_throw.cpp differs only by ASCII comment
+conversion, every THROW_ parameter is present (indices differ but all stay under
+the 64 group limit) and the next-mode whitelist already matches, including ACRO
+and VALT. The tests were the whole gap and are now taken from the 4.7 branch.
+
+### Genuinely missing, all local work with no PR behind it
+
+- **Gyro recalibration in the EKF bootstrap reset.** The 4.7 branch's
+  `InitialiseFilterBootstrap()` recalibrates the gyros when it finds the vehicle
+  stationary on the ground (`calibrate_gyros()`, which blocks and needs the vehicle
+  still). Not in upstream master, not in the #32202 head, not here - it only ever
+  existed on that branch. Two commits: the on_ground_stationary block, and
+  init_gyro() -> calibrate_gyros().
+- **XKVL logging** - optical-flow control limits (2 files, ~53 lines).
+- **XKFR logging** - the rangefinder height-switch decision (4 files, ~81 lines).
+  Both are diagnostics for the AGL KF work this branch carries.
+
+### DFU bootloader binaries
+
+Still outstanding, as before. The 4.7 branch has binaries built with DFU enabled
+for MatekH743, MambaH743v4, MicoAir743v2, MicoAir743-AIO, TBS_LUCID_H7 and
+SmallFastDronev1, and ours differ. Do NOT copy them across: a bootloader that does
+not match its own hwdef is a bricking risk, and MicoAir743-AIO's and
+SmallFastDronev1's hwdef-bl.dat differ between the branches. Rebuild them here.
+
 ## Local work NOT in prs.txt (re-fold after a from-scratch refresh)
 
 A from-scratch refresh rebuilds ONLY the prs.txt stack on a vanilla 4.7 base; the
