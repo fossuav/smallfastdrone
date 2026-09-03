@@ -130,6 +130,84 @@ under review upstream, or work local to this repo with no PR yet.
 - Scripting OSD (https://github.com/ArduPilot/ardupilot/pull/32045) - **merged**
 - Loaded Defaults Count Fix (https://github.com/ArduPilot/ardupilot/pull/33543)
 
+## Upstreaming Order ##
+
+The list above groups features by function. This one sequences the **open** PRs in
+the order that makes them easiest to merge: dependencies before dependents, small
+and already-approved work first, and the heavy diffs last so they rebase onto a
+smaller backlog.
+
+Annotations are the state at the last review sweep, not a promise - re-check before
+acting on them.
+
+### 1. Approved, waiting only on a merge
+
+1. #34251 Copter, Plane: persist the fixed notch conversion to INS_HNTC2 - 2 files, reviewed by IamPete1 - CI failing
+2. #32391 Copter: add separate LEVEL arming check for lean angle - 3 files, reviewed by IamPete1 and others - CI failing
+3. #29000 Copter: switch off fast rate while doing temperature calibration - 1 file, reviewed by peterbarker and others - **needs rebase**
+
+### 2. Small self-contained fixes
+
+1. #33543 AP_Param: publish actual loaded defaults count, not the pre-count - 1 file, comments only, no review
+2. #33318 AC_Loiter: remove drag from feed-forward accel to fix loiter overshoot - 2 files, reviewed by lthall and others
+3. #31005 Copter: don't fall out of the sky at zero throttle on min alt fences - 2 files, reviewed by IamPete1 and others
+4. #33497 AP_OpticalFlow: add FLOW_HF_RATEF to correct HereFlow output rate - 4 files, reviewed by dakejahl and others
+5. #30841 Control ESC Logging - 5 files, reviewed by peterbarker
+6. #32398 Copter: make ARM_DELAY customizable via hwdef and avoid race in ARMING_DELAY_MSEC - 6 files, reviewed by peterbarker and others
+7. #32238 Add FAST_BOOT bitmask parameter - 4 files, reviewed by IamPete1 and others - **needs rebase**
+8. #31274 Motortest error rate - 6 files, reviewed by IamPete1 and others - **needs rebase**
+9. #32232 AP_NavEKF3: ground clearance fusion fix - 4 files, reviewed by IamPete1 and others
+
+### 3. Baro and ground effect
+
+#32972 is stacked on #32768, so that pair merges in order.
+
+1. #32768 AP_NavEKF3: clear baro temperature drift on arming - 20 files, reviewed by peterbarker and others, AI-reviewed
+2. #32972 AP_NavEKF3: protect height fusion from baro ground effect at takeoff - 21 files, comments only, no review, AI-reviewed
+3. #32553 AP_NavEKF3: reset terrain offset from baro when ground effect clears - 3 files, reviewed by rishabsingh3003 and others
+4. #32514 Copter: reset EKF failsafe gate on source set change - 2 files, comments only, no review
+
+### 4. Optical flow and the AGL Kalman filter
+
+#33359 introduces the AGL-KF height the rest build on, and #33585 is stacked on #33478. #33569 currently detunes against the raw terrain state and should adopt #33359's height once that lands.
+
+1. #33359 AP_NavEKF3: use the AGL KF for the optical-flow rangefinder height switch and observation - 1 file, comments only, no review, AI-reviewed
+2. #33478 AP_NavEKF3: fuse rangefinder-aided AGL KF velocity as a velD observation - 8 files, **no review at all**
+3. #33585 AP_NavEKF3: keep optical flow nav alive above the rangefinder range - 9 files, **no review at all**
+4. #33507 AP_NavEKF3: estimate accel-Z bias in the AGL KF - 8 files, comments only, no review
+5. #33484 AP_NavEKF3: recover horizontal velocity from single-axis optical flow lockout - 12 files, **no review at all** - **needs rebase**
+6. #33568 AP_NavEKF3: fall back to relative aiding when optical flow replaces lost GPS - 4 files, **no review at all**
+7. #33569 AP_NavEKF3: make the optical-flow nav gain detune height configurable (EK3_FLOW_GAIN_H) - 3 files, reviewed by peterbarker
+8. #33498 AP_NavEKF3: inhibit Z gyro bias from optical flow with no yaw reference - 4 files, comments only, no review, AI-reviewed
+
+### 5. Accel bias
+
+#32473 overlaps #32471 across 30 files, so merging them the other way round means redoing the conflict.
+
+1. #32471 AP_NavEKF3: hover Z-bias learning for vibration rectification - 31 files, reviewed by priseborough - **needs rebase**
+2. #32473 Copter: inhibit accel bias learning during acro flight - 32 files, comments only, no review - **needs rebase**
+3. #34209 AP_NavEKF3: do not learn XY accel bias in unaided flight - 2 files, reviewed by peterbarker and others, AI-reviewed
+
+### 6. Fast rates
+
+#27893 is the foundation the other two build on.
+
+1. #27893 AP_InertialSensor: support fast rate primary on MPU6000 - 2 files, comments only, no review, AI-reviewed
+2. #30980 Copter: fix compassmot so that it works with the rate thread - 3 files, comments only, no review
+3. #34208 Copter: interpolate the rate target in the fast rate thread - 11 files, reviewed by peterbarker, AI-reviewed
+
+### 7. Larger features and boards
+
+Bigger diffs and new parameters; these want the small fixes out of the way first.
+
+1. #32401 Copter: add pending arm on switch for in-air arming - 7 files, reviewed by IamPete1 and others
+2. #34210 Copter: add advanced land failsafe (LAND_FS_OPTIONS bit 0) - 10 files, comments only, no review - **needs rebase**
+3. #32475 Copter: throw mode improvements - 8 files, reviewed by lthall
+4. #32270 Copter: add VALT velocity alt-hold flight mode - 13 files, reviewed by lthall and others - **needs rebase**
+5. #31216 AP_HAL_ChibiOS: iFlight Borg H7 - 6 files, reviewed by Hwurzburg
+6. #31770 AP_Bootloader: add DFU mode via STM32 system bootloader - 5 files, reviewed by peterbarker and others
+
+
 ## SmallFastDronev1 Target ##
 
 There is a hardware target called SmallFastDronev1 that is designed to work optimally with this fork. The hardware itself is actually the TBS_LUCID_H7 v2, so if you get one of these flight controllers you can flash it with the target if you choose.
