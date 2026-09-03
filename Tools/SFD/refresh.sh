@@ -161,7 +161,7 @@ do_run() {  # mode: stop (default) or survey
       git checkout -- . 2>/dev/null; git cherry-pick --quit 2>/dev/null
       echo "skip   #$pr  $subj" >> "$ST/applied.log"
     else
-      git commit -C "$sha" -q --no-verify
+      git commit -C "$sha" -q
       git cherry-pick --quit 2>/dev/null
       echo "apply  #$pr  $(git rev-parse --short HEAD)  $subj" >> "$ST/applied.log"
     fi
@@ -200,7 +200,7 @@ do_tests() {
     if git diff --cached --quiet; then
       git checkout -- . 2>/dev/null; git cherry-pick --quit 2>/dev/null
     else
-      git commit -C "$sha" -q --no-verify; git cherry-pick --quit 2>/dev/null
+      git commit -C "$sha" -q; git cherry-pick --quit 2>/dev/null
     fi
     i=$((i+1)); echo "$i">"$ST/tprog.idx"
   done
