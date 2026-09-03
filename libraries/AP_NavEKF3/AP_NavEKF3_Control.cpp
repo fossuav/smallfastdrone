@@ -167,9 +167,9 @@ void NavEKF3_core::setWindMagStateLearningMode()
         updateStateIndexLim();
 
         // set the initial covariance values
-        P[13][13] = sq(ACCEL_BIAS_LIM_SCALER * frontend->_accBiasLim * dtEkfAvg);
-        P[14][14] = P[13][13];
-        P[15][15] = P[13][13];
+        Pmut[13][13] = sq(ACCEL_BIAS_LIM_SCALER * frontend->_accBiasLim * dtEkfAvg);
+        Pmut[14][14] = P[13][13];
+        Pmut[15][15] = P[13][13];
     }
 
     if (tiltAlignComplete && inhibitDelAngBiasStates) {
