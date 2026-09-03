@@ -18,11 +18,11 @@ list (30994 31619 32469 32392 32200 32396 32945 31500 32770 32022 32389 32202
 fixup, then cherry-pick the 11 hwdef commits. #31005 is NOT baked (still open
 upstream) - it stays in the replay's prs.txt.
 
-Five more merged-upstream PRs were folded onto the branch after the refresh and
+Six more merged-upstream PRs were folded onto the branch after the refresh and
 are NOT yet in the base: #33780 (IIS2MDC), #33988 (board rotation during gyro
-cal), #33990 (DShot GCR quintets), #34122 (NTF units) and #34057 (MAG_CAL=7
-ground yaw anchor). Promote them into the merged-PR list at the next base
-rebuild, before #33115.
+cal), #33990 (DShot GCR quintets), #34122 (NTF units), #34057 (MAG_CAL=7
+ground yaw anchor) and #34120 (ICP201XX). Promote them into the merged-PR list
+at the next base rebuild, before #33115.
 
 Rebuilt on 2026-09-03 against 4.7.1 (`dbe792162d`). #29768, #32045, #32472 and
 #33587 merged upstream since the previous refresh and were promoted into the base;
@@ -339,8 +339,10 @@ push and needs its own grant.
 
 The previous-generation branch had carried work that the 4.7.1 line never picked
 up. Comparing the two by commit subject found nine PRs worth taking; they are now
-on the branch, the four open ones added to prs.txt and the five merged ones listed
-above for the next base rebuild.
+on the branch, the four open ones added to prs.txt and the merged ones listed
+above for the next base rebuild. #34120 (ICP201XX) was taken as well: no SFD board
+uses that baro today, so it is carried for future hardware rather than for any
+current target.
 
 Two adaptations were needed:
 
@@ -352,9 +354,8 @@ Two adaptations were needed:
 - **#34208** makes `hover_and_check_matched_frequency` keyword-only. The keep-both
   test merge keeps both signatures and leaves the older one bodyless; delete it.
 
-Checked and deliberately NOT taken: #34120 (ICP201XX) is on the old branch but no
-SFD board uses that baro; #33991 (ICM-56686), #33781 (LSM6DSO) and #31895 (Brahma
-H7) are for hardware this branch does not enable; #33443 (TBS LUCID H7 AIO) is a
+Checked and deliberately NOT taken: #33991 (ICM-56686), #33781 (LSM6DSO) and
+#31895 (Brahma H7) are for hardware this branch does not enable; #33443 (TBS LUCID H7 AIO) is a
 sibling of the board SmallFastDronev1 includes rather than a dependency; #31919
 (deferred baro calibration) overlaps the baro path this branch already modifies.
 
