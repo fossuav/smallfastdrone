@@ -15956,6 +15956,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.OpticalFlowGPSLossAiding,
              self.LoiterNoCompassYaw,
              self.LoiterNoCompassYawGPS,
+             self.LoiterFlowBrakeOvershoot,
              self.OpticalFlowCalibration,
              self.MotorFail,
              self.ModeFlip,
