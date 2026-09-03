@@ -430,7 +430,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.wait_prearm_sys_status_healthy(timeout=120)
             self.zero_throttle()
             self.arm_vehicle()
-            self.takeoff(altitude_min=20, mode='ALT_HOLD', takeoff_throttle=1800)
+            self.takeoff(alt_min=20, mode='ALT_HOLD', takeoff_throttle=1800)
             self.delay_sim_time(5, "settle in the hover")
             start_alt = self.get_altitude(altitude_source="SIM_STATE.alt")
 
@@ -2011,7 +2011,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         '''take off in ALT_HOLD, make eight forward pushes, yaw through
         three turns, hover, then land.  Returns the accel bias learned by
         each core and the landed pitch error against SIM truth'''
-        self.takeoff(altitude_min=20, mode='ALT_HOLD', takeoff_throttle=1800)
+        self.takeoff(alt_min=20, mode='ALT_HOLD', takeoff_throttle=1800)
         self.wait_climbrate(-0.5, 0.5, minimum_duration=2)
 
         # each push dips the baro while pitched and lets it recover while
@@ -8948,7 +8948,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
 
         self.reboot_sitl()
-        freq = self.hover_and_check_matched_frequency(-15, 100, 250, 64)
+        freq = self.hover_and_check_matched_frequency(
+            dblevel=-15,
+            minhz=100,
+            maxhz=250,
+            fftLength=64,
+        )
 
         # Step 2: add a second harmonic and check the first is still tracked
         self.start_subtest("Add a fixed frequency harmonic at twice the hover frequency "
@@ -8961,7 +8966,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.reboot_sitl()
 
-        self.hover_and_check_matched_frequency(-15, 100, 250, 64, None)
+        self.hover_and_check_matched_frequency(
+            dblevel=-15,
+            minhz=100,
+            maxhz=250,
+            fftLength=64,
+            peakhz=None,
+        )
 
         # Step 3: switch harmonics mid flight and check for tracking
         self.start_subtest("Switch harmonics mid flight and check the right harmonic is found")
@@ -9074,7 +9085,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.reboot_sitl()
 
         # find a motor peak
-        self.hover_and_check_matched_frequency(-15, 100, 350, 128, 250)
+        self.hover_and_check_matched_frequency(
+            dblevel=-15,
+            minhz=100,
+            maxhz=350,
+            fftLength=128,
+            peakhz=250,
+        )
 
         # Step 1b: run the same test with an FFT length of 256 which is needed to flush out a
         # whole host of bugs related to uint8_t. This also tests very accurately the frequency resolution
@@ -9084,7 +9101,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.reboot_sitl()
 
         # find a motor peak
-        self.hover_and_check_matched_frequency(-15, 100, 350, 256, 250)
+        self.hover_and_check_matched_frequency(
+            dblevel=-15,
+            minhz=100,
+            maxhz=350,
+            fftLength=256,
+            peakhz=250,
+        )
         self.set_parameter("FFT_WINDOW_SIZE", 128)
 
         # Step 2: inject actual motor noise and use the standard length FFT to track it
@@ -9099,7 +9122,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
 
         self.reboot_sitl()
-        freq = self.hover_and_check_matched_frequency(-15, 100, 250, 32)
+        freq = self.hover_and_check_matched_frequency(
+            dblevel=-15,
+            minhz=100,
+            maxhz=250,
+            fftLength=32,
+        )
 
         self.set_parameter("SIM_VIB_MOT_MULT", 1.)
 
