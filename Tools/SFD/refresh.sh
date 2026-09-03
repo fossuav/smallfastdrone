@@ -254,6 +254,11 @@ do_promote() {
   local target="${1:-}" source="${2:-$(git rev-parse --abbrev-ref HEAD)}"
   [ -n "$target" ] || { echo "usage: refresh.sh promote <target-branch> [source-branch]"; return 1; }
   git rev-parse --verify -q "$source" >/dev/null || { echo "no such branch: $source"; return 1; }
+  # check before backing up, so a refusal does not leave a stray backup behind
+  [ "$target" = "$source" ] && { echo "$target is already the source - nothing to do"; return 1; }
+  if [ "$target" = "$(git rev-parse --abbrev-ref HEAD)" ]; then
+    echo "$target is checked out; switch to another branch first"; return 1
+  fi
   if git rev-parse --verify -q "$target" >/dev/null; then
     do_backup "$target" || return 1
   else
@@ -261,7 +266,16 @@ do_promote() {
   fi
   git branch -f "$target" "$source" || return 1
   echo "$target now at $(git rev-parse --short "$target") (was $source)"
-  echo "NOTE: the remote still has the old history - that push is a force push."
+  # a promote only needs a force push when it drops commits the remote already
+  # has; reordering or replacing unpushed work still fast-forwards
+  local rt="${SFD_REMOTE:-origin}/$target"
+  if git rev-parse --verify -q "$rt" >/dev/null; then
+    if git merge-base --is-ancestor "$rt" "$target" 2>/dev/null; then
+      echo "$rt is an ancestor, so the follow-up push is a fast-forward."
+    else
+      echo "NOTE: $rt still has the old history - that push is a force push."
+    fi
+  fi
 }
 
 case "${1:-run}" in
