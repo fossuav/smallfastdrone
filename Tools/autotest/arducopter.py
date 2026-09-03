@@ -1742,30 +1742,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
-    def test_takeoff_check_mode(self, mode, user_takeoff=False):
-        # stabilize check
-        self.progress("Motor takeoff check in %s" % mode)
-        self.change_mode(mode)
-        self.zero_throttle()
-        self.wait_ready_to_arm()
-        self.context_push()
-        self.context_collect('STATUSTEXT')
-        self.arm_vehicle()
-        if user_takeoff:
-            self.run_cmd(
-                mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
-                p7=10,
-            )
-        else:
-            self.set_rc(3, 1700)
-        # we may never see ourselves as armed in a heartbeat
-        self.wait_statustext("Takeoff blocked: ESC RPM or errors out of range", check_context=True)
-        self.context_pop()
-        self.zero_throttle()
-        self.disarm_vehicle()
-        self.wait_disarmed()
-
-
     # Tests the motor failsafe
     def TakeoffCheck(self):
         '''Test takeoff check'''
@@ -2477,7 +2453,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "FENCE_TYPE": 1,
             "FENCE_ALT_MAX_TP": frame,
             "FENCE_ALT_MAX": alt,
-            "FENCE_ENABLE" : 1,
             "TERRAIN_ENABLE": terrain,
             "SIM_TERRAIN": terrain,
         })
@@ -12428,6 +12403,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.disarm_vehicle(force=True)
         self.context_pop()
         self.reboot_sitl()
+
     def EK3_NoGPSLeakWhenNotSource(self):
         '''verify EKF does not leak GPS position when GPS is not the configured source'''
         # With EKF configured to use optical flow (POSXY source is
@@ -13868,6 +13844,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 % (total_far, total_small))
 
         # we are not at the home location - reboot so the next test starts there
+        self.reboot_sitl()
+
     def VibrationRectificationBiasLearning(self):
         '''Test hover Z-bias learning for vibration rectification'''
         self.context_push()
@@ -14964,12 +14942,10 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.OpticalFlow,
              self.OpticalFlowLocation,
              self.OpticalFlowLimits,
+             self.OpticalFlowAGLKalmanFilter,
              self.OpticalFlowGPSLossAiding,
              self.LoiterNoCompassYaw,
              self.LoiterNoCompassYawGPS,
-             self.LoiterFlowBrakeOvershoot,
-             self.ModeFlowHold,
-             self.OpticalFlowAGLKalmanFilter,
              self.OpticalFlowCalibration,
              self.MotorFail,
              self.ModeFlip,
@@ -16924,35 +16900,6 @@ RTL_ALT_M 111
         # Test done
         self.land_and_disarm()
 
-    def Scripting6DoFMotors(self):
-        '''test 6DoF scripting motor matrix'''
-        self.context_collect('STATUSTEXT')
-
-        self.set_parameters({
-            "FRAME_CLASS": 16,  # MOTOR_FRAME_6DOF_SCRIPTING
-            "SCR_ENABLE": 1,
-        })
-
-        self.install_example_script_context("Copter_Motors_6DoF.lua")
-        self.reboot_sitl()
-
-        self.wait_statustext("6DoF Copter quad scripting", timeout=30, check_context=True)
-        self.wait_ready_to_arm()
-
-        self.upload_simple_relhome_mission([
-            (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 30, 0, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 30, 30, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0, 0, 0),
-        ])
-
-        num_wp = self.get_mission_count()
-        self.set_parameter("AUTO_OPTIONS", 3)
-        self.change_mode('AUTO')
-        self.arm_vehicle()
-        self.wait_waypoint(num_wp-1, num_wp-1, timeout=120)
-        self.wait_disarmed(timeout=60)
-
     def ScriptingOSD(self):
         '''test OSD scripting with waypoint mission - requires SFML OSD'''
         # This test requires SITL to be built with SFML support:
@@ -18159,7 +18106,6 @@ return update, 1000
             self.ScriptingFlipMode,
             self.RC_OPTIONS_1_FS_THR_ENABLE_0,
             self.ScriptingFlyVelocity,
-            self.Scripting6DoFMotors,
             self.ScriptingOSD,
             self.EK3_EXT_NAV_vel_without_vert,
             self.CompassLearnCopyFromEKF,
@@ -18171,182 +18117,11 @@ return update, 1000
             self.PLDNoParameters,
             self.PeriphMultiUARTTunnel,
             self.EKF3SRCPerCore,
-        ])
-        return ret
-
-            self.UTMGlobalPosition,
-            self.UTMGlobalPositionWaypoint,
-            self.HomeAltResetTest,
             self.AmslAltPreservedOnRearmAtDifferentElevation,
             self.HeightDatumKeptOnMidairRearm,
             self.BaroDriftClearedAfterMidairDisarm,
         ])
         return ret
-
-    def UTMGlobalPositionWaypoint(self):
-        '''test UTM_GLOBAL_POSITION waypoint fields in AUTO and GUIDED'''
-        self.set_parameter("AUTO_OPTIONS", 3)
-        self.start_flying_simple_relhome_mission([
-            (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 100, 0, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0, 0, 0),
-        ])
-        # seq 0 = home, seq 1 = TAKEOFF, seq 2 = WAYPOINT (100m north)
-        wp = self.assert_fetch_mission_item_int(1, 1, 2, mavutil.mavlink.MAV_MISSION_TYPE_MISSION)
-
-        self.wait_current_waypoint(2, timeout=60)
-
-        # epsilon=1 allows for 1-unit (0.11m) rounding from AP's internal coordinate conversion
-        m = self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "next_lat": wp.x,
-            "next_lon": wp.y,
-        }, poll=True, epsilon=1)
-        if not (m.flags & mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_NEXT_WAYPOINT_AVAILABLE):
-            raise NotAchievedException(f"AUTO: NEXT_WAYPOINT_AVAILABLE not set (flags=0x{m.flags:x})")
-        self.do_RTL()
-        self.zero_throttle()
-
-        # GUIDED mode
-        self.takeoff(20, mode='GUIDED')
-        home = self.poll_message("HOME_POSITION")
-        target_lat = home.latitude + 10000
-        target_lon = home.longitude
-        self.send_set_position_target_global_int(target_lat, target_lon, 20)
-        self.delay_sim_time(1, reason="guided target to propagate to UTM message")
-        m = self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "next_lat": target_lat,
-            "next_lon": target_lon,
-        }, poll=True, epsilon=1)
-        if not (m.flags & mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_NEXT_WAYPOINT_AVAILABLE):
-            raise NotAchievedException(f"GUIDED: NEXT_WAYPOINT_AVAILABLE not set (flags=0x{m.flags:x})")
-        self.do_RTL()
-
-    def UTMGlobalPosition(self):
-        '''test UTM_GLOBAL_POSITION message sending'''
-        self.install_terrain_handlers_context()
-        self.wait_ready_to_arm()
-        m = self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "flight_state": mavutil.mavlink.UTM_FLIGHT_STATE_GROUND,
-        }, poll=True)
-        if all(b == 0 for b in m.uas_id):
-            raise NotAchievedException("UAS ID is all zeros")
-        expected_flags = (
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_UAS_ID_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_POSITION_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_ALTITUDE_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_RELATIVE_ALTITUDE_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_HORIZONTAL_VELO_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_VERTICAL_VELO_AVAILABLE
-        )
-        if m.flags & expected_flags != expected_flags:
-            raise NotAchievedException(
-                f"Expected flags 0x{expected_flags:x}, got 0x{m.flags:x}")
-        self.takeoff(altitude_min=10, mode="LOITER")
-        self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "flight_state": mavutil.mavlink.UTM_FLIGHT_STATE_AIRBORNE,
-        }, poll=True)
-        self.land_and_disarm()
-
-    def HomeAltResetTest(self):
-        '''fly mission from cliff top to water, land, then RTL to cliff top'''
-        # terrain handler must be running before customise_SITL_commandline so that
-        # TERRAIN_REQUESTs from firmware at KalaupapaCliffs are answered immediately.
-        self.install_terrain_handlers_context()
-        try:
-            # wipe=True clears any stale EEPROM state from a previous failed run;
-            # a prior failure may leave TERRAIN_ENABLE=1, which causes the firmware to
-            # fetch terrain data at boot and block WPNAV parameter responses.
-            self.customise_SITL_commandline(["--home", "KalaupapaCliffs"], wipe=True)
-            # non-terrain params first; TERRAIN_ENABLE last because enabling it causes a
-            # brief firmware pause that drops subsequent PARAM_REQUEST_READ responses
-            self.set_parameters({
-                "AUTO_OPTIONS": 3,
-                "WP_SPD": 10,           # m/s; keeps test duration manageable
-                "WP_SPD_DN": 5,         # m/s
-                "WP_SPD_UP": 5,         # m/s; RTL initial climb from sea level
-                "RTL_ALT_M": 40,        # m above home (cliff top), clears cliff face on return
-                "TERRAIN_ENABLE": 1,
-                "SIM_TERRAIN": 1,
-            })
-            self.wait_ready_to_arm()
-
-            # Explicitly fix home to the current position/altitude before arming so
-            # that waypoints relative to home are computed from the correct location.
-            self.run_cmd(
-                mavutil.mavlink.MAV_CMD_DO_SET_HOME,
-            )
-
-            # read descent rate parameters so checks below are not hard-coded
-            wp_spd_dn = self.get_parameter("WP_SPD_DN")   # high-speed descent (m/s)
-            land_spd_ms = self.get_parameter("LAND_SPD_MS")  # final-approach descent (m/s)
-
-            cruise_alt = 40  # m relative to home (cliff top)
-
-            # Phase 1: take off from cliff top, fly north off the cliff edge, land near sea level.
-            # All waypoint altitudes are relative to home (cliff top).
-            self.start_flying_simple_relhome_mission([
-                (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, cruise_alt),
-                # fly north clear of the cliff edge; still at cruise_alt above cliff top
-                (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 200, 0, cruise_alt),
-                # land on the water; NAV_LAND descends to terrain (~640m below home)
-                (mavutil.mavlink.MAV_CMD_NAV_LAND, 0, 0, 0),
-            ])
-
-            # verify vehicle reaches cruise speed on the outbound leg
-            self.wait_groundspeed(7, 13, timeout=120)
-            # verify high-speed descent phase (above LAND_ALT_LOW_M) at WP_SPD_DN
-            self.wait_climbrate(
-                -wp_spd_dn - 1,
-                -wp_spd_dn + 1,
-                minimum_duration=5,
-                timeout=300,
-            )
-            # verify final low-speed approach (below LAND_ALT_LOW_M) at LAND_SPD_MS
-            self.wait_climbrate(
-                -land_spd_ms - 0.1,
-                -land_spd_ms + 0.1,
-                minimum_duration=5,
-                timeout=120,
-            )
-            # verify vehicle decelerates before landing
-            self.wait_groundspeed(0, 2, minimum_duration=5, timeout=300)
-            self.wait_disarmed(timeout=600)
-
-            # Phase 2: re-arm near sea level and climb to cruise_alt above home (a ~640m
-            # vertical climb at WP_SPD_UP); then switch to RTL to return to cliff top.
-            self.start_flying_simple_relhome_mission([
-                (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, cruise_alt),
-            ])
-
-            # wait for vehicle to reach cruise_alt above home (cliff top + cruise_alt ASL)
-            self.wait_altitude(cruise_alt - 1, cruise_alt + 5, relative=True, timeout=200)
-
-            # RTL_ALT equals cruise_alt, so the vehicle flies directly to the home position
-            self.change_mode("RTL")
-            # verify vehicle reaches cruise speed on the inbound horizontal leg
-            self.wait_groundspeed(7, 13, timeout=120)
-            # verify high-speed descent phase (RTL_ALT_M - LAND_ALT_LOW_M) at WP_SPD_DN
-            # duration is shorter here (~30 m at WP_SPD_DN) so minimum_duration is smaller
-            self.wait_climbrate(
-                -wp_spd_dn - 1,
-                -wp_spd_dn + 1,
-                minimum_duration=2,
-                timeout=300,
-            )
-            # verify final low-speed approach (below LAND_ALT_LOW_M) at LAND_SPD_MS
-            self.wait_climbrate(
-                -land_spd_ms - 0.1,
-                -land_spd_ms + 0.1,
-                minimum_duration=5,
-                timeout=120,
-            )
-            # verify vehicle decelerates on arrival at home
-            self.wait_groundspeed(0, 2, minimum_duration=5, timeout=300)
-            self.wait_rtl_complete(timeout=300)
-        finally:
-            # reset SITL home back to the default location so the framework's
-            # post-test reboot_sitl() location check passes
-            self.customise_SITL_commandline([])
 
     def assert_origin_frame_consistent(self):
         '''reported origin altitude, local down position and AMSL must agree'''

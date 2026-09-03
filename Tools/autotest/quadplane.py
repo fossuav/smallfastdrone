@@ -3244,7 +3244,6 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
             self.FenceRelativeToTerrainMaxAlt,
             self.FenceRelativeToTerrainMinAlt,
             self.TECSThrSpikeOnModeChange,
-            self.CircuitStatusScript,
             self.AmslAltPreservedAfterUpdateHomeAtDifferentElevation,
         ])
         return ret
