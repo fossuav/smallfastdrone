@@ -266,7 +266,7 @@ const AP_Param::GroupInfo AP_Baro::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("1_THST_SCALE", 25, AP_Baro, sensors[0].mot_scale, 0),
 
-    // @Param: 1_THST_FILT
+    // @Param: _THST_FILT
     // @DisplayName: Thrust compensation filter cutoff
     // @Description: Low-pass filter cutoff frequency for thrust compensation. This smooths the throttle input to prevent rapid baro altitude changes during throttle transients. Set to 0 to disable filtering.
     // @Range: 0 10
