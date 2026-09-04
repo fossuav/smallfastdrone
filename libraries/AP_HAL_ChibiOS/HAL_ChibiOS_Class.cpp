@@ -296,7 +296,12 @@ static void main_loop()
     }
 #endif
 #if HAL_FLASH_READOUT_PROTECTION
-    stm32_flash_read_protect_flash();
+    // only when asked for, and only ever raising it. Follows the pattern
+    // the write-protection options above already use, rather than firing
+    // on every boot of any build that compiles it in
+    if (AP_BoardConfig::secure_memory()) {
+        stm32_flash_read_protect_flash();
+    }
 #endif
 
 #if !defined(DISABLE_WATCHDOG)

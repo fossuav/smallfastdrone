@@ -46,3 +46,8 @@ define AP_ARMING_IMU_CONSISTENCY_CHECK_TIME_MS 2000
 # secure builds ship keyed: no MAVLink key management, an empty key set
 # fails closed, and the per-drone identity commands are available
 define AP_CHECK_FIRMWARE_FIXED_KEYS 1
+
+# allow the drone's memory to be locked against reading. Compiling this in
+# only makes the option available; BRD_OPTIONS bit 10 and an identity are
+# both needed before anything is locked, and nothing here ever unlocks
+define HAL_FLASH_READOUT_PROTECTION 1
