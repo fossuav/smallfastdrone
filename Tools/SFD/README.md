@@ -102,3 +102,11 @@ PR's net change to the file in order, auto-resolving the additive conflicts via
 `resolve_additive.py` and stopping on the rest for hand resolution. The result
 matches the current PR heads (not the loiter branch). See REFRESH_NOTES.md
 "Phase 2" for the two manual conflict shapes and the standing validation findings.
+
+## Review rules
+
+`PR_REVIEW_RULES.md` in this directory carries the local review rules that sit
+on top of the shared playbook: the refresh sweep for newly opened PRs (which
+feeds `prs.txt` and the README), the ../ardupilot-pr-analysis archive currency
+check, and vetting review findings against the private flight-test analyses.
+Read it before a /pr-review run or a batch refresh.
