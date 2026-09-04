@@ -37,7 +37,8 @@
 33359   # AGL KF rangefinder height switch + fuse aglKfH as the height observation
 33478   # AGL KF velocity velD fusion
 33585   # Optflow flat-ground above rangefinder range (bit 5; must stay after #33478 for bit 4)
-33484   # Optical flow axis lockout recovery + focus-height floor
+33484   # Optical flow axis lockout recovery (focus-height floor split out to #34292)
+34292   # Optical flow minimum focus height FLOW_HGT_MIN (split out of #33484)
 33497   # HereFlow output rate correction FLOW_HF_RATEF
 33498   # Inhibit Z gyro bias without yaw source
 33507   # AGL KF accel-Z bias estimation
