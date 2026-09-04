@@ -347,10 +347,15 @@ void AP_DAL::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f &rawF
     end_frame();
 
     // the focus height is a sensor property, so it goes in its own record ahead of
-    // the sample it applies to, and older logs without one replay with it disabled
-    const log_ROFM old_ROFM = _ROFM;
-    _ROFM.minHeight = minHeight;
-    WRITE_REPLAY_BLOCK_IFCHANGED(ROFM, _ROFM, old_ROFM);
+    // the sample it applies to, and older logs without one replay with it disabled.
+    // Writes before logging starts are dropped, and a record only written when it
+    // changes never gets a second chance, so hold the value back until it can be
+    // logged rather than latching one the log will not carry.
+    if (logging_started) {
+        const log_ROFM old_ROFM = _ROFM;
+        _ROFM.minHeight = minHeight;
+        WRITE_REPLAY_BLOCK_IFCHANGED(ROFM, _ROFM, old_ROFM);
+    }
 
     const log_ROFH old = _ROFH;
     _ROFH.rawFlowQuality = rawFlowQuality;
