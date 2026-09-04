@@ -551,7 +551,7 @@ const AP_Param::Info Copter::var_info[] = {
 
     // @Param: THROW_ALT_DCSND
     // @DisplayName: Throw mode target altitude to descend
-    // @Description: Target altitude to descend during a drop, (must be positive). This allows for rapidly clearing surrounding obstacles.
+    // @Description: Height below the release point that a drop is arrested at, and the distance the vehicle descends level under zero throttle before the arrest begins (must be positive). Uprighting overshoots it, so the position controller then makes a trajectory-limited climb back up to it; the climb can never exceed the release point. Use 0 for hand drops and 3-5 for carrier releases that need separation before the arrest.
     // @Units: m
     // @User: Advanced
     GSCALAR(throw_altitude_descend, "THROW_ALT_DCSND", 1.0),
@@ -626,6 +626,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Values: 0:Upward Throw,1:Drop
     // @User: Standard
     AP_GROUPINFO("THROW_TYPE", 4, ParametersG2, throw_type, (float)ModeThrow::ThrowType::Upward),
+
 #endif
 
     // 5 was GND_EFFECT_COMP, folded into AP_GroundEffect GNDEFF_ALT (<0 disables)
@@ -1186,6 +1187,25 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Increment: 0.5
     // @User: Advanced
     AP_GROUPINFO("VALT_POS_EXPO", 29, ParametersG2, valt_pos_expo, 0),
+#endif
+
+#if MODE_THROW_ENABLED
+    // @Param: THROW_DROP_AG
+    // @DisplayName: Drop arrest aggressiveness
+    // @Description: Scales the vertical speed and acceleration limits used by the position controller during drop recovery. At 1.0 the limits are 5 m/s and 15 m/s/s; at 2.0 they are 10 m/s and 30 m/s/s. Higher values arrest the descent in less height but demand more thrust headroom, and the arrest is still bounded by available thrust.
+    // @Range: 1.0 4.0
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("THROW_DROP_AG", 25, ParametersG2, throw_drop_ag, 1.0),
+
+    // @Param: THROW_DROP_CNF
+    // @DisplayName: Drop confirmation time
+    // @Description: Minimum freefall time (seconds) before drop detection triggers. Props remain off during this period. At 0, a 100ms minimum applies. For carrier drops use 0.5-1.0s to ensure separation before motors start. For hand drops 0 is normally sufficient as the spool-up freefall check provides additional verification. Independent of THROW_ALT_DCSND (altitude target). Only used when THROW_TYPE=1.
+    // @Range: 0 5
+    // @Units: s
+    // @Increment: 0.1
+    // @User: Advanced
+    AP_GROUPINFO("THROW_DROP_CNF", 61, ParametersG2, throw_drop_confirm_time, 0),
 #endif
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
