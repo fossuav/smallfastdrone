@@ -32,7 +32,12 @@ class JSONEmit(Emit):
         # Copy content to avoid any modification
         g = copy.deepcopy(g)
 
-        self.content[g.name] = {}
+        # merge rather than replace: several libraries legitimately share
+        # the empty group name, since their parameters carry no prefix -
+        # AP_Vehicle, the Lua applets and the vehicle's own group all do.
+        # Replacing here meant whichever emitted last kept its parameters
+        # and the rest were silently dropped
+        self.content.setdefault(g.name, {})
 
         # Check all params available
         for param in g.params:
