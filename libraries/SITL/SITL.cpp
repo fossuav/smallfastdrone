@@ -204,6 +204,7 @@ const AP_Param::GroupInfo SIM::var_info[] = {
     // @DisplayName: Optical flow rate offset X
     // @Description: Constant offset added to the X axis simulated optical flow rate, for fault injection (false motion on one axis while stationary)
     // @Units: rad/s
+
     // @Param: FLOW_OFS_Y
     // @DisplayName: Optical flow rate offset Y
     // @Description: Constant offset added to the Y axis simulated optical flow rate, for fault injection
