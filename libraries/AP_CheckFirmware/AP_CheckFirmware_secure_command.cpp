@@ -519,7 +519,14 @@ void AP_CheckFirmware::handle_secure_command(mavlink_channel_t chan, const mavli
     }
 
     case SECURE_COMMAND_GET_IDENTITY: {
-        reply.result = (pkt.data_length == 0 && fill_identity_reply(reply)) ? MAV_RESULT_ACCEPTED : MAV_RESULT_FAILED;
+        if (pkt.data_length == 0 && fill_identity_reply(reply)) {
+            reply.result = MAV_RESULT_ACCEPTED;
+            break;
+        }
+        reply.result = MAV_RESULT_FAILED;
+        reply.data_length = 1;
+        reply.data[0] = AP_CheckFirmware::find_identity() == nullptr ?
+            AP_IDENTITY_STATUS_NO_REGION : AP_IDENTITY_STATUS_NOT_SET;
         break;
     }
 #endif // AP_CHECK_FIRMWARE_IDENTITY_ENABLED

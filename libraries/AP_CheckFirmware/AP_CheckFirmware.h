@@ -116,6 +116,16 @@ static_assert(sizeof(app_descriptor_signed) == APP_DESCRIPTOR_SIGNED_TOTAL_LENGT
 #define AP_IDENTITY_SIGNATURE {0x9d, 0x2b, 0x7e, 0x11, 0xc4, 0x58, 0xa3, 0x6f}
 
 /*
+  why a GET_IDENTITY failed, returned as one byte of reply data. A
+  bootloader too old to carry the identity region and one that simply
+  has no key yet both fail the read, but the remedies differ: update
+  the bootloader, or generate. Without this the caller cannot tell,
+  and a drone part way through an upgrade looks like a fresh one
+ */
+#define AP_IDENTITY_STATUS_NOT_SET 1
+#define AP_IDENTITY_STATUS_NO_REGION 2
+
+/*
   per-drone identity: an X25519 private key generated on the board and
   never emitted. It lives outside public_key[] so that no key command
   can read, move or overwrite it, and carries its own signature so a
