@@ -485,6 +485,7 @@ private:
     AP_Float _gpsVAccThreshold;     // vertical accuracy threshold to use GPS as an altitude source
     AP_Int32 _options;              // bit mask of processing options
     AP_Float _aglKfVelMaxSpd;       // maximum horizontal speed for AGL KF vertical velocity fusion (m/s)
+    AP_Int16 _flowQualMin;          // flow quality below which a lockout is not recovered by a reset
 
     // enum for processing options
     enum class Option {
