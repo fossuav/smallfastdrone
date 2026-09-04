@@ -28,6 +28,7 @@
 #include <GCS_MAVLink/GCS.h>
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #include <AP_InertialSensor/AP_InertialSensor_rate_config.h>
+#include <AP_CheckFirmware/AP_CheckFirmware.h>
 
 #include <stdio.h>
 
@@ -337,7 +338,7 @@ const AP_Param::GroupInfo AP_BoardConfig::var_info[] = {
     // @Param: OPTIONS
     // @DisplayName: Board options
     // @Description: Board specific option flags
-    // @Bitmask: 0:Enable hardware watchdog, 1:Disable MAVftp, 2:Enable set of internal parameters, 3:Enable Debug Pins, 4:Unlock flash on reboot, 5:Write protect firmware flash on reboot, 6:Write protect bootloader flash on reboot, 7:Skip board validation, 8:Disable board arming gpio output change on arm/disarm, 9:Use safety pins as profiled
+    // @Bitmask: 0:Enable hardware watchdog, 1:Disable MAVftp, 2:Enable set of internal parameters, 3:Enable Debug Pins, 4:Unlock flash on reboot, 5:Write protect firmware flash on reboot, 6:Write protect bootloader flash on reboot, 7:Skip board validation, 8:Disable board arming gpio output change on arm/disarm, 9:Use safety pins as profiled, 10:Lock drone memory on reboot
     // @User: Advanced
     AP_GROUPINFO("OPTIONS", 19, AP_BoardConfig, _options, HAL_BRD_OPTIONS_DEFAULT),
 
@@ -594,6 +595,30 @@ bool AP_BoardConfig::safety_button_handle_pressed(uint8_t press_count)
         return false;
     }
     return true;
+}
+
+/*
+  should the drone's memory be locked against reading on the next boot?
+
+  Raise-only. Setting the bit asks for readout protection; clearing it
+  does nothing, because the firmware never lowers protection - dropping it
+  mass-erases the chip, and an operator undoing a tick box in a parameter
+  list must not be able to reach that. Unlocking is a deliberate act over
+  DFU instead.
+
+  Refused on a drone with no identity: locking one gains nothing and makes
+  it unrecoverable except by that same erase.
+ */
+bool AP_BoardConfig::secure_memory(void)
+{
+    if (_singleton == nullptr || (_singleton->_options & SECURE_MEMORY) == 0) {
+        return false;
+    }
+#if AP_CHECK_FIRMWARE_IDENTITY_ENABLED
+    return AP_CheckFirmware::identity_is_set(AP_CheckFirmware::find_identity());
+#else
+    return false;
+#endif
 }
 
 namespace AP {

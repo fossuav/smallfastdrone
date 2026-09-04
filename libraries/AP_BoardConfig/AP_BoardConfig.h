@@ -166,7 +166,16 @@ public:
         SKIP_BOARD_VALIDATION = (1<<7),
         DISABLE_ARMING_GPIO = (1<<8),
         IO_SAFETY_PINS_AS_PROFILED = (1<<9),
+        SECURE_MEMORY = (1<<10),
     };
+
+    /*
+      return true if the drone's memory should be locked against reading
+      on the next boot. Raise-only by design: nothing in the firmware ever
+      lowers readout protection, because doing so mass-erases the chip.
+      See AP_BoardConfig.cpp
+     */
+    static bool secure_memory(void);
 
     //return true if arming gpio output is disabled
     static bool arming_gpio_disabled(void) {
