@@ -1,7 +1,7 @@
 # Indoor Copter Tuning Playbook
 
-**Version:** 1.6.0
-**Applies to branch:** `SmallFastDrone-4.7-beta` (verified at `41c83011e2`)
+**Version:** 1.7.0
+**Applies to branch:** `SmallFastDrone-4.7-beta` (verified at `41c83011e2`; the §1.5–1.8 / §4.12 flow/AGL additions verified at `bda5c24ba2`)
 **Upstream base:** ArduCopter 4.7-beta
 
 Parameter names and ranges in this document have been cross-checked against
@@ -119,6 +119,83 @@ build-up that standard AltHold has to close when sticks return to centre.
 VALT is gated behind `MODE_VALT_ENABLED` (default ON for full Copter builds,
 may be off in space-constrained AP_Periph or minimum-feature builds — check
 `build-options` if it does not appear in your mode list).
+
+### 1.5 Fork-specific optical-flow / AGL parameters
+
+These parameters exist on this branch only (upstream PRs pending for some).
+Defaults and ranges cross-checked against the source.
+
+| Param | Default | Range | What it does |
+|-------|---------|-------|--------------|
+| `EK3_FLOW_GAIN_H` | 4 | 4–40 m | Height below which optical-flow nav runs at full gain. Above it the position-loop gain handed to the position controller is scaled `K/HAGL`, damping the high-altitude flow limit cycle. Larger = more authority high up, less margin against oscillation. Takes effect immediately, so it can be tuned in flight — see §4.12 |
+| `EK3_FLOW_MIN_H` | 0.1 | 0–0.5 m | Flow is treated as zero motion below this height (the flow sensor's focus floor). Stops near-ground flow garbage from being adopted as a confident phantom velocity (the lean/flyaway-on-landing failure). `0` disables |
+| `EK3_AGL_ABIAS_P` | 0.05 | 0.01–0.5 m/s² | Process noise for the AGL-KF accel-Z bias state. Default is conservative; 0.1–0.3 lets a real thermal accel bias be learned faster (0.3 flight-validated). Only used when the AGL KF is on (`EK3_OPTIONS` bit 4/5) |
+| `EK3_AGL_VD_SPD` | -1 | -1–10 m/s | Max ground speed to fuse the AGL-KF vertical velocity as velD. `-1` = follow `EK3_RNG_USE_SPD`. Only used with `EK3_OPTIONS` bit 5 |
+| `FLOW_HF_RATEF` | 1.0 | 0.25–4.0 | DroneCAN/HereFlow rate correction. Scales flow **and** the node's gyro together (unlike `FLOW_FXSCALER`/`FYSCALER`, which only scale flow). Set to `1/slope` only when `flow_cal_check` reports a sensor-rate slope ≠ 1. `FLOW_TYPE=6` only — see §1.8 |
+
+`EK3_OPTIONS` bits for the flow/AGL work (add the values of the bits you
+want):
+
+| Bit | Value | Meaning |
+|-----|-------|---------|
+| 2 | 4 | Optflow may use terrain (SRTM) alt above rangefinder range. Superseded by bit 6 for most uses |
+| 4 | 16 | **AGL KF for flow scaling** — 2-state rangefinder-aided AGL filter feeds the height used to scale flow, decoupled from main-filter vertical position error |
+| 5 | 32 | **AGL KF velocity → velD** — anchors vertical velocity (makes Z accel bias observable) to the rangefinder without making it the height source; absolute height stays baro-referenced. For no-GPS-velocity vehicles |
+| 6 | 64 | **Optflow above rangefinder range** — keeps flow nav alive past the rangefinder ceiling instead of a spurious EKF failsafe. Auto-prefers the terrain DB when `TERRAIN_ENABLE` + coverage, else assumes flat ground. The flat-ground assumption is only safe over flat areas (large indoor spaces) |
+
+Behaviours already baked into this firmware (no parameter needed): the
+GPS→flow in-flight switch enters relative aiding (so the `EK3_FLOW_GAIN_H`
+detune actually engages), forward stick no longer produces a backward lurch
+on flow Loiter (drag removed from the feed-forward accel), indoor altitude
+tracks the rangefinder instead of diverging on a propwash-inflated baro,
+flow-only Loiter without a yaw source no longer corrupts the gyro-Z bias at
+takeoff, and flow is zeroed below its focus height (`EK3_FLOW_MIN_H`).
+
+### 1.6 Flying above the rangefinder ceiling (large flat indoor space)
+
+For optical flow with no GPS, climbing above the rangefinder's range. On top
+of §1.1:
+
+```
+EK3_SRC1_POSXY  = 0      # flow is relative, no absolute XY
+EK3_SRC1_VELXY  = 5      # optical flow
+EK3_SRC1_POSZ   = 1      # baro height (rangefinder anchors AGL via the KF)
+EK3_SRC1_VELZ   = 0
+EK3_SRC1_YAW    = 1      # compass; use 0 if no usable indoor compass
+EK3_OPTIONS     = 112    # bit4(16)+bit5(32)+bit6(64): AGL-KF scaling + velD anchor + above-range
+EK3_FLOW_GAIN_H = 12     # ~0.25 * ceiling AGL (e.g. 12 for a ~45 m ceiling) — tune per §4.12
+EK3_FLOW_MIN_H  = 0.1
+RNGFND1_MAX_CM  = <true max range, cm>
+```
+
+If the floor is **not** flat, set `TERRAIN_ENABLE=1` with terrain tiles
+loaded — bit 6 then uses the terrain DB automatically instead of flat ground.
+
+### 1.7 GPS → optical-flow handoff in flight (outdoor-to-indoor, GPS loss)
+
+Mostly automatic in this firmware (the AID_RELATIVE fallback fix). Configure
+the flow set on SRC2 and switch with an RC `SOURCE_SET` aux switch:
+
+```
+EK3_SRC2_POSXY = 0
+EK3_SRC2_VELXY = 5
+EK3_SRC2_POSZ  = 1
+EK3_SRC2_YAW   = 1
+```
+
+On the switch the EKF now drops to relative aiding, so the
+`EK3_FLOW_GAIN_H` detune actually engages (before the fix it stayed in
+absolute aiding and ran full gain).
+
+### 1.8 DroneCAN flow node reading half-rate (ARK Flow / HereFlow)
+
+Symptom: flow-only Loiter leans/drifts, `flow_cal_check` sensor-rate slope
+≈ 0.5 (the node's reported integration interval is wrong, so it reports flow
+and its own gyro at the wrong rate).
+
+```
+FLOW_HF_RATEF = 1.92      # = 1 / slope  (do NOT chase it with FLOW_*SCALER)
+```
 
 ---
 
@@ -456,6 +533,18 @@ manageable above that. So pick `RNG_USE_HGT` to give a transition near
 | `0–2` | Transition altitude < 0.3 m. Rangefinder anchors only at the very lowest altitudes. | Outdoor terrain-following, where you want pure baro for almost everything. |
 | **`3–15`** | **Transition altitude ~0.5–1.5 m on typical indoor sensors. Rangefinder anchors through the propwash-affected band; baro takes over above.** | **Default indoor recommendation.** Pick the value from the table above that puts the transition near 1 m for your specific `RNGFND1_MAX_CM`. |
 | `>20` | Transition altitude well above the propwash band. Rangefinder doing height-anchor work it doesn't need to do. | Only if you have a specific reason — e.g. you've established that baro thermal drift during long indoor hover is the dominant error source and you have validated the AGL-KF-gated switching is stable on this airframe through repeated touchdowns. Not a general recommendation. |
+
+**Hard constraint: the transition altitude must clear the hover altitude.**
+Switch-on additionally requires estimated AGL below **0.7×** the transition
+altitude, so a transition at or below the hover height means the rangefinder
+never becomes the height source at all: `RNGFND1_MAX_CM = 3000` with
+`RNG_USE_HGT = 3` gives a 0.9 m transition and a 0.63 m switch-on — a 1–2 m
+hover never engages, and the vehicle rides baro while looking correctly
+configured. For a sustained hover *above* the ~1 m band on the AGL-KF stack,
+set `RNGFND1_MAX_CM` to the sensor's true maximum (a small ToF is ~4–8 m,
+not the 30 m sometimes left configured) and `RNG_USE_HGT ≈ 70`, with
+`EK3_RNG_USE_SPD ≈ 4` so repositioning does not drop back to baro. This is
+the validated case behind the `>20` row above.
 
 The HAGL Kalman filter (compile-time enabled in current firmware) makes the
 height-source switching baro-independent, which removes the original feedback
@@ -924,6 +1013,23 @@ strictly better than relying on extrapolation.
 changes: VTX swap, antenna routing change near the FC, baro shroud /
 foam change, FC swap. The fitted exponent is hardware-specific.
 
+### 4.12 `EK3_FLOW_GAIN_H` selection
+
+Only matters when flying on optical flow well above the full-gain height
+(§1.6). Two bounds bracket it:
+
+- **Too low** → at the ceiling the gain is cut so far the vehicle drifts in
+  wind and can fall back to AltHold (a control-authority drift, not an EKF
+  failsafe).
+- **Too high** → the ~0.5 Hz position limit cycle (±20° roll) returns.
+
+Start at `K ≈ 0.25 × max_HAGL` (45 m ceiling → 12, 60 m → 15, 70 m → 18).
+Raise K until the roll oscillation at the top altitude just reappears, then
+back off one step. The parameter takes effect immediately, so it can be
+tuned in flight. The usable window narrows with altitude and eventually
+closes — past that point, lower flow velocity noise (height, sensor) is the
+only lever, not gain.
+
 ---
 
 ## 5. Tuning order
@@ -984,10 +1090,21 @@ EK3_SRC1_POSZ      = 1      # Baro
 EK3_SRC1_VELZ      = 0
 EK3_RNG_USE_HGT    = 8 to 15  # set so transition altitude ~1m: value = 100*1m/RNGFND1_MAX_CM
                               # Examples: MAX_CM=1200 → 10; MAX_CM=700 → 15. Use -1 only as fallback.
+                              # Transition MUST clear the hover altitude (switch-on is at 0.7×) —
+                              # ~70 for a sustained hover above 1 m; see §4.1.
 FLOW_TYPE          = 10     # vehicle-specific
 RNGFND1_TYPE       = 10     # vehicle-specific
 RNGFND1_MIN_CM     = 2      # as low as the sensor permits
-RNGFND1_MAX_CM     = 1200
+RNGFND1_MAX_CM     = 1200   # the sensor's TRUE maximum, not a placeholder
+
+# --- Optical flow / AGL (fork-specific, §1.5) ---
+EK3_OPTIONS        = 48     # bit4 AGL-KF flow scaling + bit5 velD anchor;
+                            # +64 (bit6) if flying above rangefinder range (§1.6)
+EK3_FLOW_GAIN_H    = 12     # ~0.25 * max HAGL when flying high on flow (§4.12); default 4
+EK3_FLOW_MIN_H     = 0.1    # flow zeroed below the sensor's focus height
+EK3_AGL_ABIAS_P    = 0.1 to 0.3  # default 0.05 learns a thermal accel bias slowly; 0.3 flight-validated
+EK3_AGL_VD_SPD     = -1     # follow EK3_RNG_USE_SPD (bit 5 only)
+FLOW_HF_RATEF      = 1.0    # leave at 1 unless flow_cal_check sensor-rate slope ≠ 1 (§1.8)
 
 # --- Baro ground effect / propwash ---
 BARO1_THST_SCALE   = <calibrate>     # Pa per unit throttle, negative; per-baro
