@@ -7,8 +7,7 @@
 # Promoted into the base when they merged upstream: #29768, #32045, #32472, #33587.
 #
 # Format: one PR number per line; "#" starts a comment. Blank lines ignored.
-# Excluded for now: Throw Mode RPM (#32955, may no longer be needed) and the
-# local throw-mode work.
+# Excluded for now: Throw Mode RPM (#32955, may no longer be needed).
 
 # --- In review ---
 31005   # Fence: min alt disarm (still open despite the old "merged" label)
@@ -46,6 +45,8 @@
 33568   # Optical flow relative-aiding fallback on GPS loss
 33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H
 34251   # Persist the fixed notch conversion to INS_HNTC2 (Copter + Plane)
+33879   # FFT notch tune: persist the tracking mode and name the notch used
 34209   # EKF3: do not learn XY accel bias in unaided flight
 34208   # Copter: interpolate the rate target in the fast rate thread
 34210   # Copter: advanced land failsafe (LAND_FS_OPTIONS bit 0)
+32475   # Throw mode improvements (applied last, as the local stack was)
