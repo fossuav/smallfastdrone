@@ -1176,13 +1176,8 @@ void NavEKF3_core::FuseVelPosNED()
                 // Don't use 'fake' horizontal measurements used to constrain attitude drift during
                 // periods of non-aiding to learn bias as these can give incorrect esitmates.
                 const bool horizInhibit = PV_AidingMode == AID_NONE && obsIndex != 2 && obsIndex != 5;
-                // Inhibit Z-axis accel bias learning during ground effect because motor
-                // vibration causes a rectification offset in AccZ that differs between
-                // ground and flight conditions.
-                // When out of ground effect (controlled by GNDEFF_ALT on Copter side),
-                // allow bias learning from baro position corrections - this allows the EKF to
-                // adapt to in-flight AccZ offsets (vibration rectification) that differ from
-                // ground conditions.
+                // In ground effect the AccZ rectification offset differs from the hover
+                // value, so hold the Z bias rather than learn the ground value.
                 const bool gndEffectActive = dal.get_takeoff_expected() || dal.get_touchdown_expected();
                 if (!horizInhibit && !accelBiasLearningInhibited() && !badIMUdata) {
                     for (uint8_t i = 13; i<=15; i++) {
