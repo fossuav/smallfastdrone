@@ -222,14 +222,16 @@ skip.
 
 The three failures:
 
-- **EK3_OptflowAssumeFlatGnd** - NEW, and open. Fails its own first subtest
-  (EK3_OPTIONS=0) with "terrain offset did not go stale" after climbing clear
-  of a killed rangefinder. The test body is byte-identical to #33585's head and
-  #33585's code is present, so the rebuild is faithful. A/B'd against the
-  optical-flow FPE guard: it fails identically without the guard, so that fix is
-  not the cause. Next step is whether gndOffsetValid stays true because
-  activeHgtSource is still RANGEFINDER - #33359 changed that switch to use the
-  AGL KF - or whether #33585's head fails its own test after its latest push.
+- **EK3_OptflowAssumeFlatGnd** - NEW, and open, but #33585 IS BEING REVISED AS
+  THIS IS WRITTEN, so re-run it against a settled head before spending any time
+  on it. What is established: it fails its own first subtest (EK3_OPTIONS=0)
+  with "terrain offset did not go stale" after climbing clear of a killed
+  rangefinder; the test body is byte-identical to the head it was rebuilt from
+  and #33585's code is present, so the rebuild is faithful; and it fails
+  identically with the optical-flow FPE guard removed, so that fix is not the
+  cause. The untested hypothesis is that gndOffsetValid stays true because
+  activeHgtSource is still RANGEFINDER, #33359 having changed that switch to use
+  the AGL KF. Treat that as a hypothesis, not a diagnosis.
 - **HeightDatumKeptOnMidairRearm** - unchanged and still not a regression. The
   PR's own assertions pass; it fails the test's recovery tail, which wants the
   descent arrested above 30 m. 2.1 m this run, against 12.6 / 1.3 / 12.0 / 2.8
