@@ -77,17 +77,21 @@ Seen in the 2026-09-04 refresh, one failing test at a time:
   that live in master's vehicle_test_suite.py.
 - `install_example_script_context("Copter_Motors_6DoF.lua")`, a master-only file.
 
-After `rebuild-tests`, before the test run, sweep for them in one pass rather
-than discovering them one failure at a time:
+After `rebuild-tests`, before the test run:
 
-- walk the AST for `self.X(...)` where no `def X` exists anywhere in
-  Tools/autotest, and diff that set against the same scan of vanilla 4.7 so the
-  pre-existing upstream quirks (`change_alt_frame`, `uint8`,
-  `guided_move_global_relative_alt`) do not drown the real ones;
-- check keyword names against 4.7's signature for any harness call a PR body
-  introduces, `takeoff()` above all;
-- check that every `install_example_script_context` / `install_applet_script`
-  file exists in this tree.
+```sh
+Tools/SFD/check_test_api.py
+```
+
+It reports all of them at once - helpers with no definition, keywords 4.7's own
+signature does not accept, and install_*_script*() naming a Lua file this tree
+does not ship. Each check is diffed against vanilla 4.7 so the pre-existing
+upstream quirks (`change_alt_frame`, `uint8`,
+`guided_move_global_relative_alt`) do not drown the real findings.
+
+It resolves a script name held in a local variable, which a plain grep for
+string literals misses - that is how Scripting6DoFMotors' missing
+Copter_Motors_6DoF.lua slipped through a first pass.
 
 ## The analysis archive is part of the thread
 

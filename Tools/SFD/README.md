@@ -27,6 +27,9 @@ Tools/SFD/check_param_tables.py                # MANDATORY before any test run: 
                                                # failing every test. See PR_REVIEW_RULES.
 Tools/SFD/refresh.sh tests          # phase 2a: deferred Tools/autotest changes
 Tools/SFD/refresh.sh rebuild-tests  # phase 2b: rebuild hot files from PR heads
+Tools/SFD/check_test_api.py         # MANDATORY before any test run: tests copied
+                                    # from PR heads call master's API and only
+                                    # fail once the body runs
 
 # after a clean refresh, capture state for next time and commit it:
 Tools/SFD/refresh.sh rerere-save    # prune + archive resolutions to rr-cache.tar.gz
