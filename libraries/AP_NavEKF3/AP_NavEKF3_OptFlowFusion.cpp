@@ -62,7 +62,7 @@ void NavEKF3_core::SelectFlowFusion()
     // as zero motion rather than let unfocused readings drive a phantom velocity. Only reachable
     // above the rangefinder's own minimum range, below which no Good samples arrive and the
     // freshness check fails.
-    if (takeOffDetected && (ofDataDelayed.minHeight > 0.0f) &&
+    if (flowDataToFuse && takeOffDetected && (ofDataDelayed.minHeight > 0.0f) &&
         (imuSampleTime_ms - rngValidMeaTime_ms < 500) &&
         (rangeDataDelayed.rng * prevTnb.c.z < ofDataDelayed.minHeight)) {
         ofDataDelayed.flowRadXYcomp.zero();
