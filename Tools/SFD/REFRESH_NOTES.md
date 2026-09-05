@@ -242,6 +242,42 @@ Run the set with `Tools/SFD/run_sfd_tests.sh` - it derives the list from the
 branch, puts the watch list first and the throw tests last, and `--resume`
 picks up an interrupted run instead of starting over.
 
+### #32232 keeps the terrain offset fresh on the ground, forever
+
+`EK3_OptflowAssumeFlatGnd`'s leg "the assumption does not carry over from an
+earlier flight" waits on the ground for `EKF_POS_VERT_AGL` to clear after
+killing the rangefinder. It never clears on this branch. Master passes.
+
+Cause: #32232's `f82183e6fb` ("AP_NavEKF3: ground clearance fusion fix") added
+
+    } else if (onGround && sensor->status() == OutOfRangeLow) {
+        range_distance = rngOnGnd;
+
+(later `!takeOffDetected` instead of `onGround`). A downward rangefinder sitting
+on the ground reads below its minimum, so this substitutes the known ground
+clearance and fuses it. `EstimateTerrainOffset()` then refreshes
+`gndHgtValidTime_ms` on every cycle, and `gndOffsetValid` - which is that
+timestamp inside 5 s - never goes stale while the vehicle has not taken off.
+
+It does not distinguish "below minimum because we are sitting on the ground"
+from "this sensor is failed". The test kills the rangefinder with
+`RNGFND1_MIN` above `RNGFND1_MAX`, so no reading can ever be Good and every one
+is OutOfRangeLow - a dead sensor - and the filter keeps fusing a synthetic range
+from it indefinitely.
+
+Established by bisect over the 218-commit stack with a minimal reproducer
+(take off, land, kill the rangefinder, wait for POS_VERT_AGL to clear): the
+bare base is GOOD, `f82183e6fb` is the first BAD commit and its predecessor is
+GOOD. Confirmed by disabling only that `else if` at the branch tip, which makes
+the offset go stale after 4.8 s and the probe pass. Reverting the *later*
+#32232 commit alone does not help - the substitution comes from this one.
+
+Consequence for #33585: its flight-scoping leg cannot work as written on a
+stack that carries #32232, because the terrain offset is now always fresh on
+the ground. Either the leg stops depending on the offset going stale there, or
+#32232 stops treating a permanently-out-of-range sensor as a ground-clearance
+source. Not resolved - it needs a decision from both PR authors.
+
 ### The optical flow FPE - found, fixed, and what it cost
 
 Four SFD tests aborted SITL with `ERROR: Floating point exception` -
