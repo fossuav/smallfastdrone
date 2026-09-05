@@ -210,29 +210,44 @@ repeat, once per vehicle class), a dangling-registration scan, and a suite load.
 
 ### Validation
 
-2026-09-04 refresh: PARTIAL. 13 of the SFD tests pass; 2 fail on a reproducible
-SITL crash; ~30 have not been run yet (see below for why). Do not read the
-2026-09-03 record as still valid - it is the previous branch.
+2026-09-05 refresh (refresh3): the 49 SFD tests were run. 46 pass, 3 fail.
 
-Passing: EK3_NoGPSLeakWhenNotSource, EKFBootstrapReset, ScriptingOSD,
-SITLGyroRate, EK3AccelBias, EK3_AccelBiasInhibitOnGroundMoving,
-EK3_AccelBiasZeroVelOptFlow, EK3_ZeroVelFusionNotUsedWithGPS,
-BaroDriftClearedAtArm, BaroDriftClearedAfterMidairDisarm,
-BaroGroundEffectResetSuppression, AccelBiasMovingPlatform and
-VibrationRectificationBiasLearning.
+Two long-standing failures are GONE. ThrowDropSourceSwitch and ThrowModeNoGPS
+both pass - the pair this file recorded across two refreshes as hanging on
+"Stabilizing throw height" while the vehicle fell to the ground. #32475's
+rebuilt head carries the fix, so retire the "ours to fix" entry.
+HeightDatumKeptOnMidairRearm's own assertions still pass; only the recovery
+tail fails (see below). VibrationRectificationBiasLearning passes with no local
+skip.
 
-VRF now passes with NO local skip. The skip of subtests D/E that this file has
-carried for two refreshes is confirmed unnecessary - do not re-add it.
+The three failures:
 
-Three harness faults were found and fixed before any of that could run:
+- **EK3_OptflowAssumeFlatGnd** - NEW, and open. Fails its own first subtest
+  (EK3_OPTIONS=0) with "terrain offset did not go stale" after climbing clear
+  of a killed rangefinder. The test body is byte-identical to #33585's head and
+  #33585's code is present, so the rebuild is faithful. A/B'd against the
+  optical-flow FPE guard: it fails identically without the guard, so that fix is
+  not the cause. Next step is whether gndOffsetValid stays true because
+  activeHgtSource is still RANGEFINDER - #33359 changed that switch to use the
+  AGL KF - or whether #33585's head fails its own test after its latest push.
+- **HeightDatumKeptOnMidairRearm** - unchanged and still not a regression. The
+  PR's own assertions pass; it fails the test's recovery tail, which wants the
+  descent arrested above 30 m. 2.1 m this run, against 12.6 / 1.3 / 12.0 / 2.8
+  previously. Do not relax the threshold before understanding why the ALT_HOLD
+  recovery from a ~17 m/s fall is that slow on 4.7.
+- **Scripting6DoFMotors** - removed. Master-only Lua example.
 
-- FLOW_HGT_MIN and FLOW_HF_RATEF both on AP_OpticalFlow index 8. This failed
-  EVERY test with "Did not receive heartbeat" - SITL panics in AP_Param before
-  the first heartbeat, so no test is really about the parameter. See the
-  duplicate-index section.
-- assert_ekfs_match_sim_state and statustext_count_in_collections dropped by the
-  hot-file rebuild; an AttributeError only when the test body runs.
-- Scripting6DoFMotors needs a master-only Lua example; unregistered.
+Method notes for the next run:
+
+- Rebuild BOTH vehicles after any shared-library fix. The FPE fix went in with
+  `./waf copter` only, so the Plane and QuadPlane steps ran a six-hour-old
+  arduplane and the QuadPlane test crashed on the already-fixed bug. Its Plane
+  sibling passed on the stale binary purely because the fault is intermittent -
+  a pass on a stale binary is not evidence.
+- A crashing test costs ~45 minutes of reconnect stall before the harness gives
+  up, so a run with several crashers looks wedged when it is merely slow.
+  Confirm against the log mtime, not intuition: the per-test buildlog is
+  buffered and its mtime lags badly.
 
 ### The optical flow FPE - found, fixed, and what it cost
 
