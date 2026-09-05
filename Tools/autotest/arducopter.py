@@ -2641,11 +2641,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if not horiz_pos_rel():
             raise NotAchievedException("relative position was not valid within the range")
         self.land_and_disarm()
-        # let the first flight's terrain offset go stale on the ground, so the second
-        # flight starts with nothing measured and the timing is not a race. Arming is done
-        # without wait_ready_to_arm because that waits on the very flag under test.
+        # gndOffsetMeasured is forced false by !inFlight, so landing is what scopes the
+        # assumption to a flight - the offset does not have to go stale as well, and it
+        # cannot here: a downward range finder on the ground reads OutOfRangeLow, which
+        # the ground-clearance substitution fuses, holding gndHgtValidTime_ms fresh for
+        # as long as the vehicle has not taken off. Arming is done without
+        # wait_ready_to_arm because that waits on the very flag under test.
         kill_rangefinder()
-        wait_terrain_offset_stale()
         self.wait_prearm_sys_status_healthy()
         self.change_mode("ALT_HOLD")
         self.zero_throttle()
