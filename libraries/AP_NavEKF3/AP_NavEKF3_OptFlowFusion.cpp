@@ -914,7 +914,8 @@ bool NavEKF3_core::ResetVelocityToFlow(const of_elements &ofDataDelayed, ftype r
     stateStruct.velocity.y = (rhsY * prevTnb.a.x - rhsX * prevTnb.b.x) / det;
 
     // the reset velocity is flow rate * range, so the range variance carries into it as well
-    zeroStatesVarCov(4, 5);
+    zeroRows(P, 4, 5);
+    zeroCols(P, 4, 5);
     P[4][4] = P[5][5] = sq(MAX(frontend->_flowNoise, 0.05f) * range) +
                         sq(ofDataDelayed.flowRadXYcomp.length()) * aglKfP[0][0];
 
