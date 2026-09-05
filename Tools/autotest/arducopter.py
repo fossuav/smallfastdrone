@@ -2510,6 +2510,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # valid instead. Every assertion is on EKF_POS_HORIZ_REL, the flag the failsafe
         # actually reads, and each leg checks it both set and clear so a loss of flow
         # aiding cannot satisfy the negative half.
+        #
+        # The terrain leg needs the harness to answer SITL's TERRAIN_REQUESTs from the
+        # offline tile cache. Without this the tiles stay pending, terrain height is never
+        # valid, and that leg fails reporting the EKF flag rather than the missing data.
+        self.install_terrain_handlers_context()
         self.set_parameters({
             "SIM_FLOW_ENABLE": 1,
             "FLOW_TYPE": 10,
