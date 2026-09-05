@@ -19,6 +19,12 @@ sortie spent most of its time outside**. The measurements are below, and
 one of them started as a tool artifact that would have wrecked a
 calibration if acted on.
 
+One claim in this file was wrong when first written and is corrected in
+place below: the tilt limit was attributed to the vehicle-side
+rangefinder clamp in `AP_SurfaceDistance`, when it is EKF3's own
+`DCM33FlowMin` and it stops flow being fused at all rather than merely
+degrading its height.
+
 ## The raw data, cross-checked first
 
 Neither answer is worth anything if the inputs are not what they claim,
@@ -176,11 +182,36 @@ guarantees the attitude that degrades the measurement. Two mechanisms
 arrive together - the flow sensor goes off-nadir, and the rangefinder
 returns slant range instead of height.
 
-The second one has a hard edge. `AP_SurfaceDistance.cpp:41` corrects
-with `MAX(0.707f, c.z)`, so **past 45 degrees of tilt the correction
-clamps and the height is simply wrong**, under-corrected and reading
-long. Log 356's 15-20 m/s band sat at 49.3 deg median, past that clamp,
-which is where the p95 error jumps to 6.41 and the max to 17.2 m/s.
+There is a hard edge, and **this section first named the wrong one.** It
+blamed `AP_SurfaceDistance.cpp:41`, which corrects with
+`MAX(0.707f, c.z)` and so under-corrects past 45 degrees. That clamp is
+real but it is on the vehicle-side height - surface tracking, terrain
+following, `rangefinder_alt_ok()` - and the EKF never reads it. EKF3
+takes the rangefinder directly in `readRangeFinder()` and tilt-corrects
+with an unclamped `prevTnb.c.z` throughout `EstimateTerrainOffset()`.
+
+The gate that actually binds is EKF3's own, and it is harder than a
+clamp: `DCM33FlowMin = 0.71f` (`AP_NavEKF3.h:577`, a const rather than a
+parameter). Above about 45 degrees of tilt, `tiltOK` goes false and
+**flow is not fused at all** - `AP_NavEKF3_OptFlowFusion.cpp:44` for the
+terrain estimate and `:1036` for the AGL Kalman filter, which stops
+updating with it. The two numbers being 0.707 and 0.71 is why the wrong
+one fitted the symptom.
+
+Measured over the acro flight, the fraction of samples inside the gate:
+
+| speed band | within `DCM33FlowMin` |
+|---|---|
+| 5-10 m/s | 79% |
+| 10-15 m/s | 67% |
+| 15-20 m/s | **35%** |
+| 20-25 m/s | 42% |
+| 25-35 m/s | 38% |
+
+55% over the whole flight. So in the 15-20 m/s band the flow lane was
+running on IMU dead reckoning about two thirds of the time with nothing
+correcting it, which is where the p95 error jumps to 6.41 and the max to
+17.2 m/s. Not a degraded measurement - an absent one.
 
 The whole-flight correlation of speed against tilt is only r = +0.33,
 because acro puts plenty of tilt on at low speed too. The median trend
