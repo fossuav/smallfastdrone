@@ -76,18 +76,24 @@ def replay(src):
 def load(path, lo, hi):
     m = mavutil.mavlink_connection(path)
     lane = {GPS_LANE: [], FLOW_LANE: [], REPLAYED_FLOW: []}
+    aid = []
     t0 = None
     while True:
-        msg = m.recv_match(type=['XKF1'])
+        msg = m.recv_match(type=['XKF1', 'XKF4'])
         if msg is None:
             break
         t = msg.TimeUS / 1e6
         if t0 is None:
             t0 = t
         t -= t0
-        if lo <= t <= hi and msg.C in lane:
+        if not (lo <= t <= hi):
+            continue
+        if msg.get_type() == 'XKF4':
+            if msg.C == REPLAYED_FLOW:
+                aid.append((t, msg.AID))
+        elif msg.C in lane:
             lane[msg.C].append((t, msg.VN, msg.VE, msg.PN, msg.PE))
-    return lane
+    return lane, aid
 
 
 def at(series, t, age=0.15):
@@ -108,7 +114,13 @@ def pct(v, p):
 
 
 def score(path, lo, hi):
-    lane = load(path, lo, hi)
+    lane, aid = load(path, lo, hi)
+    # AID_ABSOLUTE=0, AID_NONE=1, AID_RELATIVE=2. The tilt gate blocks
+    # FuseOptFlow, which lets prevFlowFuseTime_ms go stale and demotes the
+    # lane after 5s, so the restart count is itself a function of the swept
+    # constant - it is the mechanism, not an independent property.
+    drops = sum(1 for a, b in zip(aid, aid[1:]) if a[1] == 2 and b[1] != 2)
+    rel = (sum(1 for _, v in aid if v == 2) / len(aid)) if aid else float('nan')
     repro, verr, drift = [], [], []
     base = prev = None
     flown = 0.0
@@ -127,7 +139,7 @@ def score(path, lo, hi):
         prev = (pn, pe)
         drift.append(math.hypot((r[3] - base[2]) - (pn - base[0]),
                                 (r[4] - base[3]) - (pe - base[1])))
-    return dict(n=len(verr), flown=flown,
+    return dict(n=len(verr), flown=flown, drops=drops, rel=100 * rel,
                 repro=pct(repro, .95) if repro else float('nan'),
                 v50=pct(verr, .5), v95=pct(verr, .95),
                 vmean=sum(verr) / len(verr),
@@ -149,17 +161,19 @@ def main():
     print("DCM33FlowMin sweep on %s, window %.0f-%.0fs" %
           (os.path.basename(args.log), args.lo, args.hi))
     print("truth is the GPS lane; %.2f is stock and its repro column is the check\n" % STOCK)
-    print("%-16s %8s %8s %8s %9s %9s %8s" %
-          ("DCM33FlowMin", "verr50", "verr95", "vmean", "driftpk", "% path", "repro95"))
+    print("%-16s %8s %8s %9s %8s %7s %8s %8s" %
+          ("DCM33FlowMin", "verr50", "vmean", "driftpk", "% path",
+           "drops", "%aiding", "repro95"))
     try:
         for v in values:
             patch(v)
             build()
             s = score(replay(args.log), args.lo, args.hi)
-            print("%-16s %8.2f %8.2f %8.2f %9.1f %8.1f%% %8.2f" %
+            print("%-16s %8.2f %8.2f %9.1f %7.1f%% %7d %7.0f%% %8.2f" %
                   ("%.2f (%2.0f deg)%s" % (v, math.degrees(math.acos(min(1.0, v))),
                                            " *" if abs(v - STOCK) < 1e-9 else ""),
-                   s['v50'], s['v95'], s['vmean'], s['dpeak'], s['dpct'], s['repro']))
+                   s['v50'], s['vmean'], s['dpeak'], s['dpct'],
+                   s['drops'], s['rel'], s['repro']))
     finally:
         shutil.move(backup, HEADER)
         build()
