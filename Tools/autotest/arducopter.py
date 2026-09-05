@@ -4558,6 +4558,69 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("SIM_GPS1_ENABLE", 1)
         self.wait_statustext("EKF3 lane switch 0", timeout=60, check_context=False)
 
+    def SRCFNoVoteWithoutFlowWitness(self):
+        '''the spoof detectors do not vote while the flow lane has no height to measure with'''
+        # Every divergence the monitor tests is measured against the flow
+        # lane, so that lane has to be measuring something. Field log 356
+        # flew 250s of acro with the rangefinder returning for 12% of the
+        # time, and the unaided lane dead reckoned a velocity that
+        # disagreed with a healthy GPS lane by up to 34 m/s. That is the
+        # absence of a witness and the monitor voted a latching spoof on it.
+        #
+        # Two-sided on purpose. The first phase alone would pass on a build
+        # that had simply broken spoof detection, so the second restores the
+        # height reference and requires the same spoof to be caught.
+        self.configure_source_fallback_per_core()
+        self.set_parameters({
+            "SRCF_VEL_THR": 1.6,
+            "SRCF_POSR_THR": 1.9,
+        })
+        self.context_collect('STATUSTEXT')
+
+        self.takeoff(10, mode='LOITER')
+
+        # the vehicle is at 10m, so a 2m ceiling puts the rangefinder out of
+        # range high: status stops being Good and the flow lane has nothing
+        # to scale flow rate by. LOITER is unaffected, being on the GPS lane
+        self.progress("Taking the flow lane's height reference away")
+        self.set_parameter("RNGFND1_MAX", 2.0)
+        self.delay_sim_time(5, "rangefinder status to go out-of-range-high")
+
+        self.progress("Spoofing GPS with no witness to compare it against")
+        self.set_parameters({
+            "SIM_GPS1_SPOOF": 2,
+            "SIM_GPS1_SPOOF_R": 1.5,
+        })
+        # no event-based wait is possible: the assertion is that nothing
+        # happens, so this has to be a window many times SRCF_CNF_TIME
+        self.delay_sim_time(30, "long enough for any vote to confirm")
+        if self.statustext_in_collections("SRCF: GPS spoof suspected"):
+            raise NotAchievedException("confirmed a spoof with no flow witness")
+
+        self.set_parameter("SIM_GPS1_SPOOF", 0)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=180)
+
+        # the counters are the tighter assertion: a partial vote never
+        # reaches a statustext, and the gate is supposed to hold them at zero
+        vvot, pvot, ovot = self.srcf_vote_peaks()
+        self.progress("with no witness: VVot peak %u PVot peak %u OVot peak %u" % (vvot, pvot, ovot))
+        if max(vvot, pvot, ovot) > 0:
+            raise NotAchievedException(
+                "detectors voted with no flow witness (peaks %u/%u/%u)" % (vvot, pvot, ovot))
+
+        self.start_subtest("the same spoof is caught once the witness is back")
+        self.set_parameter("RNGFND1_MAX", 40.0)
+        self.takeoff(10, mode='LOITER')
+        self.set_parameters({
+            "SIM_GPS1_SPOOF": 2,
+            "SIM_GPS1_SPOOF_R": 1.5,
+        })
+        self.wait_statustext("SRCF: GPS spoof suspected", timeout=90)
+        self.set_parameter("SIM_GPS1_SPOOF", 0)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=180)
+
     def SRCFGroundHandbackAlignsFlowLane(self):
         '''the ground handback to the GPS lane pulls the flow lane into its frame'''
         # Field log 356. AHRS_ORIGIN_* still named the previous site, 6623km
@@ -18980,6 +19043,7 @@ return update, 1000
             self.SRCFFirstFixNeedsSatellites,
             self.SRCFGroundLaneFollowsGPS,
             self.SRCFGroundHandbackAlignsFlowLane,
+            self.SRCFNoVoteWithoutFlowWitness,
             self.SRCFCoastingShown,
             self.SRCFDisabledRegression,
             self.SRCFRCFailsafeDrift,
