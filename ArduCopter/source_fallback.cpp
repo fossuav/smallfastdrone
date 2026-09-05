@@ -157,6 +157,22 @@ void Copter::source_fallback_ground_lane()
         return;
     }
 
+    const int8_t primary = ahrs.get_primary_core_index();
+
+    // the flow lane dead reckons from wherever it began aiding, so it is only
+    // in an earth frame if the origin is that same point. Field log 356 armed
+    // with the lanes 6623km apart because the origin came from AHRS_ORIGIN_*
+    // and named the previous site: pull the flow lane into the GPS lane's
+    // frame once the handback lands, which is what the armed first-fix
+    // handover already does. A predicted fix is not enough to align against.
+    if (srcf_state.align_pending && (primary == SRCF_GPS_LANE) &&
+        gps_lane_healthy && gps_lane_status.flags.horiz_pos_abs) {
+        srcf_state.align_pending = false;
+        if (ahrs.align_lane_position(SRCF_FLOW_LANE)) {
+            gcs().send_text(MAV_SEVERITY_INFO, "SRCF: GPS lane ready, flow lane aligned");
+        }
+    }
+
     // predicted position counts while disarmed, matching Copter::position_ok
     const bool gps_lane_ready = gps_lane_healthy &&
                                 (gps_lane_status.flags.horiz_pos_abs || gps_lane_status.flags.pred_horiz_pos_abs);
@@ -168,14 +184,17 @@ void Copter::source_fallback_ground_lane()
         want_lane = SRCF_FLOW_LANE;
     }
 
-    const int8_t primary = ahrs.get_primary_core_index();
     if (primary >= 0 && want_lane != primary) {
         // a marginal indoor fix that comes and goes would otherwise flap the
         // primary, and the EKF announces every change at CRITICAL
         if (++srcf_state.ground_lane_count >= SRCF_GROUND_LANE_ITERATIONS) {
             srcf_state.ground_lane_count = 0;
-            if (source_fallback_command_lane(want_lane) && want_lane == SRCF_FLOW_LANE) {
-                gcs().send_text(MAV_SEVERITY_INFO, "SRCF: no GPS, arming on flow lane");
+            if (source_fallback_command_lane(want_lane)) {
+                if (want_lane == SRCF_FLOW_LANE) {
+                    gcs().send_text(MAV_SEVERITY_INFO, "SRCF: no GPS, arming on flow lane");
+                } else {
+                    srcf_state.align_pending = true;
+                }
             }
         }
     } else {
@@ -211,7 +230,6 @@ void Copter::source_fallback_update()
         source_fallback_ground_lane();
         srcf_state.gps_untrusted = false;
         srcf_state.switch_warned = false;
-        srcf_state.align_pending = false;
         // an origin that predates takeoff puts the flow lane in a real earth
         // frame rather than one referenced to wherever it began aiding, which
         // is what makes the cross-lane offset testable at the first fix
