@@ -234,38 +234,44 @@ Three harness faults were found and fixed before any of that could run:
   hot-file rebuild; an AttributeError only when the test body runs.
 - Scripting6DoFMotors needs a master-only Lua example; unregistered.
 
-### Two tests abort SITL with a floating point exception
+### The optical flow FPE - found, fixed, and what it cost
 
-EKFSourceSetFailsafe and EK3NoAidAccelBiasXY both kill SITL with
-`ERROR: Floating point exception - aborting`. EKFSourceSetFailsafe reproduces
-2 for 2. The crash points differ:
+Four SFD tests aborted SITL with `ERROR: Floating point exception` -
+EKFSourceSetFailsafe, EK3NoAidAccelBiasXY, OpticalFlowGPSLossAiding and
+LoiterNoCompassYawGPS. None of them configures optical flow.
 
-- EKFSourceSetFailsafe: at the RTL mode change, after switching to the no-aiding
-  source set 2 and back to set 1 in flight. It also never sees the "EKF variance"
-  statustext it waits for, so the failsafe it exists to test does not fire either.
-- EK3NoAidAccelBiasXY: immediately after arming, at 0.13 m on takeoff - the
-  onGround -> !onGround transition, in true AID_NONE (SIM_GPS1_ENABLE 0 and all
-  XY sources None).
+Cause: `SelectFlowFusion()` declares `of_elements ofDataDelayed;` as an
+uninitialised stack local. `storedOF.recall()` leaves it untouched when no flow
+sample sits at the fusion time horizon. Every other read of it is gated on
+`flowDataToFuse`; the focus-height check from #34292 was not, so it tested
+stack garbage for `minHeight` and multiplied it by the equally stale
+`rangeDataDelayed.rng`. SITL traps that and aborts before takeoff. Fixed by
+adding the `flowDataToFuse` guard. The bug is in #34292 itself, not the
+backport - report it there.
 
-NOT yet diagnosed, and NOT yet A/B'd against the beta - treat the shared
-"unaided flight" factor as a hypothesis. What has been ruled out:
+This is the root playbook's rule about stack variables needing explicit
+initialisation, and it cost most of a day. What actually found it, and what did
+not:
 
-- The hover Z-bias correction path: gated on ACC_ZBIAS_LEARN bit 1, which
-  neither test sets.
-- The covariance-gate difference below: it only bites when
-  _inhibitAccelBiasLearning is set (acro, or bit 2), and neither test does that.
-- The two new divisions in the delta are both guarded - ResetVelocityToFlow's
-  `det` by the DCM33FlowMin tilt check, and the AGL KF velocity test ratio by
-  MAX(gate, 1.0) over a positive noise term.
-
-The suspect set is bounded: 11 commits touch AP_NavEKF3 on this branch but not
-on the beta (`git log --format=%s SmallFastDrone-4.7-base..HEAD --
-libraries/AP_NavEKF3/` minus the same for the beta). Bisect those against the
-EKFSourceSetFailsafe reproduction, which is quick and deterministic.
-
-No backtrace is available on this host: kernel.yama.ptrace_scope is 1, so
-dumpstack.sh/dumpcore.sh cannot attach and every crash reports "No stack".
-`sudo sysctl -w kernel.yama.ptrace_scope=0` would fix that for future runs.
+- **Bisection failed twice, and both times produced a confident wrong answer.**
+  The fault is intermittent - stack contents vary per run - so a single sample
+  per probe is a coin flip. The first bisect blamed a commit that only deletes
+  two `@Units` comment lines. The second blamed a real commit and survived
+  until the revert test, which is the only reason it did not get reported.
+  MEASURE THE RATE before bisecting anything that is not deterministic: at a
+  fixed commit this gave CRASH, PASS, PASS.
+- **A probe that times out is not a probe that passed.** Both bad bisects rest
+  on that confusion. Make the probe report TIMEOUT distinctly and treat it as
+  no information.
+- **The revert test is what caught the second wrong answer.** After a bisect
+  points at a commit, revert it from the tip and re-run before believing it.
+- **The backtrace found it in minutes.** `kernel.yama.ptrace_scope` must be 0
+  for dumpstack.sh to attach - it works on WSL2 - and `DEBUGINFOD_URLS=` empty,
+  or gdb stalls trying to download symbols and the run times out first. The
+  stack named `SelectFlowFusion` directly. Do this before bisecting, not after.
+- Rates measured with a minimal reproducer (inject SIM_ACC1/2/3_BIAS_X 0.5,
+  arm, climb 5 m): branch tip 5 crashes and 2 timeouts in 7, beta 0 in 6,
+  fixed tip 4 passes in 4.
 
 ### The covariance gates: this file was wrong
 
