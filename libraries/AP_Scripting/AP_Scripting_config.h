@@ -34,6 +34,10 @@
 #define AP_SCRIPTING_ENCRYPTION_ENABLED AP_SCRIPTING_ENABLED && AP_CHECK_FIRMWARE_ENABLED && AP_SIGNED_FIRMWARE
 #endif
 
+// how much of the nonce carries the board id. The STM32 unique id is 12
+// bytes and get_system_id_unformatted() caps at that
+#define AP_SCRIPTING_NONCE_UID_LEN 12
+
 #ifndef AP_SCRIPTING_ENCRYPTION_UUID_ENABLED
 #define AP_SCRIPTING_ENCRYPTION_UUID_ENABLED 0
 #endif

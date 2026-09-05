@@ -247,7 +247,14 @@ int load_encrypted_script(lua_State *L, const char *filename) {
     }
     AP::FS().close(fd);
 #if AP_SCRIPTING_ENCRYPTION_UUID_ENABLED
-    lua_scripts::create_nonce(nonce, filename);
+    // the nonce belongs to the file: it is what the script was encrypted
+    // with, and regenerating it here destroyed it, so decryption could
+    // only ever have succeeded with the board-id prefixing compiled out.
+    // Verify instead, and refuse another airframe's script cheaply.
+    if (!lua_scripts::nonce_is_for_this_board(nonce)) {
+        free(buffer);
+        return LUA_ERRFILE;
+    }
 #endif
     if (!lua_scripts::decrypt_script(buffer, mac, nonce, filesize)) {
         free(buffer);
@@ -892,16 +899,42 @@ uint32_t lua_scripts::get_running_checksum()
 #if AP_SCRIPTING_ENCRYPTION_ENABLED
 void lua_scripts::create_nonce(uint8_t nonce[24], const char* scriptname)
 {
+    (void)scriptname;
     for (uint8_t i = 0; i < 24; i++) {
         nonce[i] = rand();
     }
 #if AP_SCRIPTING_ENCRYPTION_UUID_ENABLED
-    uint8_t nonce_len;
-    // use the serial number of the board for the nonce so that it can only be
-    // decrypted on this board
-    hal.util->get_system_id_unformatted(nonce, nonce_len);
+    // prefix with this board's id so a script encrypted for one airframe
+    // is refused on another. len is in/out - it is the buffer size going
+    // in, and was previously read uninitialised, which silently truncated
+    // the prefix to whatever happened to be on the stack
+    uint8_t nonce_len = AP_SCRIPTING_NONCE_UID_LEN;
+    if (!hal.util->get_system_id_unformatted(nonce, nonce_len) ||
+        nonce_len != AP_SCRIPTING_NONCE_UID_LEN) {
+        // without a full board id the prefix would be meaningless, and a
+        // partly-random one would still decrypt on the wrong airframe
+        memset(nonce, 0, AP_SCRIPTING_NONCE_UID_LEN);
+    }
 #endif
 }
+
+#if AP_SCRIPTING_ENCRYPTION_UUID_ENABLED
+/*
+  is this nonce's board-id prefix ours? Checked before decryption rather
+  than after: a script for another airframe is then refused without
+  spending the cipher on it
+ */
+bool lua_scripts::nonce_is_for_this_board(const uint8_t nonce[24])
+{
+    uint8_t uid[AP_SCRIPTING_NONCE_UID_LEN];
+    uint8_t uid_len = sizeof(uid);
+    if (!hal.util->get_system_id_unformatted(uid, uid_len) ||
+        uid_len != AP_SCRIPTING_NONCE_UID_LEN) {
+        return false;
+    }
+    return memcmp(nonce, uid, AP_SCRIPTING_NONCE_UID_LEN) == 0;
+}
+#endif
 
 bool lua_scripts::encrypt_script(char* script, uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen)
 {
