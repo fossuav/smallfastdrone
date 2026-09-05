@@ -12973,6 +12973,43 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 "AMSL %.1f m differs from GPS %.1f m after arm - drift not cleared" %
                 (amsl_m, gps_alt_m))
 
+    def BaroDriftClearedWithRangefinderHeightSwitch(self):
+        '''the arm-time datum reset must survive the rangefinder height switch'''
+        # EK3_RNG_USE_HGT hands the height source to the rangefinder while the
+        # vehicle is parked: selectHeightForFusion() calls the terrain stable
+        # whenever the AGL KF is valid, which overrides the vehicle's own
+        # terrainHgtStable. resetHeightDatum() used to refuse any source but
+        # baro or GPS, so the drift survived the arm and only appeared once the
+        # vehicle climbed past the switch ceiling and fell back to baro
+        self.set_parameters({
+            "EK3_RNG_USE_HGT": 70,
+            "EK3_OPTIONS": 1 << 3,      # AglKfForOptflow, forces the on-ground switch
+        })
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+        self.accumulate_baro_drift()
+        self.change_mode("STABILIZE")
+        self.arm_vehicle()
+        # the rangefinder holds the reported height at zero while it is the
+        # source, so the drift is invisible in relative_alt and only the reset
+        # event and the GPS re-anchor can tell whether it was cleared
+        self.delay_sim_time(2, "let the reset event reach the log")
+        self.assert_reported_amsl_matches_gps()
+        self.disarm_vehicle(force=True)
+        dfreader = self.dfreader_for_current_onboard_log()
+        resets = 0
+        while True:
+            m = dfreader.recv_match(type=["EV"])
+            if m is None:
+                break
+            if m.Id == 60:  # LogEvent::EKF_ALT_RESET
+                resets += 1
+        if resets < 1:
+            raise NotAchievedException(
+                "No EKF_ALT_RESET at arm: the datum reset was refused because "
+                "the rangefinder was the active height source")
+
     def BaroDriftClearedAtArm(self):
         '''Test that arm-time datum reset clears accumulated baro drift'''
         # AP_Arming_Copter::arm() resets the EKF height datum when home
@@ -19042,6 +19079,7 @@ return update, 1000
             self.MotorTest,
             self.AltEstimation,
             self.BaroDriftClearedAtArm,
+            self.BaroDriftClearedWithRangefinderHeightSwitch,
             self.BaroGroundEffectAtTakeoff,
             self.BaroGroundEffectResetSuppression,
             self.EK3_NoGPSLeakWhenNotSource,
