@@ -19267,7 +19267,7 @@ return update, 1000
         # auto-set at the first arm and left unlocked so the re-arm takes
         # the !home_is_locked() branch; set_home() would lock it and skip
         # the branch, which is why RudderDisarmMidair does not cover this.
-        self.takeoff(150, mode='GUIDED', max_err=10)
+        self.takeoff(250, mode='GUIDED', max_err=10)
         self.change_mode('STABILIZE')
         self.set_rc(3, 1000)
         self.disarm_vehicle(force=True)
