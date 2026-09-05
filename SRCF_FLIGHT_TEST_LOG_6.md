@@ -12,16 +12,23 @@ on the flow lane: no terrain data, no SmartRTL, six EKF failsafe cycles
 and the wrong lane carrying the vehicle throughout. Handling was
 unaffected.
 
-**Two readings in this file were wrong before the measurement was
-finished, and both corrections are the useful part.** The first was that
-an offset that large is too big to be a spoof and should be refused as a
-frame error; a spoofer parks a receiver at an arbitrary distant point, so
-there is no such bound, and the section below records it as rejected. The
-second was that the stale recorded origin was the root cause. It is not:
-a distant origin is legitimate and this one demonstrably worked, right up
-to the lane switch. The root cause is that SRCF's ground lane selection
-returns to the GPS lane without aligning the flow lane, so nothing ever
-put the flow lane into an earth frame.
+**Four readings in this file were wrong before the measurement was
+finished, and the corrections are the useful part.** In order:
+
+- That an offset that large is too big to be a spoof and should be
+  refused as a frame error. A spoofer parks a receiver at an arbitrary
+  distant point, so there is no such bound; recorded below as rejected.
+- That the stale recorded origin was the root cause. A distant origin is
+  legitimate and this one demonstrably worked right up to the lane
+  switch. The root cause is that the ground lane selection returns to the
+  GPS lane without aligning the flow lane, so nothing ever put the flow
+  lane into an earth frame.
+- That `PR` measured anything here. At 6.62e6 m the float32 spacing makes
+  every non-zero sample an exact multiple of 0.250 m/s. It is the
+  quantisation of a misaligned frame.
+- That `flow_usable` was the wrong test for a witness gate, on a
+  misread of `FlwU` against `HasP`. They agree exactly; it is the right
+  test, it is just not sufficient.
 
 The acro measurement below is independent of all of that and outlives it:
 the cross-lane velocity difference sits above its gate for 78% of this
@@ -263,7 +270,26 @@ is a valid measurement despite the misaligned lane. Over the same window:
 | `VD` p50 / p95 / max | 3.99 / 28.8 / 33.9 | 1.6 |
 | samples above the gate | 1829 of 2350, **78%** | |
 | longest unbroken run | **118.2 s** | |
-| `\|PR\|` above gate | 78%, longest run 16.8 s | 1.9 |
+
+### `PR` is unusable in this log, and the first reading of it was wrong
+
+An earlier version of the table above carried "`|PR|` above gate 78%,
+longest run 16.8 s" beside those `VD` figures. **That is not a
+measurement of anything.** `pos_div` is a `float`, and at the 6.62e6 m
+this flight ran at, float32 spacing is 0.500 m; `pos_rate` differences it
+over the 2 s `SRCF_POS_RATE_WINDOW`, giving a 0.250 m/s quantum. Every
+one of the 2307 non-zero `|PR|` samples in the armed flight is an exact
+multiple of 0.250. `PR` here is the quantisation of a misaligned frame,
+not vehicle behaviour, so the position-rate detector was also being fed
+noise for the whole sortie.
+
+`VD` is unaffected: a velocity difference of order 0-34 has no such
+problem. Everything said about the acro envelope rests on `VD` alone.
+
+Once the lanes are aligned this cannot arise, because `pos_div` is then
+metres rather than megametres. It is recorded because it is the second
+time this file has caught a logged field that looked like a signal and
+was an artifact, after the stale `innovVelPos` of session 5h.
 
 The flow lane cannot track this profile. At 110.5 s GPS truth was
 15.8 m/s on course 162 deg; core 0 read `VN`/`VE` -15.00/+6.08 while core
@@ -282,13 +308,61 @@ assuming it.
 
 The structural gap is that `can_vote` (`source_fallback.cpp:351`) is
 `div_ok && !gps_bad_now && (primary == SRCF_GPS_LANE)`. It never asks
-whether the flow lane is a usable witness. `flow_usable` exists two dozen
-lines above it and is not consulted, and even that would not be enough
-here: `FlwU` logged 1 for the whole flight while `HasP` was 0, because
-`flow_usable` tests the lane's `horiz_pos_rel` where Copter additionally
-rejects `CONST_POS_MODE` and requires the armed rather than predicted
-flag. An unaided flow lane above the rangefinder ceiling is not evidence
-about GPS, and the monitor votes a latching spoof on it.
+whether the flow lane is a usable witness, and `flow_usable` sits two
+dozen lines above it unconsulted. An unaided flow lane above the
+rangefinder ceiling is not evidence about GPS, and the monitor votes a
+latching spoof on it.
+
+### The witness gate helps and does not close it
+
+Corrected: an earlier version of this section said `FlwU` logged 1 for
+the whole flight while `HasP` was 0, and used that to argue `flow_usable`
+was the wrong test. **Wrong, and measured the other way.** Over the armed
+flight `FlwU` is 0 for 1884 samples and `HasP` is 0 for the same 1884.
+They agree, because `horiz_pos_rel` already requires `optflow_gnd_offset`
+(`AP_NavEKF3_Control.cpp:831`). `flow_usable` is the right shape.
+
+It is not sufficient, which only a sweep shows. Longest unbroken run of
+`VD` over its gate while a candidate still permits the vote, over
+85-320 s; anything reaching 15 samples latches at `SRCF_CNF_TIME` 1.5:
+
+| candidate | samples voting | longest run |
+|---|---|---|
+| today: no witness test | 1829 | 1182 (118.2 s) |
+| `flow_usable` | 310 | 61 (6.1 s) |
+| `flow_usable` and rangefinder returning | **86** | **54 (5.4 s)** |
+| `flow_usable` held 1 s | 292 | 61 (6.1 s) |
+| `flow_usable` held 5 s | 163 | 61 (6.1 s) |
+| `flow_usable` held 10 s | 43 | 38 (3.8 s) |
+
+A 21x cut in exposure and it still latches, by a factor of three. The
+health flags say "flow data is arriving and a height is known", which is
+not the same as "this estimate is accurate at 20 m/s through a hard
+turn" - at 110.5 s the lane had the speed right and the velocity vector
+19 deg out while every flag was green. No boolean over the existing flags
+separates those, so the witness gate is necessary and something else is
+needed for aerobatics. `gate_sweep.py` is the sweep.
+
+**What it costs, stated rather than shipped quietly: spoof detection
+stops above the rangefinder ceiling.** With `EK3_OPTIONS` bit 6 the flow
+lane keeps navigating up there on a flat-ground assumption, and an
+assumed height is an assumed velocity scale, so the gate calls it not a
+witness. Both test airframes fly bit 6. Against that, the detector has
+never been shown to work above the ceiling and every false trip that
+region produced is in this record: session 1's log 329 tripped at
+13-16.5 m, and session 5f's height sweep put the worst benign excursions
+at 0.2-1.0 m and 16-21 m with the quiet band at 5-9 m. Removing a
+measured false-trip region and no demonstrated capability is the right
+trade, but it is a trade.
+
+Run against session 1's false trip (log 329, at its own 0.8 gate and 2.0
+confirmation) the gate halves the exposure, 9 samples over the gate to 4:
+that vehicle was hovering on the 15 m rangefinder ceiling with `RFND.Stat`
+flickering 3 and 4 through the vote. **Not a clean retrospective test,
+and it should not be read as one** - log 329 tripped on the OR-relay
+between `PR` and `VD` that the split vote counters already fixed, so a
+velocity-only sweep cannot reproduce that trip at all. Directionally
+supportive, nothing more.
 
 ## A log-reading trap
 
@@ -330,20 +404,29 @@ FS_EKF_ACTION   = 2
    position. With this in, log 356's stale datum is inert.
 
 2. **`can_vote` must require the flow lane to be a usable witness.**
-   Aiding, fusing flow, with a live height reference - not merely that
-   the primary is the GPS lane. Independent of the frame fault, and what
-   the acro measurement demands. Note that `flow_usable` as currently
-   computed is not the right test on its own, per the `FlwU` against
-   `HasP` disagreement above.
+   `flow_usable` and a live rangefinder, so the lane is aiding on flow
+   with a height to scale flow rate by. Independent of the frame fault.
+   Necessary and measured insufficient: it cuts the voting samples 21x
+   and still leaves a 5.4 s run against a 1.5 s confirmation, so it
+   improves the monitor without making it safe to arm for aerobatics.
 
-3. **Origin provenance, still open and now a nicety.** A check comparing
+3. **Something else is still needed before acro.** The candidates that
+   remain are not thresholds - the sweep says no boolean over the health
+   flags separates a bad witness from a good one under high dynamics.
+   The two shapes worth considering are not voting in modes that do not
+   navigate on the estimate, which costs a short exposure on entry to a
+   position mode and nothing else, and making the spoof state
+   recoverable rather than latched. Both are behaviour changes with real
+   trade-offs and neither is measured yet, so neither is proposed here.
+
+4. **Origin provenance, still open and now a nicety.** A check comparing
    the recorded origin against the current fix before adopting it would
    have caught this too, and it remains design note open question 4. It
    is the harder change - under a repeater it compares a good origin
    against a bad fix, so a refusal has to be recoverable by the pilot -
    and after change 1 the stale datum is no longer load-bearing.
 
-4. Rejected: bounding `pos_div` so an implausibly large offset is treated
+5. Rejected: bounding `pos_div` so an implausibly large offset is treated
    as a frame error rather than a spoof. There is no such bound. A
    spoofer parks a receiver at an arbitrary distant point, so the
    magnitude that looks impossible is an ordinary capture signature, and
@@ -356,8 +439,11 @@ FS_EKF_ACTION   = 2
    says the monitor cannot survive this profile, but it was taken with
    the flow lane both primary and misaligned, and the counterfactual is
    inspection rather than measurement. One acro sortie with the lanes
-   aligned and `SRCF_ENABLE = 1` settles it, and should be flown before
-   the witness gate in change 2 is designed against a guess.
+   aligned and `SRCF_ENABLE = 1` settles it, and it is now the gating
+   measurement for anything past the witness gate: the sweep says the
+   remaining shortfall is a factor of three, and whether that survives on
+   an aligned lane at the same speeds is exactly what is not known.
+   Until it is flown, acro wants `SRCF_ENABLE = 0`.
 2. **The offset detector has now fired twice in the field and neither was
    a spoof.** Log 338 was benign, log 356 was a misaligned lane. It has
    still never seen the slow position-only walk it was built for outside
@@ -400,3 +486,13 @@ FS_EKF_ACTION   = 2
 - Acro handling is unaffected by any of this. The vehicle flew 250 s with
   demand and response matching to 0.05 deg/s on all three axes while its
   position estimate was on another continent.
+- A witness gate on `can_vote` is necessary and not sufficient, and the
+  sweep is what says so rather than an argument. No boolean over the
+  lane's existing health flags separates a flow lane that is measuring
+  from one that is merely receiving data: at 110.5 s the lane had the
+  speed right and the velocity vector 19 deg out with every flag green.
+  Do not expect a tighter health test to close this.
+- A logged field is not a measurement until you know its numerical
+  range. `PR` at 6.62e6 m is float32 quantisation, and it reads as a
+  plausible 0-33 m/s signal. Second instance in this feature's record
+  after session 5h's sample-and-hold innovation.
