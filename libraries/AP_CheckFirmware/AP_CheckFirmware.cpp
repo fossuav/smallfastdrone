@@ -35,13 +35,54 @@ static bool all_zero_public_keys(void)
 }
 
 /*
+  return true if this board has been given an identity.
+
+  Read straight out of the bootloader's own copy of the secure data: the
+  identity is the last member of ap_secure_data, so it is already here and
+  needs no help from the firmware to reach.
+ */
+static bool has_identity(void)
+{
+    // no signature check here, unlike the firmware's find_identity(). The
+    // firmware has to locate the region inside a bootloader image it read
+    // out of flash, and the signature is how it tells the region from
+    // code that happens to sit at that offset. Here public_keys *is* this
+    // bootloader's own .apsec_data, placed by the linker, so the region is
+    // wherever the struct says it is. Comparing the signature would also
+    // put a second copy of that byte pattern in the image, which is the
+    // opposite of what a unique marker is for.
+    const uint8_t zero_key[AP_IDENTITY_KEY_LEN] {};
+    return memcmp(public_keys.identity.private_key, zero_key, AP_IDENTITY_KEY_LEN) != 0;
+}
+
+/*
+  may this board boot firmware that carries no valid signature?
+
+  An empty key set means an unsecured board, and booting unsigned firmware
+  there is deliberate - it is how a board is bootstrapped, and how an owner
+  removes signing entirely. But a board holding an identity was keyed when
+  that identity was written, so an empty key set on one of those means the
+  keys have since been removed, which is exactly the downgrade the
+  signing exists to prevent. Refuse.
+
+  This is held in the bootloader on purpose. A tool-side guard protects
+  against a buggy configurator; only the bootloader protects against a
+  hostile one, because it is the one thing an attacker with the drone in
+  their hands cannot talk to.
+ */
+static bool unsigned_boot_allowed(void)
+{
+    return all_zero_public_keys() && !has_identity();
+}
+
+/*
   check a signature against bootloader keys
  */
 static check_fw_result_t check_firmware_signature(const app_descriptor_signed *ad,
                                                   const uint8_t *flash1, uint32_t len1,
                                                   const uint8_t *flash2, uint32_t len2)
 {
-    if (all_zero_public_keys()) {
+    if (unsigned_boot_allowed()) {
         return check_fw_result_t::CHECK_FW_OK;
     }
 
@@ -180,7 +221,7 @@ check_fw_result_t check_good_firmware(void)
     // load of unsigned firmware
     const auto ret = check_good_firmware_signed();
     if (ret != check_fw_result_t::CHECK_FW_OK &&
-        all_zero_public_keys() &&
+        unsigned_boot_allowed() &&
         check_good_firmware_unsigned() == check_fw_result_t::CHECK_FW_OK) {
         return check_fw_result_t::CHECK_FW_OK;
     }
