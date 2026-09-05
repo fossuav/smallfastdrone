@@ -217,6 +217,64 @@ The whole-flight correlation of speed against tilt is only r = +0.33,
 because acro puts plenty of tilt on at low speed too. The median trend
 is the real signal and it is monotonic to 20 m/s.
 
+### Relaxing the tilt gate, replayed
+
+`DCM33FlowMin` is a const rather than a parameter, so the question "would
+a higher limit help" is a rebuild per value and a Replay. Log 356 is an
+unusually good subject for it: the whole window is ACRO, so the
+trajectory is pilot-commanded and the estimate never feeds back into it.
+Replay's usual limit - that it re-runs the estimator and not the vehicle
+- barely applies, because here the vehicle genuinely would have flown the
+same path.
+
+Two checks before the table. At the stock value the replayed flow lane
+reproduces the flight's own to under 1% on the aggregates - verr p50 3.96
+against 3.99, peak drift 346 m against 357 - though per-sample
+reproduction is 1.58 m/s at p95, which is what a dead-reckoning lane
+does. And Replay is bit-deterministic here: two runs of one binary gave
+identical digits, so anything below is the parameter and not the harness.
+
+| `DCM33FlowMin` | tilt | verr p50 / mean | peak drift | % of path |
+|---|---|---|---|---|
+| **0.71 stock** | 45 deg | 3.96 / 9.41 | 346 m | **7.6%** |
+| 0.68 | 47 | 4.06 / 10.44 | 863 | 18.9% |
+| 0.65 | 49 | 4.05 / 10.48 | 1339 | 29.3% |
+| 0.62 | 52 | 3.63 / 10.20 | 1710 | **37.5%** |
+| 0.60 | 53 | 3.03 / 5.79 | 773 | 16.9% |
+| 0.55 | 57 | 3.03 / 5.76 | 736 | 16.1% |
+| 0.50 | 60 | 2.79 / 3.17 | 218 | 4.8% |
+| 0.35 | 70 | 2.79 / 3.15 | 220 | 4.8% |
+
+**The mapping is chaotic and the answer is no, not on this evidence.**
+Relaxing the gate makes dead-reckoned position five times worse through
+0.68 to 0.62, recovers at 0.60, and only beats stock at 0.50. A change of
+0.03 in the constant moves peak drift by 900 m. That is not a trend, and
+0.50 looking 40% better than stock is one draw from a spread of 4.8% to
+37.5% rather than a demonstration that 60 degrees is right.
+
+The mechanism is in the flight: the flow lane stopped and restarted
+aiding eleven times. Each restart re-anchors position, so where the
+trajectory ends up depends on exactly which samples were fused before
+each reset. Position drift is close to chaotic by construction here and
+is the wrong metric for ranking estimator variants on this log. Velocity
+error is the more robust one, and even that is flat-to-worse from 0.71
+through 0.62 before improving.
+
+There is a physical reason to expect the gate near where it is:
+predicted range goes as `heightAboveGnd / c.z`, so at 60 degrees it
+doubles, and the sensor is looking at ground well ahead of or behind the
+vehicle where the flat-ground assumption under it stops holding.
+
+The confound that matters most: **the height ceiling and the tilt gate
+are not independent on this airframe.** Much of the tilt-limited data had
+no valid rangefinder either, so relaxing the tilt gate admitted flow that
+still had no height to scale it by. Testing the tilt gate properly needs
+a flight that isolates it - sustained time at 45-60 degrees with the
+rangefinder in range - which log 356 is not.
+
+`tilt_gate_sweep.py` is the harness. It edits the header and rebuilds per
+value, and restores on the way out.
+
 ### The envelope
 
 What this data supports: **below about 15 m/s, below about 30 degrees of
@@ -264,7 +322,9 @@ degree that flight left the rangefinder's range, and log 55 shows the
 suspicion is not confined to flights that obviously did.
 
 `flow_nav_viability.py` is the displacement and velocity-error analysis
-in the tables above.
+in the tables above. `tilt_gate_sweep.py` is the Replay sweep of
+`DCM33FlowMin`, which patches the header, rebuilds per value and restores
+on the way out - including after a failure, with a check that it did.
 
 ## Still open
 
@@ -285,7 +345,15 @@ in the tables above.
 4. **No flow scale should be taken from this flight.** The 12-15% is
    believable as a magnitude and not as a per-axis scaler, for the
    reason above.
-5. **Earlier flow calibrations want re-reading.** The octaquad's
+5. **The tilt gate is untested on a flight that isolates it.** The
+   Replay sweep above cannot separate the tilt limit from the height
+   ceiling, because most of log 356's over-tilt samples had no valid
+   rangefinder either. What would answer it is a sortie that spends
+   sustained time between 45 and 60 degrees of bank with the rangefinder
+   in range, replayed the same way. Until then the gate stays at 0.71
+   and the chaotic sweep is the reason, not an argument from the
+   constant's provenance.
+6. **Earlier flow calibrations want re-reading.** The octaquad's
    settled `FLOW_FYSCALER` of -110 came from session 3 flights measured
    with the unguarded tool; log 55 re-read with the guard suggests -147
    and a scale of 1.04 rather than 0.80. That is not a recommendation to
