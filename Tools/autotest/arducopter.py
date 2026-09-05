@@ -4558,6 +4558,75 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("SIM_GPS1_ENABLE", 1)
         self.wait_statustext("EKF3 lane switch 0", timeout=60, check_context=False)
 
+    def SRCFGroundHandbackAlignsFlowLane(self):
+        '''the ground handback to the GPS lane pulls the flow lane into its frame'''
+        # Field log 356. AHRS_ORIGIN_* still named the previous site, 6623km
+        # away, so when the ground selection took the flow lane it adopted that
+        # origin and the flow lane dead reckoned from it. The handback once GPS
+        # arrived was a plain relabel with no alignment, so the vehicle armed
+        # with the lanes 6623km apart and the position offset detector
+        # confirmed a spoof 1.4s later.
+        #
+        # A distant origin is not itself the fault and this does not assert
+        # against one: the GPS lane resets onto its first fix and reports
+        # correctly whatever the origin is, and log 356's home and terrain were
+        # both right until the lane switch. What has to hold is that the two
+        # lanes end up in the same frame, which is why the assertion is the
+        # separation rather than any statustext.
+        self.configure_source_fallback_per_core()
+
+        stale = self.offset_location_ne(self.sitl_start_location(), 3000, 4000)
+        self.set_parameters({
+            "SRCF_ENABLE": 2,
+            # nothing is armed in this test, so the per-core positions only
+            # reach the log with disarmed logging on
+            "LOG_DISARMED": 1,
+            "AHRS_OPTIONS": 16,     # bit 4: use the recorded origin with no GPS
+            "AHRS_ORIGIN_LAT": stale.lat,
+            "AHRS_ORIGIN_LON": stale.lng,
+            "AHRS_ORIGIN_ALT": 0,
+            "SIM_GPS1_ENABLE": 0,
+        })
+        self.reboot_sitl()
+
+        # check_context is False throughout: the boot itself switches to the
+        # flow lane before this can start collecting
+        self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=90, check_context=False)
+        self.wait_statustext("AHRS: using recorded origin", timeout=30, check_context=False)
+
+        self.progress("Restoring GPS on the ground")
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_statustext("EKF3 lane switch 0", timeout=90, check_context=True)
+        switch_us = self.get_sim_time() * 1e6
+        self.delay_sim_time(5)
+
+        pos = {0: None, 1: None}
+        sep_max = 0.0
+        dfreader = self.dfreader_for_current_onboard_log()
+        while True:
+            m = dfreader.recv_match(type=['XKF1'])
+            if m is None:
+                break
+            # the alignment lands on the tick after the commanded switch
+            if m.TimeUS < switch_us + 2e6:
+                continue
+            pos[m.C] = (m.PN, m.PE)
+            if pos[0] is None or pos[1] is None:
+                continue
+            sep_max = max(sep_max, math.sqrt((pos[0][0] - pos[1][0])**2 + (pos[0][1] - pos[1][1])**2))
+        if pos[0] is None or pos[1] is None:
+            raise NotAchievedException("no per-core XKF1 after the handback")
+        self.progress("peak lane separation after the handback %.1fm" % sep_max)
+        if sep_max > 10:
+            raise NotAchievedException(
+                "lanes %.0fm apart after the ground handback, flow lane never aligned" % sep_max)
+
+        # the ground decision has no log trace of its own, so the annunciation
+        # is the only report that the frames were reconciled
+        if self.statustext_in_collections("SRCF: GPS lane ready, flow lane aligned") is None:
+            raise NotAchievedException("ground handback did not report aligning the flow lane")
+
     def SRCFCoastingShown(self):
         '''losing GPS on the ground shows a coasting position type well before the lane switch'''
         # The lane switch waits on the GPS lane's own filter status, which
@@ -18910,6 +18979,7 @@ return update, 1000
             self.SRCFJammingExpectedWaitsForChecks,
             self.SRCFFirstFixNeedsSatellites,
             self.SRCFGroundLaneFollowsGPS,
+            self.SRCFGroundHandbackAlignsFlowLane,
             self.SRCFCoastingShown,
             self.SRCFDisabledRegression,
             self.SRCFRCFailsafeDrift,
