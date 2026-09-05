@@ -426,7 +426,7 @@ bool NavEKF3_core::resetHeightDatum(void)
     if (validOrigin) {
         // gpsGoodToAlign is not updated without a 3D fix, so also check the
         // current fix or a GPS that died after alignment would be trusted
-        if (!gpsGoodToAlign || dal.gps().status(selected_gps) < AP_GPS_FixType::FIX_3D) {
+        if (!gpsGoodToAlign || dal.gps().status(selected_gps) < AP_DAL_GPS::GPS_OK_FIX_3D) {
             // no GPS to re-anchor to, so carry the old height into the
             // reference and leave the reported height unchanged
             ekfGpsRefHgt += (double)oldHgt;
