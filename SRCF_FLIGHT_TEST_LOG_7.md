@@ -252,13 +252,24 @@ Relaxing the gate makes dead-reckoned position five times worse through
 0.50 looking 40% better than stock is one draw from a spread of 4.8% to
 37.5% rather than a demonstration that 60 degrees is right.
 
-The mechanism is in the flight: the flow lane stopped and restarted
-aiding eleven times. Each restart re-anchors position, so where the
-trajectory ends up depends on exactly which samples were fused before
-each reset. Position drift is close to chaotic by construction here and
-is the wrong metric for ranking estimator variants on this log. Velocity
-error is the more robust one, and even that is flat-to-worse from 0.71
-through 0.62 before improving.
+**Withdrawn.** This paragraph originally explained the chaos as
+reset-driven: the flow lane stopped and restarted aiding eleven times,
+each restart re-anchors position, so drift was "chaotic by construction"
+and the wrong metric. The operator asked whether the aiding was itself
+gated by lean, which would have made the whole sweep circular. It is not,
+and checking it also killed the explanation above.
+
+Counting the replayed EKF's own aiding drops per swept value gives
+**eleven at 0.71, eleven at 0.62, eleven at 0.50** - and eleven in the
+flight, which is a tighter reproduction check than the velocity one. The
+restart count is invariant, so it cannot be what makes the drift move.
+Session 8 has the measurement and what does gate the aiding.
+
+So the sweep is not circular, and the chaos is real and unexplained. It
+comes from which samples in the 45-60 degree band get fused during the
+rest of the flight, and this file should not claim to know why beyond
+that. Velocity error is the steadier metric and even that is
+flat-to-worse from 0.71 through 0.62 before improving.
 
 There is a physical reason to expect the gate near where it is:
 predicted range goes as `heightAboveGnd / c.z`, so at 60 degrees it
@@ -350,9 +361,10 @@ on the way out - including after a failure, with a check that it did.
    ceiling, because most of log 356's over-tilt samples had no valid
    rangefinder either. What would answer it is a sortie that spends
    sustained time between 45 and 60 degrees of bank with the rangefinder
-   in range, replayed the same way. Until then the gate stays at 0.71
-   and the chaotic sweep is the reason, not an argument from the
-   constant's provenance.
+   in range, replayed the same way. Until then the gate stays at 0.71.
+   Session 8 narrows this: the aiding drops are gated by the missing
+   height rather than by lean, so the constant is further from being the
+   binding constraint than this file assumed.
 6. **Earlier flow calibrations want re-reading.** The octaquad's
    settled `FLOW_FYSCALER` of -110 came from session 3 flights measured
    with the unguarded tool; log 55 re-read with the guard suggests -147
