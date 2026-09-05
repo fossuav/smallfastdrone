@@ -31,6 +31,12 @@ Tools/SFD/check_test_api.py         # MANDATORY before any test run: tests copie
                                     # from PR heads call master's API and only
                                     # fail once the body runs
 
+# then run the tests - the set is derived from the branch, not hand-kept:
+Tools/SFD/run_sfd_tests.sh          # the whole set
+Tools/SFD/run_sfd_tests.sh --list   # show what it would run
+Tools/SFD/run_sfd_tests.sh --resume # after an interrupted run
+Tools/SFD/run_sfd_tests.sh --summary
+
 # after a clean refresh, capture state for next time and commit it:
 Tools/SFD/refresh.sh rerere-save    # prune + archive resolutions to rr-cache.tar.gz
 Tools/SFD/refresh.sh lock           # record the PR head SHAs to applied.lock
