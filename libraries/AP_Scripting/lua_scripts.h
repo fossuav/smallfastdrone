@@ -125,8 +125,12 @@ private:
 
 public:
 #if AP_SCRIPTING_ENCRYPTION_ENABLED
-    static bool decrypt_script(char* script, const uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen);
-    static bool encrypt_script(char* script, uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen);
+    // agree the .lxa v2 key with a sender's ephemeral public key
+    static bool script_shared_key(uint8_t shared[32], const uint8_t peer_public[AP_SCRIPTING_LXA2_EPK_LEN]);
+    static bool decrypt_script(char* script, const uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen,
+                               const uint8_t shared[32]);
+    static bool encrypt_script(char* script, uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen,
+                               const uint8_t shared[32]);
     static void create_nonce(uint8_t nonce[24], const char* scriptname);
 #if AP_SCRIPTING_ENCRYPTION_UUID_ENABLED
     // true if the nonce's board-id prefix is this board's

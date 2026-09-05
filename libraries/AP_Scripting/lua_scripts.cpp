@@ -186,56 +186,67 @@ void lua_scripts::load_script_error(lua_State *L, const char *filename, int erro
 }
 
 #if AP_SCRIPTING_ENCRYPTION_ENABLED
-int load_encrypted_script(lua_State *L, const char *filename) {
-    int error = 0;
-    int fd = AP::FS().open(filename, O_RDONLY);
+/*
+  load a .lxa v2 encrypted script.
 
+  The layout is in AP_Scripting_config.h. The board id is checked before
+  any cipher work: a script encrypted for a different airframe is the
+  expected case on a drone carrying someone else's file, and it should
+  cost a memcmp rather than a decryption attempt.
+ */
+int load_encrypted_script(lua_State *L, const char *filename) {
+    AP_Filesystem::stat_t st;
+    if (!AP::FS().stat(filename, st) || st.size <= AP_SCRIPTING_LXA2_HEADER_LEN) {
+        return LUA_ERRFILE;
+    }
+    const off_t filesize = st.size - AP_SCRIPTING_LXA2_HEADER_LEN;
+
+    int fd = AP::FS().open(filename, O_RDONLY);
     if (fd < 0) {
         return LUA_ERRFILE;
     }
 
-    // Get the size of the file
-    AP_Filesystem::stat_t st;
-    if (!AP::FS().stat(filename, st)) {
+    uint8_t header[AP_SCRIPTING_LXA2_HEADER_LEN];
+    if (AP::FS().read(fd, header, sizeof(header)) != (ssize_t)sizeof(header) ||
+        memcmp(header, AP_SCRIPTING_LXA2_MAGIC, AP_SCRIPTING_LXA2_MAGIC_LEN) != 0) {
         AP::FS().close(fd);
         return LUA_ERRFILE;
     }
 
-    off_t filesize = st.size - 46;
+    const uint8_t *file_uid = &header[AP_SCRIPTING_LXA2_MAGIC_LEN];
+    const uint8_t *epk = file_uid + AP_SCRIPTING_NONCE_UID_LEN;
+    const uint8_t *nonce = epk + AP_SCRIPTING_LXA2_EPK_LEN;
+    const uint8_t *mac = nonce + AP_SCRIPTING_LXA2_NONCE_LEN;
 
-    // Allocate buffer
+    // is this ours? cheapest possible refusal
+    uint8_t uid[AP_SCRIPTING_NONCE_UID_LEN];
+    uint8_t uid_len = sizeof(uid);
+    if (!hal.util->get_system_id_unformatted(uid, uid_len) ||
+        uid_len != AP_SCRIPTING_NONCE_UID_LEN ||
+        memcmp(file_uid, uid, AP_SCRIPTING_NONCE_UID_LEN) != 0) {
+        AP::FS().close(fd);
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Scripting: %s is for another drone", filename);
+        return LUA_ERRFILE;
+    }
+
+    uint8_t shared[32];
+    if (!lua_scripts::script_shared_key(shared, epk)) {
+        AP::FS().close(fd);
+        return LUA_ERRFILE;
+    }
+
     char *buffer = (char *)malloc(filesize);
     if (buffer == nullptr) {
+        crypto_wipe(shared, sizeof(shared));
         AP::FS().close(fd);
         return LUA_ERRMEM;
     }
 
-    char header[6];
-    if (AP::FS().read(fd, header, 6) != 6 || strncmp(header, "LUA1.0", 6) != 0) {
-        free(buffer);
-        AP::FS().close(fd);
-        return LUA_ERRFILE;
-    }
-
-    uint8_t mac[16] = {};
-    if (AP::FS().read(fd, mac, 16) != 16) {
-        free(buffer);
-        AP::FS().close(fd);
-        return LUA_ERRFILE;
-    }
-
-    uint8_t nonce[24] = {};
-    if (AP::FS().read(fd, nonce, 24) != 24) {
-        free(buffer);
-        AP::FS().close(fd);
-        return LUA_ERRFILE;
-    }
-
-    // Read into buffer
     ssize_t total_read = 0;
     while (total_read < filesize) {
         ssize_t bytes_read = AP::FS().read(fd, buffer + total_read, filesize - total_read);
-        if (bytes_read < 0 ) {
+        if (bytes_read < 0) {
+            crypto_wipe(shared, sizeof(shared));
             free(buffer);
             AP::FS().close(fd);
             return LUA_ERRFILE;
@@ -246,23 +257,16 @@ int load_encrypted_script(lua_State *L, const char *filename) {
         total_read += bytes_read;
     }
     AP::FS().close(fd);
-#if AP_SCRIPTING_ENCRYPTION_UUID_ENABLED
-    // the nonce belongs to the file: it is what the script was encrypted
-    // with, and regenerating it here destroyed it, so decryption could
-    // only ever have succeeded with the board-id prefixing compiled out.
-    // Verify instead, and refuse another airframe's script cheaply.
-    if (!lua_scripts::nonce_is_for_this_board(nonce)) {
-        free(buffer);
-        return LUA_ERRFILE;
-    }
-#endif
-    if (!lua_scripts::decrypt_script(buffer, mac, nonce, filesize)) {
+
+    const bool ok = (total_read == filesize) &&
+        lua_scripts::decrypt_script(buffer, mac, nonce, filesize, shared);
+    crypto_wipe(shared, sizeof(shared));
+    if (!ok) {
         free(buffer);
         return LUA_ERRFILE;
     }
 
-    error = luaL_loadbuffer(L, buffer, filesize, filename);
-
+    int error = luaL_loadbuffer(L, buffer, filesize, filename);
     free(buffer);
     return error;
 }
@@ -501,11 +505,48 @@ void lua_scripts::encrypt_all_scripts_in_dir(const char *dirname)
         }
         AP::FS().close(fd);
 
-        uint8_t mac[16];
-        uint8_t nonce[24] = {};
-        create_nonce(nonce, filename);
-        if (!encrypt_script(buffer, mac, nonce, filesize)) {
-            goto cleanup;
+        // Encrypt to this drone's own identity, so what it writes only it
+        // can read back. An ephemeral key pair is made here and its
+        // private half wiped immediately: the file carries the public
+        // half, and the drone re-derives the same secret at load time
+        // from its identity private key.
+        uint8_t mac[AP_SCRIPTING_LXA2_MAC_LEN];
+        uint8_t nonce[AP_SCRIPTING_LXA2_NONCE_LEN] = {};
+        uint8_t epk[AP_SCRIPTING_LXA2_EPK_LEN];
+        uint8_t uid[AP_SCRIPTING_NONCE_UID_LEN] = {};
+        {
+            uint8_t uid_len = sizeof(uid);
+            if (!hal.util->get_system_id_unformatted(uid, uid_len) ||
+                uid_len != AP_SCRIPTING_NONCE_UID_LEN) {
+                goto cleanup;
+            }
+            const struct ap_identity_data *identity = AP_CheckFirmware::find_identity();
+            if (!AP_CheckFirmware::identity_is_set(identity)) {
+                GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Scripting: no identity, can't encrypt");
+                goto cleanup;
+            }
+            uint8_t own_public[AP_SCRIPTING_LXA2_EPK_LEN];
+            crypto_x25519_public_key(own_public, identity->private_key);
+
+            uint8_t eph_private[32];
+            if (!hal.util->get_true_random_vals(eph_private, sizeof(eph_private), 100)) {
+                goto cleanup;
+            }
+            eph_private[0] &= 248;
+            eph_private[31] &= 127;
+            eph_private[31] |= 64;
+            crypto_x25519_public_key(epk, eph_private);
+
+            uint8_t shared[32];
+            crypto_key_exchange(shared, eph_private, own_public);
+            crypto_wipe(eph_private, sizeof(eph_private));
+
+            create_nonce(nonce, filename);
+            const bool locked = encrypt_script(buffer, mac, nonce, filesize, shared);
+            crypto_wipe(shared, sizeof(shared));
+            if (!locked) {
+                goto cleanup;
+            }
         }
 
         AP::FS().unlink(filename);
@@ -518,15 +559,23 @@ void lua_scripts::encrypt_all_scripts_in_dir(const char *dirname)
             goto cleanup;
         }
 
-        if (AP::FS().write(fd, "LUA1.0", 6) != 6) {
+        if (AP::FS().write(fd, AP_SCRIPTING_LXA2_MAGIC, AP_SCRIPTING_LXA2_MAGIC_LEN) != AP_SCRIPTING_LXA2_MAGIC_LEN) {
             goto cleanup;
         }
 
-        if (AP::FS().write(fd, mac, 16) != 16) {
+        if (AP::FS().write(fd, uid, sizeof(uid)) != (ssize_t)sizeof(uid)) {
             goto cleanup;
         }
 
-        if (AP::FS().write(fd, nonce, 24) != 24) {
+        if (AP::FS().write(fd, epk, sizeof(epk)) != (ssize_t)sizeof(epk)) {
+            goto cleanup;
+        }
+
+        if (AP::FS().write(fd, nonce, sizeof(nonce)) != (ssize_t)sizeof(nonce)) {
+            goto cleanup;
+        }
+
+        if (AP::FS().write(fd, mac, sizeof(mac)) != (ssize_t)sizeof(mac)) {
             goto cleanup;
         }
 
@@ -936,36 +985,42 @@ bool lua_scripts::nonce_is_for_this_board(const uint8_t nonce[24])
 }
 #endif
 
-bool lua_scripts::encrypt_script(char* script, uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen)
-{
-    const struct ap_secure_data* keys = AP_CheckFirmware::find_public_keys();
+/*
+  agree the key a .lxa v2 file was encrypted with.
 
-    if (keys == nullptr) {
-        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "No encryption key found");
+  X25519 between this drone's identity private key and the sender's
+  ephemeral public key. The sender did the mirror of this against the
+  drone's identity public key, so both arrive at the same secret without
+  it ever crossing the wire - and no other airframe can reach it, because
+  no other airframe has this private key.
+
+  The private half is read straight out of the bootloader sector and never
+  copied; the shared secret is the caller's to wipe.
+ */
+bool lua_scripts::script_shared_key(uint8_t shared[32], const uint8_t peer_public[AP_SCRIPTING_LXA2_EPK_LEN])
+{
+    const struct ap_identity_data *identity = AP_CheckFirmware::find_identity();
+    if (!AP_CheckFirmware::identity_is_set(identity)) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Scripting: drone has no identity");
         return false;
     }
-
-    // the first three keys will be ArduPilot_public_keyx.dat
-    crypto_lock(mac, (uint8_t*)script, keys->public_key[3].key, nonce, (const uint8_t*)script, scriptlen);
+    crypto_key_exchange(shared, identity->private_key, peer_public);
     return true;
 }
 
-bool lua_scripts::decrypt_script(char* script, const uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen)
+bool lua_scripts::encrypt_script(char* script, uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen,
+                                 const uint8_t shared[32])
 {
-    const struct ap_secure_data* keys = AP_CheckFirmware::find_public_keys();
+    crypto_lock(mac, (uint8_t*)script, shared, nonce, (const uint8_t*)script, scriptlen);
+    return true;
+}
 
-    if (keys == nullptr) {
-        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "No encryption key found");
-        return false;
-    }
-
-    // try decrypting with all the available keys until we have success or run out of key
-    for (uint8_t i = 0; i < AP_PUBLIC_KEY_MAX_KEYS; i++) {
-        if (crypto_unlock((uint8_t*)script, keys->public_key[i].key, nonce, mac, (const uint8_t*)script, scriptlen) == 0) {
-            return true;
-        }
-    }
-    return false;
+bool lua_scripts::decrypt_script(char* script, const uint8_t mac[16], const uint8_t nonce[24], size_t scriptlen,
+                                 const uint8_t shared[32])
+{
+    // one key, not ten guesses: a v2 file is encrypted for exactly one
+    // drone, so either the agreed key opens it or nothing does
+    return crypto_unlock((uint8_t*)script, shared, nonce, mac, (const uint8_t*)script, scriptlen) == 0;
 }
 #endif
 
