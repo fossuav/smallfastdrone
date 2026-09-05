@@ -644,3 +644,89 @@ ships at 29: the 2026-09-04 head moved it to 25, which collides with
 ACC_ZBIAS_LEARN, so it is pinned back to 29 locally (see the index section).
 The mode_althold.cpp refactor (`alt_hold_run_flying` extracted so ModeVelAltHold can
 override it) needs the trailing `#endif // MODE_ALTHOLD_ENABLED` dropped on 4.7.
+
+## Cross-PR check against the flight analyses (2026-09-05)
+
+Every mechanism named in the private topics was checked for presence on the
+assembled branch, then the highest-risk clusters were checked for
+*reachability* - a mechanism can be present and still be made unreachable by
+another PR's gate. Method: pull the parameter and identifier tokens out of each
+topic, resolve them against the branch's own generated parameter list
+(`param_parse.py`, so names that compose at build time are not false alarms)
+and against the source, then read the composite gates where several PRs land in
+the same function.
+
+Renames, not losses (topics use the older name):
+
+- `BARO1_THST_FILT` -> `BARO_THST_FILT` (moved to the AP_Baro frontend)
+- `EK3_FLOW_MIN_H` -> `FLOW_HGT_MIN` (#34292 moved it to AP_OpticalFlow)
+- `TKOFF_GNDEFF_ALT` / `_TMO` -> `GNDEFF_ALT` / `GNDEFF_TMO` (AP_GroundEffect subgroup)
+- `PSC_POSZ_P` -> `PSC_D_POS_P` (the NED refactor renamed Z to D)
+- `XKF6` -> `XKFA` for the AGL KF log fields (HAgl/VAgl/Bias/Valid)
+
+Deliberately absent, confirmed against the topic text rather than assumed:
+
+- `EK3_RNG_TERR_RT` / `terrRate` - a proposal in the topic's "Risks / validation"
+  section, never shipped.
+- The ground-effect Z accel-bias inhibit (`zAxisInhibit`) - measured against its
+  own absence and removed for doing nothing at `ACC_ZBIAS_LEARN=2`. The EKF3
+  playbook section describing it is 4.6-branch history.
+- `cb5026417f` (the four CovariancePrediction gates on `inhibitDelVelBiasStates`)
+  - dropped after it failed `AccelBiasMovingPlatform`. The branch correctly has
+  all four on `accelBiasLearningInhibited()`.
+
+Superseded, so the topic's text is behind the code rather than the code behind
+the flights:
+
+- #34210's flat `LAND_FS_THROTTLE_CAP 0.9` is now a PI controller on baro climb
+  rate (`LAND_FS_CAP_P/I/I_BAND_MS/MAX`); `LAND_FS_RUNAWAY_CLIMB_M 10` is intact.
+- #32768's "reset the datum unconditionally at arming" is now gated on
+  `ap.disarmed_in_air`, which is what `HeightDatumKeptOnMidairRearm` covers.
+
+Values that survived the re-stack unchanged: #32475's throw constants (30 deg,
+2500 ms, 5 deg, 3.0, 5 m/s, 100 ms), #33484's `FLOW_AXIS_LOCKOUT_MS = 500` (the
+flight-informed value, not the PR's 1000), #33318's
+`desired_vel_norm * (_brake_accel_mss + drag_decel_mss)`.
+
+### Finding: the rangefinder height switch disables the arm-time datum reset
+
+`EK3_RNG_USE_HGT > 0` with the AGL KF (`EK3_OPTIONS` bit 3) makes the height
+source RANGEFINDER *while the vehicle is parked*, and
+`NavEKF3_core::resetHeightDatum()` returns false for any source but baro or GPS,
+so #32768's arm-time baro-drift reset never runs.
+
+The switch fires on the ground because `selectHeightForFusion()` forces
+`terrainStable = true` whenever the AGL KF is valid (`AP_NavEKF3_PosVelFusion.cpp`
+~1509), overriding Copter's `terrainHgtStable`, which is otherwise false unless
+taking off or landing. With the AGL KF also supplying `heightAboveGnd` and a
+fresh `lastAglRngFuseTime_ms`, every term of the switch-on branch
+(`belowLowerSwHgt && trustTerrain && prevTnb.c.z >= 0.7f`) holds at rest.
+
+Measured, not inferred. Probe: arm with an analog rangefinder and
+`EK3_OPTIONS = 8`, count `EKF_ALT_RESET` (EV id 60, written only when
+`resetHeightDatum()` returns true):
+
+| `EK3_RNG_USE_HGT` | EKF_ALT_RESET at arm |
+|---|---|
+| -1 (default) | 1 |
+| 70 | **0** |
+
+Same binary, same arm sequence, one parameter apart.
+
+The consequence is latent rather than immediate: while the rangefinder holds the
+height source the drift is not visible (30 s of injected drift left `relative_alt`
+at -0.01 m), and it surfaces when the vehicle climbs past the switch ceiling and
+falls back to baro carrying drift that was never cleared. The GPS re-anchor in
+`resetHeightDatum()` is skipped too, so the reported AMSL keeps the drift.
+
+`ekf3_althold_baro_ge.md` records the accommodation that used to cover this -
+allow the reset when `onGroundNotMoving` even if `activeHgtSource` is
+RANGEFINDER through `EK3_RNG_USE_HGT` blending, provided the *configured*
+primary source is not the rangefinder. That exception is not in the merged code.
+It is a one-branch change to the guard in `AP_NavEKF3_PosVelFusion.cpp:373`,
+plus a regression test (the probe above is the shape); both belong on #32768,
+not on the branch.
+
+No test covers the combination today: `BaroDriftClearedAtArm` runs at the
+`EK3_RNG_USE_HGT` default of -1, and the one Copter test that sets the switch
+(`EK3_AglKfVelForVelD`) sets it to -1 for an unrelated reason.
