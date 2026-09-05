@@ -364,9 +364,24 @@ void Copter::source_fallback_update()
     // one vote integrator per signal: a divergence must persist on the same
     // signal for SRCF_CNF_TIME. A single counter fed by both lets a decaying
     // signal hand over to a rising one and confirm on neither alone.
-    // Only meaningful while flying on the GPS lane with a live receiver
+    // Only meaningful while flying on the GPS lane with a live receiver, and
+    // while the flow lane is a witness rather than merely present. Every
+    // divergence here is measured against that lane, and it only measures the
+    // world while it is aiding on flow with a live height to scale flow rate
+    // by. Field log 356 flew 250s of acro with the rangefinder returning for
+    // 12% of it: the unaided lane dead reckoned a velocity that disagreed
+    // with a healthy GPS lane by up to 34 m/s, which is the absence of a
+    // witness and not a spoof.
+    //
+    // Necessary rather than sufficient. Replayed over that flight this drops
+    // the samples that would vote from 1829 to 86, but the longest surviving
+    // run is 5.4s against a 1.5s SRCF_CNF_TIME, so it does not on its own
+    // make the monitor safe to arm for aerobatics. SRCF_FLIGHT_TEST_LOG_6.md
+    // has the sweep and what is still open.
     const uint16_t vote_max = MAX(1, (int)(g2.srcf_cnf_time * 10));
-    const bool can_vote = div_ok && !gps_bad_now && (primary == SRCF_GPS_LANE);
+    const bool flow_is_witness = flow_usable && rangefinder_alt_ok();
+    const bool can_vote = div_ok && !gps_bad_now && flow_is_witness &&
+                          (primary == SRCF_GPS_LANE);
     if (can_vote && (vel_div > vel_gate)) {
         srcf_state.vel_vote = MIN(srcf_state.vel_vote + 1, vote_max);
     } else if (srcf_state.vel_vote > 0) {
