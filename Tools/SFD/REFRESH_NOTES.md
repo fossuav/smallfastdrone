@@ -210,46 +210,37 @@ repeat, once per vehicle class), a dangling-registration scan, and a suite load.
 
 ### Validation
 
-2026-09-05 refresh (refresh3): the 49 SFD tests were run. 46 pass, 3 fail.
+2026-09-05 refresh (refresh4): the 47 SFD tests were run. 45 pass, 2 fail, no
+crashes.
 
-Two long-standing failures are GONE. ThrowDropSourceSwitch and ThrowModeNoGPS
-both pass - the pair this file recorded across two refreshes as hanging on
-"Stabilizing throw height" while the vehicle fell to the ground. #32475's
-rebuilt head carries the fix, so retire the "ours to fix" entry.
-HeightDatumKeptOnMidairRearm's own assertions still pass; only the recovery
-tail fails (see below). VibrationRectificationBiasLearning passes with no local
-skip.
+The optical flow FPE is fixed UPSTREAM and the local guard is gone. #34292 now
+carries `only apply the flow focus height gate to a recalled sample`
+(flowDataToFuse && takeOffDetected && tiltOK), so do not re-fold the local
+AP_NavEKF3 fix. Its commit message also records why zeroing the struct would
+have been the wrong fix: EstimateTerrainOffset would then fuse an invented zero
+flow rate, which Copter never trips but Plane does because EK3_FLOW_USE
+defaults to 2 there. All four tests it used to crash now pass.
 
-The three failures:
+The throw pair stays fixed: ThrowDropSourceSwitch and ThrowModeNoGPS both pass,
+as in refresh3.
 
-- **EK3_OptflowAssumeFlatGnd** - NEW, and open, but #33585 IS BEING REVISED AS
-  THIS IS WRITTEN, so re-run it against a settled head before spending any time
-  on it. What is established: it fails its own first subtest (EK3_OPTIONS=0)
-  with "terrain offset did not go stale" after climbing clear of a killed
-  rangefinder; the test body is byte-identical to the head it was rebuilt from
-  and #33585's code is present, so the rebuild is faithful; and it fails
-  identically with the optical-flow FPE guard removed, so that fix is not the
-  cause. The untested hypothesis is that gndOffsetValid stays true because
-  activeHgtSource is still RANGEFINDER, #33359 having changed that switch to use
-  the AGL KF. Treat that as a hypothesis, not a diagnosis.
-- **HeightDatumKeptOnMidairRearm** - unchanged and still not a regression. The
-  PR's own assertions pass; it fails the test's recovery tail, which wants the
-  descent arrested above 30 m. 2.1 m this run, against 12.6 / 1.3 / 12.0 / 2.8
-  previously. Do not relax the threshold before understanding why the ALT_HOLD
-  recovery from a ~17 m/s fall is that slow on 4.7.
-- **Scripting6DoFMotors** - removed. Master-only Lua example.
+The two failures:
 
-Method notes for the next run:
+- **EK3_OptflowAssumeFlatGnd** - still failing, but FURTHER ON than in
+  refresh3, so #33585's new head fixed the earlier problem. It used to fail the
+  first subtest with "terrain offset did not go stale"; it now reaches
+  "Terrain data is preferred and does not need bit 2" and fails with "Terrain
+  altitude did not keep EKF relative position valid". Not an environment gap:
+  TERRAIN_ENABLE was set and took effect, and the S36E149 tile is present in
+  both tilecache and terrain/. This is #33585's own test failing against its own
+  code - report it there rather than working around it here.
+- **HeightDatumKeptOnMidairRearm** - unchanged, still not a regression. The PR's
+  own assertions pass; the test's recovery tail wants the descent arrested above
+  30 m and it is not.
 
-- Rebuild BOTH vehicles after any shared-library fix. The FPE fix went in with
-  `./waf copter` only, so the Plane and QuadPlane steps ran a six-hour-old
-  arduplane and the QuadPlane test crashed on the already-fixed bug. Its Plane
-  sibling passed on the stale binary purely because the fault is intermittent -
-  a pass on a stale binary is not evidence.
-- A crashing test costs ~45 minutes of reconnect stall before the harness gives
-  up, so a run with several crashers looks wedged when it is merely slow.
-  Confirm against the log mtime, not intuition: the per-test buildlog is
-  buffered and its mtime lags badly.
+Run the set with `Tools/SFD/run_sfd_tests.sh` - it derives the list from the
+branch, puts the watch list first and the throw tests last, and `--resume`
+picks up an interrupted run instead of starting over.
 
 ### The optical flow FPE - found, fixed, and what it cost
 
