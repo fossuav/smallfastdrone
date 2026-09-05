@@ -318,7 +318,7 @@ bool NavEKF2_core::resetHeightDatum(void)
     if (validOrigin) {
         // gpsGoodToAlign is not updated without a 3D fix, so also check the
         // current fix or a GPS that died after alignment would be trusted
-        if (!gpsGoodToAlign || dal.gps().status(dal.gps().primary_sensor()) < AP_GPS_FixType::FIX_3D) {
+        if (!gpsGoodToAlign || dal.gps().status(dal.gps().primary_sensor()) < AP_DAL_GPS::GPS_OK_FIX_3D) {
             // if we don't have GPS lock then we shouldn't be doing a
             // resetHeightDatum, but if we do then the best option is
             // to maintain the old error
