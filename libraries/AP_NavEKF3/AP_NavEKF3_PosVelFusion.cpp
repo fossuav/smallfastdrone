@@ -370,8 +370,16 @@ bool NavEKF3_core::resetHeightDatum(void)
         // only allow resets when on the ground
         return false;
     }
+    // EK3_RNG_USE_HGT blends the rangefinder in over a baro or GPS datum, and
+    // switches to it on the ground once the AGL KF calls the terrain stable.
+    // The datum is still the configured source, and at rest the zero the reset
+    // moves to is what the rangefinder reads anyway, so the drift is real
+    const AP_NavEKF_Source::SourceZ primaryHgtSource = frontend->sources.getPosZSource(core_index);
+    const bool datumIsBaroOrGps = (primaryHgtSource == AP_NavEKF_Source::SourceZ::BARO) ||
+                                  (primaryHgtSource == AP_NavEKF_Source::SourceZ::GPS);
     if (activeHgtSource != AP_NavEKF_Source::SourceZ::BARO &&
-        activeHgtSource != AP_NavEKF_Source::SourceZ::GPS) {
+        activeHgtSource != AP_NavEKF_Source::SourceZ::GPS &&
+        !(datumIsBaroOrGps && onGroundNotMoving)) {
         // with any height source other than baro or GPS the estimate is
         // referenced to that sensor rather than the baro, so zeroing it
         // would corrupt the height and there is no baro drift to clear
