@@ -18684,15 +18684,20 @@ return update, 1000
         # that model's slow inverted yaw stretching the fall -- and 21 wants 31 m AGL
         # where this show reaches the loop-spin at 28.5 and cannot start higher (39 was
         # measured 2026-09-02 to put the band at 22..48; more breaches the 50 m
-        # ceiling). Measured on this airframe instead, isolated from 105 m: dip 6.2 m
-        # and the move NETS +3.0, i.e. it climbs. 13 is that at the AUTA_*_DROP
-        # convention's 2x margin.
-        # CONFIRMED CHAINED, n=3, same day: 8.5 / 8.6 / 8.8 m, so the isolation-to-
-        # chained ratio is 1.4x where the split-S's was 2x, and 13 stands at a 1.5x
-        # margin over the flown number. Recorded because the reasoning above is the
-        # weak kind this file warns about -- an isolation declaration -- and it
-        # happened to hold rather than being known to.
-        params["AUTA_LS_DROP"] = 13
+        # ceiling). Measured on this airframe instead. Isolated from 105 m it dips
+        # 6.2 m and NETS +3.0 -- it climbs -- but an isolation number is the weak one
+        # this file warns about (the split-S declared 1.1x isolated and flew 2.2x
+        # chained), so 13 was flown once as a conservative bootstrap purely to break
+        # the loop: a chained measurement needs the move to fly and the move needs a
+        # declaration.
+        # DERIVED FROM THE CHAINED MEASUREMENT NOW, which is the one the rule asks
+        # for. n=3 in this display: 8.5 / 8.6 / 8.8 m, range 0.3. Declared at the
+        # AUTA_SS_DROP precedent's margin -- that declares 12 against ~9 measured on
+        # this airframe, 1.33x -- so 8.8 * 1.33 = 11.7, hence 12.
+        # The isolation-to-chained ratio here turned out to be 1.4x against the
+        # split-S's 2x, which is why the bootstrap held. That was luck rather than
+        # knowledge and is recorded as such.
+        params["AUTA_LS_DROP"] = 12
         if size_m is not None:
             # The uniform-size arm. Only the float-loop opener and the rewind move:
             # AUTA_IM_SIZE is already at LOOP_MIN_SIZE_M and cannot go lower without
