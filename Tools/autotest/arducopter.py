@@ -16680,12 +16680,16 @@ return update, 1000
         })
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
-        # The nine moves the curated display does not fly (2026-08-11 split). It is
-        # installed unconditionally but the applet only requires it when a
-        # configuration selects one of those moves, so a display run never compiles
-        # it -- which is where the heap saving comes from. Installing it anyway is
-        # deliberate: the isolation tests pick those moves by parameter, and an
-        # absent module would surface as a missing move rather than a missing file.
+        # The moves split out on 2026-08-11. Installed unconditionally, and it has to
+        # be: the isolation tests pick those moves by parameter, and an absent module
+        # would surface as a missing move rather than a missing file.
+        # THE HEAP SAVING NO LONGER APPLIES TO THE CURATED DISPLAY (2026-09-07). The
+        # split's whole economy was that no display entry was tagged, so a display run
+        # never compiled this. The show now flies the DRILL, so it does -- at script
+        # load, via the line weave asking the next figure's maker for its entry speed.
+        # A display is therefore back to holding both modules, roughly the pre-split
+        # compiled size, and whether that still leaves room for the CRSF menu is the
+        # vehicle's question and not SITL's.
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_extras.lua"), "autoacro_extras.lua")
         self.install_applet_script_context("autoacro.lua")
         self.reboot_sitl()
@@ -17067,12 +17071,16 @@ return update, 1000
                              "SCR_DEBUG_OPTS": 8})
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "vehicle_control.lua"), "vehicle_control.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_maneuvers.lua"), "autoacro_maneuvers.lua")
-        # The nine moves the curated display does not fly (2026-08-11 split). It is
-        # installed unconditionally but the applet only requires it when a
-        # configuration selects one of those moves, so a display run never compiles
-        # it -- which is where the heap saving comes from. Installing it anyway is
-        # deliberate: the isolation tests pick those moves by parameter, and an
-        # absent module would surface as a missing move rather than a missing file.
+        # The moves split out on 2026-08-11. Installed unconditionally, and it has to
+        # be: the isolation tests pick those moves by parameter, and an absent module
+        # would surface as a missing move rather than a missing file.
+        # THE HEAP SAVING NO LONGER APPLIES TO THE CURATED DISPLAY (2026-09-07). The
+        # split's whole economy was that no display entry was tagged, so a display run
+        # never compiled this. The show now flies the DRILL, so it does -- at script
+        # load, via the line weave asking the next figure's maker for its entry speed.
+        # A display is therefore back to holding both modules, roughly the pre-split
+        # compiled size, and whether that still leaves room for the CRSF menu is the
+        # vehicle's question and not SITL's.
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_extras.lua"), "autoacro_extras.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "crsf_helper.lua"), "crsf_helper.lua")
         self.install_applet_script_context("autoacro.lua")
@@ -17242,6 +17250,46 @@ return update, 1000
         # pivot mood left the rewind 0.8 m short.
         self.launch_autoacro_rise255(extra_params={"AUTA_JF_DROP": 6})
         self.fly_autoacro_display(65)
+
+    def fly_autoacro_size_arm(self, lp, im, rw):
+        '''AutoAcroFullDisplay with the sized figures re-sized, for the slow-show A/B.
+
+        The box is the run-ups, and a sized figure's run-up speed is what its SIZE
+        buys (v_bot^2 = g*r*(m^2 + 4 + 2*pi*d)), so the sizes are the one knob that
+        moves the whole speed regime without touching a speed constant anywhere. It
+        reaches the LINES too, because a line derives its delivery from the next
+        figure's own builder -- which is the point: a hook that scaled only the
+        maneuver's gate would starve nothing, since the line would still build the
+        full speed (2026-08-17).
+
+        THE RANGE IS BOUNDED BELOW AT 8 AND THE SHOW IS ALREADY THERE. Under
+        LOOP_MIN_SIZE_M (8) loop_planned_size returns nil, the figure falls back to
+        the UNSIZED fixed-pull path, and a pull and a rate are not a figure: at
+        AUTA_IM_SIZE 6 the first immelmann DESCENDED 18 m and translated 18 m
+        backwards where the baseline's climbs 4 m, and the display then refused its
+        split-S on the AGL floor ("needs 27.6 m, have 21.9") in 5 runs of 5. The
+        constant is derived, not chosen -- the rate a round loop needs is sqrt(5g/r),
+        so a shrinking loop asks for more rate at the same 6 g, the body lags the
+        path, and the figure comes out bigger than its ask. So the slow show is
+        reachable only by bringing the 12s DOWN TO 8, never through it, and
+        AUTA_IM_SIZE cannot move at all.
+
+        Everything else is held at AutoAcroFullDisplay's values, takeoff included.
+        Two figures still do not follow: the schedule pins the split-S at size_m 8
+        and the pivot loop at entry_speed_ms 16, both in the applet rather than in a
+        parameter. At the uniform-8 arm the split-S pin is no longer a mismatch,
+        which is the leg C/D size difference plan.md wants closed anyway.'''
+        self.launch_autoacro_rise255(extra_params={
+            "AUTA_JF_DROP": 6,
+            "AUTA_LP_SIZE": lp,   # the float-loop opener
+            "AUTA_IM_SIZE": im,   # both immelmanns
+            "AUTA_RW_SIZE": rw,   # the rewind
+        })
+        self.fly_autoacro_display(65)
+
+    def AutoAcroSlowShow8(self):
+        '''The curated display with every sized figure at 8 m -- the slow-show A/B'''
+        self.fly_autoacro_size_arm(8, 8, 8)
 
     def fly_autoacro_reversal_pair_chained(self, trigger_ch=9):
         '''Fly the immelmann/split-S pair CHAINED (AUTA_MOVE=-1) and report the walk.
@@ -18866,6 +18914,7 @@ return update, 1000
             self.ScriptingFlipOnASwitch,
             self.AutoAcroDisplay,
             self.AutoAcroFullDisplay,
+            self.AutoAcroSlowShow8,
             self.AutoAcroFlip,
             self.AutoAcroLoop,
             self.AutoAcroRoll,
