@@ -3,6 +3,7 @@
 #include <AP_HAL/AP_HAL_Boards.h>
 #include <AP_Filesystem/AP_Filesystem_config.h>
 #include <GCS_MAVLink/GCS_config.h>
+#include <AP_CheckFirmware/AP_CheckFirmware_config.h>
 
 #ifndef HAL_LOGGING_ENABLED
 #define HAL_LOGGING_ENABLED 1
@@ -66,3 +67,11 @@
 
 #include <AP_Rally/AP_Rally_config.h>
 #define HAL_LOGGER_RALLY_ENABLED HAL_LOGGING_ENABLED && HAL_RALLY_ENABLED
+
+// encrypt a log to the drone's owner as it is written. Only the file
+// backend, because the threat is a card leaving the aircraft: a log on
+// internal flash is already behind the same readout protection as
+// everything else
+#ifndef AP_LOGGER_ENCRYPTION_ENABLED
+#define AP_LOGGER_ENCRYPTION_ENABLED AP_CHECK_FIRMWARE_IDENTITY_ENABLED
+#endif

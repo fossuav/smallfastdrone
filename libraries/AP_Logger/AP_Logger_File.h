@@ -10,6 +10,9 @@
 
 #include <AP_HAL/utility/RingBuffer.h>
 #include "AP_Logger_Backend.h"
+#if AP_LOGGER_ENCRYPTION_ENABLED
+#include <AP_CheckFirmware/AP_CheckFirmware.h>
+#endif
 
 #if HAL_LOGGING_FILESYSTEM_ENABLED
 
@@ -112,6 +115,16 @@ private:
     bool write_lastlog_file(uint16_t log_num);
 
     // write buffer
+#if AP_LOGGER_ENCRYPTION_ENABLED
+    // key, nonce and block counter for the log being written
+    struct sfx_state _crypt;
+    // bytes at the head of _writebuf already encrypted and still to be
+    // written. A short write leaves them encrypted where they are, so
+    // the next pass carries on rather than encrypting them twice
+    uint32_t _crypt_pending;
+    bool _crypt_active;
+#endif
+
     ByteBuffer _writebuf{0};
     const uint16_t _writebuf_chunk = HAL_LOGGER_WRITE_CHUNK_SIZE;
     uint32_t _last_write_time;

@@ -846,6 +846,29 @@ void AP_Logger_File::start_new_log(void)
     _open_error_ms = 0;
     _write_offset = 0;
     _writebuf.clear();
+
+#if AP_LOGGER_ENCRYPTION_ENABLED
+    // the clear() above is what discards any bytes encrypted for the
+    // file we just stopped writing
+    _crypt_pending = 0;
+    _crypt_active = false;
+    uint8_t sfx_header[AP_SFX_HEADER_LEN];
+    if (AP_CheckFirmware::outbound_begin(sfx_header, _crypt, AP_SFX_TYPE_LOG, AP_SFX_FLAG_STREAM)) {
+        // written and synced before any log data, because a body whose
+        // header never reached the card cannot be read back at all
+        if (AP::FS().write(_write_fd, sfx_header, sizeof(sfx_header)) != (ssize_t)sizeof(sfx_header)) {
+            AP::FS().close(_write_fd);
+            _write_fd = -1;
+            write_fd_semaphore.give();
+            _open_error_ms = AP_HAL::millis();
+            return;
+        }
+        AP::FS().fsync(_write_fd);
+        _write_offset = sizeof(sfx_header);
+        _crypt_active = true;
+    }
+#endif
+
     write_fd_semaphore.give();
 
     // now update lastlog.txt with the new log number
@@ -992,6 +1015,36 @@ void AP_Logger_File::io_timer(void)
         nbytes = bytes_until_fsync; // write exactly enough to sync
     }
 
+#if AP_LOGGER_ENCRYPTION_ENABLED
+    if (_crypt_active) {
+        /*
+          encrypt in place, in whole 64 byte blocks. The counter is a
+          block counter, so stopping anywhere else would leave no way
+          to resume; keeping the remainder in the buffer costs nothing
+          because it is about to be written to anyway.
+
+          In place is deliberate: whatever the filesystem does not take
+          this time stays encrypted where it is, and the next pass
+          carries on from there. The cast is safe because this buffer
+          is only ever read by this thread and never read back
+         */
+        if (nbytes > _crypt_pending) {
+            const uint32_t whole = (nbytes - _crypt_pending) & ~63U;
+            if (whole > 0) {
+                AP_CheckFirmware::outbound_encrypt(_crypt, const_cast<uint8_t *>(head) + _crypt_pending, whole);
+                _crypt_pending += whole;
+            }
+        }
+        nbytes = MIN(nbytes, _crypt_pending);
+        if (nbytes == 0) {
+            // less than a block has accumulated; wait for more rather
+            // than write plaintext
+            write_fd_semaphore.give();
+            return;
+        }
+    }
+#endif
+
     ssize_t nwritten = AP::FS().write(_write_fd, head, nbytes);
     last_io_operation = "";
     if (nwritten <= 0) {
@@ -1016,6 +1069,9 @@ void AP_Logger_File::io_timer(void)
         _last_write_ms = tnow;
         _write_offset += nwritten;
         _writebuf.advance(nwritten);
+#if AP_LOGGER_ENCRYPTION_ENABLED
+        _crypt_pending -= nwritten;
+#endif
 
         // we know nwritten > 0 so we won't sync if bytes_until_fsync == 0
         if ((uint32_t)nwritten == bytes_until_fsync) {
