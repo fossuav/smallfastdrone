@@ -12,6 +12,13 @@
 #define HAL_SUPPORT_RCOUT_SERIAL 1
 #endif
 
+// and SERVO_BLH_BDMASK with it, so the configurator's ESC setup can be
+// exercised off hardware. The telemetry itself does nothing in the sim -
+// what is under test is that the option exists and can be set
+#ifndef HAL_WITH_BIDIR_DSHOT
+#define HAL_WITH_BIDIR_DSHOT 1
+#endif
+
 #define AP_FLASHSTORAGE_TYPE 3
 
 #if AP_FLASHSTORAGE_TYPE == 1
