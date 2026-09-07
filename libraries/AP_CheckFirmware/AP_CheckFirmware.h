@@ -203,6 +203,63 @@ static_assert(sizeof(ap_secure_data) == AP_SECURE_DATA_TOTAL_LENGTH, "ap_secure_
 #define AP_OWNER_STATUS_ARMED       3
 #define AP_OWNER_STATUS_ALREADY_SET 4
 #define AP_OWNER_STATUS_NO_IDENTITY 5
+
+/*
+  .sfx - the envelope the drone wraps an outbound artefact in, so that
+  only the owner can read it. The mirror of a .lxa: there the sender
+  encrypts to the drone's identity, here the drone encrypts to the
+  owner's key.
+
+    0   6  magic "SFDX10"
+    6   1  content type
+    7   1  flags
+    8  12  this board's UID, plaintext
+   20  32  a per-artefact ephemeral X25519 public key
+   52  24  nonce
+   76  16  Poly1305 tag over bytes 0..75
+   92  ..  ciphertext
+
+  The content key mixes two X25519 agreements. The ephemeral against
+  the owner key conceals - only the owner's private key re-derives it -
+  and the identity key against the owner key authenticates, since no
+  other board can produce it. Mixing a fresh ephemeral in is what stops
+  the second, which is static on both sides, from being one fixed key
+  over every artefact the drone ever writes
+ */
+#define AP_SFX_MAGIC "SFDX10"
+#define AP_SFX_MAGIC_LEN 6
+#define AP_SFX_KEY_LEN 32
+#define AP_SFX_EPK_LEN 32
+#define AP_SFX_NONCE_LEN 24
+#define AP_SFX_MAC_LEN 16
+#define AP_SFX_OFS_UID (AP_SFX_MAGIC_LEN + 2)
+#define AP_SFX_OFS_EPK (AP_SFX_OFS_UID + AP_IDENTITY_UID_LEN)
+#define AP_SFX_OFS_NONCE (AP_SFX_OFS_EPK + AP_SFX_EPK_LEN)
+#define AP_SFX_OFS_MAC (AP_SFX_OFS_NONCE + AP_SFX_NONCE_LEN)
+#define AP_SFX_HEADER_LEN (AP_SFX_OFS_MAC + AP_SFX_MAC_LEN)
+#define AP_SFX_CONTEXT "sfd-outbound/1"
+
+// block 0 of the keystream is the Poly1305 key, so the body starts at 1
+#define AP_SFX_BODY_BLOCK 1
+
+#define AP_SFX_TYPE_PARAMS 1
+#define AP_SFX_TYPE_LOG 2
+
+// the body is a seekable stream and carries no MAC of its own. Set for
+// a log, which is routinely truncated by a power loss - a trailer the
+// aircraft never got to write would fail exactly the log worth reading
+#define AP_SFX_FLAG_STREAM 1
+
+/*
+  what an outbound artefact needs to keep between calls. The counter is
+  a block counter, so every encrypt except the last must be a multiple
+  of 64 bytes
+ */
+struct sfx_state {
+    uint8_t key[AP_SFX_KEY_LEN];
+    uint8_t nonce[AP_SFX_NONCE_LEN];
+    uint64_t ctr;
+};
 #endif
 
 #ifdef HAL_BOOTLOADER_BUILD
@@ -232,6 +289,16 @@ public:
     // write-once: refused if the drone is already owned, has no identity to
     // authenticate with, or the key is all zero
     static bool set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN]);
+    /*
+      start an outbound artefact: fill in its .sfx header and derive the
+      content key. False if the drone has no identity or no owner, which
+      is the ordinary state of a drone nobody has claimed
+     */
+    static bool outbound_begin(uint8_t header[AP_SFX_HEADER_LEN], struct sfx_state &state,
+                               uint8_t content_type, uint8_t flags);
+    // encrypt in place and advance the counter. len must be a multiple
+    // of 64 unless this is the final call for the artefact
+    static void outbound_encrypt(struct sfx_state &state, uint8_t *buf, uint32_t len);
 #endif
 
     /*
