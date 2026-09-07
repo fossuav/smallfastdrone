@@ -724,7 +724,28 @@ void AP_CheckFirmware::handle_secure_command(mavlink_channel_t chan, const mavli
     }
 
 send_reply:
-    // send reply
+    /*
+      Wait for room in the link before sending.
+
+      This reply carries a 220 byte data field, and the operations that
+      write flash stall the board for about a second while telemetry
+      backs up in the transmit buffer. comm_send_lock() discards a
+      message that will not fit, silently and by design, so without this
+      wait the drone completes a write-once operation and then says
+      nothing at all - which on the wire is indistinguishable from
+      firmware that never understood the command.
+
+      Measured on a TBS_LUCID_H7: SET_OWNER_KEY reached this line with
+      ACCEPTED every time and the reply never left, while the smaller
+      statustexts around it did, because those are queued and retried
+      and this is not.
+
+      Bounded, and the handler has already blocked far longer writing
+      the sector, so the wait costs nothing that was not already spent.
+     */
+    for (uint8_t i = 0; i < 100 && comm_get_txspace(chan) < PAYLOAD_SIZE(chan, SECURE_COMMAND_REPLY); i++) {
+        hal.scheduler->delay(5);
+    }
     mavlink_msg_secure_command_reply_send_struct(chan, &reply);
 }
 
