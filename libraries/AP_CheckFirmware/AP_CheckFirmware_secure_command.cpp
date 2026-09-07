@@ -294,6 +294,38 @@ bool AP_CheckFirmware::check_signature(const mavlink_secure_command_t &pkt)
     return false;
 }
 
+/*
+  verify a detached signature over arbitrary bytes against the
+  bootloader's public keys.
+
+  check_signature() cannot serve here: it signs over the packet's
+  sequence and a session key the drone issued, which makes it an
+  interactive protocol. An ownership grant is signed offline, possibly
+  weeks before it is used, so what it needs is exactly this - a
+  signature over the blob and nothing else. Replay is stopped by the
+  grant's counter rather than by a session nonce.
+ */
+bool AP_CheckFirmware::verify_signed_blob(const uint8_t *msg, uint16_t msg_len,
+                                          const uint8_t sig[AP_OWNER_GRANT_SIG_LEN])
+{
+    const struct ap_secure_data *sec_data = find_public_keys();
+    if (sec_data == nullptr || all_zero_keys(sec_data)) {
+        // no keys is not an open door here, whatever the build posture:
+        // an unsigned grant would let anyone claim any drone
+        return false;
+    }
+    for (const auto &public_key : sec_data->public_key) {
+        crypto_check_ctx ctx {};
+        crypto_check_ctx_abstract *actx = (crypto_check_ctx_abstract*)&ctx;
+        crypto_check_init(actx, sig, public_key.key);
+        crypto_check_update(actx, msg, msg_len);
+        if (crypto_check_final(actx) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 #if !AP_CHECK_FIRMWARE_FIXED_KEYS
 /*
   set public keys in bootloader
@@ -399,7 +431,8 @@ bool AP_CheckFirmware::is_sealed(void)
   owner key without one buys nothing, and refusing here enforces the
   ceremony's ordering in firmware rather than only in the tool
  */
-bool AP_CheckFirmware::set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN])
+bool AP_CheckFirmware::set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN],
+                                    const uint8_t counter[AP_OWNER_COUNTER_LEN])
 {
     const uint8_t zero_key[AP_OWNER_KEY_LEN] {};
     if (memcmp(public_key, zero_key, AP_OWNER_KEY_LEN) == 0 ||
@@ -421,6 +454,11 @@ bool AP_CheckFirmware::set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN])
         return false;
     }
     memcpy(sec_data->owner.public_key, public_key, AP_OWNER_KEY_LEN);
+    if (counter != nullptr) {
+        // written in the same flash operation as the key it authorised,
+        // so the two cannot disagree after an interrupted write
+        memcpy(sec_data->owner.granted, counter, AP_OWNER_COUNTER_LEN);
+    }
 
     // no wipe: an owner key is public, and wiping it here would only
     // suggest to a reader that it was not
@@ -496,6 +534,74 @@ static bool fill_owner_reply(mavlink_secure_command_reply_t &reply)
 }
 
 /*
+  apply an ownership grant SFD signed offline.
+
+  Works on a sealed drone, which is the point of it: a lost owner key is
+  otherwise unrecoverable short of erasing the airframe. That does mean
+  SFD can re-point ownership, taken deliberately (PLAN.md decision 42) on
+  the grounds that the change announces itself - the old owner's key
+  stops opening new recordings at once - and that an SFD willing to do it
+  would ship firmware instead, since it signs that too.
+
+  Order matters. The cheap checks come first and the signature last, so a
+  malformed or misaddressed grant costs a memcmp rather than a
+  verification; and the counter is checked before anything is written, so
+  a replayed grant never reaches flash.
+ */
+static MAV_RESULT apply_owner_grant(const mavlink_secure_command_t &pkt,
+                                    mavlink_secure_command_reply_t &reply)
+{
+    uint8_t status = 0;
+    if (pkt.data_length != AP_OWNER_GRANT_LEN ||
+        memcmp(pkt.data, AP_OWNER_GRANT_MAGIC, AP_OWNER_GRANT_MAGIC_LEN) != 0 ||
+        pkt.data[AP_OWNER_GRANT_MAGIC_LEN] != AP_OWNER_GRANT_VERSION) {
+        status = AP_OWNER_STATUS_BAD_GRANT;
+    } else if (hal.util->get_soft_armed()) {
+        status = AP_OWNER_STATUS_ARMED;
+    } else if (AP_CheckFirmware::find_owner_key() == nullptr) {
+        status = AP_OWNER_STATUS_NO_REGION;
+    } else if (!AP_CheckFirmware::identity_is_set(AP_CheckFirmware::find_identity())) {
+        status = AP_OWNER_STATUS_NO_IDENTITY;
+    }
+    if (status == 0) {
+        // is this grant for us? a grant for another drone is an ordinary
+        // situation and should cost a memcmp, not a verification
+        uint8_t uid[AP_IDENTITY_UID_LEN];
+        uint8_t uid_len = sizeof(uid);
+        if (!hal.util->get_system_id_unformatted(uid, uid_len) ||
+            uid_len != AP_IDENTITY_UID_LEN ||
+            memcmp(&pkt.data[AP_OWNER_GRANT_OFS_UID], uid, AP_IDENTITY_UID_LEN) != 0) {
+            status = AP_OWNER_STATUS_OTHER_DRONE;
+        }
+    }
+    if (status == 0) {
+        // strictly newer than the last applied, so an old grant cannot
+        // restore a key the operator rotated away from
+        const struct ap_owner_data *owner = AP_CheckFirmware::find_owner_key();
+        if (memcmp(&pkt.data[AP_OWNER_GRANT_OFS_COUNTER], owner->granted, AP_OWNER_COUNTER_LEN) <= 0) {
+            status = AP_OWNER_STATUS_STALE;
+        }
+    }
+    if (status == 0 &&
+        !AP_CheckFirmware::verify_signed_blob(pkt.data, AP_OWNER_GRANT_SIGNED_LEN,
+                                              &pkt.data[AP_OWNER_GRANT_SIGNED_LEN])) {
+        status = AP_OWNER_STATUS_UNSIGNED;
+    }
+    if (status != 0) {
+        reply.data_length = 1;
+        reply.data[0] = status;
+        return MAV_RESULT_DENIED;
+    }
+
+    if (!AP_CheckFirmware::set_owner_key(&pkt.data[AP_OWNER_GRANT_OFS_KEY],
+                                         &pkt.data[AP_OWNER_GRANT_OFS_COUNTER]) ||
+        !fill_owner_reply(reply)) {
+        return MAV_RESULT_FAILED;
+    }
+    return MAV_RESULT_ACCEPTED;
+}
+
+/*
   why the owner key cannot be written now. Split out because each
   refusal has its own remedy and the caller has no way to work out
   which one it hit
@@ -561,7 +667,10 @@ static bool signature_required(uint32_t operation)
     return operation != SECURE_COMMAND_GENERATE_IDENTITY &&
            operation != SECURE_COMMAND_GET_IDENTITY &&
            operation != SECURE_COMMAND_SET_OWNER_KEY &&
-           operation != SECURE_COMMAND_GET_OWNER_KEY;
+           operation != SECURE_COMMAND_GET_OWNER_KEY &&
+           // the grant carries its own signature, verified against the
+           // same keys, so the packet needs none
+           operation != SECURE_COMMAND_SET_OWNER_GRANT;
 #else
     (void)operation;
     return true;
@@ -706,6 +815,11 @@ void AP_CheckFirmware::handle_secure_command(mavlink_channel_t chan, const mavli
 
     case SECURE_COMMAND_SET_OWNER_KEY: {
         reply.result = store_owner_key(pkt, reply);
+        break;
+    }
+
+    case SECURE_COMMAND_SET_OWNER_GRANT: {
+        reply.result = apply_owner_grant(pkt, reply);
         break;
     }
 

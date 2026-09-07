@@ -116,6 +116,7 @@ static_assert(sizeof(app_descriptor_signed) == APP_DESCRIPTOR_SIGNED_TOTAL_LENGT
 #define AP_IDENTITY_SIGNATURE {0x9d, 0x2b, 0x7e, 0x11, 0xc4, 0x58, 0xa3, 0x6f}
 
 #define AP_OWNER_KEY_LEN 32
+#define AP_OWNER_COUNTER_LEN 8
 #define AP_OWNER_SIGNATURE {0x3a, 0xd7, 0x62, 0x8c, 0x1f, 0xb0, 0x45, 0xe9}
 
 /*
@@ -152,6 +153,19 @@ struct PACKED ap_identity_data {
 struct PACKED ap_owner_data {
     uint8_t sig[8] = AP_OWNER_SIGNATURE;
     uint8_t public_key[AP_OWNER_KEY_LEN] = {};
+    /*
+      the counter of the last ownership grant applied, big-endian.
+
+      Without it a grant replays: an attacker who once saw a valid one
+      could re-apply it later and restore a key the operator had
+      deliberately rotated away from. The drone has no clock, so a
+      timestamp in the grant would prove nothing - only something the
+      drone itself remembers can order two grants, and this is it.
+
+      Zero on a drone that has only ever been claimed by presence, which
+      is why the first grant needs a counter of at least one.
+     */
+    uint8_t granted[AP_OWNER_COUNTER_LEN] = {};
 };
 
 struct PACKED ap_secure_data {
@@ -168,7 +182,7 @@ struct PACKED ap_secure_data {
 
 #define AP_SECURE_DATA_TOTAL_LENGTH (8 + AP_PUBLIC_KEY_MAX_KEYS*AP_PUBLIC_KEY_LEN + \
                                      8 + AP_IDENTITY_KEY_LEN + \
-                                     8 + AP_OWNER_KEY_LEN)
+                                     8 + AP_OWNER_KEY_LEN + AP_OWNER_COUNTER_LEN)
 static_assert(sizeof(ap_secure_data) == AP_SECURE_DATA_TOTAL_LENGTH, "ap_secure_data incorrect length");
 
 /*
@@ -192,6 +206,37 @@ static_assert(sizeof(ap_secure_data) == AP_SECURE_DATA_TOTAL_LENGTH, "ap_secure_
 #define SECURE_COMMAND_GET_OWNER_KEY 0x53464404U
 
 /*
+  apply an ownership grant SFD signed offline.
+
+  The drone already trusts exactly one key - SFD's, in the bootloader -
+  so the authorisation for a remote claim already exists and has simply
+  never been used for this. Unlike every other signed operation here,
+  the signature is inside the blob rather than in the packet's sig
+  field: check_signature() covers a session key the drone issues, which
+  makes it interactive, and a grant has to be signable offline weeks
+  before it is used. Replay is prevented by the counter instead.
+
+    0   6  magic "SFDOWN"
+    6   1  version
+    7   1  reserved
+    8  12  the drone this grant is for
+   20  32  the owner public key it grants
+   52   8  counter, big-endian, strictly greater than the last applied
+   60  64  signature over bytes 0..59 by SFD's signing key
+ */
+#define SECURE_COMMAND_SET_OWNER_GRANT 0x53464405U
+
+#define AP_OWNER_GRANT_MAGIC "SFDOWN"
+#define AP_OWNER_GRANT_MAGIC_LEN 6
+#define AP_OWNER_GRANT_VERSION 1
+#define AP_OWNER_GRANT_OFS_UID 8
+#define AP_OWNER_GRANT_OFS_KEY 20
+#define AP_OWNER_GRANT_OFS_COUNTER 52
+#define AP_OWNER_GRANT_SIGNED_LEN 60
+#define AP_OWNER_GRANT_SIG_LEN 64
+#define AP_OWNER_GRANT_LEN (AP_OWNER_GRANT_SIGNED_LEN + AP_OWNER_GRANT_SIG_LEN)
+
+/*
   why an owner key operation failed, returned as one byte of reply
   data. Every refusal has a different remedy - update the bootloader,
   generate an identity, disarm, or nothing at all - and a caller that
@@ -208,6 +253,10 @@ static_assert(sizeof(ap_secure_data) == AP_SECURE_DATA_TOTAL_LENGTH, "ap_secure_
 #define AP_OWNER_STATUS_ALREADY_SET 4
 #define AP_OWNER_STATUS_NO_IDENTITY 5
 #define AP_OWNER_STATUS_SEALED      6
+#define AP_OWNER_STATUS_BAD_GRANT   7
+#define AP_OWNER_STATUS_OTHER_DRONE 8
+#define AP_OWNER_STATUS_UNSIGNED    9
+#define AP_OWNER_STATUS_STALE      10
 
 /*
   .sfx - the envelope the drone wraps an outbound artefact in, so that
@@ -293,7 +342,14 @@ public:
     static bool owner_key_is_set(const struct ap_owner_data *owner);
     // refused if the key is all zero, if there is no identity to
     // authenticate with, or if the drone is already owned *and* sealed
-    static bool set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN]);
+    // `counter` nullptr leaves the stored grant counter alone, which is
+    // what the presence-authorised path wants
+    static bool set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN],
+                              const uint8_t counter[AP_OWNER_COUNTER_LEN] = nullptr);
+    // verify a detached signature over arbitrary bytes against the
+    // bootloader's public keys
+    static bool verify_signed_blob(const uint8_t *msg, uint16_t msg_len,
+                                   const uint8_t sig[AP_OWNER_GRANT_SIG_LEN]);
     // is readout protection raised? Read from the silicon, never from
     // the parameter that asks for it
     static bool is_sealed(void);
