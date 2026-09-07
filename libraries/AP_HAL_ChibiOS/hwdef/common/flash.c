@@ -1143,6 +1143,24 @@ void stm32_flash_unprotect_flash()
 #endif
 }
 
+/*
+  is the chip read protected? Level 0 is 0xAA and anything else is
+  protected.
+
+  Read from the option bytes rather than inferred from the parameter
+  that asks for protection: that request is raise-only, so it can be
+  cleared while the protection it caused stays in place, and the two
+  then disagree by design. Only the silicon knows.
+ */
+bool stm32_flash_is_read_protected(void)
+{
+#if defined(STM32H7)
+    return ((FLASH->OPTSR_CUR & FLASH_OPTSR_RDP_Msk) >> FLASH_OPTSR_RDP_Pos) != 0xAA;
+#else
+    return false;
+#endif
+}
+
 /**
  * @brief read protect the flash. prevents 3rd-parties accessing the firmware via DFU or a debugger
  */

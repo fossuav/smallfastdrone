@@ -35,6 +35,7 @@ void stm32_flash_protect_flash(bool bootloader, bool protect);
 void stm32_flash_unprotect_flash(void);
 void stm32_flash_set_rdp_flash(uint32_t optbyte);
 void stm32_flash_read_protect_flash(void);
+bool stm32_flash_is_read_protected(void);
 void stm32_flash_set_NRST_MODE(uint8_t nrst_mode);
 #if defined(STM32H7)
 void stm32_flash_corrupt(uint32_t addr, bool double_bit);
