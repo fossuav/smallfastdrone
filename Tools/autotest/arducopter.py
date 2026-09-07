@@ -18679,6 +18679,20 @@ return update, 1000
         # the size-8 figure.
         params["AUTA_JF_DROP"] = 6
         params["AUTA_SS_DROP"] = 12
+        # AUTA_LS_DROP, and it has to be declared or the move cannot fly here at all.
+        # Unset it falls back to DROP.INVYAW_M, the native model's 21 m, whose size is
+        # that model's slow inverted yaw stretching the fall -- and 21 wants 31 m AGL
+        # where this show reaches the loop-spin at 28.5 and cannot start higher (39 was
+        # measured 2026-09-02 to put the band at 22..48; more breaches the 50 m
+        # ceiling). Measured on this airframe instead, isolated from 105 m: dip 6.2 m
+        # and the move NETS +3.0, i.e. it climbs. 13 is that at the AUTA_*_DROP
+        # convention's 2x margin.
+        # CONFIRMED CHAINED, n=3, same day: 8.5 / 8.6 / 8.8 m, so the isolation-to-
+        # chained ratio is 1.4x where the split-S's was 2x, and 13 stands at a 1.5x
+        # margin over the flown number. Recorded because the reasoning above is the
+        # weak kind this file warns about -- an isolation declaration -- and it
+        # happened to hold rather than being known to.
+        params["AUTA_LS_DROP"] = 13
         if size_m is not None:
             # The uniform-size arm. Only the float-loop opener and the rewind move:
             # AUTA_IM_SIZE is already at LOOP_MIN_SIZE_M and cannot go lower without
