@@ -18637,7 +18637,7 @@ return update, 1000
                                    "KnifeEdgeSpin: rolling out", "KnifeEdgeSpin: recovering"]),
         ), trigger_ch=7)
 
-    def RealFlightFullDisplay(self, model, home):
+    def RealFlightFullDisplay(self, model, home, size_m=None):
         '''
         Fly the whole curated autoacro display chained in RealFlight (AUTA_MOVE=0),
         to see the tightened on-a-line show on the RealFlight airframe. Mirrors
@@ -18679,8 +18679,27 @@ return update, 1000
         # the size-8 figure.
         params["AUTA_JF_DROP"] = 6
         params["AUTA_SS_DROP"] = 12
+        if size_m is not None:
+            # The uniform-size arm. Only the float-loop opener and the rewind move:
+            # AUTA_IM_SIZE is already at LOOP_MIN_SIZE_M and cannot go lower without
+            # the immelmann reverting to the unsized fixed-pull path, which does not
+            # fly a smaller figure -- it descends out of one (native, 5 of 5).
+            params["AUTA_LP_SIZE"] = size_m
+            params["AUTA_RW_SIZE"] = size_m
         self.set_parameters(params)
         self.fly_autoacro_display(takeoff_alt=39, trigger_ch=7)
+
+    def RealFlightSlowShow8(self, model, home):
+        '''The RealFlight display with every sized figure at 8 m -- the slow-show A/B.
+
+        Native measured this as 8.6 m of box and, more usefully, run-to-run range
+        14 m -> 2 m, on a mechanism that should transfer: the opener's follow-on
+        line carries min_dist_m 14, and at the smaller opener its leftover always
+        falls under that floor so the line delivers the same distance every run
+        instead of whatever the figure left. Takeoff stays at 39 -- a smaller show
+        sits differently in the band, and moving the trigger too would confound the
+        band reading with the size change.'''
+        self.RealFlightFullDisplay(model, home, size_m=8)
 
     def RealFlightAutoAcroReversalPair(self, model, home):
         '''
@@ -18857,6 +18876,10 @@ return update, 1000
                 'home': 'EliField'
             }),
             Test(self.RealFlightFullDisplay, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
+            Test(self.RealFlightSlowShow8, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
@@ -19042,6 +19065,7 @@ return update, 1000
             ret["RealFlightAutoAcroLookback"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightSlowShow8"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
         return ret
