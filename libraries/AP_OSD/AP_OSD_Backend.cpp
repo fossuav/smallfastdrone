@@ -74,6 +74,18 @@ uint8_t AP_OSD_Backend::format_string_for_osd(char* buff, uint8_t size, bool dec
 #endif
 }
 
+void AP_OSD_Backend::write_styled(uint8_t x, uint8_t y, const AP_OSD_Msg::Style& style, const char *text)
+{
+#if OSD_ENABLED
+    // blink duty is backend-agnostic, so it lives here in one place: skip the
+    // draw on the "off" phase. The remaining attributes are backend-specific.
+    if (style.blink && (blink_phase < 2)) {
+        return;
+    }
+    emit_styled(x, y, style.invert, style.page, text);
+#endif
+}
+
 void AP_OSD_Backend::write(uint8_t x, uint8_t y, bool blink, const char *fmt, ...)
 {
 #if OSD_ENABLED

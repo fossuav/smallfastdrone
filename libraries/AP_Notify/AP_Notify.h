@@ -208,10 +208,12 @@ public:
     void set_flight_mode_str(const char *str);
     const char* get_flight_mode_str() const { return _flight_mode_str; }
 
-    // send text to display
-    void send_text(const char *str);
+    // send text to display, tagged with its MAV_SEVERITY (0=EMERGENCY .. 7=DEBUG)
+    void send_text(const char *str, uint8_t severity = 6 /* MAV_SEVERITY_INFO */);
     const char* get_text() const { return _send_text; }
     uint32_t get_text_updated_millis() const {return _send_text_updated_millis; }
+    // MAV_SEVERITY of the most recent send_text, for OSD/consumer level filtering
+    uint8_t get_text_severity() const { return _send_text_severity; }
  
 #if AP_SCRIPTING_ENABLED
     // send text to the display using scripting
@@ -254,6 +256,7 @@ private:
 
     char _send_text[NOTIFY_TEXT_BUFFER_SIZE];
     uint32_t _send_text_updated_millis; // last time text changed
+    uint8_t _send_text_severity = 6;    // MAV_SEVERITY of last text (default INFO)
     char _flight_mode_str[5];
 
     static NotifyDevice* _devices[];

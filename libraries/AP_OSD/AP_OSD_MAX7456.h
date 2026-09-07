@@ -32,6 +32,13 @@ public:
     //initilize display port and underlying hardware
     bool init() override;
 
+protected:
+    //draw text honouring analog attributes (invert). blink is handled by the
+    //base write_styled(); colour pages do not exist on analog and are ignored.
+    void emit_styled(uint8_t x, uint8_t y, bool invert, uint8_t page, const char* text) override;
+
+public:
+
     //flush framebuffer to screen
     void flush() override;
 
@@ -95,9 +102,15 @@ private:
 
     uint8_t frame[video_lines_pal][video_columns];
 
+    //per-cell DMM attribute bits (only DMM_INVERT_PIXEL_COLOR is used). Almost
+    //always all-zero, in which case transfer_frame() emits the exact same SPI
+    //stream as before - the invert path adds no cost to normal content.
+    uint8_t frame_attr[video_lines_pal][video_columns];
+
     //frame already transfered to max
     //used to optimize number of characters updated
     uint8_t shadow_frame[video_lines_pal][video_columns];
+    uint8_t shadow_frame_attr[video_lines_pal][video_columns];
 
     uint8_t buffer[spi_buffer_size];
     int buffer_offset;

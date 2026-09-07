@@ -2617,7 +2617,7 @@ void GCS::send_textv(MAV_SEVERITY severity, const char *fmt, va_list arg_list, m
 #endif
     AP_Notify *notify = AP_Notify::get_singleton();
     if (notify) {
-        notify->send_text(first_piece_of_text);
+        notify->send_text(first_piece_of_text, severity);
     }
 
     // push the messages out straight away until the vehicle states

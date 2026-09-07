@@ -351,6 +351,7 @@ void AP_OSD_MAX7456::reinit()
 
     // force redrawing all screen
     memset(shadow_frame, 0xFF, sizeof(shadow_frame));
+    memset(shadow_frame_attr, 0xFF, sizeof(shadow_frame_attr));
 
     initialized = true;
 }
@@ -385,6 +386,7 @@ void AP_OSD_MAX7456::transfer_frame()
 {
     uint16_t previous_pos = UINT16_MAX - 1;
     bool autoincrement = false;
+    uint8_t current_attr = 0;   // attribute bits (invert) currently loaded in DMM
     if (!initialized) {
         return;
     }
@@ -400,16 +402,22 @@ void AP_OSD_MAX7456::transfer_frame()
                 break;
             }
             shadow_frame[y][x] = frame[y][x];
+            shadow_frame_attr[y][x] = frame_attr[y][x];
             uint8_t chr = frame[y][x];
+            uint8_t attr = frame_attr[y][x];    // 0, or DMM_INVERT_PIXEL_COLOR
             uint16_t pos = y * video_columns + x;
             bool position_changed = ((previous_pos + 1) != pos);
 
-            if (position_changed && autoincrement) {
+            //an autoincrement run shares one DMM setting, so it must end when the
+            //position jumps OR the attribute changes. When nothing is inverted
+            //(attr==current_attr==0) this is exactly the original behaviour.
+            if ((position_changed || attr != current_attr) && autoincrement) {
                 //it is impossible to write to MAX7456ADD_DMAH/MAX7456ADD_DMAL in autoincrement mode
                 //so, exit autoincrement mode
                 buffer_add_cmd(MAX7456ADD_DMDI, 0xFF);
                 buffer_add_cmd(MAX7456ADD_DMM, 0);
                 autoincrement = false;
+                current_attr = 0;
             }
 
             if (!autoincrement) {
@@ -417,10 +425,16 @@ void AP_OSD_MAX7456::transfer_frame()
                 buffer_add_cmd(MAX7456ADD_DMAL, pos & 0xFF);
             }
 
-            if (!autoincrement && is_dirty(x+1, y)) {
-                //(re)enter autoincrement mode
-                buffer_add_cmd(MAX7456ADD_DMM, DMM_AUTOINCREMENT);
+            if (!autoincrement && is_dirty(x+1, y) && frame_attr[y][x+1] == attr) {
+                //(re)enter autoincrement mode, loading this run's attribute
+                buffer_add_cmd(MAX7456ADD_DMM, DMM_AUTOINCREMENT | attr);
                 autoincrement = true;
+                current_attr = attr;
+            } else if (!autoincrement && attr != current_attr) {
+                //isolated character with a non-default attribute: load it for this
+                //single write (cleared again on the next DMM write / run exit)
+                buffer_add_cmd(MAX7456ADD_DMM, attr);
+                current_attr = attr;
             }
 
             buffer_add_cmd(MAX7456ADD_DMDI, chr);
@@ -445,13 +459,14 @@ bool AP_OSD_MAX7456::is_dirty(uint8_t x, uint8_t y)
     if (y>=video_lines || x>=video_columns) {
         return false;
     }
-    return frame[y][x] != shadow_frame[y][x];
+    return frame[y][x] != shadow_frame[y][x] || frame_attr[y][x] != shadow_frame_attr[y][x];
 }
 
 void AP_OSD_MAX7456::clear()
 {
     AP_OSD_Backend::clear();
     memset(frame, ' ', sizeof(frame));
+    memset(frame_attr, 0, sizeof(frame_attr));
 }
 
 void AP_OSD_MAX7456::write(uint8_t x, uint8_t y, const char* text)
@@ -461,6 +476,22 @@ void AP_OSD_MAX7456::write(uint8_t x, uint8_t y, const char* text)
     }
     while ((x < VIDEO_COLUMNS) && (*text != 0)) {
         frame[y][x] = *text;
+        frame_attr[y][x] = 0;   // plain text carries no attributes
+        ++text;
+        ++x;
+    }
+}
+
+void AP_OSD_MAX7456::emit_styled(uint8_t x, uint8_t y, bool invert, uint8_t page, const char* text)
+{
+    (void)page;   // analog OSD has no colour font pages
+    if (y >= video_lines_pal || text == nullptr) {
+        return;
+    }
+    const uint8_t attr = invert ? DMM_INVERT_PIXEL_COLOR : 0;
+    while ((x < VIDEO_COLUMNS) && (*text != 0)) {
+        frame[y][x] = *text;
+        frame_attr[y][x] = attr;
         ++text;
         ++x;
     }

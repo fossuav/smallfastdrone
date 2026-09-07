@@ -97,7 +97,12 @@ const StorageManager::StorageArea StorageManager::layout[STORAGE_NUM_AREAS] = {
 #endif
 #if STORAGE_NUM_AREAS >= 18
     { StorageParam,    16384, 1280},
-    { StorageMission,  17664, 9842},
+    // 512 bytes carved from the tail of this mission area for the OSD shorthand
+    // table; ParamBak and all other offsets are unchanged for backwards
+    // compatibility. NOTE: sfd-vtx-tables carves the same 512 bytes here for its
+    // VTX table - a combo of the two branches must give them distinct offsets.
+    { StorageMission,  17664, 9330},
+    { StorageOSDShorthand, 26994, 512},
     { StorageParamBak, 27506, 5262},
 #endif
 };

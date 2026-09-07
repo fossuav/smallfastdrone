@@ -29,6 +29,7 @@
 #include <AP_MSP/msp.h>
 #include <AP_Baro/AP_Baro.h>
 #include <AP_RPM/AP_RPM_config.h>
+#include "AP_OSD_Shorthand.h"
 #if HAL_GCS_ENABLED
 #include <GCS_MAVLink/GCS_MAVLink.h>
 #endif
@@ -263,6 +264,9 @@ private:
 #if HAL_WITH_ESC_TELEM
     AP_Int8 esc_index;
 #endif
+    // least-severe MAV_SEVERITY shown in this screen's MESSAGE panel
+    // (0=EMERGENCY .. 7=DEBUG); messages less severe than this are suppressed
+    AP_Int8 msg_level;
 
     void draw_altitude(uint8_t x, uint8_t y);
     void draw_bat_volt(uint8_t instance,VoltageType  type,uint8_t x, uint8_t y);
@@ -543,6 +547,9 @@ public:
     // init - perform required initialisation
     void init();
 
+    // user-definable OSD message shorthand table (edited over @OSD FTP)
+    AP_OSD_Shorthand &shorthand() { return _shorthand; }
+
     // User settable parameters
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -586,6 +593,9 @@ public:
     AP_Float warn_batvolt;
     AP_Float warn_bat2volt;
     AP_Int8 msgtime_s;
+    AP_Int8 msg_abbreviate;   // apply the built-in shorthand dictionary to MESSAGE panel text
+    AP_Int32 msg_categories;  // MESSAGE panel category allow-list (AP_OSD_Msg::Category bits); 0 = show all
+    AP_Int8 msg_style;        // MESSAGE panel severity styling: 0 = off, 1 = blink severe messages
     AP_Int8 arm_scr;
     AP_Int8 disarm_scr;
     AP_Int8 failsafe_scr;
@@ -737,6 +747,7 @@ private:
     bool scripting_override;
     uint8_t override_count;
 #endif // AP_SCRIPTING_ENABLED
+    AP_OSD_Shorthand _shorthand;
     static AP_OSD *_singleton;
     // multi-thread access support
     HAL_Semaphore _sem;

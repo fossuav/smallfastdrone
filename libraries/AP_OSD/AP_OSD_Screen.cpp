@@ -25,6 +25,7 @@
 
 #include "AP_OSD.h"
 #include "AP_OSD_Backend.h"
+#include "AP_OSD_Message.h"
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/Util.h>
@@ -1174,6 +1175,13 @@ const AP_Param::GroupInfo AP_OSD_Screen::var_info2[] = {
     AP_GROUPINFO("ESC_IDX", 10, AP_OSD_Screen, esc_index, 0),
 #endif
 
+    // @Param: MSG_LVL
+    // @DisplayName: OSD message severity level
+    // @Description: Least-severe MAVLink message severity shown in this screen's MESSAGE panel. Messages less severe than this are not displayed, letting you make one screen quiet (warnings only) and another verbose. Lower numbers are more severe.
+    // @Values: 0:Emergency,1:Alert,2:Critical,3:Error,4:Warning,5:Notice,6:Info,7:Debug
+    // @User: Standard
+    AP_GROUPINFO("MSG_LVL", 63, AP_OSD_Screen, msg_level, 7),
+
     AP_GROUPEND
 };
 
@@ -1625,6 +1633,7 @@ void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
     if (notify) {
         int32_t visible_time = AP_HAL::millis() - notify->get_text_updated_millis();
         if (visible_time < osd->msgtime_s *1000) {
+            const uint8_t severity = notify->get_text_severity();
             char buffer[NOTIFY_TEXT_BUFFER_SIZE];
             strncpy(buffer, notify->get_text(), sizeof(buffer));
             int16_t len = strnlen(buffer, sizeof(buffer));
@@ -1638,6 +1647,30 @@ void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
                     buffer[i] = ' ';
                 }
             }
+
+            // classify on the raw (upper-cased) text, before abbreviation
+            // shortens the keywords, then apply the per-screen severity level
+            // filter and the global category allow-list. CRITICAL-or-worse
+            // messages are always shown as a safety net. Only classify when a
+            // category allow-list is actually configured.
+            const uint16_t category = osd->msg_categories ? AP_OSD_Msg::classify(buffer) : 0;
+            if (!AP_OSD_Msg::should_show(severity, category, uint32_t(osd->msg_categories),
+                                         uint8_t(msg_level), AP_OSD_Msg::SEV_CRITICAL)) {
+                return;
+            }
+
+            // shorten common messages so they fit without scrolling: the
+            // user-defined shorthand table is applied first (so it takes
+            // precedence), then the built-in dictionary fills in the rest
+            if (osd->msg_abbreviate) {
+                osd->shorthand().apply(buffer, sizeof(buffer));
+                AP_OSD_Msg::abbreviate(buffer);
+                len = strnlen(buffer, sizeof(buffer));
+            }
+
+            // emphasise urgent messages if severity styling is enabled
+            const AP_OSD_Msg::Style style = osd->msg_style ? AP_OSD_Msg::style_for(severity)
+                                                           : AP_OSD_Msg::Style{};
 
             int16_t start_position = 0;
             //scroll if required
@@ -1666,7 +1699,7 @@ void AP_OSD_Screen::draw_message(uint8_t x, uint8_t y)
                 buffer[end_position] = 0;
             }
 
-            backend->write(x, y, buffer + start_position);
+            backend->write_styled(x, y, style, buffer + start_position);
         }
     }
 }
