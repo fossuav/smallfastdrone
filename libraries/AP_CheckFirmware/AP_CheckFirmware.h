@@ -196,13 +196,18 @@ static_assert(sizeof(ap_secure_data) == AP_SECURE_DATA_TOTAL_LENGTH, "ap_secure_
   data. Every refusal has a different remedy - update the bootloader,
   generate an identity, disarm, or nothing at all - and a caller that
   cannot tell them apart has to guess. Values 1 and 2 match the
-  identity statuses so a ground station can share one decoder
+  identity statuses so a ground station can share one decoder.
+
+  ALREADY_SET is no longer returned: an unsealed drone accepts a
+  re-claim. It stays defined because a ground station may still meet a
+  firmware that sends it
  */
 #define AP_OWNER_STATUS_NOT_SET     1
 #define AP_OWNER_STATUS_NO_REGION   2
 #define AP_OWNER_STATUS_ARMED       3
 #define AP_OWNER_STATUS_ALREADY_SET 4
 #define AP_OWNER_STATUS_NO_IDENTITY 5
+#define AP_OWNER_STATUS_SEALED      6
 
 /*
   .sfx - the envelope the drone wraps an outbound artefact in, so that
@@ -286,9 +291,12 @@ public:
     // owner key region, nullptr if the bootloader predates it
     static const struct ap_owner_data *find_owner_key(void);
     static bool owner_key_is_set(const struct ap_owner_data *owner);
-    // write-once: refused if the drone is already owned, has no identity to
-    // authenticate with, or the key is all zero
+    // refused if the key is all zero, if there is no identity to
+    // authenticate with, or if the drone is already owned *and* sealed
     static bool set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN]);
+    // is readout protection raised? Read from the silicon, never from
+    // the parameter that asks for it
+    static bool is_sealed(void);
     /*
       start an outbound artefact: fill in its .sfx header and derive the
       content key. False if the drone has no identity or no owner, which

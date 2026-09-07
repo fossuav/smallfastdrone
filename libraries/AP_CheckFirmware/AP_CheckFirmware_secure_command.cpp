@@ -8,6 +8,9 @@
 
 #include "monocypher.h"
 #include <AP_Math/AP_Math.h>
+#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
+#include <AP_HAL_ChibiOS/hwdef/common/flash.h>
+#endif
 
 #if HAL_GCS_ENABLED
 #include <GCS_MAVLink/GCS.h>
@@ -365,10 +368,31 @@ bool AP_CheckFirmware::set_identity(const uint8_t private_key[AP_IDENTITY_KEY_LE
 }
 
 /*
-  write the owner's public key into the bootloader. Write-once, because
-  a second write would redirect every artefact the drone encrypts from
-  then on to whoever made it - and unlike the identity, which the drone
-  generates for itself, this key arrives over the link.
+  is the chip read protected? The parameter that asks for protection is
+  raise-only and can be cleared afterwards, so it says what somebody
+  wanted rather than what the silicon did. Only the option bytes settle
+  it, and an ownership rule resting on the parameter could be undone by
+  a plain parameter write
+ */
+bool AP_CheckFirmware::is_sealed(void)
+{
+#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
+    return stm32_flash_is_read_protected();
+#else
+    return false;
+#endif
+}
+
+/*
+  write the owner's public key into the bootloader.
+
+  Claiming is once-and-for-all only after the drone is sealed. Before
+  that it can be re-claimed, because an owner key that cannot be
+  replaced makes a lost key permanent: the drone would go on writing
+  logs nobody alive can read, with a mass erase as the only way back.
+  Sealing is where that trade flips - a sealed drone is deployed, and
+  someone with link access re-pointing its logs at themselves is the
+  attack this exists to stop (operator decision 2026-09-07).
 
   An identity is required first. The outbound key agreement uses the
   identity private key to authenticate what the drone sends, so an
@@ -379,7 +403,7 @@ bool AP_CheckFirmware::set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN])
 {
     const uint8_t zero_key[AP_OWNER_KEY_LEN] {};
     if (memcmp(public_key, zero_key, AP_OWNER_KEY_LEN) == 0 ||
-        owner_key_is_set(find_owner_key()) ||
+        (owner_key_is_set(find_owner_key()) && is_sealed()) ||
         !identity_is_set(find_identity())) {
         return false;
     }
@@ -484,8 +508,9 @@ static uint8_t owner_refusal(void)
     if (AP_CheckFirmware::find_owner_key() == nullptr) {
         return AP_OWNER_STATUS_NO_REGION;
     }
-    if (AP_CheckFirmware::owner_key_is_set(AP_CheckFirmware::find_owner_key())) {
-        return AP_OWNER_STATUS_ALREADY_SET;
+    if (AP_CheckFirmware::owner_key_is_set(AP_CheckFirmware::find_owner_key()) &&
+        AP_CheckFirmware::is_sealed()) {
+        return AP_OWNER_STATUS_SEALED;
     }
     if (!AP_CheckFirmware::identity_is_set(AP_CheckFirmware::find_identity())) {
         return AP_OWNER_STATUS_NO_IDENTITY;
