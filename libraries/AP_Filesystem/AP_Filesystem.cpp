@@ -63,6 +63,11 @@ static AP_Filesystem_Sys fs_sys;
 static AP_Filesystem_Mission fs_mission;
 #endif
 
+#if AP_FILESYSTEM_VTX_ENABLED
+#include "AP_Filesystem_VTX.h"
+static AP_Filesystem_VTX fs_vtx;
+#endif
+
 /*
   mapping from filesystem prefix to backend
  */
@@ -79,6 +84,9 @@ const AP_Filesystem::Backend AP_Filesystem::backends[] = {
 #endif
 #if AP_FILESYSTEM_MISSION_ENABLED
     { "@MISSION", fs_mission },
+#endif
+#if AP_FILESYSTEM_VTX_ENABLED
+    { "@VTX", fs_vtx },
 #endif
 };
 

@@ -97,7 +97,10 @@ const StorageManager::StorageArea StorageManager::layout[STORAGE_NUM_AREAS] = {
 #endif
 #if STORAGE_NUM_AREAS >= 18
     { StorageParam,    16384, 1280},
-    { StorageMission,  17664, 9842},
+    // 512 bytes carved from the tail of this mission area for the VTX table;
+    // ParamBak and all other offsets are unchanged for backwards compatibility
+    { StorageMission,  17664, 9330},
+    { StorageVTXTable, 26994,  512},
     { StorageParamBak, 27506, 5262},
 #endif
 };

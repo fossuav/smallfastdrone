@@ -19,6 +19,7 @@
 #if AP_VIDEOTX_ENABLED
 
 #include <AP_Param/AP_Param.h>
+#include "AP_VideoTX_Table.h"
 
 #define VTX_MAX_CHANNELS 8
 #define VTX_MAX_POWER_LEVELS 10
@@ -52,8 +53,6 @@ public:
         VTX_SA_IGNORE_CRC     = (1 << 6),
         VTX_CRSF_IGNORE_STAT  = (1 << 7),
     };
-
-    static const char *band_names[];
 
     enum VideoBand {
         BAND_A,
@@ -93,10 +92,19 @@ public:
 
     static PowerLevel _power_levels[VTX_MAX_POWER_LEVELS];
 
-    static const uint16_t VIDEO_CHANNELS[MAX_BANDS][VTX_MAX_CHANNELS];
-
-    static uint16_t get_frequency_mhz(uint8_t band, uint8_t channel) { return VIDEO_CHANNELS[band][channel]; }
+    // band/channel -> frequency (MHz), resolved through the active VTX table.
+    // 0 if no VTX exists yet or the band/channel is out of range/disabled.
+    static uint16_t get_frequency_mhz(uint8_t band, uint8_t channel);
     static bool get_band_and_channel(uint16_t freq, VideoBand& band, uint8_t& channel);
+
+    // access the user-definable band/frequency + power table
+    AP_VideoTX_Table& table() { return _table; }
+    const AP_VideoTX_Table& table() const { return _table; }
+    // called after the table is replaced over @VTX FTP so cached state
+    // (the selectable power set) is rebuilt from the new table
+    void on_table_updated();
+    // display label for a one-based power index, empty if out of range
+    void get_power_label(uint8_t index, char *out, size_t out_len) const;
 
     void set_frequency_mhz(uint16_t freq) { _current_frequency = freq; }
     void set_configured_frequency_mhz(uint16_t freq) { _frequency_mhz.set_and_save_ifchanged(freq); }
@@ -106,12 +114,11 @@ public:
     void update_configured_frequency();
     // get / set power level
     void set_power_mw(uint16_t power);
-    void set_power_level(uint8_t level, PowerActive active=PowerActive::Active);
-    void set_power_dbm(uint8_t power, PowerActive active=PowerActive::Active);
-    void set_power_dac(uint16_t power, PowerActive active=PowerActive::Active);
-    // add a new dbm setting to those supported
-    uint8_t update_power_dbm(uint8_t power, PowerActive active=PowerActive::Active);
-    void update_all_power_dbm(uint8_t nlevels, const uint8_t levels[]);
+    // sync the current-power cursor to what an analog VTX reports it is running;
+    // the selectable set is owned by the @VTX table, so nothing is learned here
+    void set_power_level(uint8_t level);
+    void set_power_dbm(uint8_t power);
+    void set_power_dac(uint16_t power);
     void set_configured_power_mw(uint16_t power);
     uint16_t get_configured_power_mw() const { return _power_mw; }
     uint16_t get_power_mw() const { return _power_levels[_current_power].mw; }
@@ -138,11 +145,8 @@ public:
         return _power_levels[find_current_power()].dac;
     }
 
-    // mark the power level matching the given mW as supported, learning it
-    // into the custom slot if it is not a standard value
-    void update_power_mw(uint16_t power_mw, PowerActive active = PowerActive::Active);
-    // a provider's power index is one based and refers to the supported (active)
-    // levels in ascending order, so index 1 is the lowest supported level
+    // a provider's power index is one based and refers to the selectable power
+    // levels (the @VTX table) in table order, so index 1 is the first level
     uint8_t get_num_power_levels() const;
     // mW for a one based power index, 0 if not known
     uint16_t get_power_mw_for_index(uint8_t index) const;
@@ -204,6 +208,21 @@ public:
 
 private:
     uint8_t find_current_power() const;
+    // rebuild the selectable power set (_power_levels) from the table's
+    // user-defined power levels; no-op if the table defines no power levels
+    void load_power_levels_from_table();
+    // whether the user @VTX table defines the authoritative selectable power
+    // set (has any non-zero power level). When true every power-index accessor
+    // resolves against the ordered table instead of the runtime-learned
+    // _power_levels[] ladder, so the selectable set is deterministic and
+    // matches the @VTX table (and the configurator) rather than whatever the
+    // VTX driver happens to have reported.
+    bool have_power_table() const;
+    // map a one-based selectable power index to the underlying @VTX table slot,
+    // skipping unused (0-value) entries so the index space matches the README
+    // contract ("i-th supported/non-zero level in table order"). false if the
+    // index is out of range.
+    bool table_power_slot(uint8_t index, uint8_t &slot) const;
     // channel frequency
     AP_Int16 _frequency_mhz;
     uint16_t _current_frequency;
@@ -240,6 +259,10 @@ private:
 
     // types of VTX providers
     uint8_t _types;
+
+    // user-definable band/frequency + power table (seeded with the historical
+    // defaults); the single source of truth for band/channel -> frequency
+    AP_VideoTX_Table _table;
 };
 
 namespace AP {

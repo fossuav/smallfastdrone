@@ -514,18 +514,13 @@ void AP_SmartAudio::update_vtx_settings(const Settings& settings)
     vtx.set_frequency_mhz(settings.frequency);
     vtx.set_band(settings.band);
     vtx.set_channel(settings.channel);
-    // SA21 sends us a complete packet with the supported power levels
+    // reflect the VTX's *current* power. The selectable set is owned by the
+    // @VTX table (the user defines it to match this VTX), so we no longer learn
+    // the device's advertised levels - v2.1 reports dBm, v1/v2 report a level.
     if (settings.version == SMARTAUDIO_SPEC_PROTOCOL_v21) {
         vtx.set_power_dbm(settings.power_in_dbm);
-        // learn them all
-        vtx.update_all_power_dbm(settings.num_power_levels, settings.power_levels);
-    } else if (settings.version == SMARTAUDIO_SPEC_PROTOCOL_v2) {
-        vtx.set_power_level(settings.power, AP_VideoTX::PowerActive::Active);
-        // learn them all - it's not possible to know the mw values in v2.0 so just have to go from the spec
-        uint8_t power[] { 0, 14, 23, 27, 29 };
-        vtx.update_all_power_dbm(5, power);
     } else {
-        vtx.set_power_level(settings.power, AP_VideoTX::PowerActive::Active);
+        vtx.set_power_level(settings.power);
     }
     // it seems like the spec is wrong, on a unify pro32 this setting is inverted
     _vtx_use_set_freq = !(settings.mode & 1);
@@ -610,29 +605,20 @@ bool  AP_SmartAudio::parse_response_buffer(const uint8_t *buffer)
     case SMARTAUDIO_RSP_SET_POWER: {
         const U16ResponseFrame *resp = (const U16ResponseFrame *)buffer;
         const uint8_t power = resp->payload & 0xFF;
+        // reflect the acked power into the current-power cursor; the supported
+        // set is the @VTX table, so there is nothing to invalidate/learn here
         switch (_protocol_version) {
         case SMARTAUDIO_SPEC_PROTOCOL_v21:
-            if (vtx.get_configured_power_dbm() != power) {
-                vtx.update_power_dbm(vtx.get_configured_power_dbm(), AP_VideoTX::PowerActive::Inactive);
-            }
             vtx.set_power_dbm(power);
-            vtx.set_configured_power_mw(vtx.get_power_mw());
             break;
         case SMARTAUDIO_SPEC_PROTOCOL_v2:
-            if (vtx.get_configured_power_level() != power) {
-                vtx.update_power_dbm(vtx.get_configured_power_dbm(), AP_VideoTX::PowerActive::Inactive);
-            }
             vtx.set_power_level(power);
-            vtx.set_configured_power_mw(vtx.get_power_mw());
             break;
         default:
-            if (vtx.get_configured_power_dac() != power) {
-                vtx.update_power_dbm(vtx.get_configured_power_dbm(), AP_VideoTX::PowerActive::Inactive);
-            }
             vtx.set_power_dac(power);
-            vtx.set_configured_power_mw(vtx.get_power_mw());
             break;
         }
+        vtx.set_configured_power_mw(vtx.get_power_mw());
         debug("Power was set to %d", power);
     }
         break;

@@ -8,6 +8,13 @@
 #define AP_VIDEOTX_ENABLED 1
 #endif
 
+// user-definable VTX band/frequency + power tables (Betaflight-style), stored
+// as a compact binary blob and edited over MAVLink FTP. Defaults off; when a
+// table is present it supersedes the compiled-in band/frequency defaults.
+#ifndef AP_VIDEOTX_TABLE_ENABLED
+#define AP_VIDEOTX_TABLE_ENABLED AP_VIDEOTX_ENABLED
+#endif
+
 #ifndef AP_TRAMP_ENABLED
 #define AP_TRAMP_ENABLED AP_VIDEOTX_ENABLED && OSD_ENABLED && HAL_PROGRAM_SIZE_LIMIT_KB>1024
 #endif

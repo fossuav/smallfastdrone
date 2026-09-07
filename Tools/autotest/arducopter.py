@@ -17767,6 +17767,104 @@ return update, 1000
             if pname in all_params:
                 raise ValueError(f"{pname} in fetched-all-parameters when it should have gone away")
 
+    def VTXTable(self):
+        '''test the user-definable VTX band/power table over @VTX FTP'''
+        import struct
+        import tempfile
+        import os
+        from pymavlink import mavftp
+
+        self.set_parameters({"VTX_ENABLE": 1})
+
+        # CRC matching ArduPilot crc_crc32 (reflected table, init 0, no final xor)
+        tab = []
+        for n in range(256):
+            c = n
+            for _ in range(8):
+                c = (0xEDB88320 ^ (c >> 1)) if (c & 1) else (c >> 1)
+            tab.append(c)
+
+        def ap_crc32(data, crc=0):
+            for b in data:
+                crc = tab[(crc ^ b) & 0xff] ^ (crc >> 8)
+            return crc & 0xffffffff
+
+        def ftp_get(remote):
+            ftp = mavftp.MAVFTP(self.mav, self.mav.target_system, self.mav.target_component)
+            tf = tempfile.NamedTemporaryFile(delete=False)
+            tf.close()
+            ftp.cmd_get([remote, tf.name])
+            ftp.process_ftp_reply('OpenFileRO', timeout=20)
+            with open(tf.name, 'rb') as f:
+                data = f.read()
+            os.unlink(tf.name)
+            return data
+
+        def ftp_put(remote, blob):
+            tf = tempfile.NamedTemporaryFile(delete=False)
+            tf.write(blob)
+            tf.close()
+            ftp = mavftp.MAVFTP(self.mav, self.mav.target_system, self.mav.target_component)
+            ftp.cmd_put([tf.name, remote])
+            ftp.process_ftp_reply('CreateFile', timeout=20)
+            os.unlink(tf.name)
+
+        def parse(blob):
+            magic, ver, nb, nc, npw = struct.unpack('<HBBBB', blob[:6])
+            o = 6
+            bands = []
+            for _ in range(nb):
+                name = blob[o:o+8].split(b'\0')[0].decode(errors='replace')
+                letter = chr(blob[o+8])
+                factory = blob[o+9]
+                o += 10
+                freqs = list(struct.unpack('<%uH' % nc, blob[o:o+nc*2]))
+                o += nc*2
+                bands.append((name, letter, factory, freqs))
+            for _ in range(npw):
+                o += 2 + 3
+            crc = struct.unpack('<I', blob[o:o+4])[0]
+            return magic, ver, nb, nc, npw, bands, crc, o + 4
+
+        # 1. GET the default table and validate magic/version/CRC/raceband
+        blob = ftp_get('@VTX/vtxtable.dat')
+        magic, ver, nb, nc, npw, bands, crc, total = parse(blob)
+        if magic != 0x5654:
+            raise NotAchievedException("bad VTX table magic 0x%04x" % magic)
+        if ver != 1:
+            raise NotAchievedException("bad VTX table version %u" % ver)
+        if nb < 5 or nc != 8:
+            raise NotAchievedException("unexpected table dims %u/%u" % (nb, nc))
+        if ap_crc32(blob[:total-4]) != crc:
+            raise NotAchievedException("VTX table CRC mismatch")
+        race = [b for b in bands if b[1] == 'R']
+        if not race or race[0][3][0] != 5658:
+            raise NotAchievedException("raceband ch1 not 5658 in table")
+        self.progress("VTX table default GET + CRC + raceband OK")
+
+        # 2. PUT a modified table and confirm the change round-trips
+        body = bytearray(blob[:total-4])
+        struct.pack_into('<H', body, 6+10, 5999)   # band0 channel0 -> 5999
+        ftp_put('@VTX/vtxtable.dat', bytes(body) + struct.pack('<I', ap_crc32(bytes(body))))
+        blob2 = ftp_get('@VTX/vtxtable.dat')
+        _, _, _, _, _, bands2, _, _ = parse(blob2)
+        if bands2[0][3][0] != 5999:
+            raise NotAchievedException("VTX table PUT did not take (freq0=%u)" % bands2[0][3][0])
+        self.progress("VTX table PUT round-trip OK")
+
+        # 3. a malformed blob (bad CRC) must be rejected, leaving the table intact
+        bad = bytearray(blob2)
+        bad[-1] ^= 0xFF
+        try:
+            ftp_put('@VTX/vtxtable.dat', bytes(bad))
+        except Exception:
+            pass
+        blob3 = ftp_get('@VTX/vtxtable.dat')
+        _, _, _, _, _, bands3, _, _ = parse(blob3)
+        if bands3[0][3][0] != 5999:
+            raise NotAchievedException("bad-CRC upload corrupted the table")
+        self.progress("VTX table rejects malformed upload OK")
+
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
         ret = ([
@@ -17793,6 +17891,7 @@ return update, 1000
             self.CRSF,
             self.MSPVTXConfig,
             self.MSPDisplayPortVTXConfig,
+            self.VTXTable,
             self.MotorTest,
             self.AltEstimation,
             self.BaroDriftResetOnArm,
