@@ -115,6 +115,9 @@ static_assert(sizeof(app_descriptor_signed) == APP_DESCRIPTOR_SIGNED_TOTAL_LENGT
 #define AP_IDENTITY_KEY_LEN 32
 #define AP_IDENTITY_SIGNATURE {0x9d, 0x2b, 0x7e, 0x11, 0xc4, 0x58, 0xa3, 0x6f}
 
+#define AP_OWNER_KEY_LEN 32
+#define AP_OWNER_SIGNATURE {0x3a, 0xd7, 0x62, 0x8c, 0x1f, 0xb0, 0x45, 0xe9}
+
 /*
   why a GET_IDENTITY failed, returned as one byte of reply data. A
   bootloader too old to carry the identity region and one that simply
@@ -137,6 +140,20 @@ struct PACKED ap_identity_data {
     uint8_t private_key[AP_IDENTITY_KEY_LEN] = {};
 };
 
+/*
+  the owner's X25519 public key: the reader the drone encrypts its
+  outbound artefacts to. Public data, unlike the identity private key
+  beside it, so it is not secret and is not wiped. It is still
+  write-once, for a different reason: a second write would silently
+  redirect every future log to whoever made it. Carries its own
+  signature so a bootloader built before the region existed is not
+  mistaken for one holding a key. All zero means the drone is unowned
+ */
+struct PACKED ap_owner_data {
+    uint8_t sig[8] = AP_OWNER_SIGNATURE;
+    uint8_t public_key[AP_OWNER_KEY_LEN] = {};
+};
+
 struct PACKED ap_secure_data {
     uint8_t sig[8] = AP_PUBLIC_KEY_SIGNATURE;
     struct PACKED {
@@ -144,9 +161,14 @@ struct PACKED ap_secure_data {
     } public_key[AP_PUBLIC_KEY_MAX_KEYS];
     // last, so the signing tools that patch public_key[] in place never reach it
     struct ap_identity_data identity;
+    // after identity for the same reason: make_secure_bl.py writes from the
+    // key signature forward and knows nothing of what follows the keys
+    struct ap_owner_data owner;
 };
 
-#define AP_SECURE_DATA_TOTAL_LENGTH (8 + AP_PUBLIC_KEY_MAX_KEYS*AP_PUBLIC_KEY_LEN + 8 + AP_IDENTITY_KEY_LEN)
+#define AP_SECURE_DATA_TOTAL_LENGTH (8 + AP_PUBLIC_KEY_MAX_KEYS*AP_PUBLIC_KEY_LEN + \
+                                     8 + AP_IDENTITY_KEY_LEN + \
+                                     8 + AP_OWNER_KEY_LEN)
 static_assert(sizeof(ap_secure_data) == AP_SECURE_DATA_TOTAL_LENGTH, "ap_secure_data incorrect length");
 
 /*
@@ -182,6 +204,12 @@ public:
     static bool identity_is_set(const struct ap_identity_data *identity);
     // write-once: refused if an identity already exists or the key is all zero
     static bool set_identity(const uint8_t private_key[AP_IDENTITY_KEY_LEN]);
+    // owner key region, nullptr if the bootloader predates it
+    static const struct ap_owner_data *find_owner_key(void);
+    static bool owner_key_is_set(const struct ap_owner_data *owner);
+    // write-once: refused if the drone is already owned, has no identity to
+    // authenticate with, or the key is all zero
+    static bool set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN]);
 #endif
 
     /*
