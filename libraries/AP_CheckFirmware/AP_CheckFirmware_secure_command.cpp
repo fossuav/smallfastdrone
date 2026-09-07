@@ -450,16 +450,93 @@ static MAV_RESULT generate_identity(mavlink_secure_command_reply_t &reply)
     }
     return MAV_RESULT_ACCEPTED;
 }
+
+/*
+  fill a reply with the board UID and the stored owner public key. The
+  UID is there so a caller holding several drones can tell whose key
+  came back, exactly as the identity reply does
+ */
+static bool fill_owner_reply(mavlink_secure_command_reply_t &reply)
+{
+    const struct ap_owner_data *owner = AP_CheckFirmware::find_owner_key();
+    if (!AP_CheckFirmware::owner_key_is_set(owner)) {
+        return false;
+    }
+    uint8_t uid_len = AP_IDENTITY_UID_LEN;
+    if (!hal.util->get_system_id_unformatted(reply.data, uid_len) || uid_len != AP_IDENTITY_UID_LEN) {
+        return false;
+    }
+    memcpy(&reply.data[AP_IDENTITY_UID_LEN], owner->public_key, AP_OWNER_KEY_LEN);
+    reply.data_length = AP_IDENTITY_UID_LEN + AP_OWNER_KEY_LEN;
+    return true;
+}
+
+/*
+  why the owner key cannot be written now. Split out because each
+  refusal has its own remedy and the caller has no way to work out
+  which one it hit
+ */
+static uint8_t owner_refusal(void)
+{
+    if (hal.util->get_soft_armed()) {
+        return AP_OWNER_STATUS_ARMED;
+    }
+    if (AP_CheckFirmware::find_owner_key() == nullptr) {
+        return AP_OWNER_STATUS_NO_REGION;
+    }
+    if (AP_CheckFirmware::owner_key_is_set(AP_CheckFirmware::find_owner_key())) {
+        return AP_OWNER_STATUS_ALREADY_SET;
+    }
+    if (!AP_CheckFirmware::identity_is_set(AP_CheckFirmware::find_identity())) {
+        return AP_OWNER_STATUS_NO_IDENTITY;
+    }
+    return 0;
+}
+
+/*
+  store the owner's public key. Denied while armed, since the store
+  rewrites the bootloader sector.
+
+  The reply is the key read back out of flash rather than an echo of
+  what arrived, so an ACCEPTED is already evidence of what landed
+ */
+static MAV_RESULT store_owner_key(const mavlink_secure_command_t &pkt,
+                                  mavlink_secure_command_reply_t &reply)
+{
+    if (pkt.data_length != AP_OWNER_KEY_LEN) {
+        return MAV_RESULT_FAILED;
+    }
+    const uint8_t refusal = owner_refusal();
+    if (refusal != 0) {
+        reply.data_length = 1;
+        reply.data[0] = refusal;
+        return MAV_RESULT_DENIED;
+    }
+    if (!AP_CheckFirmware::set_owner_key(pkt.data) || !fill_owner_reply(reply)) {
+        return MAV_RESULT_FAILED;
+    }
+    return MAV_RESULT_ACCEPTED;
+}
 #endif // AP_CHECK_FIRMWARE_IDENTITY_ENABLED
 
 /*
-  identity operations are unsigned by design, see AP_CheckFirmware.h
+  identity and owner key operations are unsigned by design, see
+  AP_CheckFirmware.h. SET_OWNER_KEY is the one that writes caller-
+  supplied data, and it cannot borrow the argument that makes the
+  identity commands harmless: pre-empting an identity gains an attacker
+  nothing, while pre-empting an owner key redirects everything the drone
+  encrypts afterwards. It is unsigned because the tool has no key to
+  sign with, and it is held closed by being write-once, by refusing
+  without an identity, and by being done on a bench with the operator
+  present. See docs/SECURITY.md in the configurator repo
  */
 static bool signature_required(uint32_t operation)
 {
 #if AP_CHECK_FIRMWARE_IDENTITY_ENABLED
     return operation != SECURE_COMMAND_GENERATE_IDENTITY &&
-           operation != SECURE_COMMAND_GET_IDENTITY;
+           operation != SECURE_COMMAND_GET_IDENTITY &&
+           operation != SECURE_COMMAND_SET_OWNER_KEY &&
+           operation != SECURE_COMMAND_GET_OWNER_KEY;
 #else
     (void)operation;
     return true;
@@ -599,6 +676,23 @@ void AP_CheckFirmware::handle_secure_command(mavlink_channel_t chan, const mavli
         reply.data_length = 1;
         reply.data[0] = AP_CheckFirmware::find_identity() == nullptr ?
             AP_IDENTITY_STATUS_NO_REGION : AP_IDENTITY_STATUS_NOT_SET;
+        break;
+    }
+
+    case SECURE_COMMAND_SET_OWNER_KEY: {
+        reply.result = store_owner_key(pkt, reply);
+        break;
+    }
+
+    case SECURE_COMMAND_GET_OWNER_KEY: {
+        if (pkt.data_length == 0 && fill_owner_reply(reply)) {
+            reply.result = MAV_RESULT_ACCEPTED;
+            break;
+        }
+        reply.result = MAV_RESULT_FAILED;
+        reply.data_length = 1;
+        reply.data[0] = AP_CheckFirmware::find_owner_key() == nullptr ?
+            AP_OWNER_STATUS_NO_REGION : AP_OWNER_STATUS_NOT_SET;
         break;
     }
 #endif // AP_CHECK_FIRMWARE_IDENTITY_ENABLED

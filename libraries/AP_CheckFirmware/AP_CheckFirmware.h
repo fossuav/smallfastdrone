@@ -181,6 +181,28 @@ static_assert(sizeof(ap_secure_data) == AP_SECURE_DATA_TOTAL_LENGTH, "ap_secure_
 #define SECURE_COMMAND_GENERATE_IDENTITY 0x53464401U
 #define SECURE_COMMAND_GET_IDENTITY      0x53464402U
 #define AP_IDENTITY_UID_LEN 12
+
+/*
+  owner key operations, on the same numbering and unsigned for the same
+  reason: the tool driving them holds no key it could sign with. SET
+  carries the 32-byte public key and replies with what landed in flash;
+  GET replies with the UID followed by the stored key
+ */
+#define SECURE_COMMAND_SET_OWNER_KEY 0x53464403U
+#define SECURE_COMMAND_GET_OWNER_KEY 0x53464404U
+
+/*
+  why an owner key operation failed, returned as one byte of reply
+  data. Every refusal has a different remedy - update the bootloader,
+  generate an identity, disarm, or nothing at all - and a caller that
+  cannot tell them apart has to guess. Values 1 and 2 match the
+  identity statuses so a ground station can share one decoder
+ */
+#define AP_OWNER_STATUS_NOT_SET     1
+#define AP_OWNER_STATUS_NO_REGION   2
+#define AP_OWNER_STATUS_ARMED       3
+#define AP_OWNER_STATUS_ALREADY_SET 4
+#define AP_OWNER_STATUS_NO_IDENTITY 5
 #endif
 
 #ifdef HAL_BOOTLOADER_BUILD
