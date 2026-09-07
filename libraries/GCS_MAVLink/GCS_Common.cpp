@@ -4868,7 +4868,28 @@ MAV_RESULT GCS_MAVLINK::handle_command_flash_bootloader(const mavlink_command_in
         return MAV_RESULT_FAILED;
     }
 
-    switch (hal.util->flash_bootloader()) {
+    const AP_HAL::Util::FlashBootloader result = hal.util->flash_bootloader();
+
+    /*
+      Wait for room before returning, because the caller acks us the
+      moment we do.
+
+      Writing the bootloader sector stalls the board for about a second,
+      and comm_send_lock() discards a message that will not fit into the
+      link's transmit buffer - silently, and by design. Measured on a
+      TBS_LUCID_H7: the flash succeeded, "Flash OK" arrived, and no
+      COMMAND_ACK appeared in forty-five seconds, which a ground station
+      can only read as a failed update of the one thing it most needs to
+      know succeeded.
+
+      Bounded at half a second, against a command that has already
+      blocked for far longer.
+     */
+    for (uint8_t i = 0; i < 100 && comm_get_txspace(chan) < PAYLOAD_SIZE(chan, COMMAND_ACK); i++) {
+        hal.scheduler->delay(5);
+    }
+
+    switch (result) {
     case AP_HAL::Util::FlashBootloader::OK:
     case AP_HAL::Util::FlashBootloader::NO_CHANGE:
         // consider NO_CHANGE as success (so as not to display error to user)
