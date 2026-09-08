@@ -257,6 +257,22 @@ static_assert(sizeof(ap_secure_data) == AP_SECURE_DATA_TOTAL_LENGTH, "ap_secure_
 #define AP_OWNER_STATUS_OTHER_DRONE 8
 #define AP_OWNER_STATUS_UNSIGNED    9
 #define AP_OWNER_STATUS_STALE      10
+/*
+  There was not enough free memory to read the bootloader sector.
+
+  Writing an owner key or an identity copies the used part of that
+  sector into RAM first - tens of kilobytes, contiguous - and Lua
+  scripting carves its heap out of the same pool. So a drone running
+  scripts, which is every drone doing the job SFD sells it for, can
+  fail every one of these operations while being otherwise healthy.
+  Measured on a TBS_LUCID_H7: an ownership grant refused with scripting
+  on, applied immediately with it off.
+
+  Reported separately from a plain failure because the remedy is
+  specific and an operator can perform it: turn scripting off, do the
+  thing, turn it back on.
+ */
+#define AP_OWNER_STATUS_NO_MEMORY  11
 
 /*
   .sfx - the envelope the drone wraps an outbound artefact in, so that
@@ -353,6 +369,9 @@ public:
     // is readout protection raised? Read from the silicon, never from
     // the parameter that asks for it
     static bool is_sealed(void);
+    // is there room to read the bootloader sector into RAM? Scripting's
+    // heap competes for it
+    static bool bootloader_write_possible(void);
     /*
       start an outbound artefact: fill in its .sfx header and derive the
       content key. False if the drone has no identity or no owner, which

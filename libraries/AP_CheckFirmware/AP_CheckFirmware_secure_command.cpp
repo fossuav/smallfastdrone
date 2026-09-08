@@ -406,6 +406,29 @@ bool AP_CheckFirmware::set_identity(const uint8_t private_key[AP_IDENTITY_KEY_LE
   it, and an ownership rule resting on the parameter could be undone by
   a plain parameter write
  */
+/*
+  Is there room to read the bootloader sector into RAM?
+
+  Writing an owner key or an identity copies the used part of that
+  sector first, and Lua scripting takes its heap from the same pool - so
+  a drone busy doing the job it was sold for can fail these operations
+  while being perfectly healthy. Asking first turns an opaque failure
+  into an instruction.
+ */
+bool AP_CheckFirmware::bootloader_write_possible(void)
+{
+#if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
+    auto *bld = read_bootloader();
+    if (bld == nullptr) {
+        return false;
+    }
+    delete bld;
+    return true;
+#else
+    return true;
+#endif
+}
+
 bool AP_CheckFirmware::is_sealed(void)
 {
 #if CONFIG_HAL_BOARD == HAL_BOARD_CHIBIOS
@@ -455,7 +478,9 @@ bool AP_CheckFirmware::set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN],
     }
     auto *bld = read_bootloader();
     if (bld == nullptr) {
-        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Failed to load bootloader into memory");
+        // Almost always memory rather than flash: scripting's heap comes
+        // out of the same pool as the tens of kilobytes this needs.
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Not enough free memory - turn off Lua scripting and retry");
         return false;
     }
     const uint8_t key[] = AP_PUBLIC_KEY_SIGNATURE;
@@ -599,6 +624,12 @@ static MAV_RESULT apply_owner_grant(const mavlink_secure_command_t &pkt,
         !AP_CheckFirmware::verify_signed_blob(pkt.data, AP_OWNER_GRANT_SIGNED_LEN,
                                               &pkt.data[AP_OWNER_GRANT_SIGNED_LEN])) {
         status = AP_OWNER_STATUS_UNSIGNED;
+    }
+    if (status == 0 && !AP_CheckFirmware::bootloader_write_possible()) {
+        // Checked before the write rather than discovered during it, so
+        // the drone can say which thing to change instead of failing
+        // with a message only a developer can act on.
+        status = AP_OWNER_STATUS_NO_MEMORY;
     }
     if (status != 0) {
         reply.data_length = 1;
