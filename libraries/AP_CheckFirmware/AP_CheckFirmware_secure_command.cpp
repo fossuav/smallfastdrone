@@ -158,8 +158,42 @@ AP_CheckFirmware::bl_data *AP_CheckFirmware::read_bootloader(void)
         }
         bld->length1 += block_size;
     }
+    /*
+      The scan above is meant to stop at the first erased 1 KB block, so
+      that only the bootloader itself is buffered - about 52 KB. If it
+      reaches the end of the sector instead, every block held data and
+      the buffer becomes the whole 128 KB, which is the difference
+      between this succeeding and failing while Lua scripting holds
+      memory.
+
+      That happened on a bench board on 2026-09-08 and no flashing path
+      accounts for it: a *_with_bl.hex pads with 0xFF and leaves most of
+      the sector erased, and flash_bootloader() writes only the
+      bootloader's own length. So the anomalous case says so out loud
+      rather than being inferred later from a failed allocation - with
+      the numbers that identify what is actually in the sector.
+     */
+    if (bld->length1 >= page_size) {
+        uint16_t erased = 0;
+        uint16_t first_erased = 0xFFFFU;
+        for (uint16_t i=0; i<num_blocks; i++) {
+            if (empty_1k(&flash[block_size*i])) {
+                if (first_erased == 0xFFFFU) {
+                    first_erased = i;
+                }
+                erased++;
+            }
+        }
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING,
+                      "Boot sector fully written: %u/%u blocks erased, first %d",
+                      (unsigned)erased, (unsigned)num_blocks, (int)(int16_t)first_erased);
+
+    }
+
     bld->data1 = NEW_NOTHROW uint8_t[bld->length1];
     if (bld->data1 == nullptr) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Bootloader buffer of %u bytes refused",
+                      (unsigned)bld->length1);
         delete bld;
         return nullptr;
     }
