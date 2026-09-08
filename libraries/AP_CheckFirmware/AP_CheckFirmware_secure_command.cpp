@@ -434,9 +434,22 @@ bool AP_CheckFirmware::is_sealed(void)
 bool AP_CheckFirmware::set_owner_key(const uint8_t public_key[AP_OWNER_KEY_LEN],
                                     const uint8_t counter[AP_OWNER_COUNTER_LEN])
 {
+    /*
+      A counter means SFD authorised this, and the seal does not stand in
+      the way of that - a grant is precisely the way back for a sealed
+      drone whose owner key was lost, which is what decision 42 is for.
+      Without a counter the authorisation is physical presence, and that
+      is what sealing stops.
+
+      Found on the bench: the grant path called through here and was
+      refused by the presence rule, so a sealed drone took no grant at
+      all. Reasoning that this code "never consults the seal" was wrong,
+      and only sealing a board showed it.
+     */
+    const bool by_grant = (counter != nullptr);
     const uint8_t zero_key[AP_OWNER_KEY_LEN] {};
     if (memcmp(public_key, zero_key, AP_OWNER_KEY_LEN) == 0 ||
-        (owner_key_is_set(find_owner_key()) && is_sealed()) ||
+        (!by_grant && owner_key_is_set(find_owner_key()) && is_sealed()) ||
         !identity_is_set(find_identity())) {
         return false;
     }
