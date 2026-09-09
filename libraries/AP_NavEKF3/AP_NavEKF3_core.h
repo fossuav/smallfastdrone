@@ -183,6 +183,9 @@ public:
     // makes it the right scale for judging a cross-lane position difference
     float getPosVarianceNE() const;
 
+    // return the number of times aiding has ceased since initialisation
+    uint16_t getAidingLossCount(void) const { return aidingLossCount; }
+
     // shift the horizontal position states and their output history by a
     // fixed offset. Changes the frame the lane reports in without changing
     // what it has measured, so the covariance is deliberately left alone
@@ -1427,6 +1430,7 @@ private:
     };
     AidingMode PV_AidingMode;       // Defines the preferred mode for aiding of velocity and position estimates from the INS
     AidingMode PV_AidingModePrev;   // Value of PV_AidingMode from the previous frame - used to detect transitions
+    uint16_t aidingLossCount;       // times aiding has ceased, so a consumer can tell the position frame has jumped since it last looked
     bool gndOffsetValid;            // true when the ground offset state can still be considered valid
     Vector3F delAngBodyOF;          // bias corrected delta angle of the vehicle IMU measured summed across the time since the last OF measurement
     ftype delTimeOF;                // time that delAngBodyOF is summed across

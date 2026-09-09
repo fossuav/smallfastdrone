@@ -384,6 +384,9 @@ public:
     // the current primary. Same validity rules as getLaneDivergence
     bool getLaneDivergencePosSigma(uint8_t lane_index, float &pos_sigma_m) const;
 
+    // get the number of times a lane has ceased aiding since it was initialised
+    bool getLaneAidingLossCount(uint8_t lane_index, uint16_t &count) const;
+
     // move a lane's reported position into the frame of the current primary.
     // A lane that only ever dead reckons keeps the frame it started aiding
     // in, so once another lane establishes an absolute position the two are

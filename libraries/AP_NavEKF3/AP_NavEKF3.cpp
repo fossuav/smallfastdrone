@@ -1256,6 +1256,20 @@ bool NavEKF3::getLaneDivergencePosSigma(uint8_t lane_index, float &pos_sigma_m) 
     return true;
 }
 
+// A lane that has ceased aiding has dead reckoned through the gap and come
+// back on a position of its own choosing, so its frame no longer lines up
+// with a lane that kept aiding. Count the events rather than expose the
+// transient: it is over within one filter update and a caller polling at
+// vehicle rate never sees it.
+bool NavEKF3::getLaneAidingLossCount(uint8_t lane_index, uint16_t &count) const
+{
+    if (core == nullptr || lane_index >= num_cores) {
+        return false;
+    }
+    count = core[lane_index].getAidingLossCount();
+    return true;
+}
+
 bool NavEKF3::otherLaneDeadReckoning(uint8_t exclude_core) const
 {
     if (core == nullptr) {

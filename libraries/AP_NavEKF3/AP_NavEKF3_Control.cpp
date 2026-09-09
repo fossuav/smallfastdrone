@@ -432,6 +432,7 @@ void NavEKF3_core::setAidingMode()
         case AID_NONE:
             // We have ceased aiding
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3 IMU%u stopped aiding",(unsigned)imu_index);
+            aidingLossCount++;
             // When not aiding, estimate orientation & height fusing synthetic constant position and zero velocity measurement to constrain tilt errors
             posTimeout = true;
             velTimeout = true;
