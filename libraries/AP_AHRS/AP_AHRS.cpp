@@ -207,7 +207,7 @@ const AP_Param::GroupInfo AP_AHRS::var_info[] = {
 
     // @Param: OPTIONS
     // @DisplayName: Optional AHRS behaviour
-    // @Description: This controls optional AHRS behaviour. Setting DisableDCMFallbackFW will change the AHRS behaviour for fixed wing aircraft in fly-forward flight to not fall back to DCM when the EKF stops navigating. Setting DisableDCMFallbackVTOL will change the AHRS behaviour for fixed wing aircraft in non fly-forward (VTOL) flight to not fall back to DCM when the EKF stops navigating. Setting DontDisableAirspeedUsingEKF disables the EKF based innovation check for airspeed consistency. Setting AutoRecordOrigin will auto-save the EKF origin to parameters when it becomes valid.
+    // @Description: This controls optional AHRS behaviour. Setting DisableDCMFallbackFW will change the AHRS behaviour for fixed wing aircraft in fly-forward flight to not fall back to DCM when the EKF stops navigating. Setting DisableDCMFallbackVTOL will change the AHRS behaviour for fixed wing aircraft in non fly-forward (VTOL) flight to not fall back to DCM when the EKF stops navigating. Setting DontDisableAirspeedUsingEKF disables the EKF based innovation check for airspeed consistency. Setting AutoRecordOrigin will auto-save the EKF origin to parameters when it becomes valid. Setting UseRecordedOriginForNonGPS will set the EKF origin from AHRS_ORIGIN_LAT/LON/ALT at arming if nothing else has set one.
     // @Bitmask: 0:DisableDCMFallbackFW, 1:DisableDCMFallbackVTOL, 2:DontDisableAirspeedUsingEKF, 3:RecordOrigin, 4:UseRecordedOriginForNonGPS
     // @User: Advanced
     AP_GROUPINFO("OPTIONS",  18, AP_AHRS, _options, HAL_AHRS_OPTIONS_DEFAULT),
@@ -389,6 +389,19 @@ void AP_AHRS::reset_gyro_drift(void)
 #endif
 }
 
+// true if any receiver is configured, whether or not it has been detected yet.
+// Parameter derived, so unlike num_sensors() it is valid from the first update
+static bool any_gps_configured()
+{
+    const AP_GPS &gps = AP::gps();
+    for (uint8_t i=0; i<GPS_MAX_RECEIVERS; i++) {
+        if (gps.get_type(i) != AP_GPS::GPS_TYPE_NONE) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /*
   update state structure after each update()
  */
@@ -442,8 +455,10 @@ void AP_AHRS::update_state(void)
         record_origin();
     }
 
-    // if no origin, attempt to use recorded origin
-    if (!state.origin_ok) {
+    // if no origin, attempt to use recorded origin. With a GPS configured this
+    // waits for arming: the origin is immutable once set, and at boot the
+    // driver may not even have been detected, let alone had time to fix
+    if (!state.origin_ok && (hal.util->get_soft_armed() || !any_gps_configured())) {
         use_recorded_origin_maybe();
     }
 
