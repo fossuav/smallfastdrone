@@ -196,15 +196,57 @@ the flight. It is still available as a fallback if GPS is genuinely lost -
 there it is all there is - but it may no longer be the evidence that demotes a
 healthy GPS lane.
 
+## A dead reckoned frame also blocks the way back
+
+Derived from the source and log 8's numbers, not measured: none of the
+three flights exercised the FLOW_LOSS auto-recovery, and log 8's switch was
+to FLOW_SPOOF, which is latched by design.
+
+The recovery from the flow lane to the GPS lane requires the two to agree:
+
+```c
+const bool offset_ok = pos_sigma_valid &&
+                       (pos_div < SRCF_RECOV_POS_NSIGMA * pos_sigma);   // 6.0
+```
+
+A lane that has dead reckoned cannot satisfy that. On log 8's numbers -
+`PD` 493 m against `PSig` 11.0 - the ratio is 45 against a bound of 6, so
+the vehicle would go out to the flow lane on a GPS loss and then be refused
+the return, warned `SRCF: GPS ...m off, staying on flow` every
+`SRCF_RECOV_TIME`. The comment at that gate anticipates the slow case, and
+sigma growth does keep pace with smooth dead reckoning; it does not keep
+pace with an aiding-dropout jump.
+
+So the frame break does not stop the vehicle reaching the flow lane. It
+stops it coming back, which matters more on a profile that expects to cross
+between the lanes repeatedly.
+
+Relaxing the bound was rejected. It is the only gate that sees a static
+spoof: a captured receiver reporting a fixed position with no motion
+presents no velocity difference and no divergence rate against a hovering
+vehicle, so velocity agreement cannot stand in for it.
+
+**Decision: a manual handback.** The automatic path keeps refusing and says
+why, and the pilot forces the return with a source set change - the idiom
+that already clears the spoof latch. The handback then realigns the flow
+lane into the GPS lane's frame, which repairs the break and restores the
+witness. That reverses the earlier choice not to clear the latch on
+realignment: with an explicit pilot authorisation and an alignment actually
+run, the offset test is meaningful again and there is no reason to keep the
+monitor disabled.
+
 ## Still open
 
 1. **Log 4's velocity trip is untouched.** The flow lane over-read east
    velocity by ~19% at 18 m/s with no aiding dropout, so neither the witness
    gate nor the new latch would have blocked it. A stale AGL height at the
    rangefinder limit is the likely term and it has not been measured.
-2. **The latch has no field data.** It would have blocked log 8's trip - first
-   dropout 115 s before the vote - and would not have blocked logs 3 or 4.
-   Nothing has flown with it.
+2. **The latch and the manual handback have no field data.** The latch would
+   have blocked log 8's trip - first dropout 115 s before the vote - and
+   would not have blocked logs 3 or 4. The handback path has never been
+   exercised at all, in the air or in any of these logs: the recovery gate
+   it addresses is reached from FLOW_LOSS, and no flight here entered that
+   state. Both are SITL-only.
 3. **SRCF's premise is backwards on this airframe.** The design assumes a
    spoofed GPS drags the GPS lane while the flow lane keeps measuring real
    motion. In acro this flow lane does not keep measuring real motion; it
