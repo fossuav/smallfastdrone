@@ -4622,6 +4622,77 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.change_mode('LAND')
         self.wait_disarmed(timeout=180)
 
+    def SRCFNoVoteAfterAidingLoss(self):
+        """the spoof detectors do not vote once the flow lane has dead reckoned"""
+        # The witness gate is instantaneous and the offset it guards is
+        # accumulated, so restoring the height reference reopens it on a lane
+        # whose frame is already gone. Field log 8 flew 88s of acro at 17m/s
+        # mean and 29m mean AGL against a 15m rangefinder, took six aiding
+        # dropouts, and came back to Loiter low and slow - rangefinder
+        # returning, gate open - on lanes 493m apart. The offset detector
+        # latched a spoof against a 29 satellite fix at 0.41m and moved the
+        # vehicle onto the lane that was wrong.
+        #
+        # Two-sided, like SRCFNoVoteWithoutFlowWitness: the second phase
+        # requires the same spoof to still be caught on a lane that never
+        # dropped, so a build that simply broke detection cannot pass.
+        self.configure_source_fallback_per_core()
+        self.set_parameters({
+            "SRCF_VEL_THR": 1.6,
+            "SRCF_POSR_THR": 1.9,
+        })
+        self.context_collect('STATUSTEXT')
+
+        self.takeoff(10, mode='LOITER')
+
+        # The field mechanism is flowFusionTimeout during acro, and SITL will
+        # not reproduce it from a Loiter hover: with no range data the terrain
+        # state freezes, and a frozen terrain state is still the right one
+        # while the vehicle holds height, so fusion carries on. Take the
+        # sensor away instead. What is under test is the latch, not the route
+        # the EKF took to drop aiding.
+        self.progress("Taking the flow sensor away until the lane drops aiding")
+        self.set_parameter("SIM_FLOW_ENABLE", 0)
+        self.wait_statustext("EKF3 IMU1 stopped aiding", timeout=60, check_context=True)
+
+        # the crux: the gate's own terms are all satisfied again, and only the
+        # latch stands between the accumulated offset and a vote
+        self.progress("Giving the flow sensor back")
+        self.set_parameter("SIM_FLOW_ENABLE", 1)
+        self.wait_statustext("EKF3 IMU1 fusing optical flow", timeout=60, check_context=True)
+
+        self.progress("Spoofing GPS against a lane that has dead reckoned")
+        self.set_parameters({
+            "SIM_GPS1_SPOOF": 2,
+            "SIM_GPS1_SPOOF_R": 1.5,
+        })
+        # the assertion is that nothing happens, so this has to be a window
+        # many times SRCF_CNF_TIME
+        self.delay_sim_time(30, "long enough for any vote to confirm")
+        if self.statustext_in_collections("SRCF: GPS spoof suspected"):
+            raise NotAchievedException("confirmed a spoof on a lane that had dead reckoned")
+
+        self.set_parameter("SIM_GPS1_SPOOF", 0)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=180)
+
+        vvot, pvot, ovot = self.srcf_vote_peaks()
+        self.progress("after an aiding loss: VVot peak %u PVot peak %u OVot peak %u" % (vvot, pvot, ovot))
+        if max(vvot, pvot, ovot) > 0:
+            raise NotAchievedException(
+                "detectors voted after an aiding loss (peaks %u/%u/%u)" % (vvot, pvot, ovot))
+
+        self.start_subtest("the same spoof is caught on a lane that never dropped")
+        self.takeoff(10, mode='LOITER')
+        self.set_parameters({
+            "SIM_GPS1_SPOOF": 2,
+            "SIM_GPS1_SPOOF_R": 1.5,
+        })
+        self.wait_statustext("SRCF: GPS spoof suspected", timeout=90)
+        self.set_parameter("SIM_GPS1_SPOOF", 0)
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=180)
+
     def SRCFGroundHandbackAlignsFlowLane(self):
         '''the ground handback to the GPS lane pulls the flow lane into its frame'''
         # Field log 356. AHRS_ORIGIN_* still named the previous site, 6623km
@@ -19088,6 +19159,7 @@ return update, 1000
             self.SRCFGroundLaneFollowsGPS,
             self.SRCFGroundHandbackAlignsFlowLane,
             self.SRCFNoVoteWithoutFlowWitness,
+            self.SRCFNoVoteAfterAidingLoss,
             self.SRCFCoastingShown,
             self.SRCFDisabledRegression,
             self.SRCFRCFailsafeDrift,
