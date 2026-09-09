@@ -464,6 +464,10 @@ public:
     // and the primary
     bool get_lane_divergence_pos_sigma(uint8_t lane_index, float &pos_sigma_m) const;
 
+    // get the number of times an EKF3 lane has ceased aiding since it was
+    // initialised
+    bool get_lane_aiding_loss_count(uint8_t lane_index, uint16_t &count) const;
+
     // move an EKF3 lane's reported position into the frame of the primary
     bool align_lane_position(uint8_t lane_index);
 

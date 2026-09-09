@@ -3608,6 +3608,16 @@ bool AP_AHRS::get_lane_divergence_pos_sigma(uint8_t lane_index, float &pos_sigma
 #endif
 }
 
+// get the number of times an EKF3 lane has ceased aiding since it was initialised
+bool AP_AHRS::get_lane_aiding_loss_count(uint8_t lane_index, uint16_t &count) const
+{
+#if HAL_NAVEKF3_AVAILABLE
+    return EKF3.getLaneAidingLossCount(lane_index, count);
+#else
+    return false;
+#endif
+}
+
 bool AP_AHRS::get_lane_gps_good_to_align(uint8_t lane_index) const
 {
 #if HAL_NAVEKF3_AVAILABLE
