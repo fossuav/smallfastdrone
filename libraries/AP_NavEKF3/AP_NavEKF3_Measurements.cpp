@@ -706,6 +706,7 @@ void NavEKF3_core::readGpsData()
 
         // Set the uncertainty of the GPS origin height
         ekfOriginHgtVar = sq(gpsHgtAccuracy);
+        originHgtUncertain = false;
 
     }
 
@@ -852,6 +853,7 @@ void NavEKF3_core::correctEkfOriginHeight()
     if (ratio < 25.0f && gpsAccuracyGood) {
         ekfGpsRefHgt -= (double)(gain * innovation);
         ekfOriginHgtVar -= MAX(gain * ekfOriginHgtVar , 0.0f);
+        originHgtUncertain = false;
     }
 }
 
@@ -1020,6 +1022,7 @@ void NavEKF3_core::readRngBcnData()
 
                     // Set the uncertainty of the origin height
                     ekfOriginHgtVar = sq(rngBcn.vehiclePosErr);
+                    originHgtUncertain = false;
                 }
             }
         } else {

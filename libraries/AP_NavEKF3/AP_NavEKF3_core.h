@@ -1310,6 +1310,7 @@ private:
     bool delAngBiasLearned;         // true when the gyro bias has been learned
     nav_filter_status filterStatus; // contains the status of various filter outputs
     ftype ekfOriginHgtVar;          // Variance of the EKF WGS-84 origin height estimate (m^2)
+    bool originHgtUncertain;        // true when the origin height came from a stored location rather than a fix
     double ekfGpsRefHgt;            // floating point representation of the WGS-84 reference height used to convert GPS height to local height (m)
     uint32_t lastOriginHgtTime_ms;  // last time the ekf's WGS-84 origin height was corrected
     Vector3F outputTrackError;      // attitude (rad), velocity (m/s) and position (m) tracking error magnitudes from the output observer

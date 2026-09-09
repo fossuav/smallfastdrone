@@ -1562,9 +1562,12 @@ void NavEKF3_core::selectHeightForFusion()
     // If we are not using GPS as the primary height sensor, correct EKF origin height so that
     // combined local NED position height and origin height remains consistent with the GPS altitude
     // This also enables the GPS height to be used as a backup height source
+    // an origin height that never came from a fix is reconciled once whatever the mask says
+    const bool ognHgtBaro = originHgtUncertain || (frontend->_originHgtMode & (1 << 0));
+    const bool ognHgtRng = originHgtUncertain || (frontend->_originHgtMode & (1 << 1));
     if (gpsDataToFuse &&
-            (((frontend->_originHgtMode & (1 << 0)) && (activeHgtSource == AP_NavEKF_Source::SourceZ::BARO)) ||
-            ((frontend->_originHgtMode & (1 << 1)) && (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER)))
+            ((ognHgtBaro && (activeHgtSource == AP_NavEKF_Source::SourceZ::BARO)) ||
+            (ognHgtRng && (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER)))
             ) {
             correctEkfOriginHeight();
     }

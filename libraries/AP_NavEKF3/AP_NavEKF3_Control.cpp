@@ -744,6 +744,11 @@ bool NavEKF3_core::setOrigin(const Location &loc)
 
     EKF_origin = loc;
     ekfGpsRefHgt = (double)0.01 * (double)EKF_origin.alt;
+    // an origin that did not come from a fix carries an unknown height, and a
+    // zero variance makes correctEkfOriginHeight() reject reconciling it
+    const ftype recordedOriginHgtErr = 100.0f;
+    ekfOriginHgtVar = sq(recordedOriginHgtErr);
+    originHgtUncertain = true;
     // define Earth rotation vector in the NED navigation frame at the origin
     calcEarthRateNED(earthRateNED, EKF_origin.lat);
     validOrigin = true;

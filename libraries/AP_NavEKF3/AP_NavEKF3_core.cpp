@@ -372,6 +372,7 @@ void NavEKF3_core::InitialiseVariables()
 #endif
     terrainHgtStable = true;
     ekfOriginHgtVar = 0.0f;
+    originHgtUncertain = false;
     ekfGpsRefHgt = 0.0;
     velOffsetNED.zero();
     posOffsetNED.zero();
