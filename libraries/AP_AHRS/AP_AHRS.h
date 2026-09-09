@@ -1050,6 +1050,9 @@ private:
     // This may save the user from having to set the origin manually when using position controlled modes without GPS
     void record_origin();
 
+    // warn when the recorded origin names somewhere other than the real one
+    void warn_if_recorded_origin_stale() const;
+
     /*
       state updated at the end of each update() call
      */

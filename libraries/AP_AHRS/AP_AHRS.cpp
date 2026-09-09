@@ -53,6 +53,11 @@
 #define ATTITUDE_CHECK_THRESH_ROLL_PITCH_RAD radians(10)
 #define ATTITUDE_CHECK_THRESH_YAW_RAD radians(20)
 
+// how far a recorded origin may sit from the real one before it is called out.
+// Generous: the option supplies an approximate site datum, and what this
+// catches is one left over from a different site entirely
+#define AHRS_RECORDED_ORIGIN_MAX_DIST_M 10000
+
 #ifndef HAL_AHRS_EKF_TYPE_DEFAULT
 #define HAL_AHRS_EKF_TYPE_DEFAULT 3
 #endif
@@ -450,6 +455,8 @@ void AP_AHRS::update_state(void)
 
         // report origin via MAVLink
         GCS_SEND_MESSAGE(MSG_ORIGIN);
+
+        warn_if_recorded_origin_stale();
 
         // save origin to parameters
         record_origin();
@@ -1582,6 +1589,30 @@ void AP_AHRS::use_recorded_origin_maybe()
     if (set_origin(loc)) {
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "AHRS: using recorded origin:%.7f,%.7f,%.1f",
                       (double)_origin_lat.get(), (double)_origin_lon.get(), (double)_origin_alt.get());
+    }
+}
+
+// A recorded origin left over from another site is invisible until a boot
+// without GPS adopts it, and immutable for the flight once it has. Say so
+// here, which is the only moment there is a real origin to compare it against
+void AP_AHRS::warn_if_recorded_origin_stale() const
+{
+    if (!option_set(Options::USE_RECORDED_ORIGIN_FOR_NONGPS)) {
+        return;
+    }
+    if (is_zero(_origin_lat.get()) && is_zero(_origin_lon.get())) {
+        return;
+    }
+    const Location recorded {
+        int32_t(_origin_lat.get() * 1e7),
+        int32_t(_origin_lon.get() * 1e7),
+        int32_t(_origin_alt.get() * 100),
+        Location::AltFrame::ABSOLUTE
+    };
+    const float dist_m = recorded.get_distance(state.origin);
+    if (dist_m > AHRS_RECORDED_ORIGIN_MAX_DIST_M) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "AHRS_ORIGIN is %.0fkm from here",
+                      (double)(dist_m * 0.001f));
     }
 }
 
