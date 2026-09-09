@@ -4295,11 +4295,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_collect('STATUSTEXT')
 
         # the recorded origin is only taken up once SRCF has moved the primary
-        # to the flow lane: use_recorded_origin_maybe early-returns while the
-        # primary lane is configured for GPS, so it follows the arming message
+        # to the flow lane, and with a GPS configured not until arming, so the
+        # datum lands inside the takeoff below rather than at boot
         self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=60, check_context=True)
-        self.wait_statustext("AHRS: using recorded origin", timeout=30, check_context=True)
         self.takeoff(10, mode='LOITER', require_absolute=False)
+        self.wait_statustext("AHRS: using recorded origin", timeout=30, check_context=True)
         sim_start = self.sim_location()
 
         self.progress("Receiver acquires %um from truth" % spoof_ofs_m)
@@ -4383,8 +4383,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_collect('STATUSTEXT')
 
         self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=60, check_context=True)
-        self.wait_statustext("AHRS: using recorded origin", timeout=30, check_context=True)
         self.takeoff(10, mode='LOITER', require_absolute=False)
+        # adopted during the arming sequence, not at boot
+        self.wait_statustext("AHRS: using recorded origin", timeout=30, check_context=True)
 
         self.progress("Acquiring an honest fix against a 40m-wrong origin")
         self.set_parameter("SIM_GPS1_ENABLE", 1)
@@ -4652,13 +4653,21 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.reboot_sitl()
 
-        # check_context is False throughout: the boot itself switches to the
-        # flow lane before this can start collecting
+        # check_context is False here: the boot itself switches to the flow
+        # lane before this can start collecting
         self.wait_statustext("SRCF: no GPS, arming on flow lane", timeout=90, check_context=False)
-        self.wait_statustext("AHRS: using recorded origin", timeout=30, check_context=False)
+
+        # the recorded origin is adopted during the arming sequence, so the
+        # stale datum this test sets up only lands once the vehicle has armed
+        self.context_collect('STATUSTEXT')
+        self.change_mode('STABILIZE')
+        self.wait_ready_to_arm(require_absolute=False)
+        self.arm_vehicle()
+        self.wait_statustext("AHRS: using recorded origin", timeout=30, check_context=True)
+        self.disarm_vehicle()
 
         self.progress("Restoring GPS on the ground")
-        self.context_collect('STATUSTEXT')
+        self.context_clear_collection('STATUSTEXT')
         self.set_parameter("SIM_GPS1_ENABLE", 1)
         self.wait_statustext("EKF3 lane switch 0", timeout=90, check_context=True)
         switch_us = self.get_sim_time() * 1e6
@@ -17707,6 +17716,40 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # restore params to original values
         self.context_pop()
 
+    def AHRSStaleRecordedOriginCalledOut(self):
+        """a recorded origin naming another site is reported when the real one is set"""
+        # Field logs 3 and 4: AHRS_ORIGIN_* still named a site 6623km away and
+        # nothing ever compared it to anything, so the vehicle took that datum
+        # on the one boot that had no fix yet and flew the sortie on it.
+        #
+        # The datum can only be adopted when no fix will set an origin, so
+        # there is nothing to check it against at that moment. The boot that
+        # does have GPS is where it is visible, and is the boot before.
+        self.context_push()
+        stale = self.offset_location_ne(self.sitl_start_location(), 200000, 0)
+        self.set_parameters({
+            "AHRS_OPTIONS": 16,     # USE_RECORDED_ORIGIN_FOR_NONGPS
+            "AHRS_ORIGIN_LAT": stale.lat,
+            "AHRS_ORIGIN_LON": stale.lng,
+            "AHRS_ORIGIN_ALT": 0,
+        })
+        self.reboot_sitl()
+        self.wait_statustext("AHRS_ORIGIN is 200km from here", timeout=60)
+
+        self.progress("A datum at the site is not called out")
+        here = self.sitl_start_location()
+        self.set_parameters({
+            "AHRS_ORIGIN_LAT": here.lat,
+            "AHRS_ORIGIN_LON": here.lng,
+        })
+        self.reboot_sitl()
+        self.context_collect('STATUSTEXT')
+        self.wait_ready_to_arm()
+        if self.statustext_in_collections("AHRS_ORIGIN is") is not None:
+            raise NotAchievedException("called out a datum at the site")
+        self.context_pop()
+        self.reboot_sitl()
+
     def ReadOnlyDefaults(self):
         '''test that defaults marked "readonly" can't be set'''
         defaults_filepath = tempfile.NamedTemporaryFile(mode='w', delete=False)
@@ -19016,6 +19059,7 @@ return update, 1000
             self.ScriptingAHRSSource,
             self.CommonOrigin,
             self.AHRSOriginRecorded,
+            self.AHRSStaleRecordedOriginCalledOut,
             self.TestTetherStuck,
             self.ScriptingFlipMode,
             self.RC_OPTIONS_1_FS_THR_ENABLE_0,
