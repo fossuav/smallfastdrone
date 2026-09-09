@@ -61,6 +61,7 @@ static struct {
     bool switch_warned;         // lane switch command failed warning sent
     bool align_pending;         // pull the flow lane into the GPS lane's frame once the switch lands
     bool origin_before_arming;  // an origin existed before takeoff, so both lanes share an earth frame
+    bool was_armed;             // armed on the previous tick, so origin_before_arming is settled
     uint32_t fix_good_since_ms; // time the GPS fix first met SRCF_FIXQ_* continuously
     uint8_t ground_lane_count;  // consecutive ticks the armed-on lane choice has differed
     uint8_t gps_bad_count;
@@ -235,9 +236,18 @@ void Copter::source_fallback_update()
         // is what makes the cross-lane offset testable at the first fix
         Location origin;
         srcf_state.origin_before_arming = ahrs.get_origin(origin);
+        srcf_state.was_armed = false;
         srcf_reset_detectors();
         srcf_state.last_source_set = ahrs.get_posvelyaw_source_set();
         return;
+    }
+
+    if (!srcf_state.was_armed) {
+        // the recorded origin is adopted during the arming sequence, after the
+        // last disarmed tick ran, and it still predates takeoff
+        Location origin;
+        srcf_state.origin_before_arming = ahrs.get_origin(origin);
+        srcf_state.was_armed = true;
     }
 
     // per-lane health; inert until both EKF lanes are allocated

@@ -758,6 +758,10 @@ bool AP_Arming_Copter::arm(const AP_Arming::Method method, const bool do_arming_
 
     auto &ahrs = AP::ahrs();
 
+    // adopt a recorded origin now if nothing else has set one: the height datum
+    // reset and home below both reference it, and it is immutable afterwards
+    ahrs.use_recorded_origin_maybe();
+
     copter.initial_armed_bearing_rad = ahrs.get_yaw_rad();
 
     // Always reset EKF height datum on arming so altitude starts at
