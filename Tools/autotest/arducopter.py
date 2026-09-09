@@ -4693,6 +4693,52 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.change_mode('LAND')
         self.wait_disarmed(timeout=180)
 
+    def SRCFManualHandbackAfterAidingLoss(self):
+        """a flow lane that has dead reckoned needs the pilot to authorise the return"""
+        # The FLOW_LOSS recovery requires the lanes to agree - pos_div under
+        # SRCF_RECOV_POS_NSIGMA * pos_sigma - and a frame that has jumped
+        # cannot: field log 8 held them 493m apart against an 11.0m sigma,
+        # 45 against the bound of 6. The bound is not relaxed for it because
+        # it is the only gate that sees a static spoof, so the pilot
+        # authorises the return with a source set change and the handback
+        # realigns the flow lane.
+        self.configure_source_fallback_per_core()
+        self.set_parameters({"SRCF_ENABLE": 2})
+        self.context_collect('STATUSTEXT')
+
+        self.takeoff(10, mode='LOITER')
+
+        self.progress("Breaking the flow lane's frame")
+        self.set_parameter("SIM_FLOW_ENABLE", 0)
+        self.wait_statustext("EKF3 IMU1 stopped aiding", timeout=60, check_context=True)
+        # Loiter is on the GPS lane, so the vehicle really moves while the
+        # flow lane dead reckons. That gap is the frame jump
+        self.set_rc(2, 1300)
+        self.delay_sim_time(15, "translating while the flow lane dead reckons")
+        self.set_rc(2, 1500)
+        self.delay_sim_time(3)
+        self.set_parameter("SIM_FLOW_ENABLE", 1)
+        self.wait_statustext("EKF3 IMU1 fusing optical flow", timeout=60, check_context=True)
+
+        self.progress("Losing GPS so the monitor moves onto the flow lane")
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_statustext("SRCF: GPS lost, using flow lane", timeout=60, check_context=True)
+
+        self.progress("Restoring GPS: the automatic return has to be refused")
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_statustext("flow frame lost, switch source to return",
+                             timeout=120, check_context=True)
+        if self.statustext_in_collections("SRCF: GPS recovered"):
+            raise NotAchievedException("returned to the GPS lane on a jumped frame")
+
+        self.start_subtest("the pilot's source set change authorises the return")
+        self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 2)
+        self.wait_statustext("SRCF: handback authorised", timeout=30, check_context=True)
+        self.wait_statustext("SRCF: GPS recovered", timeout=90, check_context=True)
+
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=180)
+
     def SRCFGroundHandbackAlignsFlowLane(self):
         '''the ground handback to the GPS lane pulls the flow lane into its frame'''
         # Field log 356. AHRS_ORIGIN_* still named the previous site, 6623km
@@ -19160,6 +19206,7 @@ return update, 1000
             self.SRCFGroundHandbackAlignsFlowLane,
             self.SRCFNoVoteWithoutFlowWitness,
             self.SRCFNoVoteAfterAidingLoss,
+            self.SRCFManualHandbackAfterAidingLoss,
             self.SRCFCoastingShown,
             self.SRCFDisabledRegression,
             self.SRCFRCFailsafeDrift,
