@@ -62,6 +62,8 @@ static struct {
     bool align_pending;         // pull the flow lane into the GPS lane's frame once the switch lands
     bool origin_before_arming;  // an origin existed before takeoff, so both lanes share an earth frame
     bool was_armed;             // armed on the previous tick, so origin_before_arming is settled
+    bool flow_frame_broken;     // the flow lane has dead reckoned, so its frame no longer matches the GPS lane's
+    uint16_t flow_aiding_losses; // flow lane aiding loss count as it stood at arming
     uint32_t fix_good_since_ms; // time the GPS fix first met SRCF_FIXQ_* continuously
     uint8_t ground_lane_count;  // consecutive ticks the armed-on lane choice has differed
     uint8_t gps_bad_count;
@@ -247,7 +249,23 @@ void Copter::source_fallback_update()
         // last disarmed tick ran, and it still predates takeoff
         Location origin;
         srcf_state.origin_before_arming = ahrs.get_origin(origin);
+        srcf_state.flow_frame_broken = false;
+        if (!ahrs.get_lane_aiding_loss_count(SRCF_FLOW_LANE, srcf_state.flow_aiding_losses)) {
+            srcf_state.flow_aiding_losses = 0;
+        }
         srcf_state.was_armed = true;
+    }
+
+    // A lane that ceases aiding dead reckons through the gap and resumes on a
+    // position of its own, so from then on the cross-lane offset measures that
+    // jump rather than the GPS lane. Latched for the flight: the offset is
+    // never recovered. Read from the EKF because the drop is over within one
+    // filter update - field log 8 took six of them across an acro segment
+    // without one sample of flow_usable going false at the 10hz tick.
+    uint16_t flow_aiding_losses = 0;
+    if (ahrs.get_lane_aiding_loss_count(SRCF_FLOW_LANE, flow_aiding_losses) &&
+        (flow_aiding_losses != srcf_state.flow_aiding_losses)) {
+        srcf_state.flow_frame_broken = true;
     }
 
     // per-lane health; inert until both EKF lanes are allocated
@@ -388,8 +406,13 @@ void Copter::source_fallback_update()
     // run is 5.4s against a 1.5s SRCF_CNF_TIME, so it does not on its own
     // make the monitor safe to arm for aerobatics. SRCF_FLIGHT_TEST_LOG_6.md
     // has the sweep and what is still open.
+    //
+    // The rangefinder half of that gate is instantaneous while the offset it
+    // guards is accumulated, which is how field log 8 came to vote: back low
+    // and slow in Loiter with the rangefinder returning again, on a 493m
+    // offset opened 100s earlier in acro. flow_frame_broken covers that span.
     const uint16_t vote_max = MAX(1, (int)(g2.srcf_cnf_time * 10));
-    const bool flow_is_witness = flow_usable && rangefinder_alt_ok();
+    const bool flow_is_witness = flow_usable && rangefinder_alt_ok() && !srcf_state.flow_frame_broken;
     const bool can_vote = div_ok && !gps_bad_now && flow_is_witness &&
                           (primary == SRCF_GPS_LANE);
     if (can_vote && (vel_div > vel_gate)) {
@@ -569,7 +592,7 @@ void Copter::source_fallback_update()
     // @Field: VSig: combined 1-sigma horizontal velocity uncertainty of both lanes
     // @Field: PSig: combined 1-sigma horizontal position uncertainty of both lanes
     // @Field: GpsB: GPS receiver loss confirmed
-    // @Field: FlwU: flow lane usable
+    // @Field: FlwU: flow lane state, bit0 usable, bit1 valid as a spoof witness
     // @Field: GpsL: GPS lane usable
     // @Field: Q: GPS fix meets SRCF_FIXQ_* and the EKF's own GPS checks
     // the field is named Q rather than FixQ because LogStructure caps the
@@ -585,7 +608,7 @@ void Copter::source_fallback_update()
                                 (double)vel_sigma,
                                 (double)pos_sigma,
                                 (uint8_t)gps_bad,
-                                (uint8_t)flow_usable,
+                                (uint8_t)(flow_usable | (flow_is_witness << 1)),
                                 (uint8_t)gps_lane_usable,
                                 (uint8_t)fix_quality_good);
 #endif
