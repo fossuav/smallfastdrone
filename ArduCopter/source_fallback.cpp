@@ -23,7 +23,14 @@
  *
  * SRCF_POSD_NSIG adds a third test on the accumulated position offset,
  * which catches a walk slow enough to sit inside both rate thresholds.
- * It is off by default and has not been flown.
+ *
+ * All of that rests on the flow lane sharing a frame with the GPS lane.
+ * A lane that ceases aiding dead reckons through the gap and resumes on a
+ * position of its own, so once it has, it may no longer witness a spoof,
+ * and the offset bound that guards the return to GPS can no longer pass.
+ * The lane stays available as a fallback - on a real GPS loss it is all
+ * there is - and the pilot's source set change authorises the return,
+ * which realigns the flow lane and puts both back in service.
  */
 
 #define SRCF_GPS_BAD_ITERATIONS     3       // 0.3s at 10hz to confirm GPS loss
@@ -64,6 +71,7 @@ static struct {
     bool was_armed;             // armed on the previous tick, so origin_before_arming is settled
     bool flow_frame_broken;     // the flow lane has dead reckoned, so its frame no longer matches the GPS lane's
     uint16_t flow_aiding_losses; // flow lane aiding loss count as it stood at arming
+    bool handback_forced;       // pilot has authorised the return to the GPS lane despite a broken frame
     uint32_t fix_good_since_ms; // time the GPS fix first met SRCF_FIXQ_* continuously
     uint8_t ground_lane_count;  // consecutive ticks the armed-on lane choice has differed
     uint8_t gps_bad_count;
@@ -113,6 +121,19 @@ static void srcf_sats_block_warn(uint32_t now_ms, uint32_t hold_ms, uint8_t sats
         srcf_state.offset_warned = true;
         gcs().send_text(MAV_SEVERITY_WARNING, "SRCF: GPS on %u sats, staying on flow",
                         (unsigned)sats);
+    }
+}
+
+// the same hold-off, for the case where the flow lane rather than the fix is
+// the faulty term. Naming GPS there would send the pilot after the wrong one
+static void srcf_frame_block_warn(uint32_t now_ms, uint32_t hold_ms)
+{
+    if (srcf_state.offset_block_ms == 0) {
+        srcf_state.offset_block_ms = now_ms;
+    } else if (!srcf_state.offset_warned &&
+               (now_ms - srcf_state.offset_block_ms > hold_ms)) {
+        srcf_state.offset_warned = true;
+        gcs().send_text(MAV_SEVERITY_WARNING, "SRCF: flow frame lost, switch source to return");
     }
 }
 
@@ -250,6 +271,7 @@ void Copter::source_fallback_update()
         Location origin;
         srcf_state.origin_before_arming = ahrs.get_origin(origin);
         srcf_state.flow_frame_broken = false;
+        srcf_state.handback_forced = false;
         if (!ahrs.get_lane_aiding_loss_count(SRCF_FLOW_LANE, srcf_state.flow_aiding_losses)) {
             srcf_state.flow_aiding_losses = 0;
         }
@@ -290,6 +312,15 @@ void Copter::source_fallback_update()
             }
             gcs().send_text(MAV_SEVERITY_INFO, "SRCF: GPS trust reset");
         }
+        // the offset bound cannot pass on a frame that has jumped, so the
+        // same action is the only way back to the GPS lane after one
+        const bool on_flow_lane = (srcf_state.lane_state == LaneState::FLOW_LOSS ||
+                                   srcf_state.lane_state == LaneState::FLOW_SPOOF ||
+                                   srcf_state.lane_state == LaneState::FLOW_NO_GPS);
+        if (srcf_state.flow_frame_broken && on_flow_lane && !srcf_state.handback_forced) {
+            srcf_state.handback_forced = true;
+            gcs().send_text(MAV_SEVERITY_INFO, "SRCF: handback authorised");
+        }
     }
 
     // GPS receiver loss, confirmed over SRCF_GPS_BAD_ITERATIONS
@@ -318,7 +349,12 @@ void Copter::source_fallback_update()
     // alignment waits for the commanded switch to land
     if (srcf_state.align_pending && primary == SRCF_GPS_LANE) {
         srcf_state.align_pending = false;
-        ahrs.align_lane_position(SRCF_FLOW_LANE);
+        if (ahrs.align_lane_position(SRCF_FLOW_LANE)) {
+            // the lanes share a frame again, so the offset is a measurement
+            // of them once more and the flow lane may witness again
+            srcf_state.flow_frame_broken = false;
+            srcf_state.handback_forced = false;
+        }
     }
 
     float vel_div = 0.0f;
@@ -532,8 +568,16 @@ void Copter::source_fallback_update()
             // which is their combined position uncertainty: that grows as
             // the flow lane dead reckons, so a fixed metre limit would block
             // legitimate recovery on a long outage.
-            const bool offset_ok = pos_sigma_valid &&
-                                   (pos_div < SRCF_RECOV_POS_NSIGMA * pos_sigma);
+            // A frame that has jumped cannot satisfy this: field log 8 held
+            // the lanes 493m apart against an 11.0m sigma, 45 against the 6
+            // here. The bound is not relaxed for that, because it is the
+            // only gate that sees a static spoof - one presents no velocity
+            // difference and no divergence rate against a hovering vehicle,
+            // so nothing else can stand in for it. The pilot authorises the
+            // return instead, with the source set change.
+            const bool offset_ok = srcf_state.handback_forced ||
+                                   (pos_sigma_valid &&
+                                    (pos_div < SRCF_RECOV_POS_NSIGMA * pos_sigma));
 
             // auto-recovery: GPS lane must be continuously usable and
             // consistent with the flow lane for SRCF_RECOV_TIME. Judged
@@ -544,7 +588,11 @@ void Copter::source_fallback_update()
             const bool recovery_ok = consistent && offset_ok;
 
             if (consistent && !offset_ok) {
-                srcf_offset_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000), pos_div, "returned");
+                if (srcf_state.flow_frame_broken) {
+                    srcf_frame_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000));
+                } else {
+                    srcf_offset_block_warn(now_ms, (uint32_t)(g2.srcf_recov_time * 1000), pos_div, "returned");
+                }
             } else {
                 srcf_state.offset_block_ms = 0;
             }
@@ -555,6 +603,10 @@ void Copter::source_fallback_update()
                 }
                 if (now_ms - srcf_state.recovery_start_ms > (uint32_t)(g2.srcf_recov_time * 1000)) {
                     if (source_fallback_command_lane(SRCF_GPS_LANE)) {
+                        // a forced handback returns on a frame the offset
+                        // bound never checked, so pull the flow lane into
+                        // the GPS lane's once the switch lands
+                        srcf_state.align_pending = srcf_state.handback_forced;
                         srcf_state.lane_state = LaneState::GPS_PRIMARY;
                         gcs().send_text(MAV_SEVERITY_INFO, "SRCF: GPS recovered");
                     }
