@@ -210,62 +210,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 "(delta %.6f deg)" %
                 (baseline_lat, m.lat, lat_change_deg))
 
-    def EK3_PerCoreOptflowLogging(self):
-        '''XKF5 and XKFA are logged for every core, not just the primary'''
-        # Under EK3_SRC_OPTIONS SRC_PER_CORE the lane under test is usually not the
-        # primary, so a primary-only logging guard makes it unmeasurable. Two messages
-        # appearing is not enough: the values have to differ, or the guard could be
-        # logging the primary twice.
-        self.set_parameters({
-            "EK3_ENABLE": 1,
-            "AHRS_EKF_TYPE": 3,
-            "VISO_TYPE": 2,
-            "SERIAL5_PROTOCOL": 2,
-            "EK3_SRC2_POSXY": 6,
-            "EK3_SRC2_VELXY": 6,
-            "EK3_SRC2_POSZ": 6,
-            "EK3_SRC2_VELZ": 6,
-            "EK3_SRC2_YAW": 6,
-            "EK3_SRC_OPTIONS": 8,     # SRC_PER_CORE
-            "EK3_OPTIONS": 1 << 3,    # AglKfForOptflow, so XKFA is written at all
-            "LOG_FILE_DSRMROT": 1,
-        })
-        self.set_analog_rangefinder_parameters()
-        self.customise_SITL_commandline(["--serial5=sim:vicon"])
-        self.reboot_sitl()
-
-        self.wait_ready_to_arm()
-        self.takeoff(10)
-        self.delay_sim_time(5)
-        self.progress("Injecting VICON glitch so the two lanes diverge")
-        self.set_parameters({"SIM_VICON_GLIT_X": 100, "SIM_VICON_GLIT_Y": 100})
-        self.delay_sim_time(5)
-        self.set_parameters({"SIM_VICON_GLIT_X": 0, "SIM_VICON_GLIT_Y": 0})
-        self.do_RTL()
-        self.wait_disarmed(timeout=100)
-
-        dfreader = self.dfreader_for_current_onboard_log()
-        seen = {"XKF5": {}, "XKFA": {}}
-        while True:
-            m = dfreader.recv_match(type=["XKF5", "XKFA"])
-            if m is None:
-                break
-            mtype = m.get_type()
-            seen[mtype].setdefault(m.C, []).append(m)
-
-        for mtype in ("XKF5", "XKFA"):
-            cores = sorted(seen[mtype].keys())
-            self.progress("%s cores seen: %s" % (mtype, str(cores)))
-            if 0 not in cores or 1 not in cores:
-                raise NotAchievedException(
-                    "%s was not logged for both cores (saw %s)" % (mtype, str(cores)))
-            field = "HAGL" if mtype == "XKF5" else "HAgl"
-            v0 = [getattr(m, field) for m in seen[mtype][0]]
-            v1 = [getattr(m, field) for m in seen[mtype][1]]
-            if v0 == v1[:len(v0)] or v1 == v0[:len(v1)]:
-                raise NotAchievedException(
-                    "%s.%s is identical across cores, so the lanes are not distinct"
-                    % (mtype, field))
 
     def LoiterFlowBrakeOvershoot(self):
         '''Forward-jab overshoot in optical-flow Loiter at low height'''
@@ -16851,7 +16795,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
     def tests1c(self):
         '''return list of all tests'''
         ret = ([
-             self.EK3_PerCoreOptflowLogging,
              self.OpticalFlowFocusHeight,
              self.EK3_FlowAxisLockoutRecovery,
              self.BatteryFailsafe,

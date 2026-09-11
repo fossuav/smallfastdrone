@@ -23,10 +23,13 @@ Default is a dry run. Always finish a rebuild with py_compile, a
 duplicate-def scan and a suite load - this script does not replace those.
 """
 import argparse
+import os
 import io
 import re
 import subprocess
 import sys
+
+MASTER = os.environ.get("SFD_MASTER", "upstream/master")
 
 ENTRY = re.compile(r"^(\s*)self\.(\w+),\s*$")
 
@@ -152,10 +155,28 @@ def fix_dangling(lines, pr, a_file):
     except subprocess.CalledProcessError:
         src = []
 
+    # A PR head contains the whole of master, so a def being present there is
+    # NOT evidence the PR adds it. Insert only what the PR's own diff adds;
+    # anything else is a master-only test 4.7 does not carry, and inserting it
+    # ships a test that cannot pass here. CircuitStatusScript (needs a Lua
+    # script 4.7 lacks) and CompassLearnCopyFromEKFAffinity both arrived this
+    # way before the check existed.
+    try:
+        base = git("merge-base", "refs/sfdpr/%s" % pr, MASTER).strip()
+        diff = git("diff", "%s..refs/sfdpr/%s" % (base, pr),
+                   "--", "Tools/autotest/%s" % FILE_BASENAME)
+        pr_adds = {l.split("def ", 1)[1].split("(")[0]
+                   for l in diff.split("\n")
+                   if l.startswith("+    def ")}
+    except subprocess.CalledProcessError:
+        pr_adds = None
+
     inserted, dropped = [], []
     for name in dangling:
         s = next((i for i, l in enumerate(src)
                   if l.startswith("    def %s(" % name)), None)
+        if s is not None and pr_adds is not None and name not in pr_adds:
+            s = None          # present in the PR head only because master has it
         if s is None:
             dropped.append(name)
             continue
