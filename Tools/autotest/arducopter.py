@@ -20092,7 +20092,12 @@ return update, 1000
         # auto-set at the first arm and left unlocked so the re-arm takes
         # the !home_is_locked() branch; set_home() would lock it and skip
         # the branch, which is why RudderDisarmMidair does not cover this.
-        self.takeoff(150, mode='GUIDED', max_err=10)
+        # 200 m, not 150: the two disarm/re-arm cycles below each spend a
+        # second measuring while the vehicle falls at 15-17 m/s, so the
+        # recovery starts about 90 m below the takeoff. The arrest itself
+        # costs about 9 m at the 13.7 m/s^2 the controller achieves, so the
+        # 30 m floor needs that 90 m of sequencing paid for first
+        self.takeoff(200, mode='GUIDED', max_err=10)
         self.change_mode('STABILIZE')
         self.set_rc(3, 1000)
         self.disarm_vehicle(force=True)
@@ -20141,8 +20146,8 @@ return update, 1000
         # the altitude controller must see the real descent and arrest it.
         # ALT_HOLD treats a vehicle that has been disarmed as landed until
         # the pilot asks for a climb, so demand one to bring it in
-        self.change_mode('ALT_HOLD')
         self.set_rc(3, 1700)
+        self.change_mode('ALT_HOLD')
         self.wait_climbrate(0.5, 20, timeout=20)
         self.hover()
         self.wait_climbrate(-0.5, 0.5, timeout=20)
@@ -20157,10 +20162,10 @@ return update, 1000
         # so LAND reads its height above home as negative and descends at
         # the minimum rate, which from 100 m outlasts the disarm wait
         start = self.sitl_start_location()
-        ground_amsl_m = start.get_alt_m(AltFrame.ABSOLUTE)
+        ground_amsl_m = start.alt
         self.change_mode('GUIDED')
         self.fly_guided_move_to(
-            Location(start.lat, start.lng, ground_amsl_m + 20, AltFrame.ABSOLUTE),
+            mavutil.location(start.lat, start.lng, ground_amsl_m + 20, 0),
             timeout=120)
         self.wait_altitude(ground_amsl_m + 15, ground_amsl_m + 25, timeout=60,
                            altitude_source='SIM_STATE.alt')
