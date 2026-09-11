@@ -28,7 +28,6 @@ SITL_START_LOCATION = mavutil.location(-27.274439, 151.290064, 343, 8.7)
 
 class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
 
-    @staticmethod
     def CompassLearnCopyFromEKFAffinity(self):
         '''check EKF-learned offsets are saved for several compasses at once'''
         # A pure fixed-wing never satisfies the finalInflightMagInit
@@ -116,6 +115,7 @@ class AutoTestQuadPlane(vehicle_test_suite.TestSuite):
         self.assert_parameter_values(expected_offsets, epsilon=30)
 
 
+    @staticmethod
     def get_not_armable_mode_list():
         return []
 

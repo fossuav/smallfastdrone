@@ -37,7 +37,6 @@ WIND = "0,180,0.2"  # speed,direction,variance
 
 
 class AutoTestPlane(vehicle_test_suite.TestSuite):
-    @staticmethod
     def EK3HeightDatumResetFlushesBuffers(self):
         '''Verify resetHeightDatum flushes baro and output observer buffers'''
         # Plane::update_home() runs every 5 s while disarmed (with
@@ -124,6 +123,7 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
                 "(stale baro buffer not flushed on resetHeightDatum)" %
                 peak_excursion)
 
+    @staticmethod
     def get_not_armable_mode_list():
         return []
 

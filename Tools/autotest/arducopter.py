@@ -55,7 +55,6 @@ SITL_START_LOCATION = mavutil.location(
 
 
 class AutoTestCopter(vehicle_test_suite.TestSuite):
-    @staticmethod
     def send_position_target_local_ned(self, x, y, z_up):
         self.mav.mav.set_position_target_local_ned_send(
             0, # timestamp
@@ -730,6 +729,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("RNGFND1_TYPE", 0)
         self.reboot_sitl()
 
+    @staticmethod
     def get_not_armable_mode_list():
         return ["AUTO", "AUTOTUNE", "BRAKE", "CIRCLE", "FLIP", "LAND", "RTL", "SMART_RTL", "AVOID_ADSB", "FOLLOW"]
 
