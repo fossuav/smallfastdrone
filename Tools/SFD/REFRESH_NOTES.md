@@ -1257,3 +1257,70 @@ Both of the last two sit *after* the 30 m assertion, so they are only
 reached once that passes. That is the shape check_test_api.py does not
 cover: it checks helper names, keyword names and script names, not methods
 called on an object a helper returned.
+
+## Refresh of 2026-09-11: outcome
+
+Branch `SmallFastDrone-4.7.1-refresh5`, 241 commits on the base. Copter,
+plane and heli build. The SFD set is green: **60 of 60**, 0 crashes, about
+seven minutes end to end - the 6-8 hour budget elsewhere in this file is for
+runs with a crasher in them, which cost ~45 minutes each in reconnect stall.
+
+The base was the story. See "The base branch was never advanced to the
+2026-09-03 rebuild": `changed` reported a full rebuild moving forward when the
+branch had moved three months *back*, and refreshing onto it would have
+dropped all of AP_GroundEffect. The plan went from 397 commits to 249 once it
+was pointed at the right commit, which is the tell to remember.
+
+19 conflict stops in the code pass, mostly #32768/#32972 overlap - the two
+share three commit subjects and six of #32972's commits arrived already
+applied and committed empty. Genuine 4.7 work: `resetHeightDatum()` returning
+bool via `configured_ekf_type()`, and `AP_GPS_FixType::FIX_3D` ->
+`AP_DAL_GPS::GPS_OK_FIX_3D`.
+
+Four build breaks after the code pass, all master-isms the PR heads carry:
+`ekf3.EKF3` for 4.7's `EKF3`, `takeOffDetected` for `movedSinceArming`
+(#32232 renamed it after the other PRs were written), `zeroStatesVarCov()`
+for `zeroRows()`/`zeroCols()`, and a VALT guard on `MODE_ALTHOLD_ENABLED`
+which 4.7 does not define. Plus the standing index collision:
+ACC_ZBIAS_LEARN and THROW_DROP_AG both took 25 again, held at 23 and 21.
+
+### Three new helper scripts, and the two that were wrong first
+
+- `resolve_from_branch.py` - takes the shipped branch's resolution for a
+  conflicted file. Two guards, and the second is the one that bites; see
+  "Resolving a conflict from the previous branch: two guards, not one".
+- `resolve_hotfile.py` - the rebuild-tests recipes. It grew three corrections
+  in one session, each from a rule that was right for the file in front of it
+  and wrong for the next: duplicate detection must be qualified by enclosing
+  class (it deleted 29 classes from vehicle_test_suite.py before that);
+  `self.X,` is only a registration inside a `tests*()` body; and a def may
+  only be inserted from a PR head when the PR's **own diff** adds it, because
+  a PR head contains the whole of master.
+- `resolve_registration_union.py` - the registration-list union alone.
+
+### What the gates caught that nothing else would have
+
+`check_test_api.py` found nine `takeoff()` calls using master's
+`altitude_min`/`altitude_max`. On 4.7 `max_err` is a tolerance and the ceiling
+is `alt_min + max_err`, so `altitude_max=6` on a `takeoff(4, ...)` is
+`max_err=2`, not a rename.
+
+The suite load found a dangling `SITLGyroRate` and 17 duplicate registrations.
+Neither is visible to py_compile.
+
+The def-set diff against the previous branch is useful but **not** a
+specification: it reported `EK3_PerCoreOptflowLogging` missing, and restoring
+it reintroduced a test #34363 had already replaced with `EK3_PerCoreLogging`.
+Missing from the branch is not the same as wanted, because the branch is stale
+wherever a PR has moved.
+
+### Owed
+
+- `HeightDatumKeptOnMidairRearm` is the only test that needed a real answer,
+  and it was the test at fault, not the code. See the adaptations section
+  above; the ordering fix went to #32768 as `0ca1c9e775`.
+- That push makes #32768's dev-call APPROVE stale. Four PRs now need a fresh
+  round before the next refresh: #32232, #33585 and #32768 all went stale by
+  being pushed to.
+- The rr-cache is 13M against the ~2M the README quotes. Plausible after a
+  refresh with a 938-line conflict in it, but it is committed every time.
