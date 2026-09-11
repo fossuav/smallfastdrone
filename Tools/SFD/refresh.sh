@@ -1,0 +1,295 @@
+#!/bin/bash
+#
+# SFD branch refresh
+# -----------------
+# Rebuild the Small Fast Drone feature set on top of SmallFastDrone-4.7-base
+# (= vanilla 4.7 + the merged-upstream PRs + #33115 + the permanent SFD-local
+# hwdef; override with SFD_BASE) by cherry-picking the in-flight PR branches in
+# prs.txt, in order.
+#
+# Why this exists: the SFD branches are a curated stack of in-flight upstream
+# PRs. Those PRs keep evolving in review, so periodically we want to re-stack
+# the *current* PR heads onto the latest 4.7 to (a) get an up-to-date branch
+# and (b) surface where our local copy has drifted or been superseded upstream.
+#
+# Key behaviours:
+#   - PR heads are fetched via GitHub's pull/N/head, so author/fork is
+#     irrelevant (works for andyp1per, rishabsingh3003, rmackay9, ...).
+#   - Commits already patch-present in the base are skipped (git cherry).
+#   - Tools/autotest changes are deferred (dropped per commit) - the SITL
+#     tests collide heavily across PRs; pull them in as a batch afterwards
+#     with the "tests" step.
+#   - git rerere replays previously recorded conflict resolutions, so a
+#     refresh after this first one only stops on genuinely new conflicts.
+#
+# Usage:
+#   Tools/SFD/refresh.sh fetch     # fetch all PR heads listed in prs.txt
+#   Tools/SFD/refresh.sh plan      # compute the ordered apply list
+#   Tools/SFD/refresh.sh run       # cherry-pick; stop on each new conflict
+#   Tools/SFD/refresh.sh promote <branch>  # back up <branch>, then move it here
+#   Tools/SFD/refresh.sh survey    # like run but auto-resolve to base + log
+#   Tools/SFD/refresh.sh status    # progress / remaining
+#
+# After a "run" stops on a conflict: resolve it (rerere records it), `git add`
+# the files, `git commit -C <sha>` (the sha is printed), then re-run "run".
+#
+# Env overrides: SFD_BASE (default upstream/ArduPilot-4.7),
+#                SFD_MASTER (default upstream/master).
+
+set -u
+DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(git rev-parse --show-toplevel)"
+BASE="${SFD_BASE:-SmallFastDrone-4.7-base}"
+MASTER="${SFD_MASTER:-upstream/master}"
+DEFER="Tools/autotest"
+ST="$DIR/.state"
+LOCK="$DIR/applied.lock"   # tracked: per-PR head SHAs at the last refresh
+mkdir -p "$ST"
+
+prs() { sed 's/#.*//' "$DIR/prs.txt" | awk 'NF{print $1}'; }
+
+# Make rerere portable: recorded conflict resolutions live in the committed
+# rr-cache.tar.gz, so a refresh on a fresh clone / different machine replays them
+# instead of re-resolving from zero. ensure_rerere seeds an empty local cache from
+# the tarball; rerere_save (run after a refresh) prunes + re-archives it to commit.
+rr_path() {
+  local gd; gd="$(git rev-parse --git-common-dir)"
+  case "$gd" in /*) echo "$gd/rr-cache";; *) echo "$ROOT/$gd/rr-cache";; esac
+}
+ensure_rerere() {
+  git config rerere.enabled true
+  git config rerere.autoupdate true
+  local rr; rr="$(rr_path)"
+  if { [ ! -d "$rr" ] || [ -z "$(ls -A "$rr" 2>/dev/null)" ]; } && [ -f "$DIR/rr-cache.tar.gz" ]; then
+    mkdir -p "$rr"; tar -C "$rr" -xzf "$DIR/rr-cache.tar.gz"
+    echo "seeded rerere cache from Tools/SFD/rr-cache.tar.gz"
+  fi
+}
+do_rerere_save() {
+  local rr; rr="$(rr_path)"
+  [ -d "$rr" ] || { echo "no local rr-cache to save"; return 1; }
+  git rerere gc >/dev/null 2>&1 || true        # expire stale resolutions
+  for d in "$rr"/*/; do                         # drop unresolved (no postimage) entries
+    [ -d "$d" ] && [ ! -f "$d/postimage" ] && rm -rf "$d"
+  done
+  tar -C "$rr" -czf "$DIR/rr-cache.tar.gz" .
+  echo "wrote $DIR/rr-cache.tar.gz ($(du -h "$DIR/rr-cache.tar.gz" | cut -f1), $(ls -1d "$rr"/*/ 2>/dev/null | wc -l) resolutions) - commit it"
+}
+
+# Record the PR head SHAs (and base) that this refresh was built from. Commit the
+# result so a later refresh can tell which PRs actually moved.
+do_lock() {
+  { echo -e "BASE\t$(git rev-parse "$BASE")\t$BASE"
+    for n in $(prs); do
+      git rev-parse --verify -q "refs/sfdpr/$n" >/dev/null || continue
+      echo -e "$n\t$(git rev-parse "refs/sfdpr/$n")"
+    done
+  } > "$LOCK"
+  echo "wrote $LOCK ($(grep -c . "$LOCK") entries) - commit it"
+}
+
+# Report which PRs (and the base) moved since the lock. The unchanged ones replay
+# from the rerere cache with no manual work; focus on the CHANGED/NEW ones.
+do_changed() {
+  [ -f "$LOCK" ] || { echo "no $LOCK yet - run 'lock' after a clean refresh, commit it"; return 1; }
+  local ob nb; ob="$(awk -F'\t' '$1=="BASE"{print $2}' "$LOCK")"; nb="$(git rev-parse "$BASE")"
+  [ "$ob" = "$nb" ] && echo "base $BASE: unchanged" \
+    || echo "base $BASE: CHANGED $(git rev-parse --short "$ob")->$(git rev-parse --short "$nb") (full rebuild)"
+  local any=0
+  for n in $(prs); do
+    git rev-parse --verify -q "refs/sfdpr/$n" >/dev/null || { echo "  #$n: no ref (run 'fetch')"; any=1; continue; }
+    local o nw; o="$(awk -F'\t' -v p="$n" '$1==p{print $2}' "$LOCK")"; nw="$(git rev-parse "refs/sfdpr/$n")"
+    if [ -z "$o" ]; then echo "  #$n: NEW (not in lock)"; any=1
+    elif [ "$o" != "$nw" ]; then echo "  #$n: CHANGED $(git rev-parse --short "$o")->$(git rev-parse --short "$nw")"; any=1; fi
+  done
+  [ "$any" = 0 ] && echo "all PRs unchanged since the lock - nothing to refresh"
+}
+
+do_fetch() {
+  local rs=""
+  for n in $(prs); do rs="$rs +pull/$n/head:refs/sfdpr/$n"; done
+  echo "fetching $(prs | wc -l) PR heads ..."
+  git fetch upstream $rs
+}
+
+do_plan() {
+  : > "$ST/apply.txt"; : > "$ST/sha_pr.tsv"
+  for n in $(prs); do
+    local base; base="$(git merge-base "refs/sfdpr/$n" "$MASTER")"
+    # PR's own commits, oldest first, that are NOT already patch-present in BASE
+    git cherry "$BASE" "refs/sfdpr/$n" "$base" | awk '/^\+/{print $2}' | while read -r s; do
+      printf '%s\t%s\n' "$s" "$n" >> "$ST/sha_pr.tsv"
+    done
+  done
+  # preserve order, drop exact-duplicate SHAs (PRs that share a branch base)
+  awk -F'\t' '!seen[$1]++{print $1}' "$ST/sha_pr.tsv" > "$ST/apply.txt"
+  echo "plan: $(wc -l < "$ST/apply.txt") commits to apply"
+}
+
+prog() { cat "$ST/progress.idx" 2>/dev/null || echo 0; }
+
+do_run() {  # mode: stop (default) or survey
+  local mode="${1:-stop}"
+  [ -s "$ST/apply.txt" ] || { echo "run 'plan' first"; exit 1; }
+  mapfile -t S < "$ST/apply.txt"
+  local i; i="$(prog)"; local n=${#S[@]}
+  while [ "$i" -lt "$n" ]; do
+    local sha="${S[$i]}" pr subj
+    pr="$(grep -m1 -F "$sha" "$ST/sha_pr.tsv" | cut -f2)"
+    subj="$(git log -1 --format=%s "$sha")"
+    if git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then i=$((i+1)); echo "$i">"$ST/progress.idx"; continue; fi
+    git cherry-pick -n "$sha" >/dev/null 2>&1
+    # defer autotest changes (rerere/resolutions never needed for tests)
+    git checkout HEAD -- "$DEFER" 2>/dev/null
+    git diff --cached --name-only --diff-filter=A -- "$DEFER" | xargs -r git rm -f -q 2>/dev/null
+    # add any files rerere auto-resolved (no conflict markers left)
+    for f in $(git diff --name-only --diff-filter=U -- . ":!$DEFER"); do
+      grep -q '^<<<<<<<' "$f" 2>/dev/null || git add "$f"
+    done
+    local unresolved; unresolved="$(git diff --name-only --diff-filter=U -- . ":!$DEFER")"
+    if [ -n "$unresolved" ]; then
+      if [ "$mode" = survey ]; then
+        echo "CONFLICT|#$pr|$(git rev-parse --short "$sha")|$subj|$(echo $unresolved|tr '\n' ' ')" >> "$ST/conflicts.log"
+        for f in $unresolved; do git checkout --ours -- "$f" 2>/dev/null || git rm -f -q "$f"; git add "$f"; done
+      else
+        echo "== CONFLICT at #$pr  $(git rev-parse --short "$sha")  $subj"
+        echo "   files: $unresolved"
+        echo "   resolve, 'git add' them, then: git commit -C $sha ; echo $((i+1)) > $ST/progress.idx ; re-run"
+        exit 2
+      fi
+    fi
+    if git diff --cached --quiet; then
+      git checkout -- . 2>/dev/null; git cherry-pick --quit 2>/dev/null
+      echo "skip   #$pr  $subj" >> "$ST/applied.log"
+    else
+      git commit -C "$sha" -q
+      git cherry-pick --quit 2>/dev/null
+      echo "apply  #$pr  $(git rev-parse --short HEAD)  $subj" >> "$ST/applied.log"
+    fi
+    i=$((i+1)); echo "$i">"$ST/progress.idx"
+  done
+  echo "DONE: processed $i/$n"
+}
+
+# Phase 2: bring the deferred Tools/autotest changes back in. Inverse of do_run -
+# replay the same commit list keeping ONLY the autotest hunks (the feature code is
+# already on the branch) and auto-resolving test-vs-test collisions by keeping both
+# sides. Run AFTER the code pass + a successful build.
+#
+# CAVEAT (see REFRESH_NOTES.md "Phase 2"): keep-both produces invalid Python where
+# PRs edit the same registration list / method. After this runs, py_compile the
+# touched files; for the few that break, take the integrated copy from the loiter
+# branch (`git checkout SmallFastDrone-4.7-beta-loiter -- <file>`) until the per-PR
+# test merges are done properly. Those loiter files assert loiter-era behaviour and
+# may not match the current PR code (a flow-lockout test mismatch is known).
+do_tests() {
+  [ -s "$ST/apply.txt" ] || { echo "run 'plan' first"; exit 1; }
+  mapfile -t S < "$ST/apply.txt"
+  local i; i="$(cat "$ST/tprog.idx" 2>/dev/null || echo 0)"; local n=${#S[@]}
+  while [ "$i" -lt "$n" ]; do
+    local sha="${S[$i]}" pr; pr="$(grep -m1 -F "$sha" "$ST/sha_pr.tsv" | cut -f2)"
+    git cherry-pick -n "$sha" >/dev/null 2>&1
+    # drop every non-autotest change (code already applied); keep Tools/autotest
+    for f in $(git diff --cached --name-only; git diff --name-only --diff-filter=U); do
+      case "$f" in Tools/autotest/*) ;; *) git checkout HEAD -- "$f" 2>/dev/null || git rm -f -q "$f" 2>/dev/null;; esac
+    done
+    # auto-resolve test collisions: keep both sides (additive)
+    for f in $(git diff --name-only --diff-filter=U -- Tools/autotest); do
+      sed -i '/^<<<<<<< /d; /^=======$/d; /^>>>>>>> /d' "$f"; git add "$f"
+      echo "#$pr $f" >> "$ST/tconflicts.log"
+    done
+    if git diff --cached --quiet; then
+      git checkout -- . 2>/dev/null; git cherry-pick --quit 2>/dev/null
+    else
+      git commit -C "$sha" -q; git cherry-pick --quit 2>/dev/null
+    fi
+    i=$((i+1)); echo "$i">"$ST/tprog.idx"
+  done
+  echo "DONE (tests): processed $i/$n; now py_compile the Tools/autotest files touched in $ST/tconflicts.log"
+}
+
+# The few files where PRs edit the same registration list / method, so keep-both
+# (do_tests) yields invalid Python. Rebuild these from the PR heads instead of
+# the loiter scaffold (see rebuild_testfile.sh / REFRESH_NOTES.md "Phase 2").
+HOTFILES="Tools/autotest/arducopter.py Tools/autotest/arduplane.py Tools/autotest/quadplane.py Tools/autotest/vehicle_test_suite.py"
+
+do_rebuild_tests() {
+  # resumable via per-file .applied sidecars in .state; to restart a hot file
+  # from base, delete its sidecar (or clear .state for a fresh refresh cycle).
+  for f in $HOTFILES; do
+    echo "=== $f ==="
+    bash "$DIR/rebuild_testfile.sh" "$f" || {
+      echo "STOP: resolve manual conflicts in $f, then re-run 'rebuild-tests'"; exit 2; }
+  done
+  echo "DONE (rebuild-tests): hot files rebuilt from PR heads"
+}
+
+# A refresh rewrites the branch it replaces, so never move one without first
+# parking the old tip. backup names the copy <stem>.<n><suffix> with the next free
+# index (SmallFastDrone-4.7.1-beta -> SmallFastDrone-4.7.1.1-beta); promote does
+# the backup and the move together so the backup cannot be forgotten.
+backup_name() {
+  local br="$1" stem suffix n=0 b i
+  case "$br" in
+    *-beta) stem="${br%-beta}"; suffix="-beta";;
+    *)      stem="$br"; suffix="";;
+  esac
+  for b in $(git for-each-ref --format='%(refname:short)' "refs/heads/$stem.*$suffix" 2>/dev/null); do
+    i="${b#"$stem."}"; i="${i%"$suffix"}"
+    case "$i" in ''|*[!0-9]*) continue;; esac
+    [ "$i" -gt "$n" ] && n="$i"
+  done
+  echo "$stem.$((n+1))$suffix"
+}
+
+do_backup() {
+  local br="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+  git rev-parse --verify -q "$br" >/dev/null || { echo "no such branch: $br"; return 1; }
+  local dst; dst="$(backup_name "$br")"
+  git branch "$dst" "$br" || return 1
+  echo "backed up $br ($(git rev-parse --short "$br")) -> $dst"
+}
+
+do_promote() {
+  local target="${1:-}" source="${2:-$(git rev-parse --abbrev-ref HEAD)}"
+  [ -n "$target" ] || { echo "usage: refresh.sh promote <target-branch> [source-branch]"; return 1; }
+  git rev-parse --verify -q "$source" >/dev/null || { echo "no such branch: $source"; return 1; }
+  # check before backing up, so a refusal does not leave a stray backup behind
+  [ "$target" = "$source" ] && { echo "$target is already the source - nothing to do"; return 1; }
+  if [ "$target" = "$(git rev-parse --abbrev-ref HEAD)" ]; then
+    echo "$target is checked out; switch to another branch first"; return 1
+  fi
+  if git rev-parse --verify -q "$target" >/dev/null; then
+    do_backup "$target" || return 1
+  else
+    echo "$target does not exist yet - nothing to back up"
+  fi
+  git branch -f "$target" "$source" || return 1
+  echo "$target now at $(git rev-parse --short "$target") (was $source)"
+  # a promote only needs a force push when it drops commits the remote already
+  # has; reordering or replacing unpushed work still fast-forwards
+  local rt="${SFD_REMOTE:-origin}/$target"
+  if git rev-parse --verify -q "$rt" >/dev/null; then
+    if git merge-base --is-ancestor "$rt" "$target" 2>/dev/null; then
+      echo "$rt is an ancestor, so the follow-up push is a fast-forward."
+    else
+      echo "NOTE: $rt still has the old history - that push is a force push."
+    fi
+  fi
+}
+
+case "${1:-run}" in
+  fetch)  do_fetch ;;
+  plan)   do_plan ;;
+  changed) do_changed ;;
+  run)    ensure_rerere; do_run stop ;;
+  survey) ensure_rerere; : > "$ST/conflicts.log"; do_run survey ;;
+  tests)  ensure_rerere; : > "$ST/tconflicts.log"; rm -f "$ST/tprog.idx"; do_tests ;;
+  rebuild-tests) ensure_rerere; do_rebuild_tests ;;
+  lock)   do_lock ;;
+  backup) shift; do_backup "${1:-}" ;;
+  promote) shift; do_promote "${1:-}" "${2:-}" ;;
+  rerere-save) do_rerere_save ;;
+  status) echo "progress $(prog)/$(wc -l < "$ST/apply.txt" 2>/dev/null || echo '?'); $(git rev-list --count "$BASE"..HEAD 2>/dev/null) commits on branch" ;;
+  *) echo "usage: refresh.sh {fetch|plan|changed|run|survey|tests|rebuild-tests|backup|promote|lock|rerere-save|status}"; exit 1 ;;
+esac
