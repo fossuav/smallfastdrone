@@ -156,10 +156,6 @@
 #include <AC_CustomControl/AC_CustomControl.h>                  // Custom control library
 #endif
 
-#if MODE_VALT_ENABLED && !MODE_ALTHOLD_ENABLED
-  #error VALT mode requires AltHold; disable MODE_VALT_ENABLED or enable MODE_ALTHOLD_ENABLED
-#endif
-
 #if AP_AVOIDANCE_ENABLED && !AP_FENCE_ENABLED
   #error AC_Avoidance relies on AP_FENCE_ENABLED which is disabled
 #endif

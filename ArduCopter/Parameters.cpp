@@ -1081,7 +1081,7 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Bitmask: 0:Learn and Save,1:Use Saved Values,2:Inhibit Disarmed Learning
     // @User: Advanced
     // @RebootRequired: True
-    AP_GROUPINFO("ACC_ZBIAS_LEARN", 25, ParametersG2, accel_zbias_learn, 0),
+    AP_GROUPINFO("ACC_ZBIAS_LEARN", 23, ParametersG2, accel_zbias_learn, 0),
 
     // @Param: FS_EKF_FILT
     // @DisplayName: EKF Failsafe filter cutoff
@@ -1196,7 +1196,7 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Range: 1.0 4.0
     // @Increment: 0.1
     // @User: Advanced
-    AP_GROUPINFO("THROW_DROP_AG", 25, ParametersG2, throw_drop_ag, 1.0),
+    AP_GROUPINFO("THROW_DROP_AG", 21, ParametersG2, throw_drop_ag, 1.0),
 
     // @Param: THROW_DROP_CNF
     // @DisplayName: Drop confirmation time
