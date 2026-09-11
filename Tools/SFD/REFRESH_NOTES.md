@@ -1229,3 +1229,31 @@ Check before assuming: `git show <sha> --stat` and confirm every addition is
 already in the tree. `8f7487dfa5` looked like a no-op and was one, but it is
 named "refresh on-ground references" and it would have been easy to drop
 `vertCompFiltState.pos` with it.
+
+## HeightDatumKeptOnMidairRearm: three 4.7 adaptations (2026-09-11)
+
+The test lives on #32768 and its body is written against master. Carry the
+PR head's version and re-apply these three, rather than keeping a local
+rewrite - the 2026-09-11 refresh produced a stale 150 m copy because a
+diff3 resolution took the branch's older version over the PR's, and the
+result failed its own 30 m assertion at 12.1 m.
+
+    takeoff(250, mode='GUIDED', altitude_max=260, timeout=180)
+      -> takeoff(250, mode='GUIDED', max_err=10, timeout=180)
+
+Copter's takeoff() on 4.7 has `max_err`, a tolerance, where master has
+`altitude_max`, a ceiling: the bound is `alt_min + max_err`, so a 260 m
+ceiling on a 250 m takeoff is `max_err=10`.
+
+    ground_amsl_m = start.get_alt_m(AltFrame.ABSOLUTE)   -> start.alt
+    Location(lat, lng, alt, AltFrame.ABSOLUTE)           -> mavutil.location(lat, lng, alt, 0)
+
+`sitl_start_location()` returns a `mavutil.location`, which has only
+lat/lng/alt/heading. 4.7 does have its own `Location` class with
+`get_alt_m()` (vehicle_test_suite.py), which is why a grep for the method
+finds it and suggests the call is fine - it is the receiver that is wrong.
+
+Both of the last two sit *after* the 30 m assertion, so they are only
+reached once that passes. That is the shape check_test_api.py does not
+cover: it checks helper names, keyword names and script names, not methods
+called on an object a helper returned.

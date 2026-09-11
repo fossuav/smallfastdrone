@@ -20092,16 +20092,13 @@ return update, 1000
         # auto-set at the first arm and left unlocked so the re-arm takes
         # the !home_is_locked() branch; set_home() would lock it and skip
         # the branch, which is why RudderDisarmMidair does not cover this.
-        # 200 m, not 150: the two disarm/re-arm cycles below each spend a
-        # second measuring while the vehicle falls at 15-17 m/s, so the
-        # recovery starts about 90 m below the takeoff. The arrest itself
-        # costs about 9 m at the 13.7 m/s^2 the controller achieves, so the
-        # 30 m floor needs that 90 m of sequencing paid for first
-        self.takeoff(200, mode='GUIDED', max_err=10)
+        # raise the stream rate before taking off: the context form spends ten
+        # seconds measuring the old rate, which is 170 m of fall if done later
+        self.context_set_message_rate_hz('LOCAL_POSITION_NED', 20)
+        self.takeoff(250, mode='GUIDED', max_err=10, timeout=180)
         self.change_mode('STABILIZE')
         self.set_rc(3, 1000)
         self.disarm_vehicle(force=True)
-        self.set_message_rate_hz('LOCAL_POSITION_NED', 20)
         # let the fall develop so that a velocity reset would show
         pre = self.assert_receive_message(
             'LOCAL_POSITION_NED', condition='LOCAL_POSITION_NED.vz > 5', timeout=10)
@@ -20115,10 +20112,11 @@ return update, 1000
             min_vz = min(min_vz, m.vz)
             max_z = max(max_z, m.z)
         self.progress("Post-rearm min vz=%.1f m/s max z=%.1f m" % (min_vz, max_z))
-        # still falling, so vz must not step towards zero and z may only
-        # grow by the fall itself (20-30 m here); a datum reset zeroes
-        # the velocity, and relabelling the origin frame would step z by
-        # the whole height
+        # still falling, so vz must not step towards zero: the reset zeroes
+        # velocity.z with nothing to compensate it, which is what this
+        # catches.  The z bound is only a sanity check: getPosD() subtracts
+        # ekfGpsRefHgt, which the reset moves by the height it zeroes, so the
+        # two cancel and a datum reset alone cannot step it
         if pre.vz - min_vz > 1.0:
             raise NotAchievedException(
                 "Vertical velocity stepped from %.1f to %.1f m/s across the re-arm" %
@@ -20167,7 +20165,9 @@ return update, 1000
         self.fly_guided_move_to(
             mavutil.location(start.lat, start.lng, ground_amsl_m + 20, 0),
             timeout=120)
-        self.wait_altitude(ground_amsl_m + 15, ground_amsl_m + 25, timeout=60,
+        # fly_guided_move_to waits on horizontal distance and groundspeed, so
+        # most of the descent can be left to this wait at the default WP_SPD_DN
+        self.wait_altitude(ground_amsl_m + 15, ground_amsl_m + 25, timeout=240,
                            altitude_source='SIM_STATE.alt')
         self.land_and_disarm()
 
