@@ -1324,3 +1324,111 @@ wherever a PR has moved.
   being pushed to.
 - The rr-cache is 13M against the ~2M the README quotes. Plausible after a
   refresh with a 938-line conflict in it, but it is committed every time.
+
+## PR review pass of 2026-09-12, and what the next refresh must do
+
+A pass over the manifest PRs carrying a REQUEST CHANGES verdict. The per-PR
+detail is in `../ardupilot-pr-analysis/<n>/`; this section records only what
+the next refresh has to know. **The next step is a refresh and a full SFD test
+rerun.**
+
+### MUST DO: ARMING_DELAY_MSEC is now silently ignored
+
+#32398 was redesigned. Its input is now `ARMING_DELAY_MS`, and it raises
+`#error` on the old upstream name `ARMING_DELAY_SEC`. It does **not** catch
+`ARMING_DELAY_MSEC`, the name from its own earlier revision - and that is the
+name this tree uses.
+
+Nine boards set it, every one through an SFD-local hwdef commit baked into
+`SmallFastDrone-4.7-base`, so the refresh will not touch them:
+
+    SmallFastDronev1 (1bf6b3ddc0)   BlitzF745 (116eb3eb34)
+    BlitzF745AIO (a6924b0e27)       BETAFPV-F405 (d0ab81f909)
+    MambaH743v4 (d4ce422782)        ARK_FPV (aca4f25730)
+    MicoAir405v2 (8bc0695edf)       MicoAir743v2 (f4adc6dad4)
+    MatekH743-bdshot (00b095bb7c)
+
+Every one has `define ARMING_DELAY_MSEC 0`. After the refresh picks up the new
+#32398 head, that define matches nothing, `ARMING_DELAY_MS` takes its 2000
+default, and **every SFD board silently gets a 2 s arming delay back**. The
+build stays clean.
+
+Before shipping the refreshed branch, rename `ARMING_DELAY_MSEC` to
+`ARMING_DELAY_MS` in those nine hwdefs, either by rebuilding the base with the
+hwdef commits amended or with a post-merge fixup recorded in the section of that
+name above. The three skyviper boards come from #32398 itself and are already
+correct. Cheap extra insurance, not yet done: an `#error` on
+`ARMING_DELAY_MSEC` in #32398 would make a missed rename stop the build.
+
+Verify with `grep -rn ARMING_DELAY_MSEC libraries/ ArduCopter/` returning nothing.
+
+### Heads that moved (applied.lock is stale for these, as expected)
+
+| PR | new head | what changed |
+|---|---|---|
+| #34363 | `759e895374` | comment placement, test settle delay removed, DataFlashErase ceiling 1980 -> 1990 KiB |
+| #33507 | `45e7d66369` | AGL KF variance caps scale the row and column, bias bounded by EK3_ACC_BIAS_LIM, excursion test |
+| #33585 | `76f3428d1a` | terrain state carried across a height timeout reset, EK3_TerrainStateFollowsHeightReset |
+| #34292 | `0374a23d84` | FlowHeightMinTerrainPath test |
+| #32553 | `1714711b33` | **rebased from a 12 May master**; latch fix; TerrainOffsetGroundEffectRecovery |
+| #32398 | `904630fd82` | **rebased from a 17 March master**; three commits replaced by one, input renamed to ARMING_DELAY_MS |
+
+#32553 and #32398 were months behind master. Their earlier heads predated
+`AP_GroundEffect` and several master refactors, so expect their conflict shape
+to change; the rr-cache resolutions for those two are for the old heads.
+
+### New in the manifest
+
+**#34380**, AC_Avoid: the optical flow height limit stops a climb without backing
+the vehicle down. It is placed after #33568, which widens how many vehicles reach
+that limit. Independent of every other PR; applies to `libraries/AC_Avoidance/`
+only. Test `FlowCeilingDoesNotBackUp`.
+
+### Test expectations for the rerun
+
+- `TerrainOffsetGroundEffectRecovery` (#32553) **fails by design**. It records
+  that the ground effect reset runs on contaminated baro once the 5 s
+  `AP_GROUNDEFFECT_TAKEOFF_MAX_MS` cap closes the window while the vehicle is still
+  low. Not a refresh regression; do not "fix" it in the refresh.
+- New tests that should pass: `EK3_TerrainStateFollowsHeightReset`,
+  `FlowHeightMinTerrainPath`, `FlowCeilingDoesNotBackUp`, and the extended
+  `OpticalFlowAGLKalmanFilter` (#33507's excursion subtest, which needs a
+  lidar-class range finder config and sets it itself).
+- `DataFlashErase` needs #34363's raised ceiling; without it it fails by about
+  0.5 KiB.
+
+### The 2026-09-11 owed list
+
+- **Four PRs needing a fresh AI review round** - cleared. The AIReview labels
+  delivered; the sweep on 2026-09-12 read 41 of 42 current, the exception being
+  #27893, which merged.
+- **`origin/SmallFastDrone-4.7-base` force push** - pushed at the end of this
+  session, with the June tip `99414094f6` pushed alongside as
+  `SmallFastDrone-4.7-base.1` so origin does not lose it; it was reachable there
+  only through the base branch itself.
+- **rr-cache at 13M** - still open.
+- **#32232's five-leg re-run** - still open.
+
+### Traps met this session that affect refresh and test work
+
+- **`.claude/skills/autotest/run_autotest.py` is pinned to the clone it is
+  installed in.** It resolves the harness from its own path, so invoking it by
+  absolute path from another worktree silently runs *this* clone's tests. In
+  other worktrees run `Tools/autotest/autotest.py` directly with `BUILDLOGS` set.
+- **A new worktree needs submodules, and `--reference` makes it quick.**
+  `git submodule update --init --reference <main clone>/.git/modules/modules/<m>`
+  for waf, mavlink, littlefs, lwip and the four DroneCAN modules is enough for a
+  SITL copter build; ChibiOS alone is 204M and is not needed for SITL.
+- **`grant_push.py` checks branch names against this clone.** Fetching a PR
+  branch in to satisfy it is refused if a local branch of that name already
+  exists at another commit, and deleting "the temporary copy" afterwards deletes
+  the real branch. Happened to `pr-optflow-flat-ground` and `pr-copter-arm-delay`
+  and was restored at the same commits. Check `git rev-parse --verify` before
+  fetching.
+- **TCP port 5760 can be held on the Windows side of WSL**, invisible to `ss` and
+  `lsof`, and every SITL instance then fails to bind. It cleared on its own after
+  about 40 minutes. `--uds` is broken in current master's harness.
+- **EKF probe output belongs in the dataflash.** `GCS_SEND_TEXT` drops under load,
+  and `::fprintf(stderr)` survives but interleaves out of order with the harness's
+  stdout across a SITL reboot. A temporary `AP::logger().Write()` message was
+  right every time.
