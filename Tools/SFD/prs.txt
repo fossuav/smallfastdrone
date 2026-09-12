@@ -47,6 +47,7 @@
 33507   # AGL KF accel-Z bias estimation
 33543   # AP_Param loaded defaults count
 33568   # Optical flow relative-aiding fallback on GPS loss
+34380   # AC_Avoid: flow height limit stops a climb without backing the vehicle down (widened exposure by #33568)
 33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H
 34251   # Persist the fixed notch conversion to INS_HNTC2 (Copter + Plane)
 33879   # FFT notch tune: persist the tracking mode and name the notch used
