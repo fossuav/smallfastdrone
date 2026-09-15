@@ -597,7 +597,10 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
             uint32_t kalman_mask = (1<<7) | (1<<8) | (1<<9);
 
             if (!inhibitDelAngBiasStates) {
-                kalman_mask |= (1<<10) | (1<<11) | (1<<12);
+                kalman_mask |= (1<<10) | (1<<11);
+                if (recentYawFusion()) {
+                    kalman_mask |= (1<<12);
+                }
             }
 
             if (!accelBiasLearningInhibited() && !badIMUdata) {
@@ -760,7 +763,10 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
             uint32_t kalman_mask = (1<<7) | (1<<8) | (1<<9);
 
             if (!inhibitDelAngBiasStates) {
-                kalman_mask |= (1<<10) | (1<<11) | (1<<12);
+                kalman_mask |= (1<<10) | (1<<11);
+                if (recentYawFusion()) {
+                    kalman_mask |= (1<<12);
+                }
             }
 
             if (!accelBiasLearningInhibited() && !badIMUdata) {
