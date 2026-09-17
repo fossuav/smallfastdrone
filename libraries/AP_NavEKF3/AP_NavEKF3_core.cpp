@@ -211,6 +211,11 @@ void NavEKF3_core::InitialiseVariables()
     timeAtLastAuxEKF_ms = imuSampleTime_ms;
     flowValidMeaTime_ms = imuSampleTime_ms;
     rngValidMeaTime_ms = imuSampleTime_ms;
+    memset(&rngOutOfRangeLowTime_ms, 0, sizeof(rngOutOfRangeLowTime_ms));
+    flowFocusRngAgl = 0;
+    flowFocusRngPosD = 0;
+    flowFocusRngValid = false;
+    flowFocusBelow = false;
     flowMeaTime_ms = 0;
     prevFlowFuseTime_ms = 0;
 #if EK3_FEATURE_OPTFLOW_AGL_KF

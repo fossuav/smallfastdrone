@@ -1345,6 +1345,11 @@ private:
     Vector2F auxFlowObsInnov;       // optical flow rate innovation from 1-state terrain offset estimator
     uint32_t flowValidMeaTime_ms;   // time stamp from latest valid flow measurement (msec)
     uint32_t rngValidMeaTime_ms;    // time stamp from latest valid range measurement (msec)
+    uint32_t rngOutOfRangeLowTime_ms[DOWNWARD_RANGEFINDER_MAX_INSTANCES]; // time stamps of the latest out of range low report from each downward range finder (msec)
+    ftype flowFocusRngAgl;          // tilt corrected range of the latest range sample recalled, for the flow focus height check (m)
+    ftype flowFocusRngPosD;         // vertical position when that range sample was recalled (m)
+    bool flowFocusRngValid;         // a range sample has been recalled for the flow focus height check
+    bool flowFocusBelow;            // optical flow is held off below its focus height
     uint32_t flowMeaTime_ms;        // time stamp from latest flow measurement (msec)
     uint32_t gndHgtValidTime_ms;    // time stamp from last terrain offset state update (msec)
     bool prevGndEffectActive;       // ground effect active from previous frame, for transition detection
