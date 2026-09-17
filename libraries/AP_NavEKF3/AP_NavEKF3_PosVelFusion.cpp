@@ -291,6 +291,7 @@ void NavEKF3_core::ResetPositionD(ftype posD)
     for (uint8_t i=0; i<imu_buffer_length; i++) {
         storedOutput[i].position.z += posResetD;
     }
+    flowFocusRngPosD += posResetD;
 
     // store the time of the reset
     lastPosResetD_ms = imuSampleTime_ms;
@@ -331,6 +332,7 @@ void NavEKF3_core::ResetHeight(void)
 
     // Calculate the position jump due to the reset
     posResetD = stateStruct.position.z - posResetD;
+    flowFocusRngPosD += posResetD;
 
     // store the time of the reset
     lastPosResetD_ms = imuSampleTime_ms;
