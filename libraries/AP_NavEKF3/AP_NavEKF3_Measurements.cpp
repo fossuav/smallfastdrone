@@ -58,6 +58,9 @@ void NavEKF3_core::readRangeFinder(void)
                 // only consume downward facing rangefinder data
                 continue;
             }
+            if (sensor->status() == AP_DAL_RangeFinder::Status::OutOfRangeLow) {
+                rngOutOfRangeLowTime_ms[sensorIndex] = imuSampleTime_ms;
+            }
             float range_distance = 0.0f;
             if (sensor->status() == AP_DAL_RangeFinder::Status::Good) {
                 // get the current range measurement
@@ -185,7 +188,7 @@ void NavEKF3_core::writeWheelOdom(float delAng, float delTime, uint32_t timeStam
 #if EK3_FEATURE_OPTFLOW_FUSION
 // write the raw optical flow measurements
 // this needs to be called externally.
-void NavEKF3_core::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f &rawFlowRates, const Vector2f &rawGyroRates, const uint32_t msecFlowMeas, const Vector3f &posOffset, float heightOverride)
+void NavEKF3_core::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f &rawFlowRates, const Vector2f &rawGyroRates, const uint32_t msecFlowMeas, const Vector3f &posOffset, float heightOverride, float minHeight)
 {
 #if EK3_FEATURE_OPTFLOW_AGL_KF
     // a poor lockout sample latches flow out, but a sensor that drops out over a bad patch and then
@@ -253,6 +256,8 @@ void NavEKF3_core::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f
         // carry the sensor's own quality to the fusion time horizon, where it can be
         // matched against the sample it describes
         ofDataNew.quality = rawFlowQuality;
+        // the height below which this sensor cannot focus, reported by the flow library
+        ofDataNew.minHeight = minHeight;
         // write flow rate measurements corrected for body rates
         ofDataNew.flowRadXYcomp.x = ofDataNew.flowRadXY.x + ofDataNew.bodyRadXYZ.x;
         ofDataNew.flowRadXYcomp.y = ofDataNew.flowRadXY.y + ofDataNew.bodyRadXYZ.y;
