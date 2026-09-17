@@ -290,6 +290,7 @@ void NavEKF3_core::ResetPositionD(ftype posD)
     for (uint8_t i=0; i<imu_buffer_length; i++) {
         storedOutput[i].position.z += posResetD;
     }
+    flowFocusRngPosD += posResetD;
 
     // store the time of the reset
     lastPosResetD_ms = imuSampleTime_ms;
@@ -332,6 +333,7 @@ void NavEKF3_core::ResetHeight(void)
 
     // Calculate the position jump due to the reset
     posResetD = stateStruct.position.z - posResetD;
+    flowFocusRngPosD += posResetD;
 
     // store the time of the reset
     lastPosResetD_ms = imuSampleTime_ms;
@@ -419,7 +421,9 @@ bool NavEKF3_core::resetHeightDatum(void)
     // clear the baro data buffer
     storedBaro.reset();
 
-    // reset the vertical position and velocity states
+    // reset the vertical position and velocity states.  The carried range sample
+    // moves with the datum: the ground did not shift relative to the vehicle
+    flowFocusRngPosD += oldHgt;
     stateStruct.position.z = 0.0f;
     stateStruct.velocity.z = 0.0f;
     for (uint8_t i=0; i<imu_buffer_length; i++) {

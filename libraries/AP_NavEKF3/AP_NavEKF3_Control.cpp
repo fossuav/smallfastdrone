@@ -449,6 +449,7 @@ void NavEKF3_core::setAidingMode()
             // The offset is removed because height fusion works in that frame, and it is non-zero from the arming reset on
             meaHgtAtTakeOff = baroDataDelayed.hgt - baroHgtOffset;
             // reset the vertical position state to faster recover from baro errors experienced during touchdown
+            flowFocusRngPosD += -meaHgtAtTakeOff - stateStruct.position.z;
             stateStruct.position.z = -meaHgtAtTakeOff;
             // store the current height to be used to keep reporting
             // the last known position
