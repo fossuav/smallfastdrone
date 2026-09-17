@@ -42,6 +42,7 @@
     LOG_RBOH_MSG, \
     LOG_RTER_MSG, \
     LOG_RISK_MSG, \
+    LOG_ROFM_MSG, \
     LOG_RRNJ_MSG
 
 // @LoggerMessage: RFRH
@@ -519,6 +520,14 @@ struct log_ROFH {
     uint8_t _end;
 };
 
+// @LoggerMessage: ROFM
+// @Description: Replay optical flow sensor metadata (low-rate, only logged when changed)
+// @Field: HgtMin: height below which the sensor cannot focus, in meters
+struct log_ROFM {
+    float minHeight;
+    uint8_t _end;
+};
+
 // @LoggerMessage: REPH
 // @Description: Replay external position data
 // @Field: PX: external position estimate, X-axis
@@ -699,5 +708,7 @@ struct log_RTER {
       "RBOH", "ffffffffIfffH", "Q,DPX,DPY,DPZ,DAX,DAY,DAZ,DT,TS,OX,OY,OZ,D", "-------------", "-------------" }, \
     { LOG_RTER_MSG, RLOG_SIZE(RTER),                                   \
       "RTER", "f", "Alt", "m", "0" }, \
+    { LOG_ROFM_MSG, RLOG_SIZE(ROFM),                                   \
+      "ROFM", "f", "HgtMin", "m", "0" }, \
     { LOG_RRNJ_MSG, RLOG_SIZE(RRNJ),                                   \
       "RRNJ", "IB", "LU,I", "-#", "--" },
