@@ -471,6 +471,7 @@ void NavEKF3_core::setAidingMode()
             // reset the vertical position state to faster recover from baro errors experienced during touchdown,
             // but not to a baro in ground effect, which would put its prop wash error into the height
             if (!(motorsArmed && (dal.get_takeoff_expected() || dal.get_touchdown_expected()) && !assume_zero_sideslip())) {
+                flowFocusRngPosD += -meaHgtAtTakeOff - stateStruct.position.z;
                 stateStruct.position.z = -meaHgtAtTakeOff;
             }
             // store the current height to be used to keep reporting
@@ -619,6 +620,12 @@ bool NavEKF3_core::readyToUseOptFlow(void) const
         return false;
     }
 #endif
+    // flow the focus height check is discarding cannot aid, and without this a vehicle held below
+    // its floor, as on the ground after a landing, leaves AID_RELATIVE on the timeout and re-enters
+    // on the next sample, every 5 s
+    if (flowFocusBelow) {
+        return false;
+    }
 
     // We need stable roll/pitch angles and gyro bias estimates but do not need the yaw angle aligned to use optical flow
     return (imuSampleTime_ms - flowMeaTime_ms < 200) && tiltAlignComplete && delAngBiasLearned;
