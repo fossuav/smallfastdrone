@@ -20991,7 +20991,7 @@ return update, 1000
         # raise the stream rate before taking off: the context form spends ten
         # seconds measuring the old rate, which is 170 m of fall if done later
         self.context_set_message_rate_hz('LOCAL_POSITION_NED', 20)
-        self.takeoff(250, mode='GUIDED', altitude_max=260, timeout=180)
+        self.takeoff(250, mode='GUIDED', max_err=10, timeout=180)
         self.change_mode('STABILIZE')
         self.set_rc(3, 1000)
         self.disarm_vehicle(force=True)
@@ -21056,10 +21056,10 @@ return update, 1000
         # so LAND reads its height above home as negative and descends at
         # the minimum rate, which from 100 m outlasts the disarm wait
         start = self.sitl_start_location()
-        ground_amsl_m = start.get_alt_m(AltFrame.ABSOLUTE)
+        ground_amsl_m = start.alt
         self.change_mode('GUIDED')
         self.fly_guided_move_to(
-            Location(start.lat, start.lng, ground_amsl_m + 20, AltFrame.ABSOLUTE),
+            mavutil.location(start.lat, start.lng, ground_amsl_m + 20, 0),
             timeout=120)
         # fly_guided_move_to waits on horizontal distance and groundspeed, so
         # most of the descent can be left to this wait at the default WP_SPD_DN
