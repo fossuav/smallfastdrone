@@ -70,7 +70,7 @@ void NavEKF3_core::SelectFlowFusion()
         flowFocusRngPosD = stateStruct.position.z;
         flowFocusRngValid = true;
     }
-    if (!takeOffDetected) {
+    if (!movedSinceArming) {
         flowFocusBelow = false;
     } else if (flowDataToFuse && tiltOK && flowFocusRngValid) {
         // Within a few cm of the range finder ground clearance the vehicle is on or at the ground,
@@ -863,7 +863,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     const uint32_t FLOW_RESET_DEFER_REPORT_MS = 10000;
     if (really_fuse && !flowVelResetUnhealthy &&
         frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid &&
-        PV_AidingMode == AID_RELATIVE && takeOffDetected &&
+        PV_AidingMode == AID_RELATIVE && movedSinceArming &&
         (fabsF(ofDataDelayed.flowRadXY.x) < frontend->_maxFlowRate) &&
         (fabsF(ofDataDelayed.flowRadXY.y) < frontend->_maxFlowRate)) {
         const uint32_t stale0 = imuSampleTime_ms - flowFuseTimeAxis_ms[0];
@@ -958,7 +958,8 @@ bool NavEKF3_core::ResetVelocityToFlow(const of_elements &ofDataDelayed, ftype r
     const ftype measVarX = flowVar + sq(fy) * rangeVar + sq(prevTnb.a.z) * vertVar;
     const ftype measVarY = flowVar + sq(fx) * rangeVar + sq(prevTnb.b.z) * vertVar;
     const ftype measCovXY = prevTnb.a.z * prevTnb.b.z * vertVar - fy * fx * rangeVar;
-    zeroStatesVarCov(4, 5);
+    zeroCols(P, 4, 5);
+    zeroRows(P, 4, 5);
     P[4][4] = (sq(prevTnb.b.y) * measVarX - 2.0f * prevTnb.b.y * prevTnb.a.y * measCovXY +
                sq(prevTnb.a.y) * measVarY) / sq(det);
     P[5][5] = (sq(prevTnb.b.x) * measVarX - 2.0f * prevTnb.b.x * prevTnb.a.x * measCovXY +
