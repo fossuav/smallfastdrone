@@ -1617,6 +1617,10 @@ void NavEKF3_core::selectHeightForFusion()
         activeHgtSource = AP_NavEKF_Source::SourceZ::BARO;
     }
 
+    // ground effect makes the baro read low while takeoff or touchdown is expected. Fixed wing
+    // sets those flags for a launch rather than for rotor wash, so it is left as it was
+    const bool baroInGndEffect = (dal.get_takeoff_expected() || dal.get_touchdown_expected()) && !assume_zero_sideslip();
+
     // if there is new baro data to fuse, calculate filtered baro data required by other processes
     if (baroDataToFuse) {
         if (baroHgtOffsetNeedsInit) {
@@ -1626,8 +1630,9 @@ void NavEKF3_core::selectHeightForFusion()
             baroHgtOffset = baroDataDelayed.hgt;
             baroHgtOffsetNeedsInit = false;
         }
-        // calculate offset to baro data that enables us to switch to Baro height use during operation
-        if (activeHgtSource != AP_NavEKF_Source::SourceZ::BARO) {
+        // calculate offset to baro data that enables us to switch to Baro height use during operation.
+        // Not from a baro in ground effect: the offset would carry the error into the next switch
+        if (activeHgtSource != AP_NavEKF_Source::SourceZ::BARO && !baroInGndEffect) {
             calcFiltBaroOffset();
         }
         // filtered baro data used to provide a reference for takeoff
@@ -1779,8 +1784,11 @@ void NavEKF3_core::selectHeightForFusion()
     // detect changes in source and reset height
     if ((activeHgtSource != prevHgtSource) && fuseHgtData) {
         // reset before recording the new source, so the reset can see which source is
-        // being left as well as which is being taken up
-        ResetPositionD(-hgtMea);
+        // being left as well as which is being taken up. A baro in ground effect is no
+        // height to reset to, so a switch to it keeps the height held
+        if (activeHgtSource != AP_NavEKF_Source::SourceZ::BARO || !baroInGndEffect) {
+            ResetPositionD(-hgtMea);
+        }
         prevHgtSource = activeHgtSource;
     }
 
