@@ -681,6 +681,12 @@ const AP_Param::GroupInfo SIM::var_info3[] = {
     AP_SUBGROUPINFO(vicon, "VICON_", 56, SIM, ViconParms),
 #endif  // AP_SIM_VICON_ENABLED
 
+    // @Param: SONAR_OFFSET
+    // @DisplayName: Sonar measurement offset.
+    // @Description: Sonar measurement offset, in meters. Can be used for error injection.
+    // @User: Advanced
+    AP_GROUPINFO("SONAR_OFFSET",     57, SIM,  sonar_offset, 0),
+
 #ifdef SFML_JOYSTICK
     AP_SUBGROUPEXTENSION("",      63, SIM,  var_sfml_joystick),
 #endif // SFML_JOYSTICK
