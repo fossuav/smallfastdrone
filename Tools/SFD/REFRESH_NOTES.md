@@ -55,25 +55,33 @@ re-fold them after every refresh (they are in "Local work").
 - **#33498** `autotest: count FlowGyroZBiasNoYawReference's aiding stops in
   flight only`. With #34292 aiding stops once after touchdown, which is not the
   flight the check is about; it now stops counting at LAND_COMPLETE.
-- **#32972** `AP_NavEKF3: keep ground effect out of the baro offset at a height
+- **#32232** `AP_NavEKF3: keep ground effect out of the baro offset at a height
   source switch` and `autotest: check EKF height across a ground effect range
-  finder to baro switch` (BaroGroundEffectRangefinderSwitch). With the range
-  finder height switch active on the ground (which #32768 makes work), the baro
-  offset filter learned the spool-up prop-wash error as offset, and the switch
-  back to baro at liftoff kept it: SITL flew 2.4 m above its EKF height for the
-  whole flight. Holding the offset in ground effect alone fixed that but then
-  the switch reset dropped the height 3.0 m at liftoff, so the reset is skipped
-  when switching to a baro in ground effect too. The test fails on each of the
-  two defects separately. 30 height, baro and ground effect tests pass.
+  finder to baro switch` (BaroGroundEffectRangefinderSwitch). #32232's on-ground
+  range substitution makes the range finder the height source while waiting for
+  takeoff, so the baro offset filter learned the spool-up prop-wash error as
+  offset, and the switch back to baro at liftoff kept it: SITL flew 2.5 m above
+  its EKF height for the whole flight. It reproduces on #32232's head, not on
+  #32768's or #32972's (first attributed to #32972, wrongly). The offset filter
+  now ignores a low baro reading inside EK3_GND_EFF_DZ while takeoff or
+  touchdown is expected, as height fusion does, and the switch reset to a baro
+  in ground effect is skipped: without the skip the height drops 3.0 m at
+  liftoff. The first version froze the offset outright in that window, which
+  threw away #32232's drift tracking (2 m of baro drift while armed on the
+  ground left +2.1 m in the flight; 0.0 m now). Drift downwards inside the dead
+  zone in that window is still not tracked (-2.1 m for the same 2 m), the trade
+  height fusion already makes. The test fails on each of the two defects
+  separately. On #32232: 8 range finder and ground effect tests pass; on
+  refresh6: 11 baro and ground effect tests pass, plus the designed failure.
 - **#32553** `autotest: fly TerrainOffsetGroundEffectRecovery over flat ground`.
   With a terrain tile for the home location in the run directory (any earlier
   test that installs terrain handlers leaves one), SITL's ground sits 0.55 m
   below home and the range finder reads that on the ground, so both of the
   test's preconditions failed depending on test order. With SIM_TERRAIN 0 and
-  the #32972 fix it fails for its designed reason with master's number (terrain
+  the #32232 fix it fails for its designed reason with master's number (terrain
   offset mean +0.22 to +0.31 m across four runs, against master's +0.23 to
   +0.29 m).
-- **Upstream harness, master too**: `autotest: reboot so Replay's larger log
+- **4.7 harness, not master**: `autotest: reboot so Replay's larger log
   buffer takes effect`. LOG_FILE_BUFSIZE is allocated at boot, and Replay's first
   subtest starts logging disarmed before rebooting, so the startup messages fill
   the default buffer, a replay block does not fit and SITL panics ("Failed to
@@ -82,7 +90,9 @@ re-fold them after every refresh (they are in "Local work").
   4.7 lacks: `9c7f12df34` (the larger buffer) and `d3a32025cd` (wait for home
   before the body-odometry takeoff - with #32945 in the base, GPS no longer
   fills in a location there, and the takeoff was refused). Replay passes;
-  vanilla 4.7 needs the buffer fix and reboot too, not the home wait.
+  vanilla 4.7 needs the buffer fix and reboot too, not the home wait. Master
+  passes Replay 3 of 3 without the reboot, so there is no master PR for it; a
+  4.7 backport PR would bundle all three. Plane's Replay has the same pattern.
 
 ## Next refresh
 
@@ -376,7 +386,7 @@ FLOW_OPTIONS's docs).
   log (owed to #32768).
 - The refresh6 fixes, until their PR heads carry them (drop each as it lands):
   the #34292 aiding guard and FlowFocusHoldAfterLanding, the #33498 in-flight
-  count, the #32972 baro offset/switch guard and BaroGroundEffectRangefinderSwitch,
+  count, the #32232 baro offset/switch guard and BaroGroundEffectRangefinderSwitch,
   the #32553 SIM_TERRAIN line. Cherry-pick them from the previous branch by
   subject; `audit_dropped.py` lists any that were missed.
 - `SITL: add SIM_SONAR_OFFSET` (until 4.7 has master's `568727a218`).

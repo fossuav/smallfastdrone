@@ -41,9 +41,12 @@ failure is TerrainOffsetGroundEffectRecovery, failing by design as on master.
 - The other failures were investigated on the branch before promoting and
   fixed there (REFRESH_NOTES "Fixes made on refresh6"). Two were real stack
   interactions. #34292's flow floor left aiding churning every 5 s after
-  touchdown. And with #32768 making the range finder height switch work on the
+  touchdown. And with #32232 making the range finder the height source on the
   ground, the baro offset learned the spool-up ground-effect error and kept it:
-  the EKF height ran 2.4 m high for a whole SITL flight. The third, Replay, was
+  the EKF height ran 2.5 m high for a whole SITL flight. The first fix froze the
+  offset in ground effect, was attributed to #32972, and broke #32232's drift
+  tracking; the /pr-review of #32232 caught both, and the fix now applies the
+  fusion dead zone to the offset instead. The third, Replay, was
   a harness race: the larger log buffer master added never took effect without
   a reboot, and SITL panicked on a full buffer, which looked like a hang. A gdb
   run as SITL's parent found the panic; `ptrace_scope` 1 had blocked attaching.
