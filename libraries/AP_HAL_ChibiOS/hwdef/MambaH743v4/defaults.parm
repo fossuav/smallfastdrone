@@ -3,3 +3,6 @@ SERVO9_FUNCTION 120
 # Default VTX power to on
 RELAY2_DEFAULT 1
 
+
+# SmallFastDrone behaviour-preserving defaults
+@include ../include/sfd_defaults.parm

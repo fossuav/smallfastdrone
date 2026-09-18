@@ -1,0 +1,7 @@
+# SmallFastDrone boards include this from their defaults.parm. It holds the
+# values that keep a board behaving as it did when a PR in the SFD stack turns
+# existing behaviour into an option or changes its default.
+
+# #32473 made the acro accel-bias learning inhibit opt-in (ACC_ZBIAS_LEARN bit
+# 3); the branch applied it unconditionally before that
+ACC_ZBIAS_LEARN 8
