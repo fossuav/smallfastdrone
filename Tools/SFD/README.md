@@ -50,6 +50,9 @@ Tools/SFD/run_sfd_tests.sh --summary
 # before promoting, find anything the rebuild dropped - work that is in neither
 # the base nor prs.txt is lost silently (refresh5 dropped six merged PRs):
 Tools/SFD/audit_dropped.py SmallFastDrone-4.7.1-beta HEAD
+# and any parameter, bit or default a PR changed - keep what users have with a
+# line in hwdef/include/sfd_defaults.parm:
+Tools/SFD/param_changes.py SmallFastDrone-4.7.1-beta HEAD
 
 # after a clean refresh, capture state for next time and commit it:
 Tools/SFD/refresh.sh rerere-save    # prune + archive resolutions to rr-cache.tar.gz

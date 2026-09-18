@@ -19,10 +19,11 @@ reply exists") before acting on it.
 
 - Shipping: `SmallFastDrone-4.7.1-beta` = refresh5 (2026-09-11), 241 commits on
   base `1bf6b3ddc0`.
-- Ready, not promoted: `SmallFastDrone-4.7.1-refresh6` (2026-09-18), 277 commits
-  on base `5cfd779aed`. Copter, plane, heli and sub build. SFD set plus the MSP
-  VTX tests and Sub FuseMag: 65 of 68 pass, 0 crashes; the three failures are
-  understood (below). It fixes these defects of the shipping beta:
+- Ready, not promoted: `SmallFastDrone-4.7.1-refresh6` (2026-09-18) on base
+  `a5eb325674`. Copter, plane, heli and sub build. SFD set
+  (71 tests, now including the MSP VTX pair and Sub FuseMag): 70 pass, 0
+  crashes; TerrainOffsetGroundEffectRecovery fails, for its designed reason.
+  It fixes these defects of the shipping beta:
   - #33568's position jump when GPS is lost while moving and flow takes over
     (REFRESH_HISTORY 2026-09-15).
   - Six merged-upstream PRs that refresh5 dropped: #33780 (IIS2MDC fixes),
@@ -30,33 +31,58 @@ reply exists") before acting on it.
     (NTF units), #34057 (MAG_CAL=7 yaw anchor), #34120 (ICP201XX). They are
     merged to master, not in 4.7, and were in neither the base nor prs.txt; they
     are now in prs.txt. The MSP VTX tests, lost the same way, are back too.
+  - Two stack interactions the refresh6 test failures exposed, fixed on the
+    branch (below): flow aiding churning every 5 s on the ground after landing,
+    and a baro ground-effect error locked into the EKF height for a whole flight.
 - `upstream/ArduPilot-4.7` is 6 commits past the base (AP_HAL_Linux CAN fix,
   ArduSub guided/terrain, a Sub scripting binding). None touches SFD code, so the
   base was not rebuilt onto it.
 
-### refresh6 test failures, all measured
+### Fixes made on refresh6, to port to their PRs
 
-- `FlowGyroZBiasNoYawReference` (#33498's test). The Z gyro bias stays at
-  0.02 deg/s or less against the 0.1 limit, which is what the test is for. It
-  fails its "flow fused throughout the flight" check: after touchdown, and only
-  then, aiding stops and restarts every 5 s until disarm (all three legs, at
-  +3.5 s and +8.5 s from LAND_COMPLETE). Cause measured by A/B: #34292's ground
-  clearance floor (`minHeight = MAX(FLOW_HGT_MIN, rngOnGnd + 0.05)`) discards
-  flow on the ground; with the floor removed aiding never stops and the test
-  passes. Owed upstream: #34292 should not churn aiding while landed, or #33498's
-  test should count stops only in flight.
-- `TerrainOffsetGroundEffectRecovery` (#32553) fails by design, but earlier than
-  designed: its dwell precondition wants ALT_HOLD to settle 0.75-0.9 m above the
-  ground, dragged down by the simulated baro error, and on this stack it holds
-  1.24 m against the 1.2 m commanded. Likely the stack's own ground-effect height
-  protection (#32972); not measured. The test's point is not exercised here.
-- `Replay`: SITL stops answering about 1 s after the GPS subtest sets up an
-  analog rangefinder and a second GPS, before any reboot, and the harness times
-  out. The shipping beta fails identically, so the refresh did not cause it;
-  Replay only joined the SFD set because #32471 modifies the test. Vanilla
-  4.7 (`c5e82156b0`) fails it the same way, so it is not SFD code either: a
-  4.7 or environment problem. A backtrace needs `kernel.yama.ptrace_scope=0`,
-  which is 1 on this machine.
+Each is a commit on `SmallFastDrone-4.7.1-refresh6`, shaped for the PR it
+belongs to, and measured with an A/B. Until a PR head carries its commits,
+re-fold them after every refresh (they are in "Local work").
+
+- **#34292** `AP_NavEKF3: do not restart flow aiding while the focus height hold
+  is on` and `autotest: check flow aiding stays off after a landing below the
+  focus floor` (FlowFocusHoldAfterLanding). After touchdown the flow floor
+  discards every sample, aiding timed out, `readyToUseOptFlow()` saw fresh
+  samples and restarted it at once: a stop/start pair every 5 s until disarm.
+  Flow held off is now not ready, as `flowVelResetUnhealthy` already was. The new
+  test fails without the guard (aiding restarted on the ground). 23 flow tests
+  pass with it, upstream's own flow tests included.
+- **#33498** `autotest: count FlowGyroZBiasNoYawReference's aiding stops in
+  flight only`. With #34292 aiding stops once after touchdown, which is not the
+  flight the check is about; it now stops counting at LAND_COMPLETE.
+- **#32972** `AP_NavEKF3: keep ground effect out of the baro offset at a height
+  source switch` and `autotest: check EKF height across a ground effect range
+  finder to baro switch` (BaroGroundEffectRangefinderSwitch). With the range
+  finder height switch active on the ground (which #32768 makes work), the baro
+  offset filter learned the spool-up prop-wash error as offset, and the switch
+  back to baro at liftoff kept it: SITL flew 2.4 m above its EKF height for the
+  whole flight. Holding the offset in ground effect alone fixed that but then
+  the switch reset dropped the height 3.0 m at liftoff, so the reset is skipped
+  when switching to a baro in ground effect too. The test fails on each of the
+  two defects separately. 30 height, baro and ground effect tests pass.
+- **#32553** `autotest: fly TerrainOffsetGroundEffectRecovery over flat ground`.
+  With a terrain tile for the home location in the run directory (any earlier
+  test that installs terrain handlers leaves one), SITL's ground sits 0.55 m
+  below home and the range finder reads that on the ground, so both of the
+  test's preconditions failed depending on test order. With SIM_TERRAIN 0 and
+  the #32972 fix it fails for its designed reason with master's number (terrain
+  offset mean +0.22 to +0.31 m across four runs, against master's +0.23 to
+  +0.29 m).
+- **Upstream harness, master too**: `autotest: reboot so Replay's larger log
+  buffer takes effect`. LOG_FILE_BUFSIZE is allocated at boot, and Replay's first
+  subtest starts logging disarmed before rebooting, so the startup messages fill
+  the default buffer, a replay block does not fit and SITL panics ("Failed to
+  log replay block", seen by the harness as a hang). Found with gdb as SITL's
+  parent (`ptrace_scope` 1 blocks attaching). Carried with two master commits
+  4.7 lacks: `9c7f12df34` (the larger buffer) and `d3a32025cd` (wait for home
+  before the body-odometry takeoff - with #32945 in the base, GPS no longer
+  fills in a location there, and the takeoff was refused). Replay passes;
+  vanilla 4.7 needs the buffer fix and reboot too, not the home wait.
 
 ## Next refresh
 
@@ -64,12 +90,8 @@ reply exists") before acting on it.
 
 - `refresh.sh promote SmallFastDrone-4.7.1-beta SmallFastDrone-4.7.1-refresh6`,
   run from a checkout that does not have the beta checked out. The beta push is
-  a force push; the base push (`5cfd779aed`) is a fast-forward. Both need
+  a force push; the base push (`a5eb325674`) is a fast-forward. Both need
   `/prepare-for-push`.
-- **Decision owed (user):** #32473 makes the acro accel-bias inhibit opt-in
-  (ACC_ZBIAS_LEARN bit 3, default off, all three axes). The shipping beta's
-  inhibit is always on; after promotion, SFD param files need bit 3 to keep that
-  behaviour. No flight evidence says it helps, so leaving it off is legitimate.
 
 ### Every refresh
 
@@ -129,14 +151,20 @@ After:
 16. `Tools/SFD/audit_dropped.py <previous branch> <new branch>`: anything the
     previous branch carried that is in neither the base nor prs.txt is lost by a
     refresh, silently - that is how refresh5 dropped six merged PRs.
+    Then `Tools/SFD/param_changes.py <previous branch> <new branch>`: every
+    parameter, bitmask, value or compile-time default a PR changed. Where one
+    changes what an SFD board does out of the box - existing behaviour turned
+    into an option, a default flipped, a setting renamed - put the value that
+    keeps today's behaviour in `hwdef/include/sfd_defaults.parm` (or, for a
+    define, the SFD hwdefs), in the base. Users must not see a refresh.
 17. `refresh.sh lock`, `refresh.sh rerere-save`, commit both.
 18. `refresh.sh promote SmallFastDrone-4.7.1-beta`. The push is a force push
     and needs `/prepare-for-push`.
 
 ### Owed, not tied to one refresh
 
-- #34292 vs #33498: flow aiding churns every 5 s on the ground after landing
-  (see the refresh6 failures). Decide which PR changes.
+- Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
+  offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
   dataflash log belongs on #32768. Carried locally two refreshes running; the
   closed log has both EKF_ALT_RESET events, the read straight after disarm sees
@@ -168,13 +196,21 @@ After:
 
 refresh.sh stacks onto `SmallFastDrone-4.7-base`: `upstream/ArduPilot-4.7` +
 the merged-upstream PRs + #33115 + the AP_AHRS 4.7-compat fixup + the 11
-permanent SFD-local hwdef commits + `hwdef: SFD boards set ARMING_DELAY_MS`.
+permanent SFD-local hwdef commits + two behaviour-preserving hwdef commits
+added 2026-09-18:
 
-That last one was appended on 2026-09-18 (`5cfd779aed` on `1bf6b3ddc0`), so the
-rename #32398's new head needs is permanent rather than a per-refresh fixup.
-`1bf6b3ddc0` is parked locally as `SmallFastDrone-4.7-base.2`;
-`origin/SmallFastDrone-4.7-base.1` is the June lineage (`99414094f6`). The push
-of the base is a fast-forward.
+- `hwdef: SFD boards set ARMING_DELAY_MS` (`5cfd779aed`), the rename #32398's
+  new head needs.
+- `hwdef: SFD boards keep the acro accel bias inhibit` (`a5eb325674`), which
+  adds `hwdef/include/sfd_defaults.parm` (ACC_ZBIAS_LEARN 8, for #32473's
+  bit 3) and `@include`s it from all 11 SFD boards' `defaults.parm` (creating
+  it for MatekH743, MicoAir743v2 and MicoAir743-AIO). The next default of this
+  kind is one line in that file. Unknown names in defaults are ignored, so a
+  default for a parameter only a stacked PR defines is harmless on the base.
+
+Backups: `1bf6b3ddc0` is `SmallFastDrone-4.7-base.2`, `5cfd779aed` is `.3`
+(local); `origin/SmallFastDrone-4.7-base.1` is the June lineage (`99414094f6`).
+The push of the base is a fast-forward.
 
 Rebuild it when 4.7 advances in a way that matters, a baked PR's head moves, or
 an in-flight PR merges **into 4.7**. Branch off `upstream/ArduPilot-4.7`, replay
@@ -338,6 +374,14 @@ FLOW_OPTIONS's docs).
   ModeFlowHold, UTMGlobalPosition, UTMGlobalPositionWaypoint.
 - AmslAltPreservedOnRearmAtDifferentElevation's 5 s wait before it reads the
   log (owed to #32768).
+- The refresh6 fixes, until their PR heads carry them (drop each as it lands):
+  the #34292 aiding guard and FlowFocusHoldAfterLanding, the #33498 in-flight
+  count, the #32972 baro offset/switch guard and BaroGroundEffectRangefinderSwitch,
+  the #32553 SIM_TERRAIN line. Cherry-pick them from the previous branch by
+  subject; `audit_dropped.py` lists any that were missed.
+- `SITL: add SIM_SONAR_OFFSET` (until 4.7 has master's `568727a218`).
+- Replay: master's `9c7f12df34` and `d3a32025cd`, and the reboot after raising
+  the buffer (until 4.7 has them).
 - HeightDatumKeptOnMidairRearm's three 4.7 adaptations (carry the PR head's
   body and re-apply these rather than keeping a local rewrite):
 

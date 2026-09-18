@@ -9,8 +9,9 @@ file's checklist, not here.
 
 ## 2026-09-18 - refresh6
 
-Branch `SmallFastDrone-4.7.1-refresh6`, 277 commits on base `5cfd779aed`, not
-yet promoted. Copter, plane, heli and sub build. 65 of 68 tests pass, 0 crashes.
+Branch `SmallFastDrone-4.7.1-refresh6` on base `a5eb325674`, not yet promoted.
+Copter, plane, heli and sub build. Final run: 70 of 71, 0 crashes; the one
+failure is TerrainOffsetGroundEffectRecovery, failing by design as on master.
 
 - The notes were split into a checklist and this history, and the audit that
   split prompted found refresh5 had silently dropped six merged-upstream PRs
@@ -33,15 +34,26 @@ yet promoted. Copter, plane, heli and sub build. 65 of 68 tests pass, 0 crashes.
   `resolve_hotfile.py` kept #32972's stale copies of seven #32768 methods; the
   parent's copies went back. Fourteen dangling registrations were re-folded from
   the beta or dropped as master-only.
-- Failures investigated rather than fixed: `OpticalFlowFocusHeight` and
+- First full run: 62 of 68. `OpticalFlowFocusHeight` and
   `OpticalFlowAGLKalmanFilter` needed master's `SIM_SONAR_OFFSET` (backported to
-  SITL, both pass); `AmslAltPreservedOnRearmAtDifferentElevation` was the flush
-  race again (closed log has both resets; a 5 s wait fixes it);
-  `FlowGyroZBiasNoYawReference` fails on post-touchdown aiding churn from
-  #34292's ground clearance floor, proven by A/B; `Replay` hangs SITL on the
-  beta and on vanilla 4.7 as well; `TerrainOffsetGroundEffectRecovery` fails by
-  design, at its precondition here.
-- New scripts: `audit_dropped.py`, `check_suite_load.py`,
+  SITL); `AmslAltPreservedOnRearmAtDifferentElevation` was the flush race again
+  (the closed log has both resets; a 5 s wait fixes it).
+- The other failures were investigated on the branch before promoting and
+  fixed there (REFRESH_NOTES "Fixes made on refresh6"). Two were real stack
+  interactions. #34292's flow floor left aiding churning every 5 s after
+  touchdown. And with #32768 making the range finder height switch work on the
+  ground, the baro offset learned the spool-up ground-effect error and kept it:
+  the EKF height ran 2.4 m high for a whole SITL flight. The third, Replay, was
+  a harness race: the larger log buffer master added never took effect without
+  a reboot, and SITL panicked on a full buffer, which looked like a hang. A gdb
+  run as SITL's parent found the panic; `ptrace_scope` 1 had blocked attaching.
+  TerrainOffsetGroundEffectRecovery's preconditions had depended on whether a
+  terrain tile was in the run directory.
+- Parameters: refresh6 made #32473's acro inhibit opt-in, so the base gained a
+  shared `sfd_defaults.parm` setting ACC_ZBIAS_LEARN bit 3 on every SFD board,
+  and refresh6 was replayed onto it. `param_changes.py` now lists such changes
+  each refresh.
+- New scripts: `audit_dropped.py`, `check_suite_load.py`, `param_changes.py`,
   `check_pr_test_lines.py`, `refold_methods.py`, `fix_takeoff_kwargs.py`.
   `run_sfd_tests.sh` now counts TestSuite-defined and Sub tests and compares
   against the branch's own 4.7. `refresh.sh backup` now skips indices used on
