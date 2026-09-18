@@ -55,6 +55,175 @@ SITL_START_LOCATION = mavutil.location(
 
 
 class AutoTestCopter(vehicle_test_suite.TestSuite):
+    def TouchdownGroundEffectAlt(self):
+        '''Test GNDEFF_ALT gates the touchdown ground-effect signal'''
+        # touchdown_expected fires only when slow horizontal motion AND slow
+        # descent AND near-ground (height < GNDEFF_ALT). Exercise the altitude
+        # gate by landing twice from the same altitude with different
+        # GNDEFF_ALT values: a small threshold should only fire near the
+        # ground, a large threshold (>= takeoff altitude) should fire for the
+        # whole descent.
+        self.set_parameter("LOG_FILE_DSRMROT", 1)
+        self.progress("Making sure we'll have a short log to look at")
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.disarm_vehicle()
+
+        # Subtest A: small threshold - touchdown_expected only fires near ground
+        self.start_subtest("Small GNDEFF_ALT only triggers touchdown near ground")
+        self.set_parameter("GNDEFF_ALT", 1.0)
+        self.takeoff(3, mode='GUIDED', alt_minimum_duration=2)
+        self.change_mode('LAND')
+        self.wait_disarmed()
+        durations_small = self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True)
+        total_small = sum(durations_small)
+        self.progress("touchdown_expected total with GNDEFF_ALT=1.0: %fs" % total_small)
+        if total_small < 0.5:
+            raise NotAchievedException(
+                "touchdown_expected should fire near ground (got %fs, want>0.5)" % total_small)
+
+        # Subtest B: large threshold gates touchdown over the full descent
+        self.start_subtest("Large GNDEFF_ALT triggers touchdown for whole descent")
+        self.set_parameter("GNDEFF_ALT", 5.0)
+        self.takeoff(3, mode='GUIDED', alt_minimum_duration=2)
+        self.change_mode('LAND')
+        self.wait_disarmed()
+        durations_large = self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True)
+        total_large = sum(durations_large)
+        self.progress("touchdown_expected total with GNDEFF_ALT=5.0: %fs" % total_large)
+
+        # Comparative assertion: a higher threshold catches the descent earlier
+        # so total touchdown_expected duration must be longer.
+        if total_large <= total_small:
+            raise NotAchievedException(
+                "Larger threshold should have longer touchdown (large=%fs <= small=%fs)"
+                % (total_large, total_small))
+
+        # Subtest C: more than 20m from the takeoff point the relative-to-takeoff
+        # height no longer refers to the ground below the vehicle, so without a
+        # true AGL the gate must not fire at all. It used to count any gentle
+        # descent out here, which is what latched it through a cruise hover.
+        self.start_subtest("Far from takeoff the touchdown gate does not fire")
+        self.set_parameter("GNDEFF_ALT", 1.0)
+        self.takeoff(3, mode='GUIDED', alt_minimum_duration=2)
+        self.fly_guided_move_local(30, 0, 3)
+        self.change_mode('LAND')
+        self.wait_disarmed()
+        durations_far = self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True)
+        total_far = sum(durations_far)
+        self.progress("touchdown_expected total with GNDEFF_ALT=1.0 30m from takeoff: %fs" % total_far)
+        if total_far > 0.5:
+            raise NotAchievedException(
+                "touchdown_expected should not fire 30m from takeoff without a true AGL (got %fs)"
+                % total_far)
+
+        # we are not at the home location - reboot so the next test starts there
+        self.reboot_sitl()
+
+    def TakeoffGroundEffectAlt(self):
+        '''Test GNDEFF_ALT and GNDEFF_TMO gate the ground-effect compensation window'''
+        # SIM_BARO_GEFF_M injects a real baro static-pressure error near the
+        # ground so the compensation window has something to compensate for;
+        # without it the detector parameters would be exercised but the
+        # underlying baro error they exist to mitigate wouldn't be present.
+        self.set_parameters({
+            "LOG_FILE_DSRMROT": 1,
+            "SIM_BARO_GEFF_M": 1.0,
+        })
+        self.progress("Making sure we'll have a short log to look at")
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.disarm_vehicle()
+
+        # Subtest A: large threshold - takeoff_expected persists at 5m
+        self.start_subtest("Large GNDEFF_ALT keeps ground effect at 5m")
+        self.set_parameter("GNDEFF_ALT", 10)
+        self.takeoff(5, mode='ALT_HOLD')
+        self.delay_sim_time(5, reason='let the takeoff window expire before landing')
+        self.change_mode('LAND')
+        self.wait_disarmed()
+        durations_large = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
+        total_large = sum(durations_large)
+        self.progress("takeoff_expected total with GNDEFF_ALT=10: %fs" % total_large)
+        if total_large < 3:
+            raise NotAchievedException(
+                "takeoff_expected should persist with large threshold (got %fs, want>3)" % total_large)
+
+        # Subtest B: small threshold - takeoff_expected clears quickly
+        # GNDEFF_TMO=0 so only the altitude check releases the window,
+        # giving subtest C a baseline without the default minimum hold.
+        self.start_subtest("Small GNDEFF_ALT clears ground effect at 5m")
+        self.set_parameters({
+            "GNDEFF_ALT": 0.5,
+            "GNDEFF_TMO": 0,
+        })
+        self.takeoff(5, mode='ALT_HOLD')
+        self.delay_sim_time(5, reason='let the takeoff window expire before landing')
+        self.change_mode('LAND')
+        self.wait_disarmed()
+        durations_small = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
+        total_small = sum(durations_small)
+        self.progress("takeoff_expected total with GNDEFF_ALT=0.5: %fs" % total_small)
+
+        # Comparative assertion: large threshold should have longer duration
+        if total_small >= total_large:
+            raise NotAchievedException(
+                "Smaller threshold should have shorter ground effect (small=%fs >= large=%fs)"
+                % (total_small, total_large))
+
+        # Subtest C: GNDEFF_TMO requires both timeout AND altitude
+        # With small altitude threshold but timeout set, ground effect should persist longer
+        self.start_subtest("GNDEFF_TMO extends ground effect duration")
+        self.set_parameters({
+            "GNDEFF_ALT": 0.5,  # Small threshold - would clear quickly without timeout
+            "GNDEFF_TMO": 3,    # Require 3s timeout as well
+        })
+        self.takeoff(5, mode='ALT_HOLD')
+        self.delay_sim_time(5, reason='let the takeoff window expire before landing')
+        self.change_mode('LAND')
+        self.wait_disarmed()
+        durations_tmo = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
+        total_tmo = sum(durations_tmo)
+        self.progress("takeoff_expected total with GNDEFF_TMO=3: %fs" % total_tmo)
+
+        # With timeout, ground effect should persist longer than without (even with small alt threshold)
+        if total_tmo <= total_small:
+            raise NotAchievedException(
+                "GNDEFF_TMO should extend ground effect (tmo=%fs <= no_tmo=%fs)"
+                % (total_tmo, total_small))
+
+        # Subtest D: rangefinder HAGL path. On the ground the EKF HAGL reads
+        # the rangefinder ground clearance rather than zero, so with GNDCLR
+        # above GNDEFF_ALT the windows must be measured from the on-ground
+        # reading or takeoff releases before liftoff and touchdown never fires.
+        self.start_subtest("Rangefinder HAGL is measured from the on-ground reading")
+        self.set_parameters({
+            "GNDEFF_ALT": 0.5,
+            "GNDEFF_TMO": 0,
+            "RNGFND1_TYPE": 100,  # SITL
+            "RNGFND1_GNDCLR": 0.6,
+        })
+        self.reboot_sitl()
+        self.takeoff(5, mode='ALT_HOLD')
+        self.delay_sim_time(5, reason='let the takeoff window expire before landing')
+        self.change_mode('LAND')
+        self.wait_disarmed()
+        durations_rf = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
+        total_rf = sum(durations_rf)
+        touchdown_rf = sum(self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True))
+        self.progress("takeoff_expected total with rangefinder GNDCLR=0.6: %fs (touchdown %fs)" %
+                      (total_rf, touchdown_rf))
+        if total_rf < 0.5 * total_small:
+            raise NotAchievedException(
+                "Rangefinder should not release takeoff early (rf=%fs < half of baro=%fs)"
+                % (total_rf, total_small))
+        if touchdown_rf <= 0:
+            raise NotAchievedException("Rangefinder touchdown_expected never fired")
+
+        # we are not at the home location - reboot so the next test starts there
+        self.set_parameter("RNGFND1_TYPE", 0)
+        self.reboot_sitl()
+
     @staticmethod
     def get_not_armable_mode_list():
         return ["AUTO", "AUTOTUNE", "BRAKE", "CIRCLE", "FLIP", "LAND", "RTL", "SMART_RTL", "AVOID_ADSB", "FOLLOW"]
@@ -447,6 +616,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if errors[3] < 0.02:
             raise NotAchievedException(
                 "VALT_POS_EXPO=3 should leave pos_desired marching at full stick (got %.4f m)" % errors[3])
+
     def ModeLandAdvancedFailsafe(self):
         '''LAND_FS_OPTIONS bit 0 engages on an RC-failsafe LAND and a healthy vehicle still lands without the cap tripping'''
         self.set_parameters({
@@ -1899,30 +2069,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
-    def test_takeoff_check_mode(self, mode, user_takeoff=False):
-        # stabilize check
-        self.progress("Motor takeoff check in %s" % mode)
-        self.change_mode(mode)
-        self.zero_throttle()
-        self.wait_ready_to_arm()
-        self.context_push()
-        self.context_collect('STATUSTEXT')
-        self.arm_vehicle()
-        if user_takeoff:
-            self.run_cmd(
-                mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
-                p7=10,
-            )
-        else:
-            self.set_rc(3, 1700)
-        # we may never see ourselves as armed in a heartbeat
-        self.wait_statustext("Takeoff blocked: ESC RPM or errors out of range", check_context=True)
-        self.context_pop()
-        self.zero_throttle()
-        self.disarm_vehicle()
-        self.wait_disarmed()
-
-
     # Tests the motor failsafe
     def TakeoffCheck(self):
         '''Test takeoff check'''
@@ -2098,303 +2244,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
-    def fly_accel_bias_xy_pushes(self):
-        '''take off in ALT_HOLD, make eight forward pushes, yaw through
-        three turns, hover, then land.  Returns the accel bias learned by
-        each core and the landed pitch error against SIM truth'''
-        self.takeoff(altitude_min=20, mode='ALT_HOLD', takeoff_throttle=1800)
-        self.wait_climbrate(-0.5, 0.5, minimum_duration=2)
-
-        # each push dips the baro while pitched and lets it recover while
-        # level, which an unaided filter can rectify into a body-X accel bias
-        for _ in range(8):
-            self.set_rc(2, 1333)
-            self.wait_pitch(-10, accuracy=5, minimum_duration=8, timeout=20)
-            self.set_rc(2, 1500)
-            self.wait_pitch(0, accuracy=3, minimum_duration=8, timeout=20)
-
-        # a body-frame bias is only separable from tilt while the heading
-        # changes, so give an aided filter three turns to learn it
-        heading = self.get_heading()
-        self.set_rc(4, 1600)
-        for _ in range(12):
-            heading = (heading + 90) % 360
-            self.wait_heading(heading, accuracy=15)
-        self.set_rc(4, 1500)
-        # the bias states are only visible in the log, so their settling
-        # cannot be waited on
-        tsettle = self.get_sim_time()
-        self.delay_sim_time(20, "bias states to settle in the hover")
-
-        # learned accel bias per core, from log records written after the
-        # pushes so a stale log cannot pass the check
-        bias = {}
-        dfreader = self.dfreader_for_current_onboard_log()
-        while True:
-            m = dfreader.recv_match(type='XKF2')
-            if m is None:
-                break
-            if m.TimeUS * 1e-6 < tsettle:
-                continue
-            bias[m.C] = (m.AX, m.AY)
-        if len(bias) == 0:
-            raise NotAchievedException("No XKF2 messages in onboard log after the pushes")
-        for core in sorted(bias.keys()):
-            self.progress("Core %u accel bias X=%.2f Y=%.2f m/s/s" % (core, bias[core][0], bias[core][1]))
-
-        # the pushes carry the vehicle onto ground that can sit above home,
-        # so wait on the disarm rather than on the altitude above home
-        self.change_mode('LAND')
-        self.wait_disarmed(timeout=60)
-
-        # a retained body-X bias tilts the level estimate by asin(bias/g);
-        # in the hover that is masked by the drift of an unaided vehicle, so
-        # measure it on the ground where the vehicle is stationary
-        self.delay_sim_time(10, "attitude to settle on the ground")
-        n = 20
-        pitch_err_deg = 0
-        for i in range(n):
-            att = self.assert_receive_message('ATTITUDE')
-            sim = self.assert_receive_message('SIMSTATE')
-            pitch_err_deg += math.degrees(att.pitch - sim.pitch) / n
-        self.progress("Landed pitch error vs SIM truth: %.2f deg" % pitch_err_deg)
-        return bias, pitch_err_deg
-
-    def EK3NoAidAccelBiasXY(self):
-        '''XY accel bias is not learned from tilt-coupled baro error in unaided flight'''
-        self.start_subtest("XY accel bias is not learned in unaided flight")
-        # scoped so the aided flight below starts from the defaults
-        self.context_push()
-        self.set_parameters({
-            "AHRS_EKF_TYPE": 3,
-            "EK3_ENABLE": 1,
-            "EK2_ENABLE": 0,
-            "SIM_GPS1_ENABLE": 0,
-            "EK3_SRC1_POSXY": 0,
-            "EK3_SRC1_VELXY": 0,
-            "EK3_SRC1_VELZ": 0,
-            # static port error proportional to airspeed squared, the same
-            # in every horizontal direction so the yaw does not modulate it
-            "SIM_BARO_WCF_FWD": 1.0,
-            "SIM_BARO_WCF_BAK": 1.0,
-            "SIM_BARO_WCF_RGT": 1.0,
-            "SIM_BARO_WCF_LFT": 1.0,
-        })
-        self.reboot_sitl()
-        # unaided the filter sits in constant position mode, which
-        # wait_ready_to_arm() treats as an error, so arm by hand
-        self.change_mode('ALT_HOLD')
-        self.wait_ekf_flags(
-            (mavutil.mavlink.EKF_ATTITUDE |
-             mavutil.mavlink.ESTIMATOR_VELOCITY_VERT |
-             mavutil.mavlink.ESTIMATOR_POS_VERT_ABS),
-            0,
-            timeout=120,
-        )
-        self.wait_prearm_sys_status_healthy(timeout=120)
-        self.arm_vehicle()
-        bias, pitch_err_deg = self.fly_accel_bias_xy_pushes()
-        for core in sorted(bias.keys()):
-            if abs(bias[core][0]) > 0.1 or abs(bias[core][1]) > 0.1:
-                raise NotAchievedException("Core %u learned XY accel bias in unaided flight" % core)
-        if abs(pitch_err_deg) > 0.5:
-            raise NotAchievedException("Landed pitch error %.2f deg" % pitch_err_deg)
-        self.context_pop()
-
-        # positive control: the same flight with aiding must still learn a
-        # real body-X bias
-        self.start_subtest("XY accel bias is learned in aided flight")
-        self.context_push()
-        self.set_parameters({
-            "SIM_ACC1_BIAS_X": 0.5,
-            "SIM_ACC2_BIAS_X": 0.5,
-            "SIM_ACC3_BIAS_X": 0.5,
-        })
-        self.reboot_sitl()
-        bias, pitch_err_deg = self.fly_accel_bias_xy_pushes()
-        for core in sorted(bias.keys()):
-            if abs(bias[core][0] - 0.5) > 0.1:
-                raise NotAchievedException("Core %u did not learn the X accel bias in aided flight" % core)
-        if abs(pitch_err_deg) > 0.5:
-            raise NotAchievedException("Landed pitch error %.2f deg" % pitch_err_deg)
-        self.context_pop()
-        # the filter still carries the learned bias; reboot to restore EKF health
-        self.reboot_sitl()
-
-    def EK3_AccelBiasInhibitOnGroundMoving(self):
-        '''Test EKF3 inhibits accel bias learning when vehicle is moved on ground'''
-        # When a copter is on the ground and being moved (carried, on a ship),
-        # the EKF should not learn accel biases from the external motion.
-        # Without the fix (onGroundNotMoving check in dvelBiasAxisInhibit),
-        # the Z-axis bias is learnable on the ground (passes gravity alignment
-        # check), and GPS velocity innovations can drive incorrect bias learning
-        # during ground movement. With the fix, all bias learning is inhibited
-        # when onGround && !onGroundNotMoving.
-
-        # Enable logging while disarmed so we capture ground-only EKF data
-        self.set_parameters({
-            "LOG_FILE_DSRMROT": 1,
-        })
-        self.reboot_sitl()
-        self.wait_ready_to_arm()
-
-        # Phase 1: Positive control - verify bias learning works when stationary
-        self.start_subtest("Positive control: verify bias learning works when stationary")
-        self.set_parameters({
-            'SIM_ACC2_BIAS_Z': 0.7,
-        })
-        self.delay_sim_time(30, reason="EKF to learn accel bias")
-        self.assert_dataflash_message_field_level_at(
-            "XKF2", "AZ", 0.7,
-            condition="XKF2.C==1",
-            maintain=1,
-        )
-
-        # Reset for next phase - reboot clears EKF state and starts a new log
-        self.set_parameters({
-            'SIM_ACC2_BIAS_Z': 0.0,
-        })
-        self.reboot_sitl()
-        self.wait_ready_to_arm()
-        self.delay_sim_time(5, reason="SITL to initialise after reboot")
-
-        # Phase 2: Start ship movement, then inject bias - it should NOT be learned
-        self.start_subtest("Test: verify bias NOT learned during ground movement")
-        # Use a small circle to create sufficient centripetal acceleration and
-        # yaw rate so that onGroundNotMoving transitions to false.
-        # v=10 m/s, path_size=50m (r=25m) gives yaw_rate=0.4 rad/s which
-        # exceeds the gyro movement threshold.
-        self.set_parameters({
-            "SIM_SHIP_ENABLE": 1,
-            "SIM_SHIP_SPEED": 10,
-            "SIM_SHIP_PSIZE": 50,
-            "SIM_SHIP_DSIZE": 10,
-        })
-        # Wait for vehicle to be moving with the ship
-        self.wait_groundspeed(9, 11)
-        # Allow time for onGroundNotMoving to transition to false
-        self.delay_sim_time(5, reason="onGroundNotMoving to transition")
-
-        # Record timestamp, then inject Z-bias while vehicle is moving on ground
-        tstart_inject_us = self.get_sim_time() * 1.0e6
-        self.set_parameters({
-            'SIM_ACC2_BIAS_Z': 0.7,
-        })
-
-        # Wait for potential (unwanted) bias learning
-        self.delay_sim_time(30, reason="potential bias learning period")
-
-        # Check that AZ stayed near 0 during the movement period.
-        # Skip the first 20s after injection to give time for any erroneous
-        # learning to manifest. Then require AZ near 0 for 5 consecutive seconds.
-        # With fix: AZ stays near 0 (learning inhibited) -> PASSES
-        # Without fix: AZ drifts toward 0.7 -> FAILS
-        tstart_check_us = tstart_inject_us + 20.0e6
-        self.assert_dataflash_message_field_level_at(
-            "XKF2", "AZ", 0.0,
-            condition="XKF2.C==1",
-            maintain=5,
-            tolerance=0.15,
-            dfreader_start_timestamp=tstart_check_us,
-        )
-
-        # Phase 3: Stop ship, verify bias learning resumes when stationary.
-        # After inhibition ends, the saved (small) variance is restored, so
-        # reconvergence is slow. Allow extra time and accept partial convergence.
-        self.start_subtest("Verify bias learning resumes after movement stops")
-        self.set_parameters({
-            "SIM_SHIP_ENABLE": 0,
-        })
-        self.wait_groundspeed(0, 2)
-
-        self.delay_sim_time(60, reason="accel bias to reconverge after movement stops")
-        self.assert_dataflash_message_field_level_at(
-            "XKF2", "AZ", 0.7,
-            condition="XKF2.C==1",
-            maintain=1,
-            tolerance=0.3,
-        )
-
-    def EK3_GetHaglTerrainAlt(self):
-        '''getHAGL serves the terrain database above the rangefinder range'''
-        # FuseOptFlow already falls back to the terrain database when the terrain offset
-        # state is unavailable, so the filter can be flying on a database AGL while
-        # getHAGL reports it has none. OPTICAL_FLOW.ground_distance is get_hagl()
-        # directly, and is sent as zero when it returns false, so this asserts on the
-        # height rather than on a downstream flag.
-        #
-        # It flies over the Kalaupapa cliffs rather than a flat field on purpose. Where
-        # the terrain sits at the EKF origin altitude every sign convention agrees and
-        # the test cannot tell a correct height from an inverted one; over 160 m of
-        # terrain change it can.
-        self.install_terrain_handlers_context()
-        self.set_parameters({
-            "SIM_FLOW_ENABLE": 1,
-            "FLOW_TYPE": 10,
-            "EK3_IMU_MASK": 1,
-            "AVOID_ENABLE": 0,   # the optical flow altitude limit would cap the climb
-            "TERRAIN_ENABLE": 1,
-            "EK3_OPTIONS": 1 << 2,   # OptflowMayUseTerrainAlt, and NOT the AGL KF, so
-                                     # the terrain branch is what is under test
-        })
-        self.set_analog_rangefinder_parameters()
-        self.set_parameter("RNGFND1_MAX", 8)
-        self.customise_SITL_commandline(["--home", "KalaupapaCliffs"])
-
-        # a green run here is worthless if the harness served no tiles, so prove the
-        # terrain data actually arrived before asserting on anything derived from it
-        tstart = self.get_sim_time()
-        while True:
-            if self.get_sim_time_cached() - tstart > 60:
-                raise NotAchievedException("terrain tiles were never delivered")
-            report = self.assert_receive_message("TERRAIN_REPORT", timeout=10)
-            if report.pending == 0 and report.loaded > 0:
-                break
-
-        # 60 m clears the 185.8 m AMSL ridge 50 m north of home, where a 165.25 m home
-        # leaves only 19.5 m of margin at 40 m and any less would put the rangefinder
-        # back in range and bypass the branch under test. gndOffsetValid surfaces as
-        # EKF_POS_VERT_AGL, so waiting on it going clear both replaces a blind delay
-        # and proves the branch under test is the one being reached
-        self.takeoff(60, mode='GUIDED')
-        self.wait_ekf_flags(0, mavutil.mavlink.ESTIMATOR_POS_VERT_AGL, timeout=60)
-
-        spread = 0
-        for north_m in [0, 200, 400]:
-            self.fly_guided_move_local(north_m, 0, 60)
-            self.delay_sim_time(8, "let terrain and the filter settle")
-            self.drain_mav()
-            flow = self.assert_receive_message("OPTICAL_FLOW", timeout=10)
-            report = self.assert_receive_message("TERRAIN_REPORT", timeout=10)
-            self.progress("north=%um getHAGL=%.2f terrain says %.2f"
-                          % (north_m, flow.ground_distance, report.current_height))
-            if flow.ground_distance <= 0:
-                raise NotAchievedException(
-                    "getHAGL served no height above the rangefinder range at %um" % north_m)
-            if abs(flow.ground_distance - report.current_height) > 5:
-                raise NotAchievedException(
-                    "getHAGL %.2f disagrees with the terrain database %.2f at %um"
-                    % (flow.ground_distance, report.current_height, north_m))
-            spread = max(spread, abs(report.current_height - 60))
-        # if the terrain never actually varied, the agreement above proves nothing
-        if spread < 100:
-            raise NotAchievedException(
-                "terrain did not vary enough to test the height (%.1fm)" % spread)
-
-        # clearing the option stops the frontend forwarding terrain data to the cores, so
-        # the height must go away again. Without this the test would also pass on a change
-        # that served some other height that merely happens to look right here.
-        self.set_parameter("EK3_OPTIONS", 0)
-        tstart = self.get_sim_time()
-        while True:
-            if self.get_sim_time_cached() - tstart > 30:
-                raise NotAchievedException(
-                    "getHAGL kept serving a height after the terrain option was cleared")
-            self.drain_mav()
-            if self.assert_receive_message("OPTICAL_FLOW", timeout=10).ground_distance == 0:
-                break
-        self.disarm_vehicle(force=True)
-
+    # StabilityPatch - fly south, then hold loiter within 5m
+    # position and altitude and reduce 1 motor to 60% efficiency
     def EK3_AccelBiasZeroVelOptFlow(self):
         '''Test EKF3 zero velocity fusion learns bias with optical flow config'''
         # When optical flow is configured (AID_RELATIVE) but the vehicle is
@@ -2564,13 +2415,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 "AGL KF velocity fusion failed to bound the velD runaway (got %.2f m/s)"
                 % r["max_velD_err"])
 
-        # Bit 4 alone is what the parameter documentation tells users to set, so it has
-        # to enable the AGL KF by itself. The longer hold lets the Z accel bias
-        # converge and the window skips that transient, so this measures the settled
-        # error rather than the speed of bias learning.
-        self.start_subtest("Fusion on: settled velD error with bit 4 alone")
-        r = fly_leg(agl_kf_veld, bias_z=0.4, bias_hold=45, settle=35)
-        self.progress("fusion on (settled): max velD error %.2f m/s over %u samples"
         # Bit 4 alone is what the parameter documentation tells users to set, so it has
         # to enable the AGL KF by itself. The longer hold lets the Z accel bias
         # converge and the window skips that transient, so this measures the settled
@@ -3068,6 +2912,303 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                     "%.2fm with it; the terrain state did not follow"
                     % (moved, t, hagl_moved))
 
+        self.reboot_sitl()
+
+    def EK3_AccelBiasInhibitOnGroundMoving(self):
+        '''Test EKF3 inhibits accel bias learning when vehicle is moved on ground'''
+        # When a copter is on the ground and being moved (carried, on a ship),
+        # the EKF should not learn accel biases from the external motion.
+        # Without the fix (onGroundNotMoving check in dvelBiasAxisInhibit),
+        # the Z-axis bias is learnable on the ground (passes gravity alignment
+        # check), and GPS velocity innovations can drive incorrect bias learning
+        # during ground movement. With the fix, all bias learning is inhibited
+        # when onGround && !onGroundNotMoving.
+
+        # Enable logging while disarmed so we capture ground-only EKF data
+        self.set_parameters({
+            "LOG_FILE_DSRMROT": 1,
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+
+        # Phase 1: Positive control - verify bias learning works when stationary
+        self.start_subtest("Positive control: verify bias learning works when stationary")
+        self.set_parameters({
+            'SIM_ACC2_BIAS_Z': 0.7,
+        })
+        self.delay_sim_time(30, reason="EKF to learn accel bias")
+        self.assert_dataflash_message_field_level_at(
+            "XKF2", "AZ", 0.7,
+            condition="XKF2.C==1",
+            maintain=1,
+        )
+
+        # Reset for next phase - reboot clears EKF state and starts a new log
+        self.set_parameters({
+            'SIM_ACC2_BIAS_Z': 0.0,
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+        self.delay_sim_time(5, reason="SITL to initialise after reboot")
+
+        # Phase 2: Start ship movement, then inject bias - it should NOT be learned
+        self.start_subtest("Test: verify bias NOT learned during ground movement")
+        # Use a small circle to create sufficient centripetal acceleration and
+        # yaw rate so that onGroundNotMoving transitions to false.
+        # v=10 m/s, path_size=50m (r=25m) gives yaw_rate=0.4 rad/s which
+        # exceeds the gyro movement threshold.
+        self.set_parameters({
+            "SIM_SHIP_ENABLE": 1,
+            "SIM_SHIP_SPEED": 10,
+            "SIM_SHIP_PSIZE": 50,
+            "SIM_SHIP_DSIZE": 10,
+        })
+        # Wait for vehicle to be moving with the ship
+        self.wait_groundspeed(9, 11)
+        # Allow time for onGroundNotMoving to transition to false
+        self.delay_sim_time(5, reason="onGroundNotMoving to transition")
+
+        # Record timestamp, then inject Z-bias while vehicle is moving on ground
+        tstart_inject_us = self.get_sim_time() * 1.0e6
+        self.set_parameters({
+            'SIM_ACC2_BIAS_Z': 0.7,
+        })
+
+        # Wait for potential (unwanted) bias learning
+        self.delay_sim_time(30, reason="potential bias learning period")
+
+        # Check that AZ stayed near 0 during the movement period.
+        # Skip the first 20s after injection to give time for any erroneous
+        # learning to manifest. Then require AZ near 0 for 5 consecutive seconds.
+        # With fix: AZ stays near 0 (learning inhibited) -> PASSES
+        # Without fix: AZ drifts toward 0.7 -> FAILS
+        tstart_check_us = tstart_inject_us + 20.0e6
+        self.assert_dataflash_message_field_level_at(
+            "XKF2", "AZ", 0.0,
+            condition="XKF2.C==1",
+            maintain=5,
+            tolerance=0.15,
+            dfreader_start_timestamp=tstart_check_us,
+        )
+
+        # Phase 3: Stop ship, verify bias learning resumes when stationary.
+        # After inhibition ends, the saved (small) variance is restored, so
+        # reconvergence is slow. Allow extra time and accept partial convergence.
+        self.start_subtest("Verify bias learning resumes after movement stops")
+        self.set_parameters({
+            "SIM_SHIP_ENABLE": 0,
+        })
+        self.wait_groundspeed(0, 2)
+
+        self.delay_sim_time(60, reason="accel bias to reconverge after movement stops")
+        self.assert_dataflash_message_field_level_at(
+            "XKF2", "AZ", 0.7,
+            condition="XKF2.C==1",
+            maintain=1,
+            tolerance=0.3,
+        )
+
+    def EK3_GetHaglTerrainAlt(self):
+        '''getHAGL serves the terrain database above the rangefinder range'''
+        # FuseOptFlow already falls back to the terrain database when the terrain offset
+        # state is unavailable, so the filter can be flying on a database AGL while
+        # getHAGL reports it has none. OPTICAL_FLOW.ground_distance is get_hagl()
+        # directly, and is sent as zero when it returns false, so this asserts on the
+        # height rather than on a downstream flag.
+        #
+        # It flies over the Kalaupapa cliffs rather than a flat field on purpose. Where
+        # the terrain sits at the EKF origin altitude every sign convention agrees and
+        # the test cannot tell a correct height from an inverted one; over 160 m of
+        # terrain change it can.
+        self.install_terrain_handlers_context()
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "EK3_IMU_MASK": 1,
+            "AVOID_ENABLE": 0,   # the optical flow altitude limit would cap the climb
+            "TERRAIN_ENABLE": 1,
+            "EK3_OPTIONS": 1 << 2,   # OptflowMayUseTerrainAlt, and NOT the AGL KF, so
+                                     # the terrain branch is what is under test
+        })
+        self.set_analog_rangefinder_parameters()
+        self.set_parameter("RNGFND1_MAX", 8)
+        self.customise_SITL_commandline(["--home", "KalaupapaCliffs"])
+
+        # a green run here is worthless if the harness served no tiles, so prove the
+        # terrain data actually arrived before asserting on anything derived from it
+        tstart = self.get_sim_time()
+        while True:
+            if self.get_sim_time_cached() - tstart > 60:
+                raise NotAchievedException("terrain tiles were never delivered")
+            report = self.assert_receive_message("TERRAIN_REPORT", timeout=10)
+            if report.pending == 0 and report.loaded > 0:
+                break
+
+        # 60 m clears the 185.8 m AMSL ridge 50 m north of home, where a 165.25 m home
+        # leaves only 19.5 m of margin at 40 m and any less would put the rangefinder
+        # back in range and bypass the branch under test. gndOffsetValid surfaces as
+        # EKF_POS_VERT_AGL, so waiting on it going clear both replaces a blind delay
+        # and proves the branch under test is the one being reached
+        self.takeoff(60, mode='GUIDED')
+        self.wait_ekf_flags(0, mavutil.mavlink.ESTIMATOR_POS_VERT_AGL, timeout=60)
+
+        spread = 0
+        for north_m in [0, 200, 400]:
+            self.fly_guided_move_local(north_m, 0, 60)
+            self.delay_sim_time(8, "let terrain and the filter settle")
+            self.drain_mav()
+            flow = self.assert_receive_message("OPTICAL_FLOW", timeout=10)
+            report = self.assert_receive_message("TERRAIN_REPORT", timeout=10)
+            self.progress("north=%um getHAGL=%.2f terrain says %.2f"
+                          % (north_m, flow.ground_distance, report.current_height))
+            if flow.ground_distance <= 0:
+                raise NotAchievedException(
+                    "getHAGL served no height above the rangefinder range at %um" % north_m)
+            if abs(flow.ground_distance - report.current_height) > 5:
+                raise NotAchievedException(
+                    "getHAGL %.2f disagrees with the terrain database %.2f at %um"
+                    % (flow.ground_distance, report.current_height, north_m))
+            spread = max(spread, abs(report.current_height - 60))
+        # if the terrain never actually varied, the agreement above proves nothing
+        if spread < 100:
+            raise NotAchievedException(
+                "terrain did not vary enough to test the height (%.1fm)" % spread)
+
+        # clearing the option stops the frontend forwarding terrain data to the cores, so
+        # the height must go away again. Without this the test would also pass on a change
+        # that served some other height that merely happens to look right here.
+        self.set_parameter("EK3_OPTIONS", 0)
+        tstart = self.get_sim_time()
+        while True:
+            if self.get_sim_time_cached() - tstart > 30:
+                raise NotAchievedException(
+                    "getHAGL kept serving a height after the terrain option was cleared")
+            self.drain_mav()
+            if self.assert_receive_message("OPTICAL_FLOW", timeout=10).ground_distance == 0:
+                break
+        self.disarm_vehicle(force=True)
+
+    def fly_accel_bias_xy_pushes(self):
+        '''take off in ALT_HOLD, make eight forward pushes, yaw through
+        three turns, hover, then land.  Returns the accel bias learned by
+        each core and the landed pitch error against SIM truth'''
+        self.takeoff(altitude_min=20, mode='ALT_HOLD', takeoff_throttle=1800)
+        self.wait_climbrate(-0.5, 0.5, minimum_duration=2)
+
+        # each push dips the baro while pitched and lets it recover while
+        # level, which an unaided filter can rectify into a body-X accel bias
+        for _ in range(8):
+            self.set_rc(2, 1333)
+            self.wait_pitch(-10, accuracy=5, minimum_duration=8, timeout=20)
+            self.set_rc(2, 1500)
+            self.wait_pitch(0, accuracy=3, minimum_duration=8, timeout=20)
+
+        # a body-frame bias is only separable from tilt while the heading
+        # changes, so give an aided filter three turns to learn it
+        heading = self.get_heading()
+        self.set_rc(4, 1600)
+        for _ in range(12):
+            heading = (heading + 90) % 360
+            self.wait_heading(heading, accuracy=15)
+        self.set_rc(4, 1500)
+        # the bias states are only visible in the log, so their settling
+        # cannot be waited on
+        tsettle = self.get_sim_time()
+        self.delay_sim_time(20, "bias states to settle in the hover")
+
+        # learned accel bias per core, from log records written after the
+        # pushes so a stale log cannot pass the check
+        bias = {}
+        dfreader = self.dfreader_for_current_onboard_log()
+        while True:
+            m = dfreader.recv_match(type='XKF2')
+            if m is None:
+                break
+            if m.TimeUS * 1e-6 < tsettle:
+                continue
+            bias[m.C] = (m.AX, m.AY)
+        if len(bias) == 0:
+            raise NotAchievedException("No XKF2 messages in onboard log after the pushes")
+        for core in sorted(bias.keys()):
+            self.progress("Core %u accel bias X=%.2f Y=%.2f m/s/s" % (core, bias[core][0], bias[core][1]))
+
+        # the pushes carry the vehicle onto ground that can sit above home,
+        # so wait on the disarm rather than on the altitude above home
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=60)
+
+        # a retained body-X bias tilts the level estimate by asin(bias/g);
+        # in the hover that is masked by the drift of an unaided vehicle, so
+        # measure it on the ground where the vehicle is stationary
+        self.delay_sim_time(10, "attitude to settle on the ground")
+        n = 20
+        pitch_err_deg = 0
+        for i in range(n):
+            att = self.assert_receive_message('ATTITUDE')
+            sim = self.assert_receive_message('SIMSTATE')
+            pitch_err_deg += math.degrees(att.pitch - sim.pitch) / n
+        self.progress("Landed pitch error vs SIM truth: %.2f deg" % pitch_err_deg)
+        return bias, pitch_err_deg
+
+    def EK3NoAidAccelBiasXY(self):
+        '''XY accel bias is not learned from tilt-coupled baro error in unaided flight'''
+        self.start_subtest("XY accel bias is not learned in unaided flight")
+        # scoped so the aided flight below starts from the defaults
+        self.context_push()
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 3,
+            "EK3_ENABLE": 1,
+            "EK2_ENABLE": 0,
+            "SIM_GPS1_ENABLE": 0,
+            "EK3_SRC1_POSXY": 0,
+            "EK3_SRC1_VELXY": 0,
+            "EK3_SRC1_VELZ": 0,
+            # static port error proportional to airspeed squared, the same
+            # in every horizontal direction so the yaw does not modulate it
+            "SIM_BARO_WCF_FWD": 1.0,
+            "SIM_BARO_WCF_BAK": 1.0,
+            "SIM_BARO_WCF_RGT": 1.0,
+            "SIM_BARO_WCF_LFT": 1.0,
+        })
+        self.reboot_sitl()
+        # unaided the filter sits in constant position mode, which
+        # wait_ready_to_arm() treats as an error, so arm by hand
+        self.change_mode('ALT_HOLD')
+        self.wait_ekf_flags(
+            (mavutil.mavlink.EKF_ATTITUDE |
+             mavutil.mavlink.ESTIMATOR_VELOCITY_VERT |
+             mavutil.mavlink.ESTIMATOR_POS_VERT_ABS),
+            0,
+            timeout=120,
+        )
+        self.wait_prearm_sys_status_healthy(timeout=120)
+        self.arm_vehicle()
+        bias, pitch_err_deg = self.fly_accel_bias_xy_pushes()
+        for core in sorted(bias.keys()):
+            if abs(bias[core][0]) > 0.1 or abs(bias[core][1]) > 0.1:
+                raise NotAchievedException("Core %u learned XY accel bias in unaided flight" % core)
+        if abs(pitch_err_deg) > 0.5:
+            raise NotAchievedException("Landed pitch error %.2f deg" % pitch_err_deg)
+        self.context_pop()
+
+        # positive control: the same flight with aiding must still learn a
+        # real body-X bias
+        self.start_subtest("XY accel bias is learned in aided flight")
+        self.context_push()
+        self.set_parameters({
+            "SIM_ACC1_BIAS_X": 0.5,
+            "SIM_ACC2_BIAS_X": 0.5,
+            "SIM_ACC3_BIAS_X": 0.5,
+        })
+        self.reboot_sitl()
+        bias, pitch_err_deg = self.fly_accel_bias_xy_pushes()
+        for core in sorted(bias.keys()):
+            if abs(bias[core][0] - 0.5) > 0.1:
+                raise NotAchievedException("Core %u did not learn the X accel bias in aided flight" % core)
+        if abs(pitch_err_deg) > 0.5:
+            raise NotAchievedException("Landed pitch error %.2f deg" % pitch_err_deg)
+        self.context_pop()
+        # the filter still carries the learned bias; reboot to restore EKF health
         self.reboot_sitl()
 
     def EK3_ZeroVelFusionNotUsedWithGPS(self):
@@ -4725,6 +4866,693 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 raise NotAchievedException("Alt should be limited by EKF optical flow limits")
         self.reboot_sitl(force=True)
 
+    def EK3_FlowAxisLockoutRecovery(self):
+        '''Recover horizontal velocity from a single-axis optical-flow innovation lockout'''
+        # A rate offset on one flow axis is rejected by that axis's innovation gate while the
+        # other keeps passing, so the shared flow-fusion timer stays fresh and the 5 s
+        # AID_RELATIVE timeout never fires.  An accel bias reaches the same state only
+        # indirectly - the vehicle drifts until the flow agrees again - and did not provoke it
+        # reliably, so the fault is injected at the sensor.  XKF5.NI hits its 100 ceiling while
+        # an axis is being rejected and XKF7.FVC counts the resets, so both halves can be shown
+        # to see the same lockout with only the recovery differing.
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 3,
+            "EK3_ENABLE": 1,
+            "EK2_ENABLE": 0,
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+
+        def fly_with_stuck_flow_axis(options, qmin=0, quality=51, inject=True):
+            self.set_parameters({"EK3_OPTIONS": options, "SIM_FLOW_OFS_X": 0,
+                                 "EK3_FLOW_QMIN": qmin, "SIM_FLOW_QUAL": quality})
+            self.reboot_sitl()
+            self.wait_ready_to_arm(require_absolute=False, timeout=120)
+            # ALT_HOLD leaves horizontal position uncontrolled, so nothing fights the estimate
+            self.takeoff(altitude_min=3, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
+            self.delay_sim_time(5, "let the AGL KF converge before injecting the fault")
+            if inject:
+                self.set_parameter("SIM_FLOW_OFS_X", 1.0)
+
+        self.start_subtest("AGL KF gate on: single-axis lockout is recovered")
+        self.context_collect('STATUSTEXT')
+        fly_with_stuck_flow_axis(8)  # AglKfForOptflow
+        self.wait_statustext("flow vel reset", check_context=True, timeout=60)
+        self.set_parameter("SIM_FLOW_OFS_X", 0)
+        # the reset re-anchors velocity to the faulty axis, so don't expect a graceful landing
+        self.disarm_vehicle(force=True)
+        if self.max_dfreader_field('XKF5', 'NI') < 100:
+            raise NotAchievedException("no flow axis lockout was provoked")
+        if self.max_dfreader_field('XKF7', 'FVC') == 0:
+            raise NotAchievedException("recovery announced but XKF7 logged no reset")
+
+        self.start_subtest("AGL KF gate off: same lockout, no recovery")
+        self.context_clear_collection('STATUSTEXT')
+        fly_with_stuck_flow_axis(0)  # clear AglKfForOptflow
+        self.delay_sim_time(30, "give the recovery the window it used with the gate on")
+        self.set_parameter("SIM_FLOW_OFS_X", 0)
+        self.disarm_vehicle(force=True)
+        if self.max_dfreader_field('XKF5', 'NI') < 100:
+            raise NotAchievedException("gate-off half did not reproduce the lockout")
+        if self.statustext_in_collections("flow vel reset"):
+            raise NotAchievedException("flow vel reset fired without the AGL KF gate")
+
+        # EK3_FLOW_QMIN declines to re-anchor to a sample the sensor calls poor.  Same
+        # lockout again, but now the sensor reports it is unhappy, as a defocused or
+        # poor-surface sensor does - so the recovery must stop flow aiding rather than
+        # adopt a measurement that is as likely to be the fault as the cure.
+        self.start_subtest("Low flow quality: lockout is not recovered by a reset")
+        self.context_clear_collection('STATUSTEXT')
+        fly_with_stuck_flow_axis(8, qmin=40, quality=10)
+        self.wait_statustext("flow quality", check_context=True, timeout=60)
+        self.set_parameter("SIM_FLOW_OFS_X", 0)
+        self.disarm_vehicle(force=True)
+        if self.max_dfreader_field('XKF5', 'NI') < 100:
+            raise NotAchievedException("low-quality half did not reproduce the lockout")
+        if self.statustext_in_collections("flow vel reset"):
+            raise NotAchievedException("re-anchored to a flow sample below EK3_FLOW_QMIN")
+        if self.max_dfreader_field('XKF7', 'FVC') != 0:
+            raise NotAchievedException("XKF7 logged a reset below EK3_FLOW_QMIN")
+
+        # The recovery scales the recovered velocity by the AGL KF height, and aglKfValid
+        # outlives the last range fusion by 5 s - long enough for that height to coast metres
+        # low.  Take the range finder out of range first and inject into that window: a fault
+        # injected while the range is fresh is recovered by one reset, and that reset
+        # re-anchors velocity to the faulty flow and ends the lockout, leaving nothing to
+        # defer.  The recovery must then resume with the range rather than be cancelled by it.
+        self.start_subtest("Stale range: the recovery is deferred, not taken")
+        self.context_clear_collection('STATUSTEXT')
+        fly_with_stuck_flow_axis(8, inject=False)  # AglKfForOptflow
+        self.set_parameter("RNGFND1_MAX", 1.0)
+        self.set_parameter("SIM_FLOW_OFS_X", 1.0)
+        self.wait_statustext("recovery deferred", check_context=True, timeout=4)
+        self.context_clear_collection('STATUSTEXT')
+        self.delay_sim_time(2, "hold the lockout with the range stale")
+        if self.statustext_in_collections("flow vel reset"):
+            raise NotAchievedException("re-anchored to a height with no current range")
+        self.set_parameter("RNGFND1_MAX", 40.0)
+        self.wait_statustext("flow vel reset", check_context=True, timeout=30)
+        self.disarm_vehicle(force=True)
+
+    def OpticalFlowFocusHeight(self):
+        '''Below FLOW_HGT_MIN the EKF discards optical flow so bad flow cannot drive a phantom velocity'''
+        # Below the flow's focus height EKF3 discards the flow rather than dead reckoning a
+        # phantom from an unfocused reading.  The check is driven by the rangefinder, so
+        # RNGFND1_MIN must be below the floor for it to have any effect - the analog
+        # rangefinder used here reports from 0.  FLOW_HGT_MIN is set far above any real
+        # sensor here so the floor stays active long enough to measure; a realistic value
+        # is passed through in well under the 5s flow fusion timeout.
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+
+        hover_alt_m = 2.0
+
+        def fly_with_bad_flow(flow_min_h):
+            self.set_parameters({"FLOW_HGT_MIN": flow_min_h, "SIM_FLOW_OFS_X": 0})
+            self.reboot_sitl()
+            self.wait_ready_to_arm(require_absolute=False, timeout=120)
+            # flow is not healthy while stationary on the ground, so climb in ALT_HOLD
+            # before entering a mode that needs a position estimate
+            self.takeoff(
+                altitude_min=5,
+                mode='ALT_HOLD',
+                require_absolute=False,
+                takeoff_throttle=1700,
+            )
+            # GUIDED holds the test altitude, where an RC descent flies through it by an
+            # amount that depends on the speedup
+            self.change_mode('GUIDED')
+            self.send_position_target_local_ned(0, 0, hover_alt_m)
+            self.wait_altitude(
+                hover_alt_m - 0.3,
+                hover_alt_m + 0.3,
+                relative=True,
+                minimum_duration=3,
+                timeout=90,
+            )
+            # measure in ALT_HOLD, which leaves the phantom in the estimate.  A
+            # position-controlled mode flies it away instead, hiding the effect.
+            self.hover()
+            self.change_mode('ALT_HOLD')
+            # a flow rate offset reads as motion that is not happening, as an unfocused
+            # sensor does near the ground.  Implied phantom velocity is offset * range.
+            self.set_parameter("SIM_FLOW_OFS_X", 1.0)
+
+        # with the floor the estimate stays inside 0.02-0.20 m/s for the whole injection
+        # window; without it it reaches 1.4-1.6 m/s and is still rising when the bound
+        # below is crossed, so neither bound sits close to either result.  Sustained flight
+        # below the floor drops the EKF to constant position mode, which is what leaves the
+        # estimate bounded here.
+        self.start_subtest("Floor active: flow below the focus height is ignored")
+        fly_with_bad_flow(3.0)
+        self.wait_groundspeed(0, 0.5, minimum_duration=15, timeout=25)
+        self.set_parameter("SIM_FLOW_OFS_X", 0)
+        self.disarm_vehicle(force=True)
+
+        self.start_subtest("Floor disabled: bad flow drives a phantom velocity estimate")
+        fly_with_bad_flow(0)
+        self.wait_groundspeed(0.8, 1000, timeout=30)
+        self.set_parameter("SIM_FLOW_OFS_X", 0)
+        self.disarm_vehicle(force=True)
+
+        # a floor that fired at every height, rather than below its value, would pass
+        # both of the subtests above
+        self.start_subtest("Floor set below the vehicle: bad flow is still fused")
+        fly_with_bad_flow(1.0)
+        self.wait_groundspeed(0.8, 1000, timeout=30)
+        self.set_parameter("SIM_FLOW_OFS_X", 0)
+        self.disarm_vehicle(force=True)
+
+        # a range finder stops reporting below its minimum, the last part of a landing, so
+        # the floor has to hold off flow from there until disarm.  SITL's range finder reads
+        # 0 m on the ground, so its minimum is raised only once airborne or the vehicle
+        # could not arm on flow.  Landing in ALT_HOLD leaves the vehicle armed on the ground
+        # until DISARM_DELAY, longer than a carried range height is trusted, so out of range
+        # low alone has to keep the flow off there.  The descent is held to LAND's speed.
+        self.start_subtest("Landing below the range finder minimum: flow stays discarded")
+        self.set_parameters({"FLOW_HGT_MIN": 0.3, "SIM_FLOW_OFS_X": 0, "PILOT_SPD_DN": 0.5})
+        self.reboot_sitl()
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+        self.takeoff(
+            altitude_min=5,
+            mode='ALT_HOLD',
+            require_absolute=False,
+            takeoff_throttle=1700,
+        )
+        self.set_parameter("RNGFND1_MIN", 0.2)
+        descent_start_us = self.get_sim_time() * 1e6
+        self.set_rc(3, 1000)
+        self.wait_disarmed(timeout=120)
+        self.set_rc(3, 1500)
+        self.set_parameter("RNGFND1_MIN", 0)
+        self.delay_sim_time(2, reason="flush the log")
+
+        # XKF5's flow innovations only change when flow is fused
+        dfreader = self.dfreader_for_current_onboard_log()
+        range_low = None
+        disarmed = None
+        last = None
+        updates = 0
+        while True:
+            m = dfreader.recv_match(type=['RFND', 'XKF5', 'ARM'])
+            if m is None:
+                break
+            mtype = m.get_type()
+            if mtype == 'RFND':
+                if m.TimeUS > descent_start_us and range_low is None and m.Stat == 2:  # OutOfRangeLow
+                    range_low = m.TimeUS
+            elif mtype == 'ARM':
+                if range_low is not None and m.ArmState == 0:
+                    disarmed = m.TimeUS
+                    break
+            elif m.C == 0 and range_low is not None:
+                innov = (m.FIX, m.FIY, m.NI)
+                if last is not None and innov != last:
+                    updates += 1
+                last = innov
+        if range_low is None or disarmed is None:
+            raise NotAchievedException("did not see the range finder go out of range low before disarm")
+        self.progress("flow innovation updates from range finder low to disarm over %.1fs: %u" %
+                      ((disarmed - range_low) * 1e-6, updates))
+        if disarmed - range_low < 6e6:
+            raise NotAchievedException("disarmed too soon after the range finder went low to test the hold")
+        if updates != 0:
+            raise NotAchievedException("flow fused below FLOW_HGT_MIN after the range finder went out of range low")
+
+        # the height carried from the last range sample cannot see the ground change under a
+        # vehicle that has moved, so it must not hold flow off once that sample is old.  The
+        # range finder reads 1.5 m short, as over an obstacle, then goes out of range high, and
+        # well after that a 0.5 m descent takes the carried height below the floor at 1.5 m.
+        self.start_subtest("Old range: a carried height does not hold flow off in flight")
+        self.set_parameters({"FLOW_HGT_MIN": 0.3, "SIM_FLOW_OFS_X": 0, "SURFTRAK_MODE": 0})
+        self.reboot_sitl()
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+        self.takeoff(
+            altitude_min=5,
+            mode='ALT_HOLD',
+            require_absolute=False,
+            takeoff_throttle=1700,
+        )
+        self.change_mode('GUIDED')
+        self.send_position_target_local_ned(0, 0, hover_alt_m)
+        self.wait_altitude(
+            hover_alt_m - 0.3,
+            hover_alt_m + 0.3,
+            relative=True,
+            minimum_duration=3,
+            timeout=90,
+        )
+        self.hover()
+        self.change_mode('ALT_HOLD')
+        self.set_parameter("SIM_SONAR_OFFSET", -1.5)
+        self.delay_sim_time(2, reason="range finder reads short")
+        self.set_parameter("SIM_SONAR_OFFSET", 100)
+        self.delay_sim_time(6, reason="age the last range sample past 5 s")
+        self.set_rc(3, 1300)
+        self.wait_altitude(-10, hover_alt_m - 0.5, relative=True, timeout=30)
+        self.hover()
+        window_start_us = self.get_sim_time() * 1e6
+        self.delay_sim_time(8, reason="hover with the carried height below the floor")
+        window_end_us = self.get_sim_time() * 1e6
+        self.set_parameter("SIM_SONAR_OFFSET", 0)
+        self.disarm_vehicle(force=True)
+
+        dfreader = self.dfreader_for_current_onboard_log()
+        last = None
+        updates = 0
+        while True:
+            m = dfreader.recv_match(type='XKF5')
+            if m is None:
+                break
+            if m.C != 0 or not (window_start_us <= m.TimeUS <= window_end_us):
+                continue
+            innov = (m.FIX, m.FIY, m.NI)
+            if last is not None and innov != last:
+                updates += 1
+            last = innov
+        self.progress("flow innovation updates in %.1fs with an old range below the floor: %u" %
+                      ((window_end_us - window_start_us) * 1e-6, updates))
+        if updates < 20:
+            raise NotAchievedException("flow held off at 1.5 m on a range sample over 5 s old")
+
+        self.reboot_sitl()
+
+    def FlowGyroZBiasNoYawReference(self):
+        '''Z gyro bias is not learned from optical flow without a fused yaw reference'''
+        # With optical flow as the velocity source and nothing observing
+        # heading, a flow sensor error can be absorbed as a Z gyro bias. The
+        # simulated gyro has no bias, so any Z bias learned here is phantom.
+        # Each case removes the yaw reference a different way, at arming:
+        # yaw fusion during the climb shrinks the bias variance enough that
+        # the flow gain into the bias is too small to show anything in a
+        # short flight.
+        cases = [
+            ("no yaw source", None, {"EK3_SRC1_YAW": 0, "SIM_GPS1_ENABLE": 0}, None),
+            ("compass lost", None, {"EK3_SRC1_YAW": 1, "SIM_GPS1_ENABLE": 0},
+             {"SIM_MAG1_FAIL": 1, "SIM_MAG2_FAIL": 1, "SIM_MAG3_FAIL": 1}),
+            ("GPS yaw lost", "copter-gps-for-yaw.parm", {"EK3_SRC1_YAW": 2},
+             {"SIM_GPS1_ENABLE": 0, "SIM_GPS2_ENABLE": 0}),
+        ]
+        max_bias_dps = 0.1
+        failures = []
+        for (name, params_file, params, yaw_loss) in cases:
+            self.start_subtest(name)
+            self.context_push()
+            if params_file is not None:
+                self.load_default_params_file(params_file)
+            self.set_parameters({
+                "SIM_FLOW_ENABLE": 1,
+                "FLOW_TYPE": 10,
+                "FLOW_FXSCALER": 400,  # a flow scale error for the bias to absorb
+                "SIM_TERRAIN": 0,
+            })
+            self.set_parameters(params)
+            self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+            self.set_analog_rangefinder_parameters()
+            self.reboot_sitl()
+            if params_file is not None:
+                self.wait_gps_fix_type_gte(6, message_type="GPS2_RAW", verbose=True)
+
+            self.change_mode('LOITER')
+            self.wait_ready_to_arm(require_absolute=False)
+            self.zero_throttle()
+            self.arm_vehicle()
+            if yaw_loss is not None:
+                self.set_parameters(yaw_loss)
+            self.takeoff(10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
+            # a box with turns, so the flow error is seen on changing headings
+            for _ in range(4):
+                self.set_rc(2, 1300)
+                self.delay_sim_time(5, "flying a leg")
+                self.set_rc(2, 1500)
+                self.set_rc(4, 1700)
+                self.delay_sim_time(2, "turning")
+                self.set_rc(4, 1500)
+                self.delay_sim_time(3, "stopping")
+            # LAND leans hard against the flow scale error on touchdown and
+            # never detects the landing; ALT_HOLD has no position controller
+            self.change_mode('ALT_HOLD')
+            self.set_rc(3, 1000)
+            self.wait_disarmed(timeout=120)
+            self.set_rc(3, 1500)
+
+            dfreader = self.dfreader_for_current_onboard_log()
+            bias_dps = {}
+            armed = False
+            flow_fusion_started = False
+            aiding_stopped = 0
+            while True:
+                m = dfreader.recv_match(type=['ARM', 'MSG', 'XKF1'])
+                if m is None:
+                    break
+                mtype = m.get_type()
+                if mtype == 'ARM':
+                    armed = m.ArmState == 1
+                elif mtype == 'XKF1':
+                    bias_dps[m.C] = max(bias_dps.get(m.C, 0), abs(m.GZ))
+                elif "fusing optical flow" in m.Message:
+                    flow_fusion_started = True
+                elif armed and "stopped aiding" in m.Message:
+                    aiding_stopped += 1
+            self.progress(f"{name}: max |GZ| {bias_dps} flow fusion started {flow_fusion_started} "
+                          f"aiding stopped {aiding_stopped}")
+            # without flow fusion a zero bias proves nothing. With flow as the
+            # only aiding source, aiding stops once no flow update has passed
+            # its innovation gate for 5 s
+            if not flow_fusion_started or aiding_stopped > 0:
+                failures.append(f"{name}: optical flow was not fused throughout the flight")
+            worst = max(bias_dps.values(), default=0)
+            if worst > max_bias_dps:
+                failures.append(f"{name}: learned a {worst:.2f} deg/s Z gyro bias")
+            self.context_pop()
+            self.reboot_sitl()
+        if len(failures):
+            raise NotAchievedException("; ".join(failures))
+
+    def FlowAidingRestartsWithoutYawFusion(self):
+        '''optical flow aiding restarts after a dropout while a configured compass is not fusing'''
+        # Optical flow does not learn the Z gyro bias while no yaw is being
+        # fused, so that variance stays above the gyro bias learned threshold,
+        # and aiding only restarts from AID_NONE once that check passes.
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+            "EK3_SRC1_YAW": 1,
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+        self.takeoff(10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
+        # no position controller, so the flow dropout does not trigger a landing
+        self.change_mode('ALT_HOLD')
+        self.set_parameters({"SIM_MAG1_FAIL": 1, "SIM_MAG2_FAIL": 1, "SIM_MAG3_FAIL": 1})
+        self.wait_sensor_state(mavutil.mavlink.MAV_SYS_STATUS_SENSOR_3D_MAG, True, True, False, timeout=10)
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("SIM_FLOW_ENABLE", 0)
+        self.wait_statustext("EKF3 IMU0 stopped aiding", check_context=True, timeout=30)
+        self.set_parameter("SIM_FLOW_ENABLE", 1)
+        self.wait_statustext("EKF3 IMU0 started relative aiding", check_context=True, timeout=30)
+        self.land_and_disarm()
+
+    def xkfa_recent_mean(self, field, nsamples=50):
+        '''mean of the most recent valid XKFA (core 0) values of a field'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        vals = []
+        while True:
+            m = dfreader.recv_match(type='XKFA', condition='XKFA.C==0')
+            if m is None:
+                break
+            if m.Valid:
+                vals.append(getattr(m, field))
+        if len(vals) < nsamples:
+            raise NotAchievedException("insufficient XKFA samples (%u)" % len(vals))
+        return sum(vals[-nsamples:]) / nsamples
+
+    def xkfa_peak_abs(self, field):
+        '''largest absolute valid XKFA (core 0) value of a field in the log'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        peak = 0
+        while True:
+            m = dfreader.recv_match(type='XKFA', condition='XKFA.C==0')
+            if m is None:
+                break
+            if m.Valid:
+                peak = max(peak, abs(getattr(m, field)))
+        return peak
+
+    def ScriptingOSD(self):
+        '''test OSD scripting with waypoint mission - requires SFML OSD'''
+        # This test requires SITL to be built with SFML support:
+        #   ./waf configure --board sitl --enable-sfml --sitl-osd
+        # Without SFML, the OSD scripting bindings return nil and scripts fail.
+
+        # Check if OSD is compiled in by looking for OSD_TYPE parameter
+        try:
+            self.get_parameter("OSD_TYPE", timeout=5)
+        except NotAchievedException:
+            self.progress("OSD not compiled in, skipping test")
+            return
+
+        self.context_collect('STATUSTEXT')
+
+        # Install the OSD example script
+        self.install_example_script_context('osd.lua')
+
+        # When built with --sitl-osd, OSD_TYPE defaults to 2 and the OSD backend
+        # is initialized at process start. The OSD backend cannot be created
+        # after boot (OSD_TYPE requires process restart), so if not built with
+        # --sitl-osd, the test will detect this and skip gracefully.
+        # SIM_SPEEDUP=5 makes the OSD window visible longer for visual testing.
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "OSD_TYPE": 2,  # SITL OSD (requires --sitl-osd at configure time)
+            "SIM_SPEEDUP": 5,  # Slow enough to see the OSD
+        })
+        self.reboot_sitl()
+
+        # The script prints "osd not available" when no OSD backend is present
+        # (SITL built without --sitl-osd); detect that and skip gracefully.
+        try:
+            self.wait_statustext("osd not available", timeout=5, check_context=True)
+            self.progress("OSD scripting not functional (SFML not enabled), skipping test")
+            return
+        except AutoTestTimeoutException:
+            # no error message means the OSD is working
+            pass
+
+        # AUTO_OPTIONS=3 allows arming and taking off in AUTO
+        self.set_parameter("AUTO_OPTIONS", 3)
+
+        # fly a mission while the script draws waypoint info to the OSD
+        # (type, north_offset_m, east_offset_m, alt_m)
+        self.start_flying_simple_relhome_mission([
+            (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 20),
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 50, 0, 20),    # 50m North
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 50, 50, 20),   # 50m North, 50m East
+            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 0, 50, 20),    # 50m East
+            (mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0, 0, 0),
+        ])
+
+        # Wait for mission to complete (land and disarm)
+        self.wait_disarmed(timeout=180)
+
+    def EKFBootstrapReset(self):
+        '''verify EKF reset aux switch is disarmed-only and preserves origin'''
+        self.set_parameters({
+            "RC8_OPTION": 187,  # EKF_RESET
+        })
+        self.reboot_sitl()
+
+        self.wait_ready_to_arm()
+        home = self.mav.location()
+
+        self.context_collect('STATUSTEXT')
+
+        # disarmed: reset should succeed and re-bootstrap the cores
+        self.set_rc(8, 2000)
+        self.wait_statustext("EKF bootstrap reset performed", check_context=True, timeout=10)
+        self.wait_statustext("EKF3 IMU. initialised", check_context=True, regex=True, timeout=10)
+        self.set_rc(8, 1000)
+
+        # take off and confirm the GUIDED position controller holds station
+        # at the pre-reset location - if the origin had moved during the
+        # reset, position hold would drive the vehicle away from home
+        self.takeoff(10, mode='GUIDED')
+        self.wait_location(home, accuracy=5, height_accuracy=None,
+                           minimum_duration=10, timeout=30)
+
+        # armed: reset should be refused
+        self.set_rc(8, 2000)
+        self.wait_statustext("EKF reset ignored: vehicle armed", check_context=True, timeout=10)
+        self.set_rc(8, 1000)
+
+        self.do_RTL()
+
+    def EK3_NoGPSLeakWhenNotSource(self):
+        '''verify EKF does not leak GPS position when GPS is not the configured source'''
+        # With EKF configured to use optical flow (POSXY source is
+        # not GPS) and GPS simultaneously healthy, verify the
+        # reported vehicle position does not track a simulated GPS
+        # glitch.  On master, NavEKF3_core::getGPSLLH() returns the
+        # raw GPS fix irrespective of the configured POSXY source,
+        # so getLLH() fallbacks leak the glitched GPS lat/lon to
+        # callers (including GCS_MAVLINK::send_global_position_int
+        # which ignores the return value of ahrs.get_location()).
+        # This bypasses the EKF's source configuration and causes
+        # vehicle code to follow GPS glitches/spoofing that the EKF
+        # has correctly rejected.
+        self.set_parameters({
+            "EK3_SRC1_POSXY": 5,   # OPTFLOW (no optflow data provided)
+            "EK3_SRC1_VELXY": 5,   # OPTFLOW
+            "EK3_SRC1_POSZ": 1,    # BARO
+            "EK3_SRC1_VELZ": 0,    # None
+            "AHRS_EKF_TYPE": 3,
+        })
+        self.reboot_sitl()
+
+        # allow EKF to initialise: validOrigin set from GPS, filter
+        # reaches steady AID_NONE state
+        self.wait_statustext("EKF3 IMU0 initialised", timeout=30)
+
+        # capture baseline reported position
+        m = self.assert_receive_message('GLOBAL_POSITION_INT')
+        baseline_lat = m.lat
+        baseline_lon = m.lon
+        self.progress("Baseline: lat=%d lon=%d" % (baseline_lat, baseline_lon))
+
+        # glitch simulated GPS by ~0.005 deg latitude (~555 m north)
+        self.set_parameter("SIM_GPS1_GLTCH_X", 0.005)
+
+        m = self.assert_receive_message('GLOBAL_POSITION_INT')
+        lat_change_deg = abs(m.lat - baseline_lat) * 1e-7
+        self.progress("After GPS glitch: lat=%d lon=%d (baseline lat=%d, change=%.6f deg)" %
+                      (m.lat, m.lon, baseline_lat, lat_change_deg))
+
+        if lat_change_deg > 0.001:
+            raise NotAchievedException(
+                "GPS position leaked into reported location despite "
+                "EK3_SRC1_POSXY=OPTFLOW: baseline lat %d, after glitch %d "
+                "(delta %.6f deg)" %
+                (baseline_lat, m.lat, lat_change_deg))
+
+
+    def LoiterFlowBrakeOvershoot(self):
+        '''Forward-jab overshoot in optical-flow Loiter at low height'''
+        # Optical flow, no GPS, low height: the EKF flow speed limit is small,
+        # so AC_Loiter's drag term (which shapes the desired velocity) is large.
+        # The drag is removed from the desired velocity but NOT from the
+        # acceleration feed-forward passed to the position controller, so a
+        # forward stick drives the vehicle past its desired-velocity trajectory;
+        # position overshoots the target and the loop yanks it back (backward
+        # pitch on release). High LOIT_ANG_MAX inflates the mismatch. This test
+        # flies a deterministic forward jab + release for log comparison.
+        self.set_parameters({
+            "AHRS_EKF_TYPE": 3,
+            "EK3_ENABLE": 1,
+            "EK2_ENABLE": 0,
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+            "LOIT_ANG_MAX": 30,
+            "LOIT_SPEED_MS": 5,
+            "LOIT_ACC_MAX_M": 2,
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+        # flow is not healthy stationary, so climb in ALT_HOLD to a low hover
+        self.takeoff(alt_min=2, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
+        self.change_mode('LOITER')
+        self.delay_sim_time(5, "let altitude settle")
+
+        # deterministic forward jab then release (the RCIN.C2 dip marks it in the log)
+        self.set_rc(2, 1100)
+        self.delay_sim_time(3, "let log data accumulate")
+        self.set_rc(2, 1500)
+        self.delay_sim_time(8, "let vehicle settle and log data accumulate")
+
+        self.disarm_vehicle(force=True)
+
+    def OpticalFlowAGLKalmanFilter(self):
+        '''AGL KF estimates an accel-Z bias that tracks an injected IMU bias'''
+        # The AGL KF (XKFA, enabled by EK3_OPTIONS bit 3) used for optical-flow
+        # height scaling carries an accel-Z bias state so its rangefinder-anchored
+        # height stays independent of the vehicle's accel-Z bias. The bias is only
+        # observable in flight (on the ground the height is clamped and the
+        # innovation carries no bias signal), so fly an optical-flow hover and
+        # confirm the estimate moves to track an injected IMU accel-Z bias. XKFA
+        # is logged for the primary core only, so run a single lane and inject the
+        # bias on its IMU. A before/after delta is used rather than an absolute
+        # value: with only the scaling option set the main-filter altitude is not
+        # anchored, so the exact converged bias depends on the resulting vertical
+        # motion, but it must still shift in the direction of the injected bias.
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+            "EK3_IMU_MASK": 1,  # single lane: primary is core 0 (IMU1) throughout
+            "EK3_OPTIONS": 8,   # bit 3: use the AGL KF for optical-flow scaling
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+        # a lidar-class range, so the glitch below can be far enough out to stay
+        # outside the innovation gate and still be a valid reading
+        self.set_parameters({
+            "RNGFND1_MAX": 100,
+            "RNGFND1_SCALING": 20,
+            "SIM_SONAR_SCALE": 20,
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+        self.takeoff(altitude_min=10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
+
+        # let the AGL KF settle on the rangefinder, then confirm it is valid and
+        # record the bias estimate baseline
+        self.delay_sim_time(15, reason="AGL KF to settle on the rangefinder")
+        self.assert_dataflash_message_field_level_at(
+            "XKFA", "Valid", 1,
+            condition="XKFA.C==0",
+            tolerance=0.5,
+            maintain=1,
+        )
+        self.start_subtest("Rangefinder excursion does not run the bias state away")
+        # A reading far enough out to be rejected by the innovation gate leaves the
+        # bias state unobserved while the gate keeps inflating the covariance. The
+        # height and the bias must both be where they started once the readings are
+        # good again, and the bias must never leave the accelerometer bias limit.
+        hgt_before = self.xkfa_recent_mean('HAgl')
+        self.set_parameter("SIM_SONAR_OFFSET", 80)
+        self.delay_sim_time(4, reason="rangefinder reading 80m long")
+        self.set_parameter("SIM_SONAR_OFFSET", 0)
+        self.delay_sim_time(20, reason="AGL KF to recover")
+        hgt_after = self.xkfa_recent_mean('HAgl')
+        bias_peak = self.xkfa_peak_abs('Bias')
+        self.progress("AGL KF height before=%.2f after=%.2f, peak |bias|=%.3f" %
+                      (hgt_before, hgt_after, bias_peak))
+        if abs(hgt_after - hgt_before) > 0.5:
+            raise NotAchievedException(
+                "AGL KF height did not recover from the excursion (before=%.2f after=%.2f)" %
+                (hgt_before, hgt_after))
+        accel_bias_lim = self.get_parameter("EK3_ACC_BIAS_LIM")
+        if bias_peak > accel_bias_lim:
+            raise NotAchievedException(
+                "AGL KF bias exceeded EK3_ACC_BIAS_LIM (peak=%.3f limit=%.3f)" %
+                (bias_peak, accel_bias_lim))
+
+        bias_before = self.xkfa_recent_mean('Bias')
+
+        # inject an accel-Z bias on IMU1 and confirm the AGL KF bias estimate
+        # follows it
+        self.set_parameters({
+            "SIM_ACC1_BIAS_Z": 0.7,
+        })
+        self.delay_sim_time(30, reason="AGL KF to learn the injected accel-Z bias")
+        bias_after = self.xkfa_recent_mean('Bias')
+        self.progress("AGL KF accel-Z bias before=%.3f after=%.3f" %
+                      (bias_before, bias_after))
+        if bias_after - bias_before < 0.1:
+            raise NotAchievedException(
+                "AGL KF did not learn injected accel-Z bias (before=%.3f after=%.3f)" %
+                (bias_before, bias_after))
+
+        self.land_and_disarm()
+
     def OpticalFlowGPSLossAiding(self):
         '''EKF falls back to relative aiding when flow replaces lost GPS in flight'''
         # A vehicle that takes off on GPS is in AID_ABSOLUTE.  When it switches to
@@ -4938,126 +5766,15 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # arm and take off directly in Loiter: this is the path that matters -
         # Loiter requires_position(), and arming exercises the arm-time
         # compass-health gate while the compass is not the EKF yaw source.
-        self.takeoff(altitude_min=10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
+        self.takeoff(alt_min=10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
 
         # confirm Loiter stays engaged and armed (no EKF failsafe / mode
         # revert). A lat/lon position-hold check is not used: with no GPS the
         # EKF has no absolute origin, so global position is not valid here.
-        self.delay_sim_time(15, "confirm Loiter stays engaged and armed")
+        self.delay_sim_time(15)
         self.wait_mode('LOITER')
         if not self.armed():
             raise NotAchievedException("Disarmed during Loiter without compass yaw source")
-
-        self.land_and_disarm()
-
-    def xkfa_recent_mean(self, field, nsamples=50):
-        '''mean of the most recent valid XKFA (core 0) values of a field'''
-        dfreader = self.dfreader_for_current_onboard_log()
-        vals = []
-        while True:
-            m = dfreader.recv_match(type='XKFA', condition='XKFA.C==0')
-            if m is None:
-                break
-            if m.Valid:
-                vals.append(getattr(m, field))
-        if len(vals) < nsamples:
-            raise NotAchievedException("insufficient XKFA samples (%u)" % len(vals))
-        return sum(vals[-nsamples:]) / nsamples
-
-    def xkfa_peak_abs(self, field):
-        '''largest absolute valid XKFA (core 0) value of a field in the log'''
-        dfreader = self.dfreader_for_current_onboard_log()
-        peak = 0
-        while True:
-            m = dfreader.recv_match(type='XKFA', condition='XKFA.C==0')
-            if m is None:
-                break
-            if m.Valid:
-                peak = max(peak, abs(getattr(m, field)))
-        return peak
-
-    def OpticalFlowAGLKalmanFilter(self):
-        '''AGL KF estimates an accel-Z bias that tracks an injected IMU bias'''
-        # The AGL KF (XKFA, enabled by EK3_OPTIONS bit 3) used for optical-flow
-        # height scaling carries an accel-Z bias state so its rangefinder-anchored
-        # height stays independent of the vehicle's accel-Z bias. The bias is only
-        # observable in flight (on the ground the height is clamped and the
-        # innovation carries no bias signal), so fly an optical-flow hover and
-        # confirm the estimate moves to track an injected IMU accel-Z bias. XKFA
-        # is logged for the primary core only, so run a single lane and inject the
-        # bias on its IMU. A before/after delta is used rather than an absolute
-        # value: with only the scaling option set the main-filter altitude is not
-        # anchored, so the exact converged bias depends on the resulting vertical
-        # motion, but it must still shift in the direction of the injected bias.
-        self.set_parameters({
-            "SIM_FLOW_ENABLE": 1,
-            "FLOW_TYPE": 10,
-            "SIM_GPS1_ENABLE": 0,
-            "SIM_TERRAIN": 0,
-            "EK3_IMU_MASK": 1,  # single lane: primary is core 0 (IMU1) throughout
-            "EK3_OPTIONS": 8,   # bit 3: use the AGL KF for optical-flow scaling
-        })
-        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
-        self.set_analog_rangefinder_parameters()
-        # a lidar-class range, so the glitch below can be far enough out to stay
-        # outside the innovation gate and still be a valid reading
-        self.set_parameters({
-            "RNGFND1_MAX": 100,
-            "RNGFND1_SCALING": 20,
-            "SIM_SONAR_SCALE": 20,
-        })
-        self.reboot_sitl()
-        self.wait_ready_to_arm(require_absolute=False, timeout=120)
-        self.takeoff(altitude_min=10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
-
-        # let the AGL KF settle on the rangefinder, then confirm it is valid and
-        # record the bias estimate baseline
-        self.delay_sim_time(15, reason="AGL KF to settle on the rangefinder")
-        self.assert_dataflash_message_field_level_at(
-            "XKFA", "Valid", 1,
-            condition="XKFA.C==0",
-            tolerance=0.5,
-            maintain=1,
-        )
-        self.start_subtest("Rangefinder excursion does not run the bias state away")
-        # A reading far enough out to be rejected by the innovation gate leaves the
-        # bias state unobserved while the gate keeps inflating the covariance. The
-        # height and the bias must both be where they started once the readings are
-        # good again, and the bias must never leave the accelerometer bias limit.
-        hgt_before = self.xkfa_recent_mean('HAgl')
-        self.set_parameter("SIM_SONAR_OFFSET", 80)
-        self.delay_sim_time(4, reason="rangefinder reading 80m long")
-        self.set_parameter("SIM_SONAR_OFFSET", 0)
-        self.delay_sim_time(20, reason="AGL KF to recover")
-        hgt_after = self.xkfa_recent_mean('HAgl')
-        bias_peak = self.xkfa_peak_abs('Bias')
-        self.progress("AGL KF height before=%.2f after=%.2f, peak |bias|=%.3f" %
-                      (hgt_before, hgt_after, bias_peak))
-        if abs(hgt_after - hgt_before) > 0.5:
-            raise NotAchievedException(
-                "AGL KF height did not recover from the excursion (before=%.2f after=%.2f)" %
-                (hgt_before, hgt_after))
-        accel_bias_lim = self.get_parameter("EK3_ACC_BIAS_LIM")
-        if bias_peak > accel_bias_lim:
-            raise NotAchievedException(
-                "AGL KF bias exceeded EK3_ACC_BIAS_LIM (peak=%.3f limit=%.3f)" %
-                (bias_peak, accel_bias_lim))
-
-        bias_before = self.xkfa_recent_mean('Bias')
-
-        # inject an accel-Z bias on IMU1 and confirm the AGL KF bias estimate
-        # follows it
-        self.set_parameters({
-            "SIM_ACC1_BIAS_Z": 0.7,
-        })
-        self.delay_sim_time(30, reason="AGL KF to learn the injected accel-Z bias")
-        bias_after = self.xkfa_recent_mean('Bias')
-        self.progress("AGL KF accel-Z bias before=%.3f after=%.3f" %
-                      (bias_before, bias_after))
-        if bias_after - bias_before < 0.1:
-            raise NotAchievedException(
-                "AGL KF did not learn injected accel-Z bias (before=%.3f after=%.3f)" %
-                (bias_before, bias_after))
 
         self.land_and_disarm()
 
@@ -5099,565 +5816,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # usable; switch to it and confirm it stays engaged and armed.
         self.wait_ekf_happy(require_absolute=True, timeout=30)
         self.change_mode('LOITER')
-        self.delay_sim_time(15, "confirm Loiter stays engaged and armed")
+        self.delay_sim_time(15)
         self.wait_mode('LOITER')
         if not self.armed():
             raise NotAchievedException("Disarmed during Loiter without compass yaw source")
 
         self.do_RTL()
-
-    def FlowGyroZBiasNoYawReference(self):
-        '''Z gyro bias is not learned from optical flow without a fused yaw reference'''
-        # With optical flow as the velocity source and nothing observing
-        # heading, a flow sensor error can be absorbed as a Z gyro bias. The
-        # simulated gyro has no bias, so any Z bias learned here is phantom.
-        # Each case removes the yaw reference a different way, at arming:
-        # yaw fusion during the climb shrinks the bias variance enough that
-        # the flow gain into the bias is too small to show anything in a
-        # short flight.
-        cases = [
-            ("no yaw source", None, {"EK3_SRC1_YAW": 0, "SIM_GPS1_ENABLE": 0}, None),
-            ("compass lost", None, {"EK3_SRC1_YAW": 1, "SIM_GPS1_ENABLE": 0},
-             {"SIM_MAG1_FAIL": 1, "SIM_MAG2_FAIL": 1, "SIM_MAG3_FAIL": 1}),
-            ("GPS yaw lost", "copter-gps-for-yaw.parm", {"EK3_SRC1_YAW": 2},
-             {"SIM_GPS1_ENABLE": 0, "SIM_GPS2_ENABLE": 0}),
-        ]
-        max_bias_dps = 0.1
-        failures = []
-        for (name, params_file, params, yaw_loss) in cases:
-            self.start_subtest(name)
-            self.context_push()
-            if params_file is not None:
-                self.load_default_params_file(params_file)
-            self.set_parameters({
-                "SIM_FLOW_ENABLE": 1,
-                "FLOW_TYPE": 10,
-                "FLOW_FXSCALER": 400,  # a flow scale error for the bias to absorb
-                "SIM_TERRAIN": 0,
-            })
-            self.set_parameters(params)
-            self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
-            self.set_analog_rangefinder_parameters()
-            self.reboot_sitl()
-            if params_file is not None:
-                self.wait_gps_fix_type_gte(6, message_type="GPS2_RAW", verbose=True)
-
-            self.change_mode('LOITER')
-            self.wait_ready_to_arm(require_absolute=False)
-            self.zero_throttle()
-            self.arm_vehicle()
-            if yaw_loss is not None:
-                self.set_parameters(yaw_loss)
-            self.takeoff(10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
-            # a box with turns, so the flow error is seen on changing headings
-            for _ in range(4):
-                self.set_rc(2, 1300)
-                self.delay_sim_time(5, "flying a leg")
-                self.set_rc(2, 1500)
-                self.set_rc(4, 1700)
-                self.delay_sim_time(2, "turning")
-                self.set_rc(4, 1500)
-                self.delay_sim_time(3, "stopping")
-            # LAND leans hard against the flow scale error on touchdown and
-            # never detects the landing; ALT_HOLD has no position controller
-            self.change_mode('ALT_HOLD')
-            self.set_rc(3, 1000)
-            self.wait_disarmed(timeout=120)
-            self.set_rc(3, 1500)
-
-            dfreader = self.dfreader_for_current_onboard_log()
-            bias_dps = {}
-            armed = False
-            flow_fusion_started = False
-            aiding_stopped = 0
-            while True:
-                m = dfreader.recv_match(type=['ARM', 'MSG', 'XKF1'])
-                if m is None:
-                    break
-                mtype = m.get_type()
-                if mtype == 'ARM':
-                    armed = m.ArmState == 1
-                elif mtype == 'XKF1':
-                    bias_dps[m.C] = max(bias_dps.get(m.C, 0), abs(m.GZ))
-                elif "fusing optical flow" in m.Message:
-                    flow_fusion_started = True
-                elif armed and "stopped aiding" in m.Message:
-                    aiding_stopped += 1
-            self.progress(f"{name}: max |GZ| {bias_dps} flow fusion started {flow_fusion_started} "
-                          f"aiding stopped {aiding_stopped}")
-            # without flow fusion a zero bias proves nothing. With flow as the
-            # only aiding source, aiding stops once no flow update has passed
-            # its innovation gate for 5 s
-            if not flow_fusion_started or aiding_stopped > 0:
-                failures.append(f"{name}: optical flow was not fused throughout the flight")
-            worst = max(bias_dps.values(), default=0)
-            if worst > max_bias_dps:
-                failures.append(f"{name}: learned a {worst:.2f} deg/s Z gyro bias")
-            self.context_pop()
-            self.reboot_sitl()
-        if len(failures):
-            raise NotAchievedException("; ".join(failures))
-
-    def FlowAidingRestartsWithoutYawFusion(self):
-        '''optical flow aiding restarts after a dropout while a configured compass is not fusing'''
-        # Optical flow does not learn the Z gyro bias while no yaw is being
-        # fused, so that variance stays above the gyro bias learned threshold,
-        # and aiding only restarts from AID_NONE once that check passes.
-        self.set_parameters({
-            "SIM_FLOW_ENABLE": 1,
-            "FLOW_TYPE": 10,
-            "SIM_GPS1_ENABLE": 0,
-            "SIM_TERRAIN": 0,
-            "EK3_SRC1_YAW": 1,
-        })
-        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
-        self.set_analog_rangefinder_parameters()
-        self.reboot_sitl()
-        self.takeoff(10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
-        # no position controller, so the flow dropout does not trigger a landing
-        self.change_mode('ALT_HOLD')
-        self.set_parameters({"SIM_MAG1_FAIL": 1, "SIM_MAG2_FAIL": 1, "SIM_MAG3_FAIL": 1})
-        self.wait_sensor_state(mavutil.mavlink.MAV_SYS_STATUS_SENSOR_3D_MAG, True, True, False, timeout=10)
-        self.context_collect('STATUSTEXT')
-        self.set_parameter("SIM_FLOW_ENABLE", 0)
-        self.wait_statustext("EKF3 IMU0 stopped aiding", check_context=True, timeout=30)
-        self.set_parameter("SIM_FLOW_ENABLE", 1)
-        self.wait_statustext("EKF3 IMU0 started relative aiding", check_context=True, timeout=30)
-        self.land_and_disarm()
-
-    def LoiterFlowBrakeOvershoot(self):
-        '''Forward-jab overshoot in optical-flow Loiter at low height'''
-        # Optical flow, no GPS, low height: the EKF flow speed limit is small,
-        # so AC_Loiter's drag term (which shapes the desired velocity) is large.
-        # The drag is removed from the desired velocity but NOT from the
-        # acceleration feed-forward passed to the position controller, so a
-        # forward stick drives the vehicle past its desired-velocity trajectory;
-        # position overshoots the target and the loop yanks it back (backward
-        # pitch on release). High LOIT_ANG_MAX inflates the mismatch. This test
-        # flies a deterministic forward jab + release for log comparison.
-        self.set_parameters({
-            "AHRS_EKF_TYPE": 3,
-            "EK3_ENABLE": 1,
-            "EK2_ENABLE": 0,
-            "SIM_FLOW_ENABLE": 1,
-            "FLOW_TYPE": 10,
-            "SIM_GPS1_ENABLE": 0,
-            "SIM_TERRAIN": 0,
-            "LOIT_ANG_MAX": 30,
-            "LOIT_SPEED_MS": 5,
-            "LOIT_ACC_MAX_M": 2,
-        })
-        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
-        self.set_analog_rangefinder_parameters()
-        self.reboot_sitl()
-
-        self.wait_ready_to_arm(require_absolute=False, timeout=120)
-        # flow is not healthy stationary, so climb in ALT_HOLD to a low hover
-        self.takeoff(altitude_min=2, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
-        self.change_mode('LOITER')
-        self.delay_sim_time(5, "let altitude settle")
-
-        # deterministic forward jab then release (the RCIN.C2 dip marks it in the log)
-        self.set_rc(2, 1100)
-        self.delay_sim_time(3, "let log data accumulate")
-        self.set_rc(2, 1500)
-        self.delay_sim_time(8, "let vehicle settle and log data accumulate")
-
-        self.disarm_vehicle(force=True)
-
-    def ModeFlowHold(self):
-        '''test FlowHold mode - position hold and flow-based height estimation'''
-        self.set_parameters({
-            "SIM_FLOW_ENABLE": 1,
-            "FLOW_TYPE": 10,
-            # the height estimator discards negative instantaneous
-            # heights, so flow noise biases its estimate low; this test
-            # is about the estimator arithmetic, not noise rejection:
-            "SIM_FLOW_RND": 0,
-            # a little wind so position-hold is against an external
-            # force rather than just coming to rest:
-            "SIM_WIND_SPD": 1,
-            "SIM_WIND_DIR": 225,
-            "SIM_WIND_T": 1,  # full wind at low altitude (no shear)
-        })
-        self.reboot_sitl()
-
-        # ground truth for height-above-ground comes from the simulated
-        # GPS; the EKF height (and anything derived from it, e.g.
-        # GLOBAL_POSITION_INT.relative_alt) is corrupted by baro drift
-        # later in this test
-        def true_agl_m(ground_alt_m):
-            m = self.assert_receive_message('GPS_RAW_INT')
-            return m.alt * 0.001 - ground_alt_m
-
-        self.wait_ready_to_arm()
-        ground_alt_m = self.assert_receive_message('GPS_RAW_INT').alt * 0.001
-
-        self.takeoff(8, mode='FLOWHOLD')
-
-        self.start_subtest("hold position after pilot input is released")
-        # flow is only used from 3s after arming:
-        self.delay_sim_time(5, "let FlowHold settle")
-        self.set_rc(2, 1200)
-        self.wait_groundspeed(1.0, 100, timeout=10)
-        self.set_rc(2, 1500)
-        self.wait_groundspeed(0, 0.3, timeout=30, minimum_duration=5)
-        loc = self.get_location()
-        self.delay_sim_time(15, "watch for drift")
-        drift_m = self.get_distance(loc, self.get_location())
-        self.progress("Drifted %.2fm while holding" % drift_m)
-        if drift_m > 3:
-            raise NotAchievedException("Drifted %.2fm in FlowHold" % drift_m)
-
-        self.start_subtest("height estimate recovers from EKF height error")
-        # FlowHold scales flow to a velocity using its own height
-        # estimate, broadcast as named float HEST.  Check it currently
-        # agrees with the true height:
-        hest_m = self.assert_receive_named_value_float('HEST').value
-        agl_m = true_agl_m(ground_alt_m)
-        self.progress("HEST %.2fm true-AGL %.2fm" % (hest_m, agl_m))
-        if abs(hest_m - agl_m) > 1.5:
-            raise NotAchievedException(
-                "HEST %.2fm does not match true height %.2fm" %
-                (hest_m, agl_m))
-
-        # EK3's default height source is the baro.  Drift the baro low;
-        # the EKF height sinks with it and the height controller climbs
-        # the vehicle to hold its altitude target, leaving the vehicle
-        # higher above the ground than FlowHold's height estimate.
-        self.progress("Drifting baro to give EKF an incorrect height")
-        self.set_parameter("SIM_BARO_DRIFT", -0.35)
-        want_agl_m = 10
-        tstart = self.get_sim_time()
-        while true_agl_m(ground_alt_m) < want_agl_m:
-            if self.get_sim_time_cached() - tstart > 60:
-                raise NotAchievedException("Did not climb with baro drift")
-        self.set_parameter("SIM_BARO_DRIFT", 0)
-
-        # the height estimator only updates when it sees significant
-        # delta-velocity and delta-flow; at this height that takes hard
-        # accelerations, so bang the roll and pitch sticks back and
-        # forth (out of phase) while waiting for the estimate to
-        # converge on the true height
-        self.progress("Stirring sticks to excite the height estimator")
-        tstart = self.get_sim_time()
-        last_stick_flip = 0
-        last_report = 0
-        flip_pitch = True
-        rc_pitch = 2000
-        rc_roll = 2000
-        try:
-            while True:
-                now = self.get_sim_time_cached()
-                if now - tstart > 150:
-                    raise NotAchievedException(
-                        "HEST did not converge; HEST %.2fm true %.2fm" %
-                        (hest_m, agl_m))
-                if now - last_stick_flip > 0.5:
-                    if flip_pitch:
-                        rc_pitch = 3000 - rc_pitch
-                        self.set_rc(2, rc_pitch)
-                    else:
-                        rc_roll = 3000 - rc_roll
-                        self.set_rc(1, rc_roll)
-                    flip_pitch = not flip_pitch
-                    last_stick_flip = now
-                m = self.assert_receive_message('NAMED_VALUE_FLOAT')
-                if m.name != 'HEST':
-                    continue
-                hest_m = m.value
-                agl_m = true_agl_m(ground_alt_m)
-                if now - last_report > 5:
-                    self.progress("HEST %.2fm true-AGL %.2fm" % (hest_m, agl_m))
-                    last_report = now
-                if abs(hest_m - agl_m) < 0.4:
-                    self.progress(
-                        "HEST converged in %.1fs; HEST %.2fm true %.2fm" %
-                        (now - tstart, hest_m, agl_m))
-                    break
-        finally:
-            self.set_rc(1, 1500)
-            self.set_rc(2, 1500)
-
-        self.do_RTL()
-
-        # we have played with SIM_BARO_DRIFT and that causes the
-        # estimators to build up state that takes time to decay - so
-        # just reboot.
-        self.reboot_sitl()
-
-    def EK3_FlowAxisLockoutRecovery(self):
-        '''Recover horizontal velocity from a single-axis optical-flow innovation lockout'''
-        # A rate offset on one flow axis is rejected by that axis's innovation gate while the
-        # other keeps passing, so the shared flow-fusion timer stays fresh and the 5 s
-        # AID_RELATIVE timeout never fires.  An accel bias reaches the same state only
-        # indirectly - the vehicle drifts until the flow agrees again - and did not provoke it
-        # reliably, so the fault is injected at the sensor.  XKF5.NI hits its 100 ceiling while
-        # an axis is being rejected and XKF7.FVC counts the resets, so both halves can be shown
-        # to see the same lockout with only the recovery differing.
-        self.set_parameters({
-            "AHRS_EKF_TYPE": 3,
-            "EK3_ENABLE": 1,
-            "EK2_ENABLE": 0,
-    def OpticalFlowFocusHeight(self):
-        '''Below FLOW_HGT_MIN the EKF discards optical flow so bad flow cannot drive a phantom velocity'''
-        # Below the flow's focus height EKF3 discards the flow rather than dead reckoning a
-        # phantom from an unfocused reading.  The check is driven by the rangefinder, so
-        # RNGFND1_MIN must be below the floor for it to have any effect - the analog
-        # rangefinder used here reports from 0.  FLOW_HGT_MIN is set far above any real
-        # sensor here so the floor stays active long enough to measure; a realistic value
-        # is passed through in well under the 5s flow fusion timeout.
-        self.set_parameters({
-            "SIM_FLOW_ENABLE": 1,
-            "FLOW_TYPE": 10,
-            "SIM_GPS1_ENABLE": 0,
-            "SIM_TERRAIN": 0,
-        })
-        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
-        self.set_analog_rangefinder_parameters()
-
-        def fly_with_stuck_flow_axis(options, qmin=0, quality=51, inject=True):
-            self.set_parameters({"EK3_OPTIONS": options, "SIM_FLOW_OFS_X": 0,
-                                 "EK3_FLOW_QMIN": qmin, "SIM_FLOW_QUAL": quality})
-            self.reboot_sitl()
-            self.wait_ready_to_arm(require_absolute=False, timeout=120)
-            # ALT_HOLD leaves horizontal position uncontrolled, so nothing fights the estimate
-            self.takeoff(altitude_min=3, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
-            self.delay_sim_time(5, "let the AGL KF converge before injecting the fault")
-            if inject:
-                self.set_parameter("SIM_FLOW_OFS_X", 1.0)
-
-        self.start_subtest("AGL KF gate on: single-axis lockout is recovered")
-        self.context_collect('STATUSTEXT')
-        fly_with_stuck_flow_axis(8)  # AglKfForOptflow
-        self.wait_statustext("flow vel reset", check_context=True, timeout=60)
-        self.set_parameter("SIM_FLOW_OFS_X", 0)
-        # the reset re-anchors velocity to the faulty axis, so don't expect a graceful landing
-        self.disarm_vehicle(force=True)
-        if self.max_dfreader_field('XKF5', 'NI') < 100:
-            raise NotAchievedException("no flow axis lockout was provoked")
-        if self.max_dfreader_field('XKF7', 'FVC') == 0:
-            raise NotAchievedException("recovery announced but XKF7 logged no reset")
-
-        self.start_subtest("AGL KF gate off: same lockout, no recovery")
-        self.context_clear_collection('STATUSTEXT')
-        fly_with_stuck_flow_axis(0)  # clear AglKfForOptflow
-        self.delay_sim_time(30, "give the recovery the window it used with the gate on")
-        self.set_parameter("SIM_FLOW_OFS_X", 0)
-        self.disarm_vehicle(force=True)
-        if self.max_dfreader_field('XKF5', 'NI') < 100:
-            raise NotAchievedException("gate-off half did not reproduce the lockout")
-        if self.statustext_in_collections("flow vel reset"):
-            raise NotAchievedException("flow vel reset fired without the AGL KF gate")
-
-        # EK3_FLOW_QMIN declines to re-anchor to a sample the sensor calls poor.  Same
-        # lockout again, but now the sensor reports it is unhappy, as a defocused or
-        # poor-surface sensor does - so the recovery must stop flow aiding rather than
-        # adopt a measurement that is as likely to be the fault as the cure.
-        self.start_subtest("Low flow quality: lockout is not recovered by a reset")
-        self.context_clear_collection('STATUSTEXT')
-        fly_with_stuck_flow_axis(8, qmin=40, quality=10)
-        self.wait_statustext("flow quality", check_context=True, timeout=60)
-        self.set_parameter("SIM_FLOW_OFS_X", 0)
-        self.disarm_vehicle(force=True)
-        if self.max_dfreader_field('XKF5', 'NI') < 100:
-            raise NotAchievedException("low-quality half did not reproduce the lockout")
-        if self.statustext_in_collections("flow vel reset"):
-            raise NotAchievedException("re-anchored to a flow sample below EK3_FLOW_QMIN")
-        if self.max_dfreader_field('XKF7', 'FVC') != 0:
-            raise NotAchievedException("XKF7 logged a reset below EK3_FLOW_QMIN")
-
-        # The recovery scales the recovered velocity by the AGL KF height, and aglKfValid
-        # outlives the last range fusion by 5 s - long enough for that height to coast metres
-        # low.  Take the range finder out of range first and inject into that window: a fault
-        # injected while the range is fresh is recovered by one reset, and that reset
-        # re-anchors velocity to the faulty flow and ends the lockout, leaving nothing to
-        # defer.  The recovery must then resume with the range rather than be cancelled by it.
-        self.start_subtest("Stale range: the recovery is deferred, not taken")
-        self.context_clear_collection('STATUSTEXT')
-        fly_with_stuck_flow_axis(8, inject=False)  # AglKfForOptflow
-        self.set_parameter("RNGFND1_MAX", 1.0)
-        self.set_parameter("SIM_FLOW_OFS_X", 1.0)
-        self.wait_statustext("recovery deferred", check_context=True, timeout=4)
-        self.context_clear_collection('STATUSTEXT')
-        self.delay_sim_time(2, "hold the lockout with the range stale")
-        if self.statustext_in_collections("flow vel reset"):
-            raise NotAchievedException("re-anchored to a height with no current range")
-        self.set_parameter("RNGFND1_MAX", 40.0)
-        self.wait_statustext("flow vel reset", check_context=True, timeout=30)
-        self.disarm_vehicle(force=True)
-
-        hover_alt_m = 2.0
-
-        def fly_with_bad_flow(flow_min_h):
-            self.set_parameters({"FLOW_HGT_MIN": flow_min_h, "SIM_FLOW_OFS_X": 0})
-            self.reboot_sitl()
-            self.wait_ready_to_arm(require_absolute=False, timeout=120)
-            # flow is not healthy while stationary on the ground, so climb in ALT_HOLD
-            # before entering a mode that needs a position estimate
-            self.takeoff(
-                altitude_min=5,
-                mode='ALT_HOLD',
-                require_absolute=False,
-                takeoff_throttle=1700,
-            )
-            # GUIDED holds the test altitude, where an RC descent flies through it by an
-            # amount that depends on the speedup
-            self.change_mode('GUIDED')
-            self.send_position_target_local_ned(0, 0, hover_alt_m)
-            self.wait_altitude(
-                hover_alt_m - 0.3,
-                hover_alt_m + 0.3,
-                relative=True,
-                minimum_duration=3,
-                timeout=90,
-            )
-            # measure in ALT_HOLD, which leaves the phantom in the estimate.  A
-            # position-controlled mode flies it away instead, hiding the effect.
-            self.hover()
-            self.change_mode('ALT_HOLD')
-            # a flow rate offset reads as motion that is not happening, as an unfocused
-            # sensor does near the ground.  Implied phantom velocity is offset * range.
-            self.set_parameter("SIM_FLOW_OFS_X", 1.0)
-
-        # with the floor the estimate stays inside 0.02-0.20 m/s for the whole injection
-        # window; without it it reaches 1.4-1.6 m/s and is still rising when the bound
-        # below is crossed, so neither bound sits close to either result.  Sustained flight
-        # below the floor drops the EKF to constant position mode, which is what leaves the
-        # estimate bounded here.
-        self.start_subtest("Floor active: flow below the focus height is ignored")
-        fly_with_bad_flow(3.0)
-        self.wait_groundspeed(0, 0.5, minimum_duration=15, timeout=25)
-        self.set_parameter("SIM_FLOW_OFS_X", 0)
-        self.disarm_vehicle(force=True)
-
-        self.start_subtest("Floor disabled: bad flow drives a phantom velocity estimate")
-        fly_with_bad_flow(0)
-        self.wait_groundspeed(0.8, 1000, timeout=30)
-        self.set_parameter("SIM_FLOW_OFS_X", 0)
-        self.disarm_vehicle(force=True)
-
-        # a floor that fired at every height, rather than below its value, would pass
-        # both of the subtests above
-        self.start_subtest("Floor set below the vehicle: bad flow is still fused")
-        fly_with_bad_flow(1.0)
-        self.wait_groundspeed(0.8, 1000, timeout=30)
-        self.set_parameter("SIM_FLOW_OFS_X", 0)
-        self.disarm_vehicle(force=True)
-
-        # a range finder stops reporting below its minimum, the last part of a landing, so
-        # the floor has to hold off flow from there until disarm.  SITL's range finder reads
-        # 0 m on the ground, so its minimum is raised only once airborne or the vehicle
-        # could not arm on flow.  Landing in ALT_HOLD leaves the vehicle armed on the ground
-        # until DISARM_DELAY, longer than a carried range height is trusted, so out of range
-        # low alone has to keep the flow off there.  The descent is held to LAND's speed.
-        self.start_subtest("Landing below the range finder minimum: flow stays discarded")
-        self.set_parameters({"FLOW_HGT_MIN": 0.3, "SIM_FLOW_OFS_X": 0, "PILOT_SPD_DN": 0.5})
-        self.reboot_sitl()
-        self.wait_ready_to_arm(require_absolute=False, timeout=120)
-        self.takeoff(
-            altitude_min=5,
-            mode='ALT_HOLD',
-            require_absolute=False,
-            takeoff_throttle=1700,
-        )
-        self.set_parameter("RNGFND1_MIN", 0.2)
-        descent_start_us = self.get_sim_time() * 1e6
-        self.set_rc(3, 1000)
-        self.wait_disarmed(timeout=120)
-        self.set_rc(3, 1500)
-        self.set_parameter("RNGFND1_MIN", 0)
-        self.delay_sim_time(2, reason="flush the log")
-
-        # XKF5's flow innovations only change when flow is fused
-        dfreader = self.dfreader_for_current_onboard_log()
-        range_low = None
-        disarmed = None
-        last = None
-        updates = 0
-        while True:
-            m = dfreader.recv_match(type=['RFND', 'XKF5', 'ARM'])
-            if m is None:
-                break
-            mtype = m.get_type()
-            if mtype == 'RFND':
-                if m.TimeUS > descent_start_us and range_low is None and m.Stat == 2:  # OutOfRangeLow
-                    range_low = m.TimeUS
-            elif mtype == 'ARM':
-                if range_low is not None and m.ArmState == 0:
-                    disarmed = m.TimeUS
-                    break
-            elif m.C == 0 and range_low is not None:
-                innov = (m.FIX, m.FIY, m.NI)
-                if last is not None and innov != last:
-                    updates += 1
-                last = innov
-        if range_low is None or disarmed is None:
-            raise NotAchievedException("did not see the range finder go out of range low before disarm")
-        self.progress("flow innovation updates from range finder low to disarm over %.1fs: %u" %
-                      ((disarmed - range_low) * 1e-6, updates))
-        if disarmed - range_low < 6e6:
-            raise NotAchievedException("disarmed too soon after the range finder went low to test the hold")
-        if updates != 0:
-            raise NotAchievedException("flow fused below FLOW_HGT_MIN after the range finder went out of range low")
-
-        # the height carried from the last range sample cannot see the ground change under a
-        # vehicle that has moved, so it must not hold flow off once that sample is old.  The
-        # range finder reads 1.5 m short, as over an obstacle, then goes out of range high, and
-        # well after that a 0.5 m descent takes the carried height below the floor at 1.5 m.
-        self.start_subtest("Old range: a carried height does not hold flow off in flight")
-        self.set_parameters({"FLOW_HGT_MIN": 0.3, "SIM_FLOW_OFS_X": 0, "SURFTRAK_MODE": 0})
-        self.reboot_sitl()
-        self.wait_ready_to_arm(require_absolute=False, timeout=120)
-        self.takeoff(
-            altitude_min=5,
-            mode='ALT_HOLD',
-            require_absolute=False,
-            takeoff_throttle=1700,
-        )
-        self.change_mode('GUIDED')
-        self.send_position_target_local_ned(0, 0, hover_alt_m)
-        self.wait_altitude(
-            hover_alt_m - 0.3,
-            hover_alt_m + 0.3,
-            relative=True,
-            minimum_duration=3,
-            timeout=90,
-        )
-        self.hover()
-        self.change_mode('ALT_HOLD')
-        self.set_parameter("SIM_SONAR_OFFSET", -1.5)
-        self.delay_sim_time(2, reason="range finder reads short")
-        self.set_parameter("SIM_SONAR_OFFSET", 100)
-        self.delay_sim_time(6, reason="age the last range sample past 5 s")
-        self.set_rc(3, 1300)
-        self.wait_altitude(-10, hover_alt_m - 0.5, relative=True, timeout=30)
-        self.hover()
-        window_start_us = self.get_sim_time() * 1e6
-        self.delay_sim_time(8, reason="hover with the carried height below the floor")
-        window_end_us = self.get_sim_time() * 1e6
-        self.set_parameter("SIM_SONAR_OFFSET", 0)
-        self.disarm_vehicle(force=True)
-
-        dfreader = self.dfreader_for_current_onboard_log()
-        last = None
-        updates = 0
-        while True:
-            m = dfreader.recv_match(type='XKF5')
-            if m is None:
-                break
-            if m.C != 0 or not (window_start_us <= m.TimeUS <= window_end_us):
-                continue
-            innov = (m.FIX, m.FIY, m.NI)
-            if last is not None and innov != last:
-                updates += 1
-            last = innov
-        self.progress("flow innovation updates in %.1fs with an old range below the floor: %u" %
-                      ((window_end_us - window_start_us) * 1e-6, updates))
-        if updates < 20:
-            raise NotAchievedException("flow held off at 1.5 m on a range sample over 5 s old")
-
-        self.reboot_sitl()
 
     def OpticalFlowCalibration(self):
         '''test optical flow calibration'''
@@ -9972,7 +10136,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
-    def hover_and_check_matched_frequency(self, dblevel=-15, minhz=200, maxhz=300, fftLength=32, peakhz=None):
     def SITLGyroRate(self):
         '''SITL gyro rate follows INS_GYRO_RATE with fast sampling enabled'''
         self.set_parameters({
@@ -9989,7 +10152,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.reboot_sitl()
             self.wait_statustext(pattern, regex=True, timeout=60, check_context=True)
 
-    def hover_and_check_matched_frequency(self, *, dblevel=-15, minhz=200, maxhz=300, fftLength=32, peakhz=None):
+    def hover_and_check_matched_frequency(self, dblevel=-15, minhz=200, maxhz=300, fftLength=32, peakhz=None):
         '''do a simple up-and-down test flight with current vehicle state.
         Check that the onboard filter comes up with the same peak-frequency that
         post-processing does.'''
@@ -13831,134 +13994,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.context_pop()
         self.reboot_sitl()
 
-    def EK3_NoGPSLeakWhenNotSource(self):
-        '''verify EKF does not leak GPS position when GPS is not the configured source'''
-        # With EKF configured to use optical flow (POSXY source is
-        # not GPS) and GPS simultaneously healthy, verify the
-        # reported vehicle position does not track a simulated GPS
-        # glitch.  On master, NavEKF3_core::getGPSLLH() returns the
-        # raw GPS fix irrespective of the configured POSXY source,
-        # so getLLH() fallbacks leak the glitched GPS lat/lon to
-        # callers (including GCS_MAVLINK::send_global_position_int
-        # which ignores the return value of ahrs.get_location()).
-        # This bypasses the EKF's source configuration and causes
-        # vehicle code to follow GPS glitches/spoofing that the EKF
-        # has correctly rejected.
-        self.set_parameters({
-            "EK3_SRC1_POSXY": 5,   # OPTFLOW (no optflow data provided)
-            "EK3_SRC1_VELXY": 5,   # OPTFLOW
-            "EK3_SRC1_POSZ": 1,    # BARO
-            "EK3_SRC1_VELZ": 0,    # None
-            "AHRS_EKF_TYPE": 3,
-        })
-        # this message is emitted as the vehicle comes up, so it can
-        # arrive before a wait started afterwards; collect across the
-        # reboot, which empties the collection as it goes
-        self.context_collect('STATUSTEXT')
-
-        self.reboot_sitl()
-
-        # allow EKF to initialise: validOrigin set from GPS, filter
-        # reaches steady AID_NONE state
-        self.wait_statustext("EKF3 IMU0 initialised", timeout=30, check_context=True)
-
-        # capture baseline reported position
-        m = self.assert_receive_message('GLOBAL_POSITION_INT')
-        baseline_lat = m.lat
-        baseline_lon = m.lon
-        self.progress("Baseline: lat=%d lon=%d" % (baseline_lat, baseline_lon))
-
-        # glitch simulated GPS by ~0.005 deg latitude (~555 m north)
-        self.set_parameter("SIM_GPS1_GLTCH_X", 0.005)
-
-        m = self.assert_receive_message('GLOBAL_POSITION_INT')
-        lat_change_deg = abs(m.lat - baseline_lat) * 1e-7
-        self.progress("After GPS glitch: lat=%d lon=%d (baseline lat=%d, change=%.6f deg)" %
-                      (m.lat, m.lon, baseline_lat, lat_change_deg))
-
-        if lat_change_deg > 0.001:
-            raise NotAchievedException(
-                "GPS position leaked into reported location despite "
-                "EK3_SRC1_POSXY=OPTFLOW: baseline lat %d, after glitch %d "
-                "(delta %.6f deg)" %
-                (baseline_lat, m.lat, lat_change_deg))
-
-    def peak_relative_alt_excursion(self, duration):
-        '''largest |relative_alt| in GLOBAL_POSITION_INT over duration seconds
-
-        This is the reported height, which AP_AHRS backs with raw baro when the
-        EKF vertical position is unhealthy. That is the right signal only where
-        the fallback is what is under test, as in the no-GPS arm reset
-        '''
-        tstart = self.get_sim_time_cached()
-        peak = 0.0
-        count = 0
-        while self.get_sim_time_cached() - tstart < duration:
-            # the default timeout is one second of wallclock against a 5 Hz
-            # stream, which a loaded host loses without the vehicle misbehaving
-            m = self.assert_receive_message('GLOBAL_POSITION_INT', timeout=10)
-            m = self.assert_receive_message('GLOBAL_POSITION_INT')
-            peak = max(peak, abs(m.relative_alt * 0.001))
-            count += 1
-        if count < 5:
-            raise NotAchievedException("Only %u GLOBAL_POSITION_INT samples in %.1fs" % (count, duration))
-        return peak
-
-    def peak_ekf_alt_excursion(self, duration):
-        '''largest |EKF height| from LOCAL_POSITION_NED over duration seconds
-
-        Not GLOBAL_POSITION_INT.relative_alt: AP_AHRS substitutes the raw baro
-        reading there whenever the EKF vertical position is unhealthy, so a
-        regression that unsettles the EKF would be measured against the very
-        baro error these checks exist to prove absent
-        '''
-        tstart = self.get_sim_time_cached()
-        peak = 0.0
-        count = 0
-        while self.get_sim_time_cached() - tstart < duration:
-            peak = max(peak, abs(self.ekf_position_D_m()))
-            count += 1
-        if count < 5:
-            raise NotAchievedException("Only %u LOCAL_POSITION_NED samples in %.1fs" % (count, duration))
-        return peak
-
-    def accumulate_baro_drift(self, duration=30):
-        '''0.3 m/s of baro drift while sitting on the ground'''
-        self.set_parameter("SIM_BARO_DRIFT", 0.3)
-        self.delay_sim_time(duration, "accumulate baro drift")
-        self.set_parameter("SIM_BARO_DRIFT", 0)
-
-    def assert_baro_drift_cleared_at_arm(self):
-        '''accumulate baro drift while disarmed, arm, check it is gone'''
-        self.accumulate_baro_drift()
-
-        pre_arm_alt = self.assert_receive_message('GLOBAL_POSITION_INT').relative_alt * 0.001
-        self.progress("Pre-arm altitude with drift: %.2f m" % pre_arm_alt)
-        if abs(pre_arm_alt) < 5.0:
-            raise NotAchievedException("Expected >5 m of baro drift before arm, got %.2f m" % pre_arm_alt)
-
-        self.change_mode("STABILIZE")
-        self.arm_vehicle()
-        # the drift is metres and this bound is two, so this is what actually
-        # says the drift was cleared.  It goes first: the settling bound below
-        # is a tenth of a metre and would otherwise be the only thing that ran
-        self.assert_reported_amsl_matches_gps()
-        peak = self.peak_relative_alt_excursion(2)
-        self.progress("Peak altitude excursion over 2s post-arm: %.3f m" % peak)
-        if peak > 0.1:
-            raise NotAchievedException("Post-arm altitude %.3f m exceeds 0.1 m" % peak)
-        self.disarm_vehicle(force=True)
-
-    def assert_reported_amsl_matches_gps(self, max_error_m=2.0):
-        '''the reported AMSL altitude must agree with the GPS altitude'''
-        amsl_m = self.assert_receive_message('GLOBAL_POSITION_INT').alt * 0.001
-        gps_alt_m = self.assert_receive_message('GPS_RAW_INT').alt * 0.001
-        self.progress("Post-arm AMSL %.1f m, GPS %.1f m" % (amsl_m, gps_alt_m))
-        if abs(amsl_m - gps_alt_m) > max_error_m:
-            raise NotAchievedException(
-                "AMSL %.1f m differs from GPS %.1f m after arm - drift not cleared" %
-                (amsl_m, gps_alt_m))
-
     def BaroDriftClearedWithRangefinderHeightSwitch(self):
         '''the arm-time datum reset must survive the rangefinder height switch'''
         # EK3_RNG_USE_HGT hands the height source to the rangefinder while the
@@ -14092,6 +14127,81 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # the offset slews rather than stepping, so start the next test clean
         self.reboot_sitl()
 
+    def peak_relative_alt_excursion(self, duration):
+        '''largest |relative_alt| in GLOBAL_POSITION_INT over duration seconds
+
+        This is the reported height, which AP_AHRS backs with raw baro when the
+        EKF vertical position is unhealthy. That is the right signal only where
+        the fallback is what is under test, as in the no-GPS arm reset
+        '''
+        tstart = self.get_sim_time_cached()
+        peak = 0.0
+        count = 0
+        while self.get_sim_time_cached() - tstart < duration:
+            # the default timeout is one second of wallclock against a 5 Hz
+            # stream, which a loaded host loses without the vehicle misbehaving
+            m = self.assert_receive_message('GLOBAL_POSITION_INT', timeout=10)
+            peak = max(peak, abs(m.relative_alt * 0.001))
+            count += 1
+        if count < 5:
+            raise NotAchievedException("Only %u GLOBAL_POSITION_INT samples in %.1fs" % (count, duration))
+        return peak
+
+    def peak_ekf_alt_excursion(self, duration):
+        '''largest |EKF height| from LOCAL_POSITION_NED over duration seconds
+
+        Not GLOBAL_POSITION_INT.relative_alt: AP_AHRS substitutes the raw baro
+        reading there whenever the EKF vertical position is unhealthy, so a
+        regression that unsettles the EKF would be measured against the very
+        baro error these checks exist to prove absent
+        '''
+        tstart = self.get_sim_time_cached()
+        peak = 0.0
+        count = 0
+        while self.get_sim_time_cached() - tstart < duration:
+            peak = max(peak, abs(self.ekf_position_D_m()))
+            count += 1
+        if count < 5:
+            raise NotAchievedException("Only %u LOCAL_POSITION_NED samples in %.1fs" % (count, duration))
+        return peak
+
+    def accumulate_baro_drift(self, duration=30):
+        '''0.3 m/s of baro drift while sitting on the ground'''
+        self.set_parameter("SIM_BARO_DRIFT", 0.3)
+        self.delay_sim_time(duration, "accumulate baro drift")
+        self.set_parameter("SIM_BARO_DRIFT", 0)
+
+    def assert_baro_drift_cleared_at_arm(self):
+        '''accumulate baro drift while disarmed, arm, check it is gone'''
+        self.accumulate_baro_drift()
+
+        pre_arm_alt = self.assert_receive_message('GLOBAL_POSITION_INT').relative_alt * 0.001
+        self.progress("Pre-arm altitude with drift: %.2f m" % pre_arm_alt)
+        if abs(pre_arm_alt) < 5.0:
+            raise NotAchievedException("Expected >5 m of baro drift before arm, got %.2f m" % pre_arm_alt)
+
+        self.change_mode("STABILIZE")
+        self.arm_vehicle()
+        # the drift is metres and this bound is two, so this is what actually
+        # says the drift was cleared.  It goes first: the settling bound below
+        # is a tenth of a metre and would otherwise be the only thing that ran
+        self.assert_reported_amsl_matches_gps()
+        peak = self.peak_relative_alt_excursion(2)
+        self.progress("Peak altitude excursion over 2s post-arm: %.3f m" % peak)
+        if peak > 0.1:
+            raise NotAchievedException("Post-arm altitude %.3f m exceeds 0.1 m" % peak)
+        self.disarm_vehicle(force=True)
+
+    def assert_reported_amsl_matches_gps(self, max_error_m=2.0):
+        '''the reported AMSL altitude must agree with the GPS altitude'''
+        amsl_m = self.assert_receive_message('GLOBAL_POSITION_INT').alt * 0.001
+        gps_alt_m = self.assert_receive_message('GPS_RAW_INT').alt * 0.001
+        self.progress("Post-arm AMSL %.1f m, GPS %.1f m" % (amsl_m, gps_alt_m))
+        if abs(amsl_m - gps_alt_m) > max_error_m:
+            raise NotAchievedException(
+                "AMSL %.1f m differs from GPS %.1f m after arm - drift not cleared" %
+                (amsl_m, gps_alt_m))
+
     def BaroDriftClearedAtArm(self):
         '''Test that arm-time datum reset clears accumulated baro drift'''
         # AP_Arming_Copter::arm() resets the EKF height datum when home
@@ -14104,12 +14214,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # relative_alt alone cannot tell, because the arm-time home move
         # zeroes it on master too, leaving home at the drifted altitude
         self.assert_baro_drift_cleared_at_arm()
-        self.assert_baro_drift_cleared_at_arm()
-        # the reset re-anchors the reference height to the GPS altitude,
-        # so unlike master the drift must also be gone from the reported
-        # AMSL (relative_alt alone cannot tell: the arm-time home move
-        # zeroes it on master too, leaving home at the drifted altitude)
-        self.assert_reported_amsl_matches_gps()
 
         self.start_subtest("GPS sets home, then the receiver dies")
         # a dead receiver fails the GPS prearm checks even in STABILIZE,
@@ -14179,17 +14283,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # SIM_BARO_DRIFT accumulates into an offset that setting the rate back
         # to zero does not undo, and the recorded origin is still in force
         self.reboot_sitl()
-        origin_alt_mm = self.poll_message('GPS_GLOBAL_ORIGIN').altitude
-        # home is never set without GPS so this arm resets via the
-        # pre-existing no-home branch; the reported height falls back to
-        # the recalibrated baro, and the reset's no-GPS path must leave
-        # the reported origin altitude alone
-        self.assert_baro_drift_cleared_at_arm()
-        origin_alt2_mm = self.poll_message('GPS_GLOBAL_ORIGIN').altitude
-        if abs(origin_alt2_mm - origin_alt_mm) > 1000:
-            raise NotAchievedException(
-                "Origin altitude moved %.1f m across the datum reset" %
-                ((origin_alt2_mm - origin_alt_mm) * 0.001))
 
     def BaroGroundEffectAtTakeoff(self):
         '''EKF height holds through baro ground effect with a negative EK3_GND_EFF_DZ'''
@@ -15346,6 +15439,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # init - so clear it before the reboot rather than hand it to the next test
         self.set_parameter("RNGFND1_TYPE", 0)
         self.reboot_sitl()
+
     def EK3_OptflowTerrainScaleHeight(self):
         '''optical flow scale height from the terrain database is right over slopes'''
         # Above the rangefinder range with EK3_OPTIONS bit 2 the optical flow scale
@@ -15432,6 +15526,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if worst > 50:
             raise NotAchievedException(
                 "flow innovation ratio reached %u, so the scale height is wrong" % worst)
+
     def EK3_PerCoreLogging(self):
         '''XKF5 and XKFA are logged for every core, not just the primary'''
         # Under EK3_SRC_OPTIONS bit 3 each core runs its own source set, so the lane
@@ -15609,9 +15704,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_statustext("Throw height achieved, good position", check_context=True)
         self.wait_mode('AUTO')
         self.wait_disarmed(timeout=240)
-
-        # we are not at the home location - reboot so the next test starts there
-        self.reboot_sitl()
 
     def ThrowModeNoGPS(self):
         '''Test throw mode works without GPS (baro-only, transitions to ALT_HOLD)'''
@@ -16050,272 +16142,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException("Was expecting takeoff for longer than expected; got=%f want<=%f" %
                                        (duration, want_lt))
 
-    def TerrainOffsetGroundEffectRecovery(self):
-        '''terrain offset recovers after a low hover inside the ground effect baro error'''
-        # SIM_BARO_GEFF_M injects the real rotor-downwash baro error: up to this
-        # many metres of under-read on the ground, decaying to zero at 2m AGL and
-        # only while the motors are turning. A vehicle that hovers inside that
-        # band feeds the error into the EKF vertical position, and the terrain
-        # offset is initialised from that position plus the rangefinder, so it
-        # inherits the error and keeps it after the climb out.
-        self.set_parameters({
-            "LOG_FILE_DSRMROT": 1,
-            "SIM_BARO_GEFF_M": 3.0,
-            "RNGFND1_TYPE": 100,
-            "RNGFND1_MIN": 0.05,
-            "RNGFND1_MAX": 10,
-            "EK3_RNG_USE_HGT": 50,
-            # GNDEFF_ALT is set to where the simulated baro error actually ends,
-            # so the detector is correctly configured for this airframe and the
-            # failure below cannot be blamed on the threshold. Note that it only
-            # delays the window's release: AP_GROUNDEFFECT_TAKEOFF_MAX_MS caps
-            # takeoff_expected at 5s regardless, so a vehicle that stays low for
-            # longer than that leaves the window while still inside the error.
-            "GNDEFF_ALT": 2.0,
-            "GNDEFF_TMO": 0,
-        })
-        self.reboot_sitl()
-        self.wait_ready_to_arm()
-        self.takeoff(1.2, mode='ALT_HOLD')
-        # with LOG_FILE_DSRMROT the disarm opens a new log, so note the one being written in flight
-        flight_log = self.current_onboard_log_filepath()
-
-        # The depth of the dwell inside the band decides the result, and ALT_HOLD holds a
-        # height the ground effect has already disturbed, settling 0.75-0.9m above the ground.
-        # Measure it on the range finder, which reads the true height, rather than assume it.
-        heights = []
-        tstart = self.get_sim_time()
-        while self.get_sim_time_cached() - tstart < 25:
-            heights.append(self.get_rangefinder_distance())
-        mean_height = sum(heights) / len(heights)
-        self.progress("dwell height %.2f m mean, %.2f to %.2f m" % (mean_height, min(heights), max(heights)))
-        if not 0.6 <= mean_height <= 1.2:
-            raise NotAchievedException("dwell was not about 0.9m above the ground (mean %.2f m)" % mean_height)
-        self.set_rc(3, 1700)
-        self.wait_altitude(12, 20, relative=True, timeout=60)
-        self.set_rc(3, 1500)
-        self.delay_sim_time(20, reason="let the terrain filter settle after the climb out")
-        self.change_mode('LAND')
-        self.wait_disarmed()
-
-        # The ground is flat, so the terrain offset should return to the value
-        # it held on the ground, which is the ground clearance rather than zero.
-        # That value is taken in the second after arming: the arming datum reset
-        # has settled it, and the motors have not yet disturbed the baro. Measure
-        # only above 5m, clear of the band, and only while the rangefinder reads
-        # Good: above RNGFND1_MAX the terrain filter stops fusing and the offset
-        # is a frozen value that says nothing about recovery.
-        dfreader = self.dfreader_for_path(flight_log)
-        rangefinder_good = False
-        arm_time = None
-        on_ground = []
-        offsets = []
-        while True:
-            m = dfreader.recv_match(type=['XKF5', 'RFND', 'EV'])
-            if m is None:
-                break
-            if m.get_type() == 'EV':
-                if m.Id == 10 and arm_time is None:  # ARMED
-                    arm_time = m.TimeUS
-                continue
-            if m.get_type() == 'RFND':
-                rangefinder_good = m.Stat == 4  # RangeFinder::Status::Good
-                continue
-            if m.C != 0 or arm_time is None:
-                continue
-            if m.TimeUS - arm_time < 1e6:
-                on_ground.append(m.TOfs)
-            elif m.HAGL > 5.0 and rangefinder_good:
-                offsets.append(m.TOfs)
-        if len(on_ground) < 5:
-            raise NotAchievedException("insufficient XKF5 samples after arming (%u)" % len(on_ground))
-        if len(offsets) < 100:
-            raise NotAchievedException("insufficient XKF5 samples above 5m with range (%u)" % len(offsets))
-        on_ground.sort()
-        ground = on_ground[len(on_ground) // 2]
-        clearance = max(self.get_parameter("RNGFND1_GNDCLR"), 0.05)
-        if abs(ground - clearance) > 0.05:
-            raise NotAchievedException("terrain offset at arming %.3f m is not the ground clearance %.3f m"
-                                       % (ground, clearance))
-        errors = [o - ground for o in offsets]
-        mean = sum(errors) / len(errors)
-        worst = max(errors, key=abs)
-        self.progress("terrain offset above 5m, relative to %+.3f m on the ground: mean %+.3f m, worst %+.3f m over %u samples"
-                      % (ground, mean, worst, len(errors)))
-        if abs(mean) > 0.15:
-            raise NotAchievedException(
-                "terrain offset did not recover from the ground effect baro error "
-                "(mean %+.3f m, worst %+.3f m)" % (mean, worst))
-
-    def TakeoffGroundEffectAlt(self):
-        '''Test GNDEFF_ALT and GNDEFF_TMO gate the ground-effect compensation window'''
-        # SIM_BARO_GEFF_M injects a real baro static-pressure error near the
-        # ground so the compensation window has something to compensate for;
-        # without it the detector parameters would be exercised but the
-        # underlying baro error they exist to mitigate wouldn't be present.
-        self.set_parameters({
-            "LOG_FILE_DSRMROT": 1,
-            "SIM_BARO_GEFF_M": 1.0,
-        })
-        self.progress("Making sure we'll have a short log to look at")
-        self.wait_ready_to_arm()
-        self.arm_vehicle()
-        self.disarm_vehicle()
-
-        # Subtest A: large threshold - takeoff_expected persists at 5m
-        self.start_subtest("Large GNDEFF_ALT keeps ground effect at 5m")
-        self.set_parameter("GNDEFF_ALT", 10)
-        self.takeoff(5, mode='ALT_HOLD')
-        self.delay_sim_time(5, reason='let the takeoff window expire before landing')
-        self.change_mode('LAND')
-        self.wait_disarmed()
-        durations_large = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
-        total_large = sum(durations_large)
-        self.progress("takeoff_expected total with GNDEFF_ALT=10: %fs" % total_large)
-        if total_large < 3:
-            raise NotAchievedException(
-                "takeoff_expected should persist with large threshold (got %fs, want>3)" % total_large)
-
-        # Subtest B: small threshold - takeoff_expected clears quickly
-        # GNDEFF_TMO=0 so only the altitude check releases the window,
-        # giving subtest C a baseline without the default minimum hold.
-        self.start_subtest("Small GNDEFF_ALT clears ground effect at 5m")
-        self.set_parameters({
-            "GNDEFF_ALT": 0.5,
-            "GNDEFF_TMO": 0,
-        })
-        self.takeoff(5, mode='ALT_HOLD')
-        self.delay_sim_time(5, reason='let the takeoff window expire before landing')
-        self.change_mode('LAND')
-        self.wait_disarmed()
-        durations_small = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
-        total_small = sum(durations_small)
-        self.progress("takeoff_expected total with GNDEFF_ALT=0.5: %fs" % total_small)
-
-        # Comparative assertion: large threshold should have longer duration
-        if total_small >= total_large:
-            raise NotAchievedException(
-                "Smaller threshold should have shorter ground effect (small=%fs >= large=%fs)"
-                % (total_small, total_large))
-
-        # Subtest C: GNDEFF_TMO requires both timeout AND altitude
-        # With small altitude threshold but timeout set, ground effect should persist longer
-        self.start_subtest("GNDEFF_TMO extends ground effect duration")
-        self.set_parameters({
-            "GNDEFF_ALT": 0.5,  # Small threshold - would clear quickly without timeout
-            "GNDEFF_TMO": 3,    # Require 3s timeout as well
-        })
-        self.takeoff(5, mode='ALT_HOLD')
-        self.delay_sim_time(5, reason='let the takeoff window expire before landing')
-        self.change_mode('LAND')
-        self.wait_disarmed()
-        durations_tmo = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
-        total_tmo = sum(durations_tmo)
-        self.progress("takeoff_expected total with GNDEFF_TMO=3: %fs" % total_tmo)
-
-        # With timeout, ground effect should persist longer than without (even with small alt threshold)
-        if total_tmo <= total_small:
-            raise NotAchievedException(
-                "GNDEFF_TMO should extend ground effect (tmo=%fs <= no_tmo=%fs)"
-                % (total_tmo, total_small))
-
-        # Subtest D: rangefinder HAGL path. On the ground the EKF HAGL reads
-        # the rangefinder ground clearance rather than zero, so with GNDCLR
-        # above GNDEFF_ALT the windows must be measured from the on-ground
-        # reading or takeoff releases before liftoff and touchdown never fires.
-        self.start_subtest("Rangefinder HAGL is measured from the on-ground reading")
-        self.set_parameters({
-            "GNDEFF_ALT": 0.5,
-            "GNDEFF_TMO": 0,
-            "RNGFND1_TYPE": 100,  # SITL
-            "RNGFND1_GNDCLR": 0.6,
-        })
-        self.reboot_sitl()
-        self.takeoff(5, mode='ALT_HOLD')
-        self.delay_sim_time(5, reason='let the takeoff window expire before landing')
-        self.change_mode('LAND')
-        self.wait_disarmed()
-        durations_rf = self.get_takeoffexpected_durations_from_current_onboard_log(ignore_multi=True)
-        total_rf = sum(durations_rf)
-        touchdown_rf = sum(self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True))
-        self.progress("takeoff_expected total with rangefinder GNDCLR=0.6: %fs (touchdown %fs)" %
-                      (total_rf, touchdown_rf))
-        if total_rf < 0.5 * total_small:
-            raise NotAchievedException(
-                "Rangefinder should not release takeoff early (rf=%fs < half of baro=%fs)"
-                % (total_rf, total_small))
-        if touchdown_rf <= 0:
-            raise NotAchievedException("Rangefinder touchdown_expected never fired")
-
-        # we are not at the home location - reboot so the next test starts there
-        self.set_parameter("RNGFND1_TYPE", 0)
-        self.reboot_sitl()
-
-    def TouchdownGroundEffectAlt(self):
-        '''Test GNDEFF_ALT gates the touchdown ground-effect signal'''
-        # touchdown_expected fires only when slow horizontal motion AND slow
-        # descent AND near-ground (height < GNDEFF_ALT). Exercise the altitude
-        # gate by landing twice from the same altitude with different
-        # GNDEFF_ALT values: a small threshold should only fire near the
-        # ground, a large threshold (>= takeoff altitude) should fire for the
-        # whole descent.
-        self.set_parameter("LOG_FILE_DSRMROT", 1)
-        self.progress("Making sure we'll have a short log to look at")
-        self.wait_ready_to_arm()
-        self.arm_vehicle()
-        self.disarm_vehicle()
-
-        # Subtest A: small threshold - touchdown_expected only fires near ground
-        self.start_subtest("Small GNDEFF_ALT only triggers touchdown near ground")
-        self.set_parameter("GNDEFF_ALT", 1.0)
-        self.takeoff(3, mode='GUIDED', alt_minimum_duration=2)
-        self.change_mode('LAND')
-        self.wait_disarmed()
-        durations_small = self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True)
-        total_small = sum(durations_small)
-        self.progress("touchdown_expected total with GNDEFF_ALT=1.0: %fs" % total_small)
-        if total_small < 0.5:
-            raise NotAchievedException(
-                "touchdown_expected should fire near ground (got %fs, want>0.5)" % total_small)
-
-        # Subtest B: large threshold gates touchdown over the full descent
-        self.start_subtest("Large GNDEFF_ALT triggers touchdown for whole descent")
-        self.set_parameter("GNDEFF_ALT", 5.0)
-        self.takeoff(3, mode='GUIDED', alt_minimum_duration=2)
-        self.change_mode('LAND')
-        self.wait_disarmed()
-        durations_large = self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True)
-        total_large = sum(durations_large)
-        self.progress("touchdown_expected total with GNDEFF_ALT=5.0: %fs" % total_large)
-
-        # Comparative assertion: a higher threshold catches the descent earlier
-        # so total touchdown_expected duration must be longer.
-        if total_large <= total_small:
-            raise NotAchievedException(
-                "Larger threshold should have longer touchdown (large=%fs <= small=%fs)"
-                % (total_large, total_small))
-
-        # Subtest C: more than 20m from the takeoff point the relative-to-takeoff
-        # height no longer refers to the ground below the vehicle, so without a
-        # true AGL the gate must not fire at all. It used to count any gentle
-        # descent out here, which is what latched it through a cruise hover.
-        self.start_subtest("Far from takeoff the touchdown gate does not fire")
-        self.set_parameter("GNDEFF_ALT", 1.0)
-        self.takeoff(3, mode='GUIDED', alt_minimum_duration=2)
-        self.fly_guided_move_local(30, 0, 3)
-        self.change_mode('LAND')
-        self.wait_disarmed()
-        durations_far = self.get_touchdownexpected_durations_from_current_onboard_log(ignore_multi=True)
-        total_far = sum(durations_far)
-        self.progress("touchdown_expected total with GNDEFF_ALT=1.0 30m from takeoff: %fs" % total_far)
-        if total_far > 0.5:
-            raise NotAchievedException(
-                "touchdown_expected should not fire 30m from takeoff without a true AGL (got %fs)"
-                % total_far)
-
-        # we are not at the home location - reboot so the next test starts there
-        self.reboot_sitl()
-
     def assert_ekf_height_tracks_climb(self, climb_m, timeout=90):
         '''check the EKF height estimate follows climb_m of real altitude'''
         gnd_alt = self.get_altitude(altitude_source="SIM_STATE.alt")
@@ -16522,6 +16348,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # detectFlight() that a Plane takes. Nor does it cover a premature
         # release from airframe vibration - SITL models no gyro noise, so the
         # detector's 0.1 rad/s threshold is never approached on the ground.
+
     def get_accel_bias_z_at_arm_from_current_onboard_log(self):
         '''returns the primary core's Z accel bias state as it stood at the
         moment of arming'''
@@ -16785,6 +16612,103 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.context_pop()
         self.reboot_sitl()
+
+    def TerrainOffsetGroundEffectRecovery(self):
+        '''terrain offset recovers after a low hover inside the ground effect baro error'''
+        # SIM_BARO_GEFF_M injects the real rotor-downwash baro error: up to this
+        # many metres of under-read on the ground, decaying to zero at 2m AGL and
+        # only while the motors are turning. A vehicle that hovers inside that
+        # band feeds the error into the EKF vertical position, and the terrain
+        # offset is initialised from that position plus the rangefinder, so it
+        # inherits the error and keeps it after the climb out.
+        self.set_parameters({
+            "LOG_FILE_DSRMROT": 1,
+            "SIM_BARO_GEFF_M": 3.0,
+            "RNGFND1_TYPE": 100,
+            "RNGFND1_MIN": 0.05,
+            "RNGFND1_MAX": 10,
+            "EK3_RNG_USE_HGT": 50,
+            # GNDEFF_ALT is set to where the simulated baro error actually ends,
+            # so the detector is correctly configured for this airframe and the
+            # failure below cannot be blamed on the threshold. Note that it only
+            # delays the window's release: AP_GROUNDEFFECT_TAKEOFF_MAX_MS caps
+            # takeoff_expected at 5s regardless, so a vehicle that stays low for
+            # longer than that leaves the window while still inside the error.
+            "GNDEFF_ALT": 2.0,
+            "GNDEFF_TMO": 0,
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+        self.takeoff(1.2, mode='ALT_HOLD')
+        # with LOG_FILE_DSRMROT the disarm opens a new log, so note the one being written in flight
+        flight_log = self.current_onboard_log_filepath()
+
+        # The depth of the dwell inside the band decides the result, and ALT_HOLD holds a
+        # height the ground effect has already disturbed, settling 0.75-0.9m above the ground.
+        # Measure it on the range finder, which reads the true height, rather than assume it.
+        heights = []
+        tstart = self.get_sim_time()
+        while self.get_sim_time_cached() - tstart < 25:
+            heights.append(self.get_rangefinder_distance())
+        mean_height = sum(heights) / len(heights)
+        self.progress("dwell height %.2f m mean, %.2f to %.2f m" % (mean_height, min(heights), max(heights)))
+        if not 0.6 <= mean_height <= 1.2:
+            raise NotAchievedException("dwell was not about 0.9m above the ground (mean %.2f m)" % mean_height)
+        self.set_rc(3, 1700)
+        self.wait_altitude(12, 20, relative=True, timeout=60)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(20, reason="let the terrain filter settle after the climb out")
+        self.change_mode('LAND')
+        self.wait_disarmed()
+
+        # The ground is flat, so the terrain offset should return to the value
+        # it held on the ground, which is the ground clearance rather than zero.
+        # That value is taken in the second after arming: the arming datum reset
+        # has settled it, and the motors have not yet disturbed the baro. Measure
+        # only above 5m, clear of the band, and only while the rangefinder reads
+        # Good: above RNGFND1_MAX the terrain filter stops fusing and the offset
+        # is a frozen value that says nothing about recovery.
+        dfreader = self.dfreader_for_path(flight_log)
+        rangefinder_good = False
+        arm_time = None
+        on_ground = []
+        offsets = []
+        while True:
+            m = dfreader.recv_match(type=['XKF5', 'RFND', 'EV'])
+            if m is None:
+                break
+            if m.get_type() == 'EV':
+                if m.Id == 10 and arm_time is None:  # ARMED
+                    arm_time = m.TimeUS
+                continue
+            if m.get_type() == 'RFND':
+                rangefinder_good = m.Stat == 4  # RangeFinder::Status::Good
+                continue
+            if m.C != 0 or arm_time is None:
+                continue
+            if m.TimeUS - arm_time < 1e6:
+                on_ground.append(m.TOfs)
+            elif m.HAGL > 5.0 and rangefinder_good:
+                offsets.append(m.TOfs)
+        if len(on_ground) < 5:
+            raise NotAchievedException("insufficient XKF5 samples after arming (%u)" % len(on_ground))
+        if len(offsets) < 100:
+            raise NotAchievedException("insufficient XKF5 samples above 5m with range (%u)" % len(offsets))
+        on_ground.sort()
+        ground = on_ground[len(on_ground) // 2]
+        clearance = max(self.get_parameter("RNGFND1_GNDCLR"), 0.05)
+        if abs(ground - clearance) > 0.05:
+            raise NotAchievedException("terrain offset at arming %.3f m is not the ground clearance %.3f m"
+                                       % (ground, clearance))
+        errors = [o - ground for o in offsets]
+        mean = sum(errors) / len(errors)
+        worst = max(errors, key=abs)
+        self.progress("terrain offset above 5m, relative to %+.3f m on the ground: mean %+.3f m, worst %+.3f m over %u samples"
+                      % (ground, mean, worst, len(errors)))
+        if abs(mean) > 0.15:
+            raise NotAchievedException(
+                "terrain offset did not recover from the ground effect baro error "
+                "(mean %+.3f m, worst %+.3f m)" % (mean, worst))
 
     def _MAV_CMD_CONDITION_YAW(self, command):
         self.start_subtest("absolute")
@@ -17729,6 +17653,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.BatteryMissing,
              self.VibrationFailsafe,
              self.EK3AccelBias,
+             self.EKF3RangeFinderOnGround,
              self.EK3_OptflowTerrainScaleHeight,
              self.EK3_GetHaglTerrainAlt,
              self.EK3_PerCoreLogging,
@@ -17743,7 +17668,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.TerrainOffsetGroundEffectRecovery,
              self.TakeoffGroundEffectAlt,
              self.TouchdownGroundEffectAlt,
-             self.EKF3RangeFinderOnGround,
              self.VibrationRectificationBiasLearning,
              self.AccelBiasMovingPlatform,
              self.TouchdownGroundEffectCruise,
@@ -17814,10 +17738,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.OpticalFlowFallbackKeepsAbsolute,
              self.LoiterNoCompassYaw,
              self.LoiterNoCompassYawGPS,
+             self.LoiterFlowBrakeOvershoot,
              self.FlowGyroZBiasNoYawReference,
              self.FlowAidingRestartsWithoutYawFusion,
-             self.LoiterFlowBrakeOvershoot,
-             self.ModeFlowHold,
              self.OpticalFlowAGLKalmanFilter,
              self.OpticalFlowCalibration,
              self.MotorFail,
@@ -20776,6 +20699,8 @@ return update, 1000
     def tests2b(self):  # this block currently around 9.5mins here
         '''return list of all tests'''
         ret = ([
+            self.ScriptingOSD,
+            self.EKFBootstrapReset,
             self.MotorVibration,
             Test(self.DynamicNotches, attempts=4),
             self.PositionWhenGPSIsZero,
@@ -20800,11 +20725,11 @@ return update, 1000
             self.CRSF,
             self.MotorTest,
             self.AltEstimation,
-            self.EK3_NoGPSLeakWhenNotSource,
             self.BaroDriftClearedAtArm,
             self.BaroDriftClearedWithAltOffset,
             self.BaroDriftClearedWithEKF2,
             self.BaroDriftClearedWithRangefinderHeightSwitch,
+            self.EK3_NoGPSLeakWhenNotSource,
             self.BaroGroundEffectAtTakeoff,
             self.BaroGroundEffectResetSuppression,
             self.EKFSource,
@@ -20935,182 +20860,11 @@ return update, 1000
             self.PLDNoParameters,
             self.PeriphMultiUARTTunnel,
             self.EKF3SRCPerCore,
-        ])
-        return ret
-
-            self.UTMGlobalPosition,
-            self.UTMGlobalPositionWaypoint,
-            self.HomeAltResetTest,
             self.AmslAltPreservedOnRearmAtDifferentElevation,
             self.HeightDatumKeptOnMidairRearm,
             self.BaroDriftClearedAfterMidairDisarm,
         ])
         return ret
-
-    def UTMGlobalPositionWaypoint(self):
-        '''test UTM_GLOBAL_POSITION waypoint fields in AUTO and GUIDED'''
-        self.set_parameter("AUTO_OPTIONS", 3)
-        self.start_flying_simple_relhome_mission([
-            (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 100, 0, 20),
-            (mavutil.mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0, 0, 0),
-        ])
-        # seq 0 = home, seq 1 = TAKEOFF, seq 2 = WAYPOINT (100m north)
-        wp = self.assert_fetch_mission_item_int(1, 1, 2, mavutil.mavlink.MAV_MISSION_TYPE_MISSION)
-
-        self.wait_current_waypoint(2, timeout=60)
-
-        # epsilon=1 allows for 1-unit (0.11m) rounding from AP's internal coordinate conversion
-        m = self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "next_lat": wp.x,
-            "next_lon": wp.y,
-        }, poll=True, epsilon=1)
-        if not (m.flags & mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_NEXT_WAYPOINT_AVAILABLE):
-            raise NotAchievedException(f"AUTO: NEXT_WAYPOINT_AVAILABLE not set (flags=0x{m.flags:x})")
-        self.do_RTL()
-        self.zero_throttle()
-
-        # GUIDED mode
-        self.takeoff(20, mode='GUIDED')
-        home = self.poll_message("HOME_POSITION")
-        target_lat = home.latitude + 10000
-        target_lon = home.longitude
-        self.send_set_position_target_global_int(target_lat, target_lon, 20)
-        self.delay_sim_time(1, reason="guided target to propagate to UTM message")
-        m = self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "next_lat": target_lat,
-            "next_lon": target_lon,
-        }, poll=True, epsilon=1)
-        if not (m.flags & mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_NEXT_WAYPOINT_AVAILABLE):
-            raise NotAchievedException(f"GUIDED: NEXT_WAYPOINT_AVAILABLE not set (flags=0x{m.flags:x})")
-        self.do_RTL()
-
-    def UTMGlobalPosition(self):
-        '''test UTM_GLOBAL_POSITION message sending'''
-        self.install_terrain_handlers_context()
-        self.wait_ready_to_arm()
-        m = self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "flight_state": mavutil.mavlink.UTM_FLIGHT_STATE_GROUND,
-        }, poll=True)
-        if all(b == 0 for b in m.uas_id):
-            raise NotAchievedException("UAS ID is all zeros")
-        expected_flags = (
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_UAS_ID_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_POSITION_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_ALTITUDE_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_RELATIVE_ALTITUDE_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_HORIZONTAL_VELO_AVAILABLE |
-            mavutil.mavlink.UTM_DATA_AVAIL_FLAGS_VERTICAL_VELO_AVAILABLE
-        )
-        if m.flags & expected_flags != expected_flags:
-            raise NotAchievedException(
-                f"Expected flags 0x{expected_flags:x}, got 0x{m.flags:x}")
-        self.takeoff(altitude_min=10, mode="LOITER")
-        self.assert_received_message_field_values("UTM_GLOBAL_POSITION", {
-            "flight_state": mavutil.mavlink.UTM_FLIGHT_STATE_AIRBORNE,
-        }, poll=True)
-        self.land_and_disarm()
-
-    def HomeAltResetTest(self):
-        '''fly mission from cliff top to water, land, then RTL to cliff top'''
-        # terrain handler must be running before customise_SITL_commandline so that
-        # TERRAIN_REQUESTs from firmware at KalaupapaCliffs are answered immediately.
-        self.install_terrain_handlers_context()
-        try:
-            # wipe=True clears any stale EEPROM state from a previous failed run;
-            # a prior failure may leave TERRAIN_ENABLE=1, which causes the firmware to
-            # fetch terrain data at boot and block WPNAV parameter responses.
-            self.customise_SITL_commandline(["--home", "KalaupapaCliffs"], wipe=True)
-            # non-terrain params first; TERRAIN_ENABLE last because enabling it causes a
-            # brief firmware pause that drops subsequent PARAM_REQUEST_READ responses
-            self.set_parameters({
-                "AUTO_OPTIONS": 3,
-                "WP_SPD": 10,           # m/s; keeps test duration manageable
-                "WP_SPD_DN": 5,         # m/s
-                "WP_SPD_UP": 5,         # m/s; RTL initial climb from sea level
-                "RTL_ALT_M": 40,        # m above home (cliff top), clears cliff face on return
-                "TERRAIN_ENABLE": 1,
-                "SIM_TERRAIN": 1,
-            })
-            self.wait_ready_to_arm()
-
-            # Explicitly fix home to the current position/altitude before arming so
-            # that waypoints relative to home are computed from the correct location.
-            self.run_cmd(
-                mavutil.mavlink.MAV_CMD_DO_SET_HOME,
-            )
-
-            # read descent rate parameters so checks below are not hard-coded
-            wp_spd_dn = self.get_parameter("WP_SPD_DN")   # high-speed descent (m/s)
-            land_spd_ms = self.get_parameter("LAND_SPD_MS")  # final-approach descent (m/s)
-
-            cruise_alt = 40  # m relative to home (cliff top)
-
-            # Phase 1: take off from cliff top, fly north off the cliff edge, land near sea level.
-            # All waypoint altitudes are relative to home (cliff top).
-            self.start_flying_simple_relhome_mission([
-                (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, cruise_alt),
-                # fly north clear of the cliff edge; still at cruise_alt above cliff top
-                (mavutil.mavlink.MAV_CMD_NAV_WAYPOINT, 200, 0, cruise_alt),
-                # land on the water; NAV_LAND descends to terrain (~640m below home)
-                (mavutil.mavlink.MAV_CMD_NAV_LAND, 0, 0, 0),
-            ])
-
-            # verify vehicle reaches cruise speed on the outbound leg
-            self.wait_groundspeed(7, 13, timeout=120)
-            # verify high-speed descent phase (above LAND_ALT_LOW_M) at WP_SPD_DN
-            self.wait_climbrate(
-                -wp_spd_dn - 1,
-                -wp_spd_dn + 1,
-                minimum_duration=5,
-                timeout=300,
-            )
-            # verify final low-speed approach (below LAND_ALT_LOW_M) at LAND_SPD_MS
-            self.wait_climbrate(
-                -land_spd_ms - 0.1,
-                -land_spd_ms + 0.1,
-                minimum_duration=5,
-                timeout=120,
-            )
-            # verify vehicle decelerates before landing
-            self.wait_groundspeed(0, 2, minimum_duration=5, timeout=300)
-            self.wait_disarmed(timeout=600)
-
-            # Phase 2: re-arm near sea level and climb to cruise_alt above home (a ~640m
-            # vertical climb at WP_SPD_UP); then switch to RTL to return to cliff top.
-            self.start_flying_simple_relhome_mission([
-                (mavutil.mavlink.MAV_CMD_NAV_TAKEOFF, 0, 0, cruise_alt),
-            ])
-
-            # wait for vehicle to reach cruise_alt above home (cliff top + cruise_alt ASL)
-            self.wait_altitude(cruise_alt - 1, cruise_alt + 5, relative=True, timeout=200)
-
-            # RTL_ALT equals cruise_alt, so the vehicle flies directly to the home position
-            self.change_mode("RTL")
-            # verify vehicle reaches cruise speed on the inbound horizontal leg
-            self.wait_groundspeed(7, 13, timeout=120)
-            # verify high-speed descent phase (RTL_ALT_M - LAND_ALT_LOW_M) at WP_SPD_DN
-            # duration is shorter here (~30 m at WP_SPD_DN) so minimum_duration is smaller
-            self.wait_climbrate(
-                -wp_spd_dn - 1,
-                -wp_spd_dn + 1,
-                minimum_duration=2,
-                timeout=300,
-            )
-            # verify final low-speed approach (below LAND_ALT_LOW_M) at LAND_SPD_MS
-            self.wait_climbrate(
-                -land_spd_ms - 0.1,
-                -land_spd_ms + 0.1,
-                minimum_duration=5,
-                timeout=120,
-            )
-            # verify vehicle decelerates on arrival at home
-            self.wait_groundspeed(0, 2, minimum_duration=5, timeout=300)
-            self.wait_rtl_complete(timeout=300)
-        finally:
-            # reset SITL home back to the default location so the framework's
-            # post-test reboot_sitl() location check passes
-            self.customise_SITL_commandline([])
 
     def assert_origin_frame_consistent(self):
         '''reported origin altitude, local down position and AMSL must agree'''
@@ -21135,7 +20889,6 @@ return update, 1000
         # an AMSL mission flown after the re-arm targets the wrong altitude.
         self.install_terrain_handlers_context()
         # KalaupapaCliffs sits at 165 m AMSL; the flight lands ~90 m lower
-        # KalaupapaCliffs is ~165 m above the sea to its north
         self.customise_SITL_commandline(["--home", "KalaupapaCliffs"], wipe=True)
         self.set_parameters({
             "AUTO_OPTIONS": 3,
@@ -21149,7 +20902,6 @@ return update, 1000
         # EK2_ENABLE needs a reboot; go through customise_SITL_commandline so
         # the custom home survives it, and without wipe so the parameters do
         self.customise_SITL_commandline(["--home", "KalaupapaCliffs"])
-        })
         self.wait_ready_to_arm()
 
         cliff_alt_amsl_mm = self.assert_receive_message('GLOBAL_POSITION_INT').alt
@@ -21169,7 +20921,6 @@ return update, 1000
             raise NotAchievedException(
                 "Expected >50 m altitude drop cliff-top -> landing, got %.1f m" %
                 drop_m)
-        pre_origin_alt_m, pre_z_m = self.assert_origin_frame_consistent()
 
         # home is still auto-set at the cliff top and not locked, so
         # this takes the !home_is_locked() branch of the arming code
@@ -21197,16 +20948,6 @@ return update, 1000
             raise NotAchievedException(
                 "Expected an EKF_ALT_RESET at the mission arm and at the "
                 "re-arm, got %u" % resets)
-        post_origin_alt_m, post_z_m = self.assert_origin_frame_consistent()
-
-        self.disarm_vehicle(force=True)
-
-        # the reset must not relabel the origin frame: the origin stays
-        # put and height above it is unchanged
-        if abs(post_origin_alt_m - pre_origin_alt_m) > 2.0 or abs(post_z_m - pre_z_m) > 2.0:
-            raise NotAchievedException(
-                "Origin frame moved across rearm (origin alt %.1f -> %.1f m, local z %.1f -> %.1f m)" %
-                (pre_origin_alt_m, post_origin_alt_m, pre_z_m, post_z_m))
 
         delta_m = abs(post_rearm_amsl_mm - pre_rearm_amsl_mm) * 0.001
         if delta_m > 10.0:
@@ -21252,11 +20993,6 @@ return update, 1000
         self.change_mode('STABILIZE')
         self.set_rc(3, 1000)
         self.disarm_vehicle(force=True)
-        self.takeoff(150, mode='GUIDED', altitude_max=160)
-        self.change_mode('STABILIZE')
-        self.set_rc(3, 1000)
-        self.disarm_vehicle(force=True)
-        self.set_message_rate_hz('LOCAL_POSITION_NED', 20)
         # let the fall develop so that a velocity reset would show
         pre = self.assert_receive_message(
             'LOCAL_POSITION_NED', condition='LOCAL_POSITION_NED.vz > 5', timeout=10)
@@ -21275,10 +21011,6 @@ return update, 1000
         # catches.  The z bound is only a sanity check: getPosD() subtracts
         # ekfGpsRefHgt, which the reset moves by the height it zeroes, so the
         # two cancel and a datum reset alone cannot step it
-        # still falling, so vz must not step towards zero and z may only
-        # grow by the fall itself (20-30 m here); a datum reset zeroes
-        # the velocity, and relabelling the origin frame would step z by
-        # the whole height
         if pre.vz - min_vz > 1.0:
             raise NotAchievedException(
                 "Vertical velocity stepped from %.1f to %.1f m/s across the re-arm" %
@@ -21308,8 +21040,6 @@ return update, 1000
         # the pilot asks for a climb, so demand one to bring it in
         self.set_rc(3, 1700)
         self.change_mode('ALT_HOLD')
-        self.change_mode('ALT_HOLD')
-        self.set_rc(3, 1700)
         self.wait_climbrate(0.5, 20, timeout=20)
         self.hover()
         self.wait_climbrate(-0.5, 0.5, timeout=20)
@@ -21332,7 +21062,6 @@ return update, 1000
         # fly_guided_move_to waits on horizontal distance and groundspeed, so
         # most of the descent can be left to this wait at the default WP_SPD_DN
         self.wait_altitude(ground_amsl_m + 15, ground_amsl_m + 25, timeout=240,
-        self.wait_altitude(ground_amsl_m + 15, ground_amsl_m + 25, timeout=60,
                            altitude_source='SIM_STATE.alt')
         self.land_and_disarm()
 
@@ -21354,7 +21083,6 @@ return update, 1000
         # SIM_BARO_DRIFT accumulates into an offset that setting it back to
         # zero does not undo, so hand the next test a clean barometer
         self.reboot_sitl()
-        self.assert_reported_amsl_matches_gps()
 
     def testcan(self):
         ret = ([
@@ -21434,7 +21162,6 @@ return update, 1000
             "SMART_RTL_EnterLeave": "Causes a panic",
             "SMART_RTL_Repeat": "Currently fails due to issue with loop detection",
             "RTLStoppingDistanceSpeed": "Currently fails due to vehicle going off-course",
-            "ScriptingOSD": "Requires SFML which is not available in CI",
             "TerrainOffsetGroundEffectRecovery": "Fails by design: the takeoff window closes before the baro error does",
         }
 

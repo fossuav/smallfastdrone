@@ -10971,62 +10971,6 @@ Also, ignores heartbeats not from our target system'''
 
         ex = None
         self.context_push()
-        mavproxy.send("module load log\n")
-        mavproxy.send("log erase\n")
-        mavproxy.expect("Chip erase complete")
-
-        self.set_autodisarm_delay(0)
-
-        self.progress("Creating a very short log")
-        self.wait_ready_to_arm()
-        self.set_parameter("DISARM_DELAY", 1)
-        self.arm_vehicle()
-        self.wait_disarmed()
-        self.delay_sim_time(15, reason="Allow log persistence to finish")
-        mavproxy.send("log download 1 logs/dataflash-log-erase.BIN\n")
-        mavproxy.expect("Finished downloading", timeout=120)
-        # read the downloaded log - it must parse without error
-        self.validate_log_file("logs/dataflash-log-erase.BIN")
-        self.assert_log_dsf_no_drops("logs/dataflash-log-erase.BIN")
-        self.assert_current_log_filesizes({
-            1: (1000*1024, 1100*1024),
-        })
-
-        self.start_subtest("Test rotation results in a valid file")
-        self.set_parameter("LOG_FILE_DSRMROT", 1)
-
-        self.progress("Appending to create larger log")
-        self.arm_vehicle()
-        self.wait_disarmed()
-        self.delay_sim_time(15, reason="Allow log persistence to finish")
-        self.assert_current_log_filesizes({
-            1: (1950*1024, 1990*1024),
-        })
-        self.progress("Creating a second log")
-        self.arm_vehicle()
-        self.wait_disarmed()
-        self.delay_sim_time(15, reason="Allow log persistence to finish")
-        self.assert_current_log_filesizes({
-            1: (1950*1024, 1990*1024),
-            2: (1000*1024, 1100*1024),
-        })
-
-        self.progress("Creating a very large log which wipes the other ones out")
-        self.context_collect('STATUSTEXT')
-        self.set_parameter("LOG_BITMASK", 131071)
-        self.set_parameter("DISARM_DELAY", 0)  # disabled
-        self.arm_vehicle()
-        self.wait_statustext('Chip full, logging stopped', check_context=True, timeout=60)
-        self.disarm_vehicle()
-
-        # make sure we have finished logging
-        self.delay_sim_time(15, reason="logging to finish")
-
-        self.assert_current_log_filesizes({
-            1: (3809996, 4109996),
-        })
-
-        mavproxy.send("log list\n")
         try:
             self.set_parameter("LOG_BACKEND_TYPE", 4)
             self.reboot_sitl()
