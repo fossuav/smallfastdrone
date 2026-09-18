@@ -667,7 +667,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.wait_prearm_sys_status_healthy(timeout=120)
             self.zero_throttle()
             self.arm_vehicle()
-            self.takeoff(altitude_min=20, mode='ALT_HOLD', takeoff_throttle=1800)
+            self.takeoff(alt_min=20, mode='ALT_HOLD', takeoff_throttle=1800)
             self.delay_sim_time(5, "settle in the hover")
             start_alt = self.get_altitude(altitude_source="SIM_STATE.alt")
 
@@ -2564,7 +2564,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         def horiz_pos_rel_above_rangefinder(options_value):
             self.set_parameter("EK3_OPTIONS", options_value)
             self.reboot_sitl()
-            self.takeoff(4, mode="ALT_HOLD", require_absolute=False, altitude_max=6)
+            self.takeoff(4, mode="ALT_HOLD", require_absolute=False, max_err=2)
             assert_offset_measured()
             # climb clear of the rangefinder and hold while the terrain offset goes stale
             self.set_rc(3, 1800)
@@ -2668,7 +2668,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "TERRAIN_ENABLE": 0,
         })
         self.reboot_sitl()
-        self.takeoff(4, mode="ALT_HOLD", require_absolute=False, altitude_max=6)
+        self.takeoff(4, mode="ALT_HOLD", require_absolute=False, max_err=2)
         assert_offset_measured()
         # take the range finder away in the air and let the terrain offset go stale, so
         # that the flag which survives can only be the assumption. Without this the leg
@@ -2712,7 +2712,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.reboot_sitl()
         self.context_collect('STATUSTEXT')
-        self.takeoff(4, mode="ALT_HOLD", require_absolute=False, altitude_max=6)
+        self.takeoff(4, mode="ALT_HOLD", require_absolute=False, max_err=2)
         self.change_mode("LOITER")
         self.set_rc(3, 1800)
         # the failsafe fires on the way up, about 5s after the climb passes the range
@@ -2738,7 +2738,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.set_parameter("EK3_OPTIONS", flat_gnd)
         self.reboot_sitl()
-        self.takeoff(4, mode="ALT_HOLD", require_absolute=False, altitude_max=6)
+        self.takeoff(4, mode="ALT_HOLD", require_absolute=False, max_err=2)
         self.change_mode("LOITER")
         self.set_rc(3, 1800)
         self.wait_altitude(20, 200, relative=True, timeout=90)
@@ -2857,7 +2857,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("RNGFND1_MAX", 8)
         self.reboot_sitl()
 
-        self.takeoff(3, mode="ALT_HOLD", altitude_max=5)
+        self.takeoff(3, mode="ALT_HOLD", max_err=2)
         mark = self.get_sim_time()
         # take the range data away, so selectHeightForFusion falls back to baro, and
         # displace the baro in the same breath. The displacement has to be a step: while
@@ -3092,7 +3092,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         '''take off in ALT_HOLD, make eight forward pushes, yaw through
         three turns, hover, then land.  Returns the accel bias learned by
         each core and the landed pitch error against SIM truth'''
-        self.takeoff(altitude_min=20, mode='ALT_HOLD', takeoff_throttle=1800)
+        self.takeoff(alt_min=20, mode='ALT_HOLD', takeoff_throttle=1800)
         self.wait_climbrate(-0.5, 0.5, minimum_duration=2)
 
         # each push dips the baro while pitched and lets it recover while
@@ -4893,7 +4893,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.reboot_sitl()
             self.wait_ready_to_arm(require_absolute=False, timeout=120)
             # ALT_HOLD leaves horizontal position uncontrolled, so nothing fights the estimate
-            self.takeoff(altitude_min=3, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
+            self.takeoff(alt_min=3, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
             self.delay_sim_time(5, "let the AGL KF converge before injecting the fault")
             if inject:
                 self.set_parameter("SIM_FLOW_OFS_X", 1.0)
@@ -4984,7 +4984,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             # flow is not healthy while stationary on the ground, so climb in ALT_HOLD
             # before entering a mode that needs a position estimate
             self.takeoff(
-                altitude_min=5,
+                alt_min=5,
                 mode='ALT_HOLD',
                 require_absolute=False,
                 takeoff_throttle=1700,
@@ -5044,7 +5044,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.reboot_sitl()
         self.wait_ready_to_arm(require_absolute=False, timeout=120)
         self.takeoff(
-            altitude_min=5,
+            alt_min=5,
             mode='ALT_HOLD',
             require_absolute=False,
             takeoff_throttle=1700,
@@ -5098,7 +5098,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.reboot_sitl()
         self.wait_ready_to_arm(require_absolute=False, timeout=120)
         self.takeoff(
-            altitude_min=5,
+            alt_min=5,
             mode='ALT_HOLD',
             require_absolute=False,
             takeoff_throttle=1700,
@@ -5291,6 +5291,26 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             if m.Valid:
                 peak = max(peak, abs(getattr(m, field)))
         return peak
+
+    def send_position_target_local_ned(self, x, y, z_up):
+        self.mav.mav.set_position_target_local_ned_send(
+            0, # timestamp
+            1, # target system_id
+            1, # target component id
+            mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+            MAV_POS_TARGET_TYPE_MASK.POS_ONLY | MAV_POS_TARGET_TYPE_MASK.LAST_BYTE, # mask specifying use-only-x-y-z
+            x, # x
+            y, # y
+            -z_up, # z
+            0, # vx
+            0, # vy
+            0, # vz
+            0, # afx
+            0, # afy
+            0, # afz
+            0, # yaw
+            0, # yawrate
+        )
 
     def ScriptingOSD(self):
         '''test OSD scripting with waypoint mission - requires SFML OSD'''
@@ -5500,7 +5520,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.reboot_sitl()
         self.wait_ready_to_arm(require_absolute=False, timeout=120)
-        self.takeoff(altitude_min=10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
+        self.takeoff(alt_min=10, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
 
         # let the AGL KF settle on the rangefinder, then confirm it is valid and
         # record the bias estimate baseline
