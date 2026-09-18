@@ -15173,6 +15173,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "LOG_FILE_RATEMAX": 0,
             "LOG_FILE_BUFSIZE": 32767,
         })
+        # the buffer is allocated at boot, and the first subtest starts logging
+        # disarmed before it reboots, flooding the old buffer with startup messages
+        self.reboot_sitl()
 
         bits = [
             ('GPS', self.test_replay_gps_bit),
