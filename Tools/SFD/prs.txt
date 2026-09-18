@@ -62,4 +62,5 @@
 34209   # EKF3: do not learn XY accel bias in unaided flight
 34208   # Copter: interpolate the rate target in the fast rate thread
 34210   # Copter: advanced land failsafe (LAND_FS_OPTIONS bit 0)
+34432   # EKF3: keep baro ground effect out of a height source switch (found with #32232)
 32475   # Throw mode improvements (applied last, as the local stack was)

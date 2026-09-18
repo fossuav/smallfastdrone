@@ -43,10 +43,12 @@ failure is TerrainOffsetGroundEffectRecovery, failing by design as on master.
   interactions. #34292's flow floor left aiding churning every 5 s after
   touchdown. And with #32232 making the range finder the height source on the
   ground, the baro offset learned the spool-up ground-effect error and kept it:
-  the EKF height ran 2.5 m high for a whole SITL flight. The first fix froze the
-  offset in ground effect, was attributed to #32972, and broke #32232's drift
-  tracking; the /pr-review of #32232 caught both, and the fix now applies the
-  fusion dead zone to the offset instead. The third, Replay, was
+  the EKF height ran 2.5 m high for a whole SITL flight. It is a master bug
+  (a range finder that reads on the ground takes the same path), now #34432. On
+  the way there it was attributed to #32972 and then #32232, and a dead-zone
+  version replaced the first freeze; the /pr-review of #32232 found the dead
+  zone ratchets on baro noise, and a six-scenario A/B of four variants went
+  back to the freeze. The third, Replay, was
   a harness race: the larger log buffer master added never took effect without
   a reboot, and SITL panicked on a full buffer, which looked like a hang. A gdb
   run as SITL's parent found the panic; `ptrace_scope` 1 had blocked attaching.
@@ -62,6 +64,13 @@ failure is TerrainOffsetGroundEffectRecovery, failing by design as on master.
   against the branch's own 4.7. `refresh.sh backup` now skips indices used on
   origin: its first backup of the base took `.1`, the name origin already uses
   for the June lineage (renamed locally to `.2`).
+- PR updates pushed from the refresh6 fixes, after /pr-review of each: #34292
+  force-pushed at `54cd8177fa` (also the AP-Review blocker, a no-range-finder
+  build break), #33498 `d6eea72cd9`, #32553 `3216b0579e`, #32768 `51afc9c222`,
+  and the ground effect fix opened as #34432 (`f2be29f74e`). #32232 got a
+  description update and a reply, no commits. With #34432's version folded in,
+  refresh6 ran 70 of 71 again, 0 crashes, the same designed failure.
+
 
 ## 2026-09-15 - the shipping beta jumps position on a GPS-to-flow fall back
 
