@@ -149,7 +149,8 @@ After:
   MicoAir743-AIO, TBS_LUCID_H7 and SmallFastDronev1. Rebuild them here; do NOT
   copy from the old 4.7 branch - a bootloader that does not match its own
   hwdef is a bricking risk, and two of those hwdef-bl.dat files differ.
-- rr-cache is 12.8 MB against the ~2 MB the README quotes, and it is committed
+- rr-cache is 17.7 MB after refresh6 (12.8 MB after refresh5) against the ~2 MB
+  the README quotes, and it is committed
   every refresh.
 - #32232's five-leg re-run: the 20 Hz stream rate was lost at every reboot, so
   legs 3-5 were sampled at 5 Hz (`../ardupilot-pr-analysis/32232/`).
