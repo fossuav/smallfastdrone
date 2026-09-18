@@ -13,3 +13,6 @@ SERIAL5_PROTOCOL 16
 SERIAL6_PROTOCOL 23
 LOG_FILE_BUFSIZE 8
 GPS_DRV_OPTIONS 4
+
+# SmallFastDrone behaviour-preserving defaults
+@include ../include/sfd_defaults.parm
