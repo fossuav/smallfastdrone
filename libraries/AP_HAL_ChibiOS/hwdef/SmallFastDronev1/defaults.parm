@@ -35,3 +35,6 @@ CUST_ROT1_YAW,90
 COMPASS_ORIENT,101
 COMPASS_AUTO_ROT,0
 OSD_TYPE2,5
+
+# SmallFastDrone behaviour-preserving defaults
+@include ../include/sfd_defaults.parm
