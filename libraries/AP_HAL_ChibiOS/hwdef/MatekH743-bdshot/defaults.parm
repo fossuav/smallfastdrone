@@ -1,3 +1,6 @@
 # SERIAL7 is RCIN by default
 SERIAL7_PROTOCOL 23
 SERIAL7_BAUD 115
+
+# SmallFastDrone behaviour-preserving defaults
+@include ../include/sfd_defaults.parm

@@ -10,3 +10,6 @@ MOT_PWM_TYPE 6
 
 # io on alternate config is on
 RELAY2_DEFAULT 1
+
+# SmallFastDrone behaviour-preserving defaults
+@include ../include/sfd_defaults.parm

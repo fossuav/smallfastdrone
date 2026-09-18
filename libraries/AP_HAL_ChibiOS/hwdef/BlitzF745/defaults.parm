@@ -2,3 +2,6 @@
 SERVO9_FUNCTION 120
 NTF_LED_TYPES 257
 OSD_TYPE2 5
+
+# SmallFastDrone behaviour-preserving defaults
+@include ../include/sfd_defaults.parm
