@@ -209,6 +209,17 @@ public:
     AC_PolyFence_loader &polyfence();
     const AC_PolyFence_loader &polyfence() const;
 
+#if AP_SCRIPTING_ENABLED
+    // Build an inclusion polygon a point at a time, for scripting. Split into
+    // three calls because the binding generator passes one Location per call;
+    // the accumulated points are only written to storage by polygon_commit().
+    // polygon_commit() REPLACES the whole stored fence, and writes both storage
+    // and FENCE_TOTAL, so it must not be called while manoeuvring.
+    bool polygon_begin(uint8_t vertex_count);
+    bool polygon_add_point(const Location &loc);
+    bool polygon_commit();
+#endif
+
     enum class OPTIONS {
         DISABLE_MODE_CHANGE = 1U << 0,
         INCLUSION_UNION = 1U << 1,
@@ -343,6 +354,14 @@ private:
     
 
     AC_PolyFence_loader _poly_loader{_total, _options}; // polygon fence
+
+#if AP_SCRIPTING_ENABLED
+    // Points accumulated by polygon_begin/polygon_add_point, owned between the
+    // two and freed by polygon_commit. nullptr whenever no build is in progress.
+    AC_PolyFenceItem *_script_poly;
+    uint8_t _script_poly_count;
+    uint8_t _script_poly_used;
+#endif
 };
 
 namespace AP {
