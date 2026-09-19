@@ -1210,6 +1210,57 @@ const AC_PolyFence_loader &AC_Fence::polyfence() const
     return _poly_loader;
 }
 
+#if AP_SCRIPTING_ENABLED
+bool AC_Fence::polygon_begin(uint8_t vertex_count)
+{
+    // write_fence() rejects a polygon of under three vertices; refuse here so a
+    // script gets the failure before it has built anything.
+    if (vertex_count < 3) {
+        return false;
+    }
+    free(_script_poly);
+    _script_poly_count = 0;
+    _script_poly_used = 0;
+    _script_poly = (AC_PolyFenceItem *)calloc(vertex_count, sizeof(AC_PolyFenceItem));
+    if (_script_poly == nullptr) {
+        return false;
+    }
+    _script_poly_count = vertex_count;
+    return true;
+}
+
+bool AC_Fence::polygon_add_point(const Location &loc)
+{
+    if (_script_poly == nullptr || _script_poly_used >= _script_poly_count) {
+        return false;
+    }
+    AC_PolyFenceItem &item = _script_poly[_script_poly_used];
+    item.type = AC_PolyFenceType::POLYGON_INCLUSION;
+    item.loc[0] = loc.lat;
+    item.loc[1] = loc.lng;
+    // every vertex of a polygon carries the polygon's whole count; validate_fence()
+    // checks they all agree.
+    item.vertex_count = _script_poly_count;
+    _script_poly_used++;
+    return true;
+}
+
+bool AC_Fence::polygon_commit()
+{
+    // a short write would store a polygon whose vertices disagree about its size,
+    // which validate_fence() rejects after format() has already wiped storage.
+    if (_script_poly == nullptr || _script_poly_used != _script_poly_count) {
+        return false;
+    }
+    const bool ret = _poly_loader.write_fence(_script_poly, _script_poly_count);
+    free(_script_poly);
+    _script_poly = nullptr;
+    _script_poly_count = 0;
+    _script_poly_used = 0;
+    return ret;
+}
+#endif // AP_SCRIPTING_ENABLED
+
 
 #else  // build type is not appropriate; provide a dummy implementation:
 const AP_Param::GroupInfo AC_Fence::var_info[] = { AP_GROUPEND };
@@ -1253,6 +1304,12 @@ const AC_PolyFence_loader &AC_Fence::polyfence() const
 {
     return _poly_loader;
 }
+
+#if AP_SCRIPTING_ENABLED
+bool AC_Fence::polygon_begin(uint8_t vertex_count) { return false; }
+bool AC_Fence::polygon_add_point(const Location &loc) { return false; }
+bool AC_Fence::polygon_commit() { return false; }
+#endif // AP_SCRIPTING_ENABLED
 
 #endif // #if AC_FENCE_DUMMY_METHODS_ENABLED
 

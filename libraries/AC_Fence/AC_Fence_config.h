@@ -3,6 +3,7 @@
 #include <AP_HAL/AP_HAL_Boards.h>
 
 #include <GCS_MAVLink/GCS_config.h>
+#include <AP_Scripting/AP_Scripting_config.h>
 
 // Enabled 0 is compiled out
 // Enabled 1 is always enabled on all vehicles
