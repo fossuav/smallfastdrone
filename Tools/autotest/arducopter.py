@@ -17282,7 +17282,8 @@ return update, 1000
         # wrong geometry, and the box axis is the documented place this gets wrong.
         self.launch_autoacro_rise255(extra_params={
             "AUTA_FEN_ENAB": 1,
-            "AUTA_FEN_MARG": 10,
+            "AUTA_FEN_MRGXY": 10,
+            "AUTA_FEN_MRGZ": 10,
         })
         # Drive the trigger LOW first and hold it there. RC9 sits at mid from boot,
         # which the applet reads as the staging position, so the rising edge is
@@ -17334,13 +17335,13 @@ return update, 1000
         # plan term at all, so it is HALF_W_M + margin either side and nothing else.
         # A margin that never reached the polygon shows up here and only here.
         for side in (sides[0], sides[2]):
-            if abs(side - 60) > 3:
-                raise NotAchievedException("fence width %.1f m, want 60" % side)
+            if abs(side - 70) > 3:
+                raise NotAchievedException("fence width %.1f m, want 70" % side)
         # The length carries the schedule's plan on top of its floors, so it is
         # bounded below rather than pinned: AHEAD_M + BEHIND_M + 2*margin.
         for side in (sides[1], sides[3]):
-            if side < 187:
-                raise NotAchievedException("fence length %.1f m, want >= 190" % side)
+            if side < 202:
+                raise NotAchievedException("fence length %.1f m, want >= 205" % side)
         if abs(sides[1] - sides[3]) > 3:
             raise NotAchievedException("fence not a rectangle: %.1f vs %.1f" %
                                        (sides[1], sides[3]))
@@ -17366,6 +17367,20 @@ return update, 1000
                     inside = not inside
         if not inside:
             raise NotAchievedException("vehicle is outside its own show-box fence")
+
+        # The vertical band, which is the other half of the staging gesture. Staged
+        # at 20 m, so UP_M + margin above and a minimum floored at 0 -- the floor
+        # landing at 0 is the design working, not a failure to write it.
+        alt_max = self.get_parameter("FENCE_ALT_MAX")
+        alt_min = self.get_parameter("FENCE_ALT_MIN")
+        # Referenced to where it was staged, not to the takeoff ask -- the vehicle
+        # settles a few metres off that and the band follows it, which is the point.
+        want_max = here.relative_alt * 0.001 + 10 + 10   # UP_M + AUTA_FEN_MRGZ
+        if abs(alt_max - want_max) > 3:
+            raise NotAchievedException("FENCE_ALT_MAX %.1f, want ~%.1f" %
+                                       (alt_max, want_max))
+        if alt_min != 0:
+            raise NotAchievedException("FENCE_ALT_MIN %.1f, want 0" % alt_min)
 
         # Land the way the other autoacro tests do. do_RTL() goes through
         # distance_to_home(), which waits on a GLOBAL_POSITION_INT that is not
