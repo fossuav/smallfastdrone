@@ -1071,6 +1071,9 @@ singleton AC_Fence method get_safe_alt_max_m_and_frame void float'Ref uint8_t'Re
 singleton AC_Fence method get_safe_alt_max_m_and_frame rename get_safe_alt_max
 singleton AC_Fence method present uint8_t
 singleton AC_Fence method get_enabled_fences uint8_t
+singleton AC_Fence method polygon_begin boolean uint8_t 3 UINT8_MAX
+singleton AC_Fence method polygon_add_point boolean Location
+singleton AC_Fence method polygon_commit boolean
 
 include AP_Rally/AP_Rally.h depends HAL_RALLY_ENABLED
 

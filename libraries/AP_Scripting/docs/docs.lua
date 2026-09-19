@@ -4080,6 +4080,24 @@ function fence:present() end
 ---| 8 # Minimum altitude
 function fence:get_enabled_fences() end
 
+-- Begin building an inclusion polygon of vertex_count points. Discards any build
+-- already in progress. Nothing reaches storage until fence:polygon_commit().
+---@param vertex_count integer -- at least 3
+---@return boolean
+function fence:polygon_begin(vertex_count) end
+
+-- Append one vertex to the polygon begun by fence:polygon_begin. Returns false if
+-- no build is in progress or the declared vertex count is already filled.
+---@param loc Location_ud
+---@return boolean
+function fence:polygon_add_point(loc) end
+
+-- Validate the accumulated polygon and write it to fence storage, REPLACING any
+-- stored fence and updating FENCE_TOTAL. Returns false without writing if fewer
+-- points were added than were declared.
+---@return boolean
+function fence:polygon_commit() end
+
 -- Returns the type bitmask of any fence whose margins have been crossed
 ---@return integer fence_type bitmask
 ---| 1 # Maximim altitude
