@@ -16683,14 +16683,14 @@ return update, 1000
         # The moves split out on 2026-08-11. Installed unconditionally, and it has to
         # be: the isolation tests pick those moves by parameter, and an absent module
         # would surface as a missing move rather than a missing file.
-        # THE HEAP SAVING NO LONGER APPLIES TO THE CURATED DISPLAY (2026-09-07). The
-        # split's whole economy was that no display entry was tagged, so a display run
-        # never compiled this. The show now flies the DRILL, so it does -- at script
-        # load, via the line weave asking the next figure's maker for its entry speed.
-        # A display is therefore back to holding both modules, roughly the pre-split
-        # compiled size, and whether that still leaves room for the CRSF menu is the
-        # vehicle's question and not SITL's.
+        # THE SAVING WAS LOST ON 2026-09-07 AND RECOVERED ON 09-19. The split's whole
+        # economy was that no display entry was tagged, so a display never compiled
+        # this -- and then the show started flying the DRILL. The drill now has its
+        # own module (autoacro_drill.lua), by the same configuration rule, so a
+        # display is back to compiling neither this file nor the other seven moves
+        # in it.
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_extras.lua"), "autoacro_extras.lua")
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_drill.lua"), "autoacro_drill.lua")
         self.install_applet_script_context("autoacro.lua")
         self.reboot_sitl()
 
@@ -17066,6 +17066,21 @@ return update, 1000
         # the vehicle has the CPU for it (scheduler MaxT 3.9-4.2 ms and load
         # 39.6-61.6% through a whole field display). Keep this and the vehicle's
         # value in step, or the test stops predicting what the airframe does.
+        # STAYS AT 500000, the Marmott's ceiling, and on 2026-09-19 that stopped
+        # being free. Bisected that day: the applet as it stood on 09-09 already
+        # failed at 499000, so the 19-25 KB of headroom measured on 08-10 was gone
+        # -- spent on 09-07 when the drill joined the curated show, which makes the
+        # line weave require autoacro_extras at script LOAD, inside the peak. The
+        # show-box fence's +281 B then failed at 500000 outright. The fix was not a
+        # bigger number: the drill's line now takes the next figure's DECLARED entry
+        # speed instead of calling its maker, so extras compiles in the IDLE path
+        # after autoacro.lua's own parser state is gone. That moved the cliff to
+        # between 475000 and 485000, i.e. ~15-25 KB of headroom restored at the same
+        # pin.
+        # STEADY STATE IS 446739 B (SCR.Total_mem, bit 3 of SCR_DEBUG_OPTS, which
+        # has been on and unread) -- so the LOAD PEAK is ~33 KB above steady, and
+        # the peak is what this pin is really measuring. Read SCR.Total_mem before
+        # arguing about heap; it is in every log here already.
         self.set_parameters({"SCR_ENABLE": 1, "SCR_HEAP_SIZE": 500000,
                              "SCR_VM_I_COUNT": 20000,
                              "SCR_DEBUG_OPTS": 8})
@@ -17074,14 +17089,22 @@ return update, 1000
         # The moves split out on 2026-08-11. Installed unconditionally, and it has to
         # be: the isolation tests pick those moves by parameter, and an absent module
         # would surface as a missing move rather than a missing file.
-        # THE HEAP SAVING NO LONGER APPLIES TO THE CURATED DISPLAY (2026-09-07). The
-        # split's whole economy was that no display entry was tagged, so a display run
-        # never compiled this. The show now flies the DRILL, so it does -- at script
-        # load, via the line weave asking the next figure's maker for its entry speed.
-        # A display is therefore back to holding both modules, roughly the pre-split
-        # compiled size, and whether that still leaves room for the CRSF menu is the
-        # vehicle's question and not SITL's.
+        # THE SAVING WAS LOST ON 2026-09-07 AND RECOVERED ON 09-19. The split's whole
+        # economy was that no display entry was tagged, so a display never compiled
+        # this -- and then the show started flying the DRILL. The drill now has its
+        # own module (autoacro_drill.lua), by the same configuration rule, so a
+        # display is back to compiling neither this file nor the other seven moves
+        # in it.
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_extras.lua"), "autoacro_extras.lua")
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_drill.lua"), "autoacro_drill.lua")
+        # The show-box fence, split out 2026-09-19 for the same reason and a harder
+        # one: carried inside autoacro_maneuvers it cost 2081 B compiled and broke
+        # the extras require outright at 500k -- "not enough mem, increase
+        # SCR_HEAP_SIZE" -- because the LOAD-TIME peak is what binds and the drill
+        # joining the show had already spent the 19-25 KB measured on 08-10. It is
+        # required from the applet's idle path instead, on the staging gesture, so a
+        # display that never stages one does not compile it at all.
+        self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "autoacro_fence.lua"), "autoacro_fence.lua")
         self.install_script_module(os.path.join(self.rootdir(), "libraries", "AP_Scripting", "modules", "crsf_helper.lua"), "crsf_helper.lua")
         self.install_applet_script_context("autoacro.lua")
         self.install_applet_script_context("autoacro_menu.lua")
@@ -17250,6 +17273,107 @@ return update, 1000
         # pivot mood left the rewind 0.8 m short.
         self.launch_autoacro_rise255(extra_params={"AUTA_JF_DROP": 6})
         self.fly_autoacro_display(65)
+
+    def AutoAcroShowFence(self):
+        '''Stage the show-box polygon fence from the middle switch position'''
+        # The fence is written from the IDLE path on a rising edge to the middle
+        # switch position, so this test is the gesture and then a read-back of
+        # storage: a statustext alone would pass on a fence that committed with the
+        # wrong geometry, and the box axis is the documented place this gets wrong.
+        self.launch_autoacro_rise255(extra_params={
+            "AUTA_FEN_ENAB": 1,
+            "AUTA_FEN_MARG": 10,
+        })
+        # Drive the trigger LOW first and hold it there. RC9 sits at mid from boot,
+        # which the applet reads as the staging position, so the rising edge is
+        # already spent by the time AUTA_FEN_ENAB is set -- the fence would never be
+        # asked for and the test would time out on a working applet.
+        self.set_rc(9, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(20, mode="GUIDED")
+        self.change_mode("LOITER")
+
+        # POLLED, not waited for: GLOBAL_POSITION_INT is not reliably in the stream
+        # right after the mode change here, and assert_receive_message timed out on
+        # about one run in five with nothing wrong with the applet.
+        here = self.poll_message('GLOBAL_POSITION_INT')
+        yaw_deg = here.hdg * 0.01
+
+        # Nothing is stored until the gesture: the write belongs to the switch, not
+        # to arming or to script start. Read through FENCE_TOTAL rather than a
+        # mission download -- downloading an empty fence here leaves the link not
+        # serving GLOBAL_POSITION_INT, and the test then fails on the wrong thing.
+        if self.get_parameter("FENCE_TOTAL") != 0:
+            raise NotAchievedException("fence present before it was staged")
+
+        self.context_collect('STATUSTEXT')
+        self.set_rc(9, 1500)   # middle: lay the fence down the current heading
+        # The PLAN line is the one that proves the good path ran. box_plan is wrapped
+        # in a pcall, and its fallback produces a box identical to a healthy one
+        # whenever the floors bind -- which they do on every current schedule -- so
+        # waiting only on the box line would pass on a plan that threw every time.
+        plan = self.wait_statustext("Fence: plan", check_context=True, timeout=20)
+        plan_ahead = float(plan.text.split("+")[1].split("/")[0])
+        if plan_ahead <= 0:
+            raise NotAchievedException("planned box does not translate: %s" % plan.text)
+        self.wait_statustext("Fence: box", check_context=True, timeout=20)
+
+        items = self.download_using_mission_protocol(mavutil.mavlink.MAV_MISSION_TYPE_FENCE)
+        if len(items) != 4:
+            raise NotAchievedException("want 4 fence vertices, got %u" % len(items))
+        for item in items:
+            if item.command != mavutil.mavlink.MAV_CMD_NAV_FENCE_POLYGON_VERTEX_INCLUSION:
+                raise NotAchievedException("non-inclusion fence item %u" % item.command)
+
+        corners = [mavutil.location(i.x * 1e-7, i.y * 1e-7) for i in items]
+        sides = [self.get_distance_accurate(corners[i], corners[(i + 1) % 4])
+                 for i in range(4)]
+
+        # THE WIDTH IS EXACT and is the assertion that earns its keep: lateral has no
+        # plan term at all, so it is HALF_W_M + margin either side and nothing else.
+        # A margin that never reached the polygon shows up here and only here.
+        for side in (sides[0], sides[2]):
+            if abs(side - 60) > 3:
+                raise NotAchievedException("fence width %.1f m, want 60" % side)
+        # The length carries the schedule's plan on top of its floors, so it is
+        # bounded below rather than pinned: AHEAD_M + BEHIND_M + 2*margin.
+        for side in (sides[1], sides[3]):
+            if side < 187:
+                raise NotAchievedException("fence length %.1f m, want >= 190" % side)
+        if abs(sides[1] - sides[3]) > 3:
+            raise NotAchievedException("fence not a rectangle: %.1f vs %.1f" %
+                                       (sides[1], sides[3]))
+
+        # The long axis must lie down the vehicle's heading. This is the check for
+        # the trap the box has fallen into before -- a box built on an axis inferred
+        # from motion rather than on the yaw the display line is captured from.
+        axis_deg = self.get_bearing(corners[2], corners[1])
+        if abs(((axis_deg - yaw_deg) + 180) % 360 - 180) > 5:
+            raise NotAchievedException("fence axis %.0f deg, vehicle heading %.0f" %
+                                       (axis_deg, yaw_deg))
+
+        # And the vehicle must be inside it: the box is anchored on the vehicle, so a
+        # sign or rotation error in the corner arithmetic puts the anchor outside.
+        inside = False
+        for i in range(4):
+            j = (i + 1) % 4
+            if ((corners[i].lat > here.lat * 1e-7) != (corners[j].lat > here.lat * 1e-7)):
+                lng_at = (corners[j].lng - corners[i].lng) * \
+                    (here.lat * 1e-7 - corners[i].lat) / \
+                    (corners[j].lat - corners[i].lat) + corners[i].lng
+                if here.lon * 1e-7 < lng_at:
+                    inside = not inside
+        if not inside:
+            raise NotAchievedException("vehicle is outside its own show-box fence")
+
+        # Land the way the other autoacro tests do. do_RTL() goes through
+        # distance_to_home(), which waits on a GLOBAL_POSITION_INT that is not
+        # reliably in the stream here and flaked about one run in five -- in
+        # TEARDOWN, after every assertion above had already passed.
+        self.set_rc(9, 1000)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
 
     def fly_autoacro_size_arm(self, lp, im, rw):
         '''AutoAcroFullDisplay with the sized figures re-sized, for the slow-show A/B.
@@ -18979,6 +19103,7 @@ return update, 1000
             self.AutoAcroReversalPairChained,
             self.AutoAcroImmelmannJerk,
             self.AutoAcroAltitudeRefusal,
+            self.AutoAcroShowFence,
             self.AutoAcroEKFRecovery,
             self.AutoAcroCharacterise,
         ])
