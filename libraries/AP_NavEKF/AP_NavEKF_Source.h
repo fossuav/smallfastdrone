@@ -75,6 +75,10 @@ public:
         return active_source_set;
      }
 
+    // true when each core runs the source set with its own index, so selecting a set and
+    // selecting a lane are the same request
+    bool source_set_per_core() const { return option_is_set(SourceOptions::SRC_PER_CORE); }
+
     // get current position source
     SourceXY getPosXYSource(uint8_t core_index) const { return _source_set[getActiveSourceSet(core_index)].posxy; }
 
