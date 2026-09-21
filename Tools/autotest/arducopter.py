@@ -5209,7 +5209,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             dfreader = self.dfreader_for_current_onboard_log()
             bias_dps = {}
             armed = False
-            landed = False
+            flying = False
             flow_fusion_started = False
             aiding_stopped = 0
             while True:
@@ -5220,15 +5220,17 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 if mtype == 'ARM':
                     armed = m.ArmState == 1
                 elif mtype == 'EV':
-                    # on the ground the flow is below its focus height and is
-                    # not fused, so aiding stopping after touchdown is expected
-                    if m.Id == 18:  # LogEvent::LAND_COMPLETE
-                        landed = True
+                    # only the flight is under test: a flow focus floor withholds
+                    # the flow on the ground, and aiding may stop after touchdown
+                    if m.Id == 28:  # LogEvent::NOT_LANDED
+                        flying = True
+                    elif m.Id == 18:  # LogEvent::LAND_COMPLETE
+                        flying = False
                 elif mtype == 'XKF1':
                     bias_dps[m.C] = max(bias_dps.get(m.C, 0), abs(m.GZ))
                 elif "fusing optical flow" in m.Message:
                     flow_fusion_started = True
-                elif armed and not landed and "stopped aiding" in m.Message:
+                elif armed and flying and "stopped aiding" in m.Message:
                     aiding_stopped += 1
             self.progress(f"{name}: max |GZ| {bias_dps} flow fusion started {flow_fusion_started} "
                           f"aiding stopped {aiding_stopped}")
