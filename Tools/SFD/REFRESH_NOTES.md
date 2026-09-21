@@ -18,9 +18,10 @@ reply exists") before acting on it.
 ## Current state
 
 - Shipping: `SmallFastDrone-4.7.1-beta` = refresh6, promoted 2026-09-21 at
-  `b19fee0640` and since carried on to 302 commits on base `a5eb325674` (the
-  parameter note, and the AGL KF floor fix below, flown on SFD-O4 log10). The
-  refresh5 beta is kept as
+  `b19fee0640`, 297 commits on base `a5eb325674`, and carried on past it since
+  (the parameter note, and the AGL KF floor fix below, flown on SFD-O4 log10).
+  A running total goes stale on the commit that writes it, so this one is the
+  promotion's. The refresh5 beta is kept as
   `SmallFastDrone-4.7.1.5-beta`. Copter, plane, heli and sub build, and so does
   a copter with AP_RANGEFINDER_ENABLED 0. SFD set (71 tests, including the MSP
   VTX pair and Sub FuseMag): 70 pass, 0 crashes; TerrainOffsetGroundEffectRecovery
