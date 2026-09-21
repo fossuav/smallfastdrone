@@ -31,8 +31,26 @@ samples, the residual consistent with the 1 s differentiation baseline.
 The record of it is in `../ardupilot-pr-analysis/pending-srcset-lane/`, added
 under finding 3 rather than replacing it: log14's 0.94 is the number for a
 flight that flew the old scalers, and re-measuring the drift on the fitted
-values is a different measurement. Verification pass still owed, and it should
-come before any GPS-denied sortie on the new values.
+values is a different measurement.
+
+**Verified the same afternoon on log16**, flown with the fitted values: the flow
+lane's speed ratio against GPS is 1.002 where log14 on the old scalers read
+0.935. Both axes land within a few percent of unity on the helper and on an
+independent fit over pure legs only.
+
+Two traps came out of that verification, both worth the space. The helper
+reported X cross-axis at 20 % against log15's 1 %, which reads as a rotated flow
+frame and is not one: log16 flew its middle legs at 34 to 55 degrees off the
+nose, and each sample is assigned to whichever body axis dominates, so genuine
+motion on the other axis is counted as leakage. Binned by course relative to the
+nose it is 5-7 % on both flights, and an orientation error cannot appear between
+two sorties with nothing touched. The playbook now carries that (aap 1.7.12).
+And the independent fit written to cross-check the helper read six points low on
+both flights and both axes until the range geometry was fixed: the flow sees the
+ground at the slant range along body -z, which `RFND.Dist` already is, so
+dividing by the vertical height inflates the ideal flow by 1/cos(tilt). A
+systematic offset that appears on every arm of a comparison is the method, not
+the finding.
 
 ## 2026-09-21 - SFD-O4 log12 and log14: the focus floor, and the lane fix flown
 
