@@ -15683,6 +15683,52 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 "cores were not on separate source sets (got %s)"
                 % {c: sorted(v) for c, v in sorted(source_sets.items())})
 
+    def EK3_SourceSetSelectsLane(self):
+        '''with a source set per core, selecting a set selects the lane that runs it'''
+        # Under EK3_SRC_OPTIONS bit 3 each core is pinned to the set with its own index,
+        # so setting the active set reaches no core: getActiveSourceSet() returns the core
+        # index and never reads it. The request changed nothing while still reporting that
+        # it worked, which is how a flight meant to fly the second set flew the first.
+        #
+        # Same configuration as EK3_PerCoreLogging: GPS on core 0, VICON on core 1.
+        self.set_parameters({
+            "EK3_ENABLE": 1,
+            "AHRS_EKF_TYPE": 3,
+            "VISO_TYPE": 2,
+            "SERIAL5_PROTOCOL": 2,
+            "EK3_SRC2_POSXY": 6,
+            "EK3_SRC2_VELXY": 6,
+            "EK3_SRC2_POSZ": 6,
+            "EK3_SRC2_VELZ": 6,
+            "EK3_SRC2_YAW": 6,
+            "EK3_SRC_OPTIONS": 8,     # SRC_PER_CORE
+            "EK3_OPTIONS": 1 << 1,    # ManualLaneSwitch, or lane selection is not the user's
+        })
+        self.customise_SITL_commandline(["--serial5=sim:vicon"])
+
+        # one collection, and a string unique to each phase: check_context matches
+        # everything gathered so far, so re-collecting would not scope the later waits
+        self.context_collect('STATUSTEXT')
+        self.wait_ready_to_arm()
+        self.takeoff(10, mode='GUIDED')
+
+        self.start_subtest("selecting the second set moves the primary to its lane")
+        self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 2)
+        self.wait_statustext("EKF3 lane switch 1", check_context=True, timeout=10)
+
+        self.start_subtest("and selecting the first set brings it back")
+        self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 1)
+        self.wait_statustext("EKF3 lane switch 0", check_context=True, timeout=10)
+
+        # EK3_IMU_MASK leaves two cores here, so the third set has no lane to select.
+        # UpdateFilter() falls back to lane 0 rather than to nothing, and the warning is
+        # what stops that reading as the set having been taken up
+        self.start_subtest("a set with no lane warns instead of reporting success")
+        self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 3)
+        self.wait_statustext("source set 3 has no lane", check_context=True, timeout=10)
+
+        self.do_RTL()
+
     def FlowHeightMinTerrainPath(self):
         """FLOW_HGT_MIN withholds unfocused flow from the terrain estimator"""
         # EK3_FLOW_USE=2 sends optical flow to the 1-state terrain estimator rather
@@ -17799,6 +17845,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.EK3_OptflowTerrainScaleHeight,
              self.EK3_GetHaglTerrainAlt,
              self.EK3_PerCoreLogging,
+             self.EK3_SourceSetSelectsLane,
              self.EK3NoAidAccelBiasXY,
              self.EK3_AccelBiasInhibitOnGroundMoving,
              self.EK3_AccelBiasZeroVelOptFlow,
