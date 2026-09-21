@@ -18847,6 +18847,115 @@ return update, 1000
         self.set_parameters(params)
         self.fly_autoacro_display(takeoff_alt=39, trigger_ch=7)
 
+    def RealFlightShowFence(self, model, home):
+        '''Stage the show-box fence on RealFlight and fly the display inside it.
+
+        The fence MECHANISM is airframe-independent: RealFlight and native SITL run
+        the same binary, and write_fence does not care what is flying. What this
+        test is for is CONTAINMENT, which is not airframe-independent at all. The
+        same schedule runs -79..+51 m on the Marmott and 0..+152 here, because this
+        airframe's leg error is a one-signed bias, and the box floors in
+        autoacro_fence.lua are the Marmott's. AUTA_FEN_MRGXY is the per-airframe
+        knob for exactly that, the way AUTA_*_DROP is for height, and 70 is this
+        airframe's number: it puts the ahead edge at 170 m against a show that
+        measured 152 (2026-09-19), so the margin is real rather than arithmetic
+        sitting on the answer.
+
+        The fence is armed REPORT ONLY and only after takeoff. Report-only cannot
+        RTL, which matters because a breach action firing mid-figure is worse than
+        no fence; and arming after the climb keeps FENCE_ALT_MIN out of the takeoff.
+        '''
+        if not self.realflight_address:
+            raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
+        self.setup_RealFlight_vehicle(model, home)
+        self.install_autoacro_scripts()
+        # Same display configuration as RealFlightFullDisplay -- this is that show
+        # with a fence round it, so anything that changes the box must change there.
+        params = self.autoacro_display_params(0.025, trigger_ch=7,
+                                              loop_drag_g=0.40)
+        params["LOG_BITMASK"] = 0x10FFFF
+        params["AUTA_JF_DROP"] = 6
+        params["AUTA_SS_DROP"] = 12
+        params["AUTA_LS_DROP"] = 12
+        params["AUTA_FEN_ENAB"] = 1
+        params["AUTA_FEN_MRGXY"] = 70
+        params["AUTA_FEN_MRGZ"] = 10
+        self.set_parameters(params)
+
+        # RC7 sits at mid from boot, which the applet reads as the staging
+        # position, so drive it low first or the rising edge is already spent.
+        self.set_rc(7, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        # 43 rather than RealFlightFullDisplay's 39. The loop-spin's AGL floor is
+        # AUTA_LS_DROP 12 + AUTA_MIN_ALT 10 = 22 m, and the first run of this test
+        # refused it at "needs 22.0 m AGL, have 21.8" -- 0.2 m, with the display
+        # aborting and taking the containment check with it. That marginality is
+        # already an open item and is not this test's subject, so buy margin rather
+        # than under-declare the drop. It puts the band a little over the 10..50 the
+        # show is choreographed for, which is the trade being made knowingly.
+        self.takeoff(43, mode="GUIDED")
+        self.change_mode("LOITER")
+
+        if self.get_parameter("FENCE_TOTAL") != 0:
+            raise NotAchievedException("fence present before it was staged")
+
+        self.context_collect('STATUSTEXT')
+        self.set_rc(7, 1500)   # middle: lay the fence down the current heading
+        self.wait_statustext("Fence: plan", check_context=True, timeout=20)
+        self.wait_statustext("Fence: box", check_context=True, timeout=20)
+        self.wait_statustext("Fence: alt", check_context=True, timeout=20)
+
+        items = self.download_using_mission_protocol(mavutil.mavlink.MAV_MISSION_TYPE_FENCE)
+        if len(items) != 4:
+            raise NotAchievedException("want 4 fence vertices, got %u" % len(items))
+        corners = [mavutil.location(i.x * 1e-7, i.y * 1e-7) for i in items]
+        sides = [self.get_distance_accurate(corners[i], corners[(i + 1) % 4])
+                 for i in range(4)]
+        # HALF_W_M 25 + margin 70, either side.
+        for side in (sides[0], sides[2]):
+            if abs(side - 190) > 4:
+                raise NotAchievedException("fence width %.1f m, want 190" % side)
+        # AHEAD_M 100 + BEHIND_M 85 + 2*margin, and the plan can only raise it.
+        for side in (sides[1], sides[3]):
+            if side < 320:
+                raise NotAchievedException("fence length %.1f m, want >= 325" % side)
+
+        # Arm it REPORT ONLY, after the climb. Report-only takes no action on a
+        # breach, so this cannot pull the vehicle out of a figure; it just tells us.
+        # POLYGON AND ALT-MAX ONLY. The band's FENCE_ALT_MIN sits at 7 m against a
+        # show whose floor is 23, so nothing in the display can reach it and the
+        # only thing that ever will is the landing -- arming it here tests nothing
+        # and guarantees a breach on the way down, which is what the first run did.
+        self.set_parameters({
+            "FENCE_ACTION": 0,
+            "FENCE_TYPE": 5,    # alt max + polygon
+            "FENCE_ENABLE": 1,
+        })
+
+        try:
+            self.context_collect('STATUSTEXT')
+            self.set_rc(7, 2000)
+            self.wait_statustext("AutoAcro: display starting", check_context=True, timeout=15)
+            self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=200)
+
+            # THE ASSERTION THIS TEST EXISTS FOR. Report-only means a breach
+            # announces itself ("<fence names> breached") and does nothing, so the
+            # show either stayed inside its own box or the log says which it did not.
+            breaches = [m.text for m in self.context_collection('STATUSTEXT')
+                        if "breached" in m.text.lower()]
+            if breaches:
+                raise NotAchievedException("fence breached during the display: %s" %
+                                           "; ".join(sorted(set(breaches))))
+        finally:
+            # Off before any descent, including the one an abort causes -- otherwise
+            # a failed run reports a breach that belongs to the landing.
+            self.set_parameters({"FENCE_ENABLE": 0})
+
+        self.set_rc(7, 1000)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def RealFlightSlowShow8(self, model, home):
         '''The RealFlight display with every sized figure at 8 m -- the slow-show A/B.
 
@@ -19037,6 +19146,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightShowFence, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             Test(self.RealFlightSlowShow8, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
@@ -19224,6 +19337,7 @@ return update, 1000
             ret["RealFlightAutoAcroLookback"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightShowFence"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightSlowShow8"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
