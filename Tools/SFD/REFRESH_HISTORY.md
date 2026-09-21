@@ -7,6 +7,30 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-09-21 - SFD-O4 log10: the wind-up is intermittent, and why
+
+Second flight of the same day, same firmware (`ee3bda1f`, the fix was not
+flashed), same airframe and parameters. The AGL KF did not wind up: velocity
+-0.00 m/s after 69 s on the ground against log9's -7.22, bias converged to
+-0.019 rather than freezing at -0.080. The takeoff fault did not appear either
+- `HAgl` tracked from the first sample after lift-off and there was no height
+step, against log9's 2.9 s on the floor and 2.21 m. A natural A/B, and better
+evidence than the Replay one because nothing was changed to get it.
+
+The split is the sign of the early velocity error, because the clamp is
+one-sided. Up lifts the height off the floor, which restores the innovation
+and corrects the bias; down presses it into the floor, where the innovation
+dies and the error latches. log9 was at -0.09 m/s at 2 s, log10 at -0.00003
+and then positive, and that is the whole difference. So the bug is
+intermittent on a timescale of one power cycle, which is also why it survived
+to a real flight. The claim to carry into the PR is not that the AGL KF winds
+up but that a downward error is never corrected.
+
+Rest of the flight was clean: ESC error rates below 0.08 % peak, VIBE under
+19 m/s2 with no clips, 21.7 satellites at HDop 0.66, motor balance inside 37
+PWM, battery failsafe at 274 s. Thirteen aiding stop/start pairs and six flow
+velocity resets, the same acro tilt-limit pattern as log9.
+
 ## 2026-09-21 - SFD-O4 log9: the AGL KF winds up on the ground
 
 First flight of the promoted beta, SFD-O4 log9 (`ee3bda1f`), 216 s armed,

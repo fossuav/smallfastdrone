@@ -89,9 +89,22 @@ re-fold them after every refresh (they are in "Local work").
   prediction and the measurement are both the floor and the innovation is zero.
   Nothing corrects the velocity or the bias from there, so the bias the filter
   grabs in its first seconds integrates into the velocity for the whole ground
-  dwell - unbounded in ground time, and SFD-O4 log9 reached -7.2 m/s over 88 s
-  with the bias frozen at -0.08 m/s/s, which is the entire ramp rate. Four
-  seconds of the climb then go on unwinding it while `aglKfH` holds the floor.
+  dwell - unbounded in ground time. SFD-O4 log9 reached -7.2 m/s over 88 s with
+  the bias frozen at -0.08 m/s/s, which is the entire ramp rate, and four
+  seconds of the climb then went on unwinding it while `aglKfH` held the floor.
+  **The clamp is one-sided, so this is intermittent, and the PR has to say so.**
+  An early velocity error that points up lifts the height off the floor, which
+  restores the innovation and corrects the bias; one that points down presses
+  the height into the floor, where the innovation dies and the error latches.
+  log9 and log10 are the same firmware, airframe and parameters on the same
+  day and split on exactly that: log9's velocity was -0.09 m/s at 2 s and ran
+  to -7.22 by lift-off, log10's was -0.00003 m/s, went positive, carried the
+  height to 0.063 m, and the bias converged to -0.019 with the velocity at
+  -0.00 m/s after 69 s on the ground. log10 then took off with `HAgl` tracking
+  from the first sample and no height step - the fault simply did not appear.
+  Do not claim the wind-up always happens; claim that a downward error on the
+  ground is never corrected, and that its sign is not something the vehicle
+  chooses.
   Size the PR for master, not for this branch. On master the pinned height
   reaches `getHAGL()`, so AP_GroundEffect's `above_alt` release never fires and
   the takeoff window runs to its 5 s cap, and it reaches the flow velocity
