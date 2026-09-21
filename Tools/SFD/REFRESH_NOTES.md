@@ -17,8 +17,9 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.1-beta` = refresh6, promoted 2026-09-21, 297
-  commits on base `a5eb325674`. The refresh5 beta is kept as
+- Shipping: `SmallFastDrone-4.7.1-beta` = refresh6, promoted 2026-09-21 at
+  `b19fee0640` and since carried on to 300 commits on base `a5eb325674` (the
+  parameter note, and the AGL KF floor fix below). The refresh5 beta is kept as
   `SmallFastDrone-4.7.1.5-beta`. Copter, plane, heli and sub build, and so does
   a copter with AP_RANGEFINDER_ENABLED 0. SFD set (71 tests, including the MSP
   VTX pair and Sub FuseMag): 70 pass, 0 crashes; TerrainOffsetGroundEffectRecovery
@@ -78,6 +79,46 @@ re-fold them after every refresh (they are in "Local work").
   carried). A dead-zone variant and an anchored-floor variant were measured
   against it over six scenarios and did no better; the dead zone ratchets on
   baro noise. It replaced refresh6's dead-zone commit.
+- **Needs its own master PR** `AP_NavEKF3: clear the AGL KF velocity when the
+  height rests on its floor` (`8461433db6`). The code it touches merged with the
+  AGL KF, which the base took in from the promoted set - #33587 by elimination
+  against the other three, so check the number on GitHub before filing. It does
+  **not** belong to #33359, #33478 or #33507: those stack on top of the clamp,
+  they did not introduce it.
+  `UpdateAglKf()` clamps the height to `rngOnGnd`, so on the ground the
+  prediction and the measurement are both the floor and the innovation is zero.
+  Nothing corrects the velocity or the bias from there, so the bias the filter
+  grabs in its first seconds integrates into the velocity for the whole ground
+  dwell - unbounded in ground time, and SFD-O4 log9 reached -7.2 m/s over 88 s
+  with the bias frozen at -0.08 m/s/s, which is the entire ramp rate. Four
+  seconds of the climb then go on unwinding it while `aglKfH` holds the floor.
+  Size the PR for master, not for this branch. On master the pinned height
+  reaches `getHAGL()`, so AP_GroundEffect's `above_alt` release never fires and
+  the takeoff window runs to its 5 s cap, and it reaches the flow velocity
+  scaling and `ekfGndSpdLimit`. It is #33359 that also fuses `aglKfH` in place
+  of the raw range finder, which is what turned it into a main-filter height
+  error here: 0.22 m/s of height against a true 1.02 m/s, then a 2.21 m step at
+  the switch back to baro. So the master case is real without #33359 but the
+  headline numbers are not; quote the `getHAGL()` path there.
+  Measured by Replay of log9 (`replay_sweep.py`, before/after): samples with the
+  height on its floor and the velocity below -1 m/s 1313 -> 0 on core 0 and
+  1341 -> 2 on core 1, worst floor velocity -9.2 -> -0.7 m/s, unexplained height
+  step 2.17 -> 0.43 m, height error against the range finder over the first
+  seven seconds of flight -0.93 m mean / -2.39 m worst -> -0.40 / -0.72. The
+  thirteen Copter flow, AGL KF and ground effect tests pass unchanged.
+  Three things the PR still needs, none of them done:
+  - **A regression test.** There is none. `OpticalFlowAGLKalmanFilter`'s own
+    comment already records that the on-ground clamp kills the innovation, but
+    reasons about the bias state only. Provoking the wind-up in SITL needs a
+    persistent `aglKfB`-to-`velDotNED.z` mismatch on the ground, which a clean
+    simulated accel does not give; injecting `SIM_ACC1_BIAS_Z` is not enough on
+    its own because the main filter learns it back out of `velDotNED`.
+  - **The ground effect release is unmeasured.** Replay feeds the recorded
+    `takeoff_expected`, so it cannot test the release timing. That half rests on
+    reading `getHAGL()` and wants a SITL A/B or the next flight.
+  - **Core 1's in-flight height steps grew**, 1.76 -> 1.94 m worst, at 165, 211,
+    234 and 244 s. Pre-existing and on the non-primary core, but it is the one
+    number that moved the wrong way and a reviewer will find it.
 - **#32553** `autotest: fly TerrainOffsetGroundEffectRecovery over flat ground`.
   With a terrain tile for the home location in the run directory (any earlier
   test that installs terrain handlers leaves one), SITL's ground sits 0.55 m

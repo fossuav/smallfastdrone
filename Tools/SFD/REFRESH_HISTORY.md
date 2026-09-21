@@ -7,6 +7,43 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-09-21 - SFD-O4 log9: the AGL KF winds up on the ground
+
+First flight of the promoted beta, SFD-O4 log9 (`ee3bda1f`), 216 s armed,
+LOITER takeoff then acro. The vehicle was healthy - ESC error rates 0.01 to
+0.02 % mean with no outlier channel, VIBE under 23 m/s2 and no clips, rate
+tracking matching demand on all three axes - and the three things refresh6 went
+in for held: no post-landing flow aiding churn, the touchdown baro hold kept
+the height at 0.93 m while the baro dived to -3.35 m, and the baro offset
+stayed frozen at its arm value for the whole flight.
+
+The takeoff did not. The EKF height rose at 0.22 m/s against a true 1.02 m/s
+(range finder and baro agreeing), then stepped 2.21 m at 93.78 s. Cause is the
+AGL KF: its velocity state had wound up to -7.2 m/s over the 88 s on the
+ground, because the height clamp at `rngOnGnd` holds the innovation at zero and
+nothing corrects velocity or bias from there. Fixed on the branch at
+`8461433db6`; REFRESH_NOTES has the mechanism, the Replay numbers and what the
+master PR still needs. log6 and log7 (`797f6854`) reach -6.5 m/s, so it is not
+a refresh6 regression.
+
+Two wrong turns worth keeping. The pinning was first put down to
+`EK3_GND_EFF_DZ = -8` de-weighting the baro; the baro was not the height source
+at the time, and reconstructing the fused measurement as `XKF3.IPD - XKF1.PD`
+gave 0.51 to 0.60 m flat through the climb - `aglKfH` at its 0.05 m floor plus
+the 0.46 m arm datum - which named `selectHeightForFusion()` fusing `aglKfH` in
+place of the range finder instead. And the first cut of the sweep's AGL KF
+metric took a global minimum of `XKFA.VAgl`, which reported an unrelated
+in-flight excursion at 232 s and read as "the fix changed nothing"; it has to
+be scoped to samples with the height on its floor. A summary number that spans
+the whole log will not see a ground-phase fault.
+
+Separately, the flow lane is not a fallback in acro on this airframe: 67 % of
+the acro segment was past the flow tilt limit and the DroneCAN range finder
+returned NoData for 67 % of the flight, leaving core 1's AGL KF valid for 25 %
+of acro. Sixteen aiding stop/start pairs followed, many exactly 5 s apart. That
+is the tilt limit doing its job, not a fault, but it bounds what the GPSDisable
+switch can be used for mid-acro.
+
 ## 2026-09-18 - refresh6
 
 Branch `SmallFastDrone-4.7.1-refresh6` on base `a5eb325674`, not yet promoted.
