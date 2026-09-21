@@ -7,6 +7,33 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-09-21 - SFD-O4 log15: the flow scale that was limiting the lane
+
+The flow under-read has been the limiting number in the whole flow-lane story
+and was never fitted properly, because no flight had exercised the X axis -
+log9's calibration had eight strafe samples. log15 was flown for it: clean
+alternating legs at 0, 90, 180 and 90 degrees relative to the nose, 5644 usable
+samples split 3265 forward and 2352 strafe, range finder Good 99.5 %, mean
+height 9.47 m with only 4 % near the 15 m cap so the truncation bias the
+calibration helper warns about is absent.
+
+X reads 0.97 and Y 0.90, giving **`FLOW_FXSCALER` -88 -> -60 and
+`FLOW_FYSCALER` -148 -> -50**. The sensor rate checks out on both axes, so the
+node and `FLOW_ORIENT_YAW` are right and `FLOW_HF_RATEF` stays at 1, and
+cross-axis at 1 % and 3 % rules out a rotated flow frame.
+
+Both halves of the usual `flow/ideal` ambiguity are closed. A height error
+scales both axes equally, so the seven-point gap between X and Y can only be
+flow scale; and the height itself checks out on its own terms, `dRFND/dt`
+against GPS-Doppler climb rate giving slope 0.965 at corr 0.993 over 952
+samples, the residual consistent with the 1 s differentiation baseline.
+
+The record of it is in `../ardupilot-pr-analysis/pending-srcset-lane/`, added
+under finding 3 rather than replacing it: log14's 0.94 is the number for a
+flight that flew the old scalers, and re-measuring the drift on the fitted
+values is a different measurement. Verification pass still owed, and it should
+come before any GPS-denied sortie on the new values.
+
 ## 2026-09-21 - SFD-O4 log12 and log14: the focus floor, and the lane fix flown
 
 log12 is the `FLOW_HGT_MIN` sortie, flown at 2.0 m because the true value has
