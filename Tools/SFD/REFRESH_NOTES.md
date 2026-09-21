@@ -17,13 +17,12 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.1-beta` = refresh5 (2026-09-11), 241 commits on
-  base `1bf6b3ddc0`.
-- Ready, not promoted: `SmallFastDrone-4.7.1-refresh6` (2026-09-18) on base
-  `a5eb325674`. Copter, plane, heli and sub build. SFD set
-  (71 tests, now including the MSP VTX pair and Sub FuseMag): 70 pass, 0
-  crashes; TerrainOffsetGroundEffectRecovery fails, for its designed reason.
-  It fixes these defects of the shipping beta:
+- Shipping: `SmallFastDrone-4.7.1-beta` = refresh6, promoted 2026-09-21, 297
+  commits on base `a5eb325674`. The refresh5 beta is kept as
+  `SmallFastDrone-4.7.1.5-beta`. Copter, plane, heli and sub build, and so does
+  a copter with AP_RANGEFINDER_ENABLED 0. SFD set (71 tests, including the MSP
+  VTX pair and Sub FuseMag): 70 pass, 0 crashes; TerrainOffsetGroundEffectRecovery
+  fails, for its designed reason. Over refresh5 it fixes:
   - #33568's position jump when GPS is lost while moving and flow takes over
     (REFRESH_HISTORY 2026-09-15).
   - Six merged-upstream PRs that refresh5 dropped: #33780 (IIS2MDC fixes),
@@ -31,9 +30,11 @@ reply exists") before acting on it.
     (NTF units), #34057 (MAG_CAL=7 yaw anchor), #34120 (ICP201XX). They are
     merged to master, not in 4.7, and were in neither the base nor prs.txt; they
     are now in prs.txt. The MSP VTX tests, lost the same way, are back too.
-  - Two stack interactions the refresh6 test failures exposed, fixed on the
+  - Three stack interactions the refresh6 test failures exposed, fixed on the
     branch (below): flow aiding churning every 5 s on the ground after landing,
-    and a baro ground-effect error locked into the EKF height for a whole flight.
+    a baro ground-effect error locked into the EKF height for a whole flight
+    (now #34432), and a height reset reading as movement in the flow focus
+    check.
 - `upstream/ArduPilot-4.7` is 6 commits past the base (AP_HAL_Linux CAN fix,
   ArduSub guided/terrain, a Sub scripting binding). None touches SFD code, so the
   base was not rebuilt onto it.
@@ -99,12 +100,14 @@ re-fold them after every refresh (they are in "Local work").
 
 ## Next refresh
 
-### Before promoting refresh6
+### Promoting
 
-- `refresh.sh promote SmallFastDrone-4.7.1-beta SmallFastDrone-4.7.1-refresh6`,
-  run from a checkout that does not have the beta checked out. The beta push is
-  a force push; the base push (`a5eb325674`) is a fast-forward. Both need
-  `/prepare-for-push`.
+`refresh.sh promote SmallFastDrone-4.7.1-beta SmallFastDrone-4.7.1-refreshN`,
+run from a checkout that does not have the beta checked out. Worktrees make that
+stricter than the message suggests: git refuses to move a branch checked out in
+any worktree, so detach the beta's own checkout first (`git checkout --detach`)
+and check the branch out again afterwards. The beta push is a force push; a
+new base pushes fast-forward. Both need `/prepare-for-push`, remote `origin`.
 
 ### Every refresh
 

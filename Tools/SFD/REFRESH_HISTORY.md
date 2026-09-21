@@ -76,6 +76,9 @@ failure is TerrainOffsetGroundEffectRecovery, failing by design as on master.
   moving with a height reset. Copter, plane, heli and sub build, and so does a
   copter with AP_RANGEFINDER_ENABLED 0, which is what the new guards are for.
   SFD set: 70 of 71, 0 crashes, the same designed failure (+0.216 m).
+- Promoted 2026-09-21: the beta is refresh6 at `b19fee0640`, 297 commits on base
+  `a5eb325674`; refresh5's beta is kept as `SmallFastDrone-4.7.1.5-beta`. The
+  base pushed fast-forward, the beta as a force push.
 
 
 ## 2026-09-15 - the shipping beta jumps position on a GPS-to-flow fall back
