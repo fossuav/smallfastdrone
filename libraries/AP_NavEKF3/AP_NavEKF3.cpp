@@ -724,7 +724,7 @@ const AP_Param::GroupInfo NavEKF3::var_info2[] = {
 
     // @Param: PRIMARY
     // @DisplayName: Primary core number
-    // @Description: The core number (index in IMU mask) that will be used as the primary EKF core on startup. While disarmed the EKF will force the use of this core. A value of 0 corresponds to the first IMU in EK3_IMU_MASK.
+    // @Description: The core number (index in IMU mask) that will be used as the primary EKF core on startup. While disarmed the EKF will force the use of this core. A value of 0 corresponds to the first IMU in EK3_IMU_MASK. With EK3_OPTIONS bit 1 (Manual lane switching) set this core is forced in flight as well, so changing this parameter switches the primary lane while armed, and with EK3_SRC_OPTIONS bit 3 (a source set per core) selecting a source set sets this parameter to the core that runs it.
     // @Range: 0 2
     // @Increment: 1
     // @User: Advanced
