@@ -1178,6 +1178,19 @@ void NavEKF3::setPosVelYawSourceSet(uint8_t source_set_idx)
         dal.log_event3(AP_DAL::Event(uint8_t(AP_DAL::Event::setSourceSet0)+source_set_idx));
     }
     sources.setPosVelYawSourceSet((AP_NavEKF_Source::SourceSetSelection)source_set_idx);
+
+    if (!sources.source_set_per_core()) {
+        return;
+    }
+    // each core is pinned to the set with its own index, so the sources being asked for are
+    // only reached by making that core primary. Without this the request changes nothing at
+    // all while still reporting that it worked. UpdateFilter() falls back to lane 0 when the
+    // set has no core, so warn rather than leave that looking like the set was taken up
+    if ((core != nullptr) && (source_set_idx >= num_cores)) {
+        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3 source set %u has no lane", source_set_idx+1);
+    }
+    // not saved: an RC switch selects for this flight, it does not rewrite the boot lane
+    _primary_core.set(source_set_idx);
 }
 
 // Check basic filter health metrics and return a consolidated health status
