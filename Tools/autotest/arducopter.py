@@ -17140,6 +17140,21 @@ return update, 1000
             "WP_SPD": 25.0,
             "ATC_ANGLE_MAX": 70,
             "AUTA_ENABLE": 1,
+            # 5, which is what the VEHICLE flies. The applet's default is 10 and
+            # stays there -- an unset AUTA_ parameter should be the conservative
+            # one -- but a test flying more clearance than the airframe stops
+            # predicting it, the same way a mismatched SCR_VM_I_COUNT would. It is
+            # also what took the loop-spin's floor from a coin toss to a margin on
+            # RealFlight: the gate is AUTA_MIN_ALT + the move's drop_m, and at 10 it
+            # refused at "needs 22.0 m AGL, have 21.8" on a show that had passed the
+            # same numbers hours earlier.
+            # THE CLEARANCE AND THE DROP MOVE TOGETHER. 5 is only safe while each
+            # move's drop_m is honest: the Marmott flies AUTA_LS_DROP 8 against a
+            # loop-spin whose worst measured spend is 13.6 m, so 5 + 8 = 13 m of
+            # gate is NEGATIVE margin against that spend and the aircraft is one
+            # low trigger from the ground. Raising LS_DROP to the derived 12 is the
+            # other half and is an open item in plan.md.
+            "AUTA_MIN_ALT": 5,
             "AUTA_HOVER": hover,
             "AUTA_LP_RATE": 130,  # tighter loop/immelmann, nearer the pilot's ~130-160 dps
             "AUTA_LP_ANG": 360,
@@ -18887,14 +18902,12 @@ return update, 1000
         self.set_rc(7, 1000)
         self.wait_ready_to_arm()
         self.arm_vehicle()
-        # 43 rather than RealFlightFullDisplay's 39. The loop-spin's AGL floor is
-        # AUTA_LS_DROP 12 + AUTA_MIN_ALT 10 = 22 m, and the first run of this test
-        # refused it at "needs 22.0 m AGL, have 21.8" -- 0.2 m, with the display
-        # aborting and taking the containment check with it. That marginality is
-        # already an open item and is not this test's subject, so buy margin rather
-        # than under-declare the drop. It puts the band a little over the 10..50 the
-        # show is choreographed for, which is the trade being made knowingly.
-        self.takeoff(43, mode="GUIDED")
+        # 39, the same as RealFlightFullDisplay, which keeps the band inside the
+        # 10..50 the show is choreographed for. This was briefly 43 to buy margin
+        # after the loop-spin refused at "needs 22.0 m AGL, have 21.8"; the margin
+        # comes from AUTA_MIN_ALT matching the vehicle's 5 now, which is the honest
+        # place for it rather than flying the show higher to clear its own floor.
+        self.takeoff(39, mode="GUIDED")
         self.change_mode("LOITER")
 
         if self.get_parameter("FENCE_TOTAL") != 0:
