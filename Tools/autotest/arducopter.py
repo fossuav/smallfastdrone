@@ -15776,8 +15776,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.wait_statustext("EKF3 IMU0 started relative aiding", check_context=True, timeout=30)
         alt = self.get_altitude(relative=True)
         self.progress("relative aiding restarted at %.1f m" % alt)
-        if alt < 0.25:
-            raise NotAchievedException("Relative aiding restarted on the ground (%.1f m)" % alt)
+        # the floor is the 0.1 m default ground clearance plus 0.05 m
+        if alt < 0.15:
+            raise NotAchievedException("Relative aiding restarted below the focus floor (%.1f m)" % alt)
+        if alt > 2:
+            raise NotAchievedException("Relative aiding restarted late, at %.1f m" % alt)
         self.set_rc(3, 1000)
         self.wait_altitude(-1, 0.5, relative=True, timeout=60)
         self.disarm_vehicle(force=True)
