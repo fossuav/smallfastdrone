@@ -602,6 +602,11 @@ lags. For long runs use a normal shell:
 - **Read the subsystem playbook before building on a flag.**
   `libraries/AP_NavEKF3/CLAUDE.md` already listed `takeOffDetected` and `inFlight`
   as unreliable; a round of experiments on #33585 re-derived that the hard way.
+- **`RNGFND1_GNDCLR` places the flow focus floor, not just the range clamp.**
+  `rngOnGnd` is `MAX(ground_clearance, 0.05)`, and #34292 floors the focus check
+  at `rngOnGnd + 0.05` m, so a value wrong for the airframe moves the height at
+  which flow stops being trusted on a landing as well as the clamp. Check it per
+  airframe.
 
 ## Settled (so an audit does not re-raise them)
 
