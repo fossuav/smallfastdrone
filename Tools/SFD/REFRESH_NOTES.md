@@ -18,8 +18,9 @@ reply exists") before acting on it.
 ## Current state
 
 - Shipping: `SmallFastDrone-4.7.1-beta` = refresh6, promoted 2026-09-21 at
-  `b19fee0640` and since carried on to 300 commits on base `a5eb325674` (the
-  parameter note, and the AGL KF floor fix below). The refresh5 beta is kept as
+  `b19fee0640` and since carried on to 302 commits on base `a5eb325674` (the
+  parameter note, and the AGL KF floor fix below, flown on SFD-O4 log10). The
+  refresh5 beta is kept as
   `SmallFastDrone-4.7.1.5-beta`. Copter, plane, heli and sub build, and so does
   a copter with AP_RANGEFINDER_ENABLED 0. SFD set (71 tests, including the MSP
   VTX pair and Sub FuseMag): 70 pass, 0 crashes; TerrainOffsetGroundEffectRecovery
@@ -92,19 +93,11 @@ re-fold them after every refresh (they are in "Local work").
   dwell - unbounded in ground time. SFD-O4 log9 reached -7.2 m/s over 88 s with
   the bias frozen at -0.08 m/s/s, which is the entire ramp rate, and four
   seconds of the climb then went on unwinding it while `aglKfH` held the floor.
-  **The clamp is one-sided, so this is intermittent, and the PR has to say so.**
-  An early velocity error that points up lifts the height off the floor, which
-  restores the innovation and corrects the bias; one that points down presses
-  the height into the floor, where the innovation dies and the error latches.
-  log9 and log10 are the same firmware, airframe and parameters on the same
-  day and split on exactly that: log9's velocity was -0.09 m/s at 2 s and ran
-  to -7.22 by lift-off, log10's was -0.00003 m/s, went positive, carried the
-  height to 0.063 m, and the bias converged to -0.019 with the velocity at
-  -0.00 m/s after 69 s on the ground. log10 then took off with `HAgl` tracking
-  from the first sample and no height step - the fault simply did not appear.
-  Do not claim the wind-up always happens; claim that a downward error on the
-  ground is never corrected, and that its sign is not something the vehicle
-  chooses.
+  The clamp is one-sided, which is why clearing the velocity with it works. An
+  error that points up lifts the height off the floor, restoring the innovation
+  so the bias is corrected; one that points down presses the height into the
+  floor, where the innovation dies and the error latches. The fix gives the
+  downward side the behaviour the upward side already had.
   Size the PR for master, not for this branch. On master the pinned height
   reaches `getHAGL()`, so AP_GroundEffect's `above_alt` release never fires and
   the takeoff window runs to its 5 s cap, and it reaches the flow velocity
@@ -119,16 +112,27 @@ re-fold them after every refresh (they are in "Local work").
   step 2.17 -> 0.43 m, height error against the range finder over the first
   seven seconds of flight -0.93 m mean / -2.39 m worst -> -0.40 / -0.72. The
   thirteen Copter flow, AGL KF and ground effect tests pass unchanged.
-  Three things the PR still needs, none of them done:
+  Flown on SFD-O4 log10, which carries the fix built from an uncommitted tree
+  and so still reports `ee3bda1f`. Over 69 s on the ground the velocity stayed
+  bounded at -0.017 m/s worst against log9's -7.13, with the same 827-of-827
+  on-floor samples now bounded rather than free-running, `HAgl` tracked from
+  the first sample after lift-off, and there was no height step. Quote it: a
+  Replay A/B on its own invites "you only tested the log you fitted to".
+  Two things the PR still needs, neither of them done:
   - **A regression test.** There is none. `OpticalFlowAGLKalmanFilter`'s own
     comment already records that the on-ground clamp kills the innovation, but
     reasons about the bias state only. Provoking the wind-up in SITL needs a
     persistent `aglKfB`-to-`velDotNED.z` mismatch on the ground, which a clean
     simulated accel does not give; injecting `SIM_ACC1_BIAS_Z` is not enough on
     its own because the main filter learns it back out of `velDotNED`.
-  - **The ground effect release is unmeasured.** Replay feeds the recorded
-    `takeoff_expected`, so it cannot test the release timing. That half rests on
-    reading `getHAGL()` and wants a SITL A/B or the next flight.
+    Replay cannot stand in for it: it feeds the recorded `takeoff_expected`, so
+    it never exercises the release path at all.
+    (The ground effect release, previously listed here as unmeasured, is done:
+    log10's "terrain offset reset from baro" fires 2.0 s after NOT_LANDED,
+    exactly GNDEFF_TMO, where log9 never emits it. The message is latched on the
+    ground effect clear edge in `EstimateTerrainOffset()`, so its timestamp is
+    the release. It is a one-flight result and the absence in log9 has more than
+    one possible cause, so carry it as corroboration, not proof.)
   - **Core 1's in-flight height steps grew**, 1.76 -> 1.94 m worst, at 165, 211,
     234 and 244 s. Pre-existing and on the non-primary core, but it is the one
     number that moved the wrong way and a reviewer will find it.

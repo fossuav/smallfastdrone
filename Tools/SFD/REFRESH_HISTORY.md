@@ -7,29 +7,33 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
-## 2026-09-21 - SFD-O4 log10: the wind-up is intermittent, and why
+## 2026-09-21 - SFD-O4 log10: the AGL KF fix flown
 
-Second flight of the same day, same firmware (`ee3bda1f`, the fix was not
-flashed), same airframe and parameters. The AGL KF did not wind up: velocity
--0.00 m/s after 69 s on the ground against log9's -7.22, bias converged to
--0.019 rather than freezing at -0.080. The takeoff fault did not appear either
-- `HAgl` tracked from the first sample after lift-off and there was no height
-step, against log9's 2.9 s on the floor and 2.21 m. A natural A/B, and better
-evidence than the Replay one because nothing was changed to get it.
-
-The split is the sign of the early velocity error, because the clamp is
-one-sided. Up lifts the height off the floor, which restores the innovation
-and corrects the bias; down presses it into the floor, where the innovation
-dies and the error latches. log9 was at -0.09 m/s at 2 s, log10 at -0.00003
-and then positive, and that is the whole difference. So the bug is
-intermittent on a timescale of one power cycle, which is also why it survived
-to a real flight. The claim to carry into the PR is not that the AGL KF winds
-up but that a downward error is never corrected.
+The fix's first flight, and it holds. Over 69 s on the ground the AGL KF
+velocity stayed bounded at -0.017 m/s worst against log9's -7.13, and the
+827-of-827 on-floor samples that ran free in log9 are bounded here. `HAgl`
+tracked from the first sample after lift-off instead of spending 2.9 s on the
+floor, and there was no height step against log9's 2.21 m. It also settles the
+half Replay could not reach, the ground effect release: "terrain offset reset
+from baro" fires 2.0 s after NOT_LANDED, exactly GNDEFF_TMO, and log9 never
+emits it at all. That message is latched on the ground effect clear edge, so
+its timestamp is the release. One flight, and the absence in log9 has more
+than one possible cause, so it is corroboration rather than proof.
 
 Rest of the flight was clean: ESC error rates below 0.08 % peak, VIBE under
 19 m/s2 with no clips, 21.7 satellites at HDop 0.66, motor balance inside 37
 PWM, battery failsafe at 274 s. Thirteen aiding stop/start pairs and six flow
 velocity resets, the same acro tilt-limit pattern as log9.
+
+The first reading of this log was wrong and the wrong turn is the lesson. The
+firmware banner still said `ee3bda1f` because the binary was built from an
+uncommitted tree, so the hash identifies the last commit and not what was
+compiled. Taking it as the vehicle's identity put the flight down as a second
+unfixed one, which then had to explain why the fault had vanished, and produced
+a whole theory that the wind-up was intermittent on the sign of the early
+velocity error - committed, and wrong. A version banner dates the tree only as
+far back as its last commit. Check the build against the source timestamps
+before reading a flight as a control.
 
 ## 2026-09-21 - SFD-O4 log9: the AGL KF winds up on the ground
 
