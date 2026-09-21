@@ -60,11 +60,11 @@ void NavEKF3_core::SelectFlowFusion()
         ofDataDelayed.flowRadXY.zero();
         flowDataValid = true;
     }
-#if AP_RANGEFINDER_ENABLED
+#if EK3_FEATURE_RANGEFINDER_MEASUREMENTS
     // In flight the sensor cannot focus below the height it reports, so discard the sample rather
     // than let an unfocused reading drive a phantom velocity. The rangefinder is used rather than
-    // terrainState because terrainState is itself fused from flow, and is not updated at all while
-    // the rangefinder is the height source.
+    // terrainState because the range keeps more margin on the ground, and terrainState on the
+    // EK3_FLOW_USE terrain path is fused from this same flow.
     if (rangeDataToFuse) {
         flowFocusRngAgl = rangeDataDelayed.rng * prevTnb.c.z;
         flowFocusRngPosD = stateStruct.position.z;
