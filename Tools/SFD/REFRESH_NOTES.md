@@ -54,12 +54,14 @@ re-fold them after every refresh (they are in "Local work").
   while held below the focus floor"). The PR head also folds in the 2026-09-17
   review: the no-range-finder build fix, `flowFocusRngPosD` moved by every height
   reset (`ResetPositionD()`, `ResetHeight()`, AID_NONE entry), the comment and
-  FLOW_HGT_MIN description. refresh6 carries the pre-fold commits; the next
-  refresh takes the PR head.
+  FLOW_HGT_MIN description. refresh6 was brought up to that head on 2026-09-21
+  (four commits: the reset shifts and guards, the parameter note, the test
+  bounds, and #33498's flight window); the next refresh takes the PR head and
+  drops all four.
 - **#33498** `autotest: count FlowGyroZBiasNoYawReference's aiding stops in
   flight only`. With #34292 aiding stops once after touchdown, which is not the
-  flight the check is about. The PR version counts only between NOT_LANDED and
-  LAND_COMPLETE; refresh6's stops counting at LAND_COMPLETE.
+  flight the check is about. Counted only between NOT_LANDED and LAND_COMPLETE,
+  on the PR head and on refresh6.
 - **#34432** (its own master PR) `AP_NavEKF3: keep baro ground effect out of a
   height source switch` and `autotest: test a range finder to baro switch in
   ground effect` (BaroGroundEffectRangefinderSwitch). With EK3_RNG_USE_HGT,

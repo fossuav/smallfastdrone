@@ -70,6 +70,12 @@ failure is TerrainOffsetGroundEffectRecovery, failing by design as on master.
   and the ground effect fix opened as #34432 (`f2be29f74e`). #32232 got a
   description update and a reply, no commits. With #34432's version folded in,
   refresh6 ran 70 of 71 again, 0 crashes, the same designed failure.
+- 2026-09-21, before promoting: refresh6 had drifted from #34292's head, which
+  gained the review fold after the branch was built. The four commits above
+  bring it level, the behavioural one being the carried flow focus height
+  moving with a height reset. Copter, plane, heli and sub build, and so does a
+  copter with AP_RANGEFINDER_ENABLED 0, which is what the new guards are for.
+  SFD set: 70 of 71, 0 crashes, the same designed failure (+0.216 m).
 
 
 ## 2026-09-15 - the shipping beta jumps position on a GPS-to-flow fall back
