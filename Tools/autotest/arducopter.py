@@ -5581,6 +5581,63 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         self.land_and_disarm()
 
+    def OpticalFlowAGLKfFloorVelocity(self):
+        '''the AGL KF velocity does not latch downward while the height sits on its floor'''
+        # UpdateAglKf() clamps the AGL height to the on-ground range finder reading.
+        # Resting on that floor makes the height innovation zero, so nothing corrects the
+        # velocity that drove it there: a downward error latches, and then integrates the
+        # accel-Z bias for as long as the vehicle is on the ground. SFD-O4 log9 reached
+        # -7.15 m/s over 88 s that way, and the takeoff spent four seconds unwinding it.
+        #
+        # The clamp is one-sided, so the provocation has to push the height DOWN onto the
+        # floor: an upward error lifts it off, which restores the innovation and corrects
+        # itself. Stepping the reported range up and then back down leaves exactly the
+        # state at issue - height on the floor, velocity still strongly negative.
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+            "EK3_IMU_MASK": 1,   # single lane, so XKFA is the core the helpers read
+            "EK3_OPTIONS": 8,    # bit 3: AGL KF for optical flow scaling
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+        self.set_parameters({
+            "RNGFND1_MAX": 100,
+            "RNGFND1_SCALING": 20,
+            "SIM_SONAR_SCALE": 20,
+        })
+        self.reboot_sitl()
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+
+        # no event marks the filter settling on a constant range, so this is a delay
+        self.delay_sim_time(15, reason="AGL KF to settle on the on-ground reading")
+
+        self.set_parameter("SIM_SONAR_OFFSET", 3)
+        self.delay_sim_time(6, reason="AGL KF to follow the range up")
+        self.set_parameter("SIM_SONAR_OFFSET", 0)
+        self.delay_sim_time(10, reason="AGL KF to settle back onto the floor")
+
+        hgt = self.xkfa_recent_mean('HAgl')
+        vel = self.xkfa_recent_mean('VAgl')
+        self.progress("AGL KF after the step down: HAgl %.3f m, VAgl %.4f m/s" % (hgt, vel))
+
+        # the height has to have come back down, or the velocity below proves nothing
+        if hgt > 0.5:
+            raise NotAchievedException(
+                "AGL KF height did not return toward the floor (%.2f m), so the "
+                "provocation did not reach the clamp" % hgt)
+
+        # measured on this test: -0.058 m/s with the guard, -1.579 without it, so the
+        # bound has an order of magnitude either side. One-sided deliberately - an
+        # upward velocity lifts the height off the floor and corrects itself, and it is
+        # only the downward one that the zeroed innovation leaves nothing to correct
+        if vel < -0.5:
+            raise NotAchievedException(
+                "AGL KF velocity latched downward at the floor (%.3f m/s); the height "
+                "clamp has left it with no innovation to correct it" % vel)
+
     def OpticalFlowGPSLossAiding(self):
         '''EKF falls back to relative aiding when flow replaces lost GPS in flight'''
         # A vehicle that takes off on GPS is in AID_ABSOLUTE.  When it switches to
@@ -17846,6 +17903,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
              self.EK3_GetHaglTerrainAlt,
              self.EK3_PerCoreLogging,
              self.EK3_SourceSetSelectsLane,
+             self.OpticalFlowAGLKfFloorVelocity,
              self.EK3NoAidAccelBiasXY,
              self.EK3_AccelBiasInhibitOnGroundMoving,
              self.EK3_AccelBiasZeroVelOptFlow,
