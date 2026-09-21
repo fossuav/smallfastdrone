@@ -7,6 +7,46 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-09-21 - SFD-O4 log12 and log14: the focus floor, and the lane fix flown
+
+log12 is the `FLOW_HGT_MIN` sortie, flown at 2.0 m because the true value has
+nothing to do on this airframe - `OF.Qual` is *highest* near the ground, 214 at
+0 to 0.15 m AGL against 157 at 4.5 to 6 m over 2162 near-level samples, so the
+ARK Flow's focus limit is below 0.15 m and the code already floors at 0.05 m.
+The mechanism is exact: the range finder crosses 2.000 m at 514.5568 and flow
+resumes 74 ms later, and again 65 ms later on the second pass.
+
+The A/B on it went the other way and that is the useful part. Replaying log12
+with `minHeight` cut to the ground clearance, so the flow below 2 m is fused
+rather than discarded, improved the flow lane's velocity against GPS: RMS 1.60
+-> 1.01 m/s through the climb window and 2.25 -> 1.67 through the descent, with
+the above-floor windows unchanged. Discarding good flow costs accuracy, which is
+the parameter's own warning measured rather than asserted. The guard is not in
+question; the value was, and it goes back to 0 here. Two things log12 never
+reached, both needing one more sortie: the post-touchdown churn the guard exists
+for, because the pilot disarmed 0.7 s after landing, and the carried focus
+height through a height reset, because none fired in flight.
+
+log14 flew the source set lane fix on `5adc2ea0`. "Using EKF Source Set 2" at
+46.5055, "EKF3 lane switch 1" 4.6 ms later, `XKF4.PI` 1 for all 1240 in-flight
+samples, and 126 s of LOITER navigating on the flow lane with GPS alongside as
+standby - no aiding stop, no flow reset, no failsafe. Against GPS the lane held
+velocity to 0.26 m/s RMS at a 0.94 ratio and its relative position drifted 11.4 m
+over 122 s, which is the 6 % speed under-read integrated.
+
+That under-read is now the limiting number and it agrees three ways: 0.88 on the
+forward axis from log9's flow cal, 0.92 to 0.98 by height on log11, 0.94 on the
+lane that actually flew. It wants a dedicated calibration pass, forward/back and
+a strafe leg at over 1.5 m/s inside range, because log9's fit had 8 strafe
+samples and could not do the X axis at all.
+
+A wrong turn worth keeping: the first A/B of log12 returned byte-identical
+numbers for floor on and floor off, which reads like "the change does nothing".
+It was one binary. `waf` had reverted to the `SmallFastDronev1` board, so
+`./waf --targets tool/Replay` built the board's Replay while `replay_sweep.py`
+ran a stale `build/sitl/tool/Replay` for both arms. Check the build log names the
+path the runner will execute before believing an A/B, especially a null one.
+
 ## 2026-09-21 - SFD-O4 log11: a source set switch that reached nothing
 
 A staircase profile on the fix, low hover to 23 m to 10.5 m and back, four
