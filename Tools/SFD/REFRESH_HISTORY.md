@@ -7,6 +7,33 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-09-21 - SFD-O4 log11: a source set switch that reached nothing
+
+A staircase profile on the fix, low hover to 23 m to 10.5 m and back, four
+minutes of level LOITER. Three things came out of it.
+
+The AGL KF fix has its control. log11's bias froze at -0.0806, within a
+thousandth of log9's -0.0796, and the velocity stayed at -0.0009 m/s over 62 s
+instead of running to -7.2. That residual is one prediction step of the frozen
+bias, which is what the clamp leaves. Same bias error, opposite outcome, the
+fix the only difference. No height step, third flight running.
+
+The terrain path is measured. At 23 m the range finder returned NoData for the
+whole 45 s segment and the AGL KF was invalid, yet `XKF5.HAGL` read 23.7 m from
+the terrain database and the flow lane's speed tracked GPS at 0.98, against
+0.92 at 3-4 m and 0.95 at 10.5 m where the range finder was good. An SRTM sign
+error would not give that, so #34360 and #34361 are exercised and right. Flow
+aiding never dropped up there either, which is what bit 5 and bit 2 are for.
+
+And the flight did not do what it was flown to do. The three source set
+switches changed nothing: with `SRC_PER_CORE` the set index and the core index
+are the same, so the active set is never read, and the vehicle flew GPS on core
+0 throughout at 26 satellites. Every interface reported success. `XKFS.SS` is
+the only field that carries the truth and it held 0 and 1 per core. Fixed on
+the branch; REFRESH_NOTES has the PR shape. The general lesson is the one the
+EKF3 playbook now carries: a control that reports success is not evidence it
+did anything, and on this configuration there is a field that says.
+
 ## 2026-09-21 - SFD-O4 log10: the AGL KF fix flown
 
 The fix's first flight, and it holds. Over 69 s on the ground the AGL KF

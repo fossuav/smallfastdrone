@@ -81,6 +81,29 @@ re-fold them after every refresh (they are in "Local work").
   carried). A dead-zone variant and an anchored-floor variant were measured
   against it over six scenarios and did no better; the dead zone ratchets on
   baro noise. It replaced refresh6's dead-zone commit.
+- **Needs its own master PR** `AP_NavEKF: name the per-core source set option`,
+  `AP_NavEKF3: select the lane that runs the source set being asked for` and
+  `autotest: check a source set selection reaches a lane` (`3294e6418a`,
+  `2cee4deebb`, `c718acdedb`). `SRC_PER_CORE` came in with `f172c2fd03`, which
+  the base carries, so this is master and not one of the in-flight source PRs.
+  With `EK3_SRC_OPTIONS` bit 3, `getActiveSourceSet()` returns the core index
+  and never reads the active set, so selecting a set reached no core while the
+  RC switch and `MAV_CMD_SET_EKF_SOURCE_SET` both reported success. SFD-O4
+  log11 flew four minutes on GPS having asked for the second set three times;
+  `XKFS.SS` held 0 and 1 per core throughout, which is the only field that said
+  so. The request now selects the lane that runs the set, by setting
+  `EK3_PRIMARY` rather than calling `switchLane()`, so manual lane switching
+  applies it at once and automatic switching treats it as the preference it
+  already documents. A set with no lane warns, because `UpdateFilter()` falls
+  back to lane 0 and that reads exactly like success.
+  The PR has to meet the objection that sets and lanes are separate concepts,
+  because they are, and the EKF3 playbook says so. The answer is that this is
+  the one configuration where the code has already made them identical, so a
+  request naming a set has no other meaning left to it. Offer the alternative
+  that was rejected: leaving it alone and documenting that the switch does
+  nothing keeps the concepts clean and keeps a control that silently lies.
+  `EK3_SourceSetSelectsLane` fails without the change on the first wait, never
+  seeing a lane switch, and the nine source-set tests pass with it.
 - **Needs its own master PR** `AP_NavEKF3: clear the AGL KF velocity when the
   height rests on its floor` (`8461433db6`). The code it touches merged with the
   AGL KF, which the base took in from the promoted set - #33587 by elimination
