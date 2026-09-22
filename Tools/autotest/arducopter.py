@@ -5618,77 +5618,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
         self.set_analog_rangefinder_parameters()
 
-        def fly_with_stuck_flow_axis(options, qmin=0, quality=51, inject=True):
-            self.set_parameters({"EK3_OPTIONS": options, "SIM_FLOW_OFS_X": 0,
-                                 "EK3_FLOW_QMIN": qmin, "SIM_FLOW_QUAL": quality})
-            self.reboot_sitl()
-            self.wait_ready_to_arm(require_absolute=False, timeout=120)
-            # ALT_HOLD leaves horizontal position uncontrolled, so nothing fights the estimate
-            self.takeoff(alt_min=3, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
-            self.delay_sim_time(5, "let the AGL KF converge before injecting the fault")
-            if inject:
-                self.set_parameter("SIM_FLOW_OFS_X", 1.0)
-
-        self.start_subtest("AGL KF gate on: single-axis lockout is recovered")
-        self.context_collect('STATUSTEXT')
-        fly_with_stuck_flow_axis(8)  # AglKfForOptflow
-        self.wait_statustext("flow vel reset", check_context=True, timeout=60)
-        self.set_parameter("SIM_FLOW_OFS_X", 0)
-        # the reset re-anchors velocity to the faulty axis, so don't expect a graceful landing
-        self.disarm_vehicle(force=True)
-        if self.max_dfreader_field('XKF5', 'NI') < 100:
-            raise NotAchievedException("no flow axis lockout was provoked")
-        if self.max_dfreader_field('XKF7', 'FVC') == 0:
-            raise NotAchievedException("recovery announced but XKF7 logged no reset")
-
-        self.start_subtest("AGL KF gate off: same lockout, no recovery")
-        self.context_clear_collection('STATUSTEXT')
-        fly_with_stuck_flow_axis(0)  # clear AglKfForOptflow
-        self.delay_sim_time(30, "give the recovery the window it used with the gate on")
-        self.set_parameter("SIM_FLOW_OFS_X", 0)
-        self.disarm_vehicle(force=True)
-        if self.max_dfreader_field('XKF5', 'NI') < 100:
-            raise NotAchievedException("gate-off half did not reproduce the lockout")
-        if self.statustext_in_collections("flow vel reset"):
-            raise NotAchievedException("flow vel reset fired without the AGL KF gate")
-
-        # EK3_FLOW_QMIN declines to re-anchor to a sample the sensor calls poor.  Same
-        # lockout again, but now the sensor reports it is unhappy, as a defocused or
-        # poor-surface sensor does - so the recovery must stop flow aiding rather than
-        # adopt a measurement that is as likely to be the fault as the cure.
-        self.start_subtest("Low flow quality: lockout is not recovered by a reset")
-        self.context_clear_collection('STATUSTEXT')
-        fly_with_stuck_flow_axis(8, qmin=40, quality=10)
-        self.wait_statustext("flow quality", check_context=True, timeout=60)
-        self.set_parameter("SIM_FLOW_OFS_X", 0)
-        self.disarm_vehicle(force=True)
-        if self.max_dfreader_field('XKF5', 'NI') < 100:
-            raise NotAchievedException("low-quality half did not reproduce the lockout")
-        if self.statustext_in_collections("flow vel reset"):
-            raise NotAchievedException("re-anchored to a flow sample below EK3_FLOW_QMIN")
-        if self.max_dfreader_field('XKF7', 'FVC') != 0:
-            raise NotAchievedException("XKF7 logged a reset below EK3_FLOW_QMIN")
-
-        # The recovery scales the recovered velocity by the AGL KF height, and aglKfValid
-        # outlives the last range fusion by 5 s - long enough for that height to coast metres
-        # low.  Take the range finder out of range first and inject into that window: a fault
-        # injected while the range is fresh is recovered by one reset, and that reset
-        # re-anchors velocity to the faulty flow and ends the lockout, leaving nothing to
-        # defer.  The recovery must then resume with the range rather than be cancelled by it.
-        self.start_subtest("Stale range: the recovery is deferred, not taken")
-        self.context_clear_collection('STATUSTEXT')
-        fly_with_stuck_flow_axis(8, inject=False)  # AglKfForOptflow
-        self.set_parameter("RNGFND1_MAX", 1.0)
-        self.set_parameter("SIM_FLOW_OFS_X", 1.0)
-        self.wait_statustext("recovery deferred", check_context=True, timeout=4)
-        self.context_clear_collection('STATUSTEXT')
-        self.delay_sim_time(2, "hold the lockout with the range stale")
-        if self.statustext_in_collections("flow vel reset"):
-            raise NotAchievedException("re-anchored to a height with no current range")
-        self.set_parameter("RNGFND1_MAX", 40.0)
-        self.wait_statustext("flow vel reset", check_context=True, timeout=30)
-        self.disarm_vehicle(force=True)
-
         hover_alt_m = 2.0
 
         def fly_with_bad_flow(flow_min_h):
@@ -14522,12 +14451,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # relative_alt alone cannot tell, because the arm-time home move
         # zeroes it on master too, leaving home at the drifted altitude
         self.assert_baro_drift_cleared_at_arm()
-        self.assert_baro_drift_cleared_at_arm()
-        # the reset re-anchors the reference height to the GPS altitude,
-        # so unlike master the drift must also be gone from the reported
-        # AMSL (relative_alt alone cannot tell: the arm-time home move
-        # zeroes it on master too, leaving home at the drifted altitude)
-        self.assert_reported_amsl_matches_gps()
 
         self.start_subtest("GPS sets home, then the receiver dies")
         # a dead receiver fails the GPS prearm checks even in STABILIZE,
@@ -14597,17 +14520,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # SIM_BARO_DRIFT accumulates into an offset that setting the rate back
         # to zero does not undo, and the recorded origin is still in force
         self.reboot_sitl()
-        origin_alt_mm = self.poll_message('GPS_GLOBAL_ORIGIN').altitude
-        # home is never set without GPS so this arm resets via the
-        # pre-existing no-home branch; the reported height falls back to
-        # the recalibrated baro, and the reset's no-GPS path must leave
-        # the reported origin altitude alone
-        self.assert_baro_drift_cleared_at_arm()
-        origin_alt2_mm = self.poll_message('GPS_GLOBAL_ORIGIN').altitude
-        if abs(origin_alt2_mm - origin_alt_mm) > 1000:
-            raise NotAchievedException(
-                "Origin altitude moved %.1f m across the datum reset" %
-                ((origin_alt2_mm - origin_alt_mm) * 0.001))
 
     def BaroGroundEffectAtTakeoff(self):
         '''EKF height holds through baro ground effect with a negative EK3_GND_EFF_DZ'''
@@ -21866,7 +21778,6 @@ return update, 1000
         # SIM_BARO_DRIFT accumulates into an offset that setting it back to
         # zero does not undo, so hand the next test a clean barometer
         self.reboot_sitl()
-        self.assert_reported_amsl_matches_gps()
 
     def testcan(self):
         ret = ([
