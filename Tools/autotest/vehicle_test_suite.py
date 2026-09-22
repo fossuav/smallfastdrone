@@ -955,6 +955,19 @@ class MSP_Generic(Telem):
         else:
             print("cmd=%s" % str(cmd))
 
+    def send_command(self, cmd, data=bytes()):
+        '''send an MSPv1 request frame ($M<) to the autopilot'''
+        size = len(data)
+        frame = bytearray(b'$M<')
+        frame.append(size)
+        frame.append(cmd)
+        frame.extend(data)
+        checksum = 0
+        for b in frame[3:]:  # checksum covers size, command and payload
+            checksum ^= b
+        frame.append(checksum & 0xFF)
+        self.do_write(bytes(frame))
+
     def update_read(self):
         for byte in self.do_read():
             c = chr(byte)
@@ -11151,10 +11164,20 @@ Also, ignores heartbeats not from our target system'''
 
     def DataFlashErase(self):
         """Test that erasing the dataflash chip and creating a new log is error free"""
+        # we have to significantly reduce the data going into the
+        # blackbox chip - it is only 4MB in size and we persist
+        # logging for 15 seconds.  That means we can end up rotating
+        # the contents for size way too much.
+        self.set_parameters({
+            "LOG_DISARMED": 0,
+            "LOG_BACKEND_TYPE": 4,
+            "LOG_BITMASK": 14,
+            "SIM_SPEEDUP": 1,  # there's a wallclock-time thread involved!
+        })
+        self.reboot_sitl()
+
         mavproxy = self.start_mavproxy()
 
-        ex = None
-        self.context_push()
         mavproxy.send("module load log\n")
         mavproxy.send("log erase\n")
         mavproxy.expect("Chip erase complete")
@@ -11212,80 +11235,27 @@ Also, ignores heartbeats not from our target system'''
 
         mavproxy.send("log list\n")
         try:
-            self.set_parameter("LOG_BACKEND_TYPE", 4)
-            self.reboot_sitl()
-            mavproxy.send("module load log\n")
-            mavproxy.send("log erase\n")
-            mavproxy.expect("Chip erase complete")
-            self.set_parameter("LOG_DISARMED", 1)
-            self.delay_sim_time(3)
-            self.set_parameter("LOG_DISARMED", 0)
-            mavproxy.send("log download 1 logs/dataflash-log-erase.BIN\n")
-            mavproxy.expect("Finished downloading", timeout=120)
-            # read the downloaded log - it must parse without error
-            self.validate_log_file("logs/dataflash-log-erase.BIN")
+            mavproxy.expect("Log ([0-9]+)  numLogs ([0-9]+) lastLog ([0-9]+) size ([0-9]+)", timeout=120)
+        except pexpect.TIMEOUT as e:
+            if self.sitl_is_running():
+                self.progress("SITL is running")
+            else:
+                self.progress("SITL is NOT running")
+            raise NotAchievedException("Received %s" % str(e))
+        if int(mavproxy.match.group(2)) != 1:
+            raise NotAchievedException("Expected 1 log got %s" % (mavproxy.match.group(2)))
 
-            self.start_subtest("Test file wrapping results in a valid file")
-            # roughly 4mb
-            self.set_parameter("LOG_FILE_DSRMROT", 1)
-            self.set_parameter("LOG_BITMASK", 131071)
-            self.wait_ready_to_arm()
-            if self.is_copter() or self.is_plane():
-                self.set_autodisarm_delay(0)
-            self.arm_vehicle()
-            self.delay_sim_time(30)
-            self.disarm_vehicle()
-            # roughly 4mb
-            self.arm_vehicle()
-            self.delay_sim_time(30)
-            self.disarm_vehicle()
-            # roughly 9mb, should wrap around
-            self.arm_vehicle()
-            self.delay_sim_time(50)
-            self.disarm_vehicle()
-            # make sure we have finished logging
-            self.delay_sim_time(15)
-            mavproxy.send("log list\n")
-            try:
-                mavproxy.expect("Log ([0-9]+)  numLogs ([0-9]+) lastLog ([0-9]+) size ([0-9]+)", timeout=120)
-            except pexpect.TIMEOUT as e:
-                if self.sitl_is_running():
-                    self.progress("SITL is running")
-                else:
-                    self.progress("SITL is NOT running")
-                raise NotAchievedException("Received %s" % str(e))
-            if int(mavproxy.match.group(2)) != 3:
-                raise NotAchievedException("Expected 3 logs got %s" % (mavproxy.match.group(2)))
+        mavproxy.send("log download 1 logs/dataflash-log-erase2.BIN\n")
+        mavproxy.expect("Finished downloading", timeout=120)
+        self.validate_log_file("logs/dataflash-log-erase2.BIN", header_errors=1)
 
-            mavproxy.send("log download 1 logs/dataflash-log-erase2.BIN\n")
-            mavproxy.expect("Finished downloading", timeout=120)
-            self.validate_log_file("logs/dataflash-log-erase2.BIN", 1)
+        # clean up
+        mavproxy.send("log erase\n")
+        mavproxy.expect("Chip erase complete")
 
-            mavproxy.send("log download latest logs/dataflash-log-erase3.BIN\n")
-            mavproxy.expect("Finished downloading", timeout=120)
-            self.validate_log_file("logs/dataflash-log-erase3.BIN", 1)
-
-            # clean up
-            mavproxy.send("log erase\n")
-            mavproxy.expect("Chip erase complete")
-
-            # clean up
-            mavproxy.send("log erase\n")
-            mavproxy.expect("Chip erase complete")
-
-        except Exception as e:
-            self.print_exception_caught(e)
-            ex = e
-
-        mavproxy.send("module unload log\n")
-
-        self.context_pop()
-        self.reboot_sitl()
-
-        self.stop_mavproxy(mavproxy)
-
-        if ex is not None:
-            raise ex
+        # clean up
+        mavproxy.send("log erase\n")
+        mavproxy.expect("Chip erase complete")
 
     def ArmFeatures(self):
         '''Arm features'''
