@@ -337,7 +337,7 @@ bool AP_AHRS::get_ekf_lane_status(uint8_t lane, nav_lane_status &status) const
 #if HAL_NAVEKF3_AVAILABLE
     // configured rather than active: the lanes keep running while AHRS has fallen back to DCM
     if (configured_ekf_type() == EKFType::THREE && ekf3.started) {
-        return ekf3.EKF3.getLaneStatus(lane, status);
+        return EKF3.getLaneStatus(lane, status);
     }
 #endif
     return false;
@@ -3721,7 +3721,7 @@ bool AP_AHRS::configured_to_use_horizontal_position_or_velocity_source(void) con
 {
 #if HAL_NAVEKF3_AVAILABLE
     if (active_EKF_type() == EKFType::THREE) {
-        return ekf3.EKF3.has_horiz_pos_vel_source();
+        return EKF3.has_horiz_pos_vel_source();
     }
 #endif
     return true;
@@ -3777,7 +3777,7 @@ float AP_AHRS::get_hover_z_bias_correction(uint8_t imu_index) const
 {
 #if HAL_NAVEKF3_AVAILABLE
     if (_hover_z_bias_enabled) {
-        return ekf3.EKF3.hoverZBiasCorrection(imu_index);
+        return EKF3.hoverZBiasCorrection(imu_index);
     }
 #endif
     return 0.0f;
@@ -3789,7 +3789,7 @@ bool AP_AHRS::get_accel_bias_z_for_imu(uint8_t imu_index, float &bias_z)
     // arming and disarming from Lua or DDS call this off the main thread
     WITH_SEMAPHORE(_rsem);
     Vector3f accel_bias;
-    if (ekf3.EKF3.getAccelBiasForIMU(imu_index, accel_bias)) {
+    if (EKF3.getAccelBiasForIMU(imu_index, accel_bias)) {
         bias_z = accel_bias.z;
         return true;
     }
@@ -3803,7 +3803,7 @@ uint16_t AP_AHRS::get_accel_bias_reset_count_for_imu(uint8_t imu_index)
 {
 #if HAL_NAVEKF3_AVAILABLE
     WITH_SEMAPHORE(_rsem);
-    return ekf3.EKF3.getAccelBiasResetCountForIMU(imu_index);
+    return EKF3.getAccelBiasResetCountForIMU(imu_index);
 #else
     return 0;
 #endif
@@ -3815,7 +3815,7 @@ uint32_t AP_AHRS::get_accel_bias_zero_time_ms_for_imu(uint8_t imu_index)
 {
 #if HAL_NAVEKF3_AVAILABLE
     WITH_SEMAPHORE(_rsem);
-    return ekf3.EKF3.getAccelBiasZeroTimeForIMU(imu_index);
+    return EKF3.getAccelBiasZeroTimeForIMU(imu_index);
 #else
     return 0;
 #endif
@@ -3826,7 +3826,7 @@ void AP_AHRS::set_inhibit_accel_bias_learning(bool inhibit)
 #if HAL_NAVEKF3_AVAILABLE
     // arming from Lua or DDS calls this off the main thread, and each core reads it mid-frame
     WITH_SEMAPHORE(_rsem);
-    ekf3.EKF3.setInhibitAccelBiasLearning(inhibit);
+    EKF3.setInhibitAccelBiasLearning(inhibit);
 #endif
 }
 
