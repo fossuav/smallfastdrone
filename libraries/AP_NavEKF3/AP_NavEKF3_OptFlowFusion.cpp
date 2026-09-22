@@ -108,7 +108,7 @@ void NavEKF3_core::SelectFlowFusion()
         flowFocusRngPosD = stateStruct.position.z;
         flowFocusRngValid = true;
     }
-    if (!takeOffDetected) {
+    if (!movedSinceArming) {
         flowFocusBelow = false;
         flowFocusResting = false;
     } else if (flowDataToFuse && tiltOK && flowFocusRngValid) {
@@ -882,7 +882,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     const uint32_t FLOW_RESET_PAUSE_MAX_MS = 40000;
     if (really_fuse && !flowVelResetUnhealthy &&
         frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid &&
-        PV_AidingMode == AID_RELATIVE && takeOffDetected &&
+        PV_AidingMode == AID_RELATIVE && movedSinceArming &&
         (fabsF(ofDataDelayed.flowRadXY.x) < frontend->_maxFlowRate) &&
         (fabsF(ofDataDelayed.flowRadXY.y) < frontend->_maxFlowRate)) {
         const uint32_t stale0 = imuSampleTime_ms - flowFuseTimeAxis_ms[0];
