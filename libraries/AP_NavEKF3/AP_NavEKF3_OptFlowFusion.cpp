@@ -469,7 +469,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     // not motion. Don't fuse them but still calculate the innovations so they can be reported.
     // On the ground before takeoff the flow is fused as zero instead, see SelectFlowFusion(),
     // so that relative aiding is not lost. Skipped if the altitude is a user specified override
-    flowRngBelowAltMin = takeOffDetected && rangeIsEstimated && (range < ofDataDelayed.altMin);
+    flowRngBelowAltMin = movedSinceArming && rangeIsEstimated && (range < ofDataDelayed.altMin);
     if (flowRngBelowAltMin) {
         really_fuse = false;
     }
@@ -954,7 +954,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     const uint32_t FLOW_RESET_PAUSE_MAX_MS = 40000;
     FlowResetHeight resetHgt;
     if (really_fuse && !flowVelResetUnhealthy && flowResetHeight(resetHgt) &&
-        PV_AidingMode == AID_RELATIVE && takeOffDetected &&
+        PV_AidingMode == AID_RELATIVE && movedSinceArming &&
         (fabsF(ofDataDelayed.flowRadXY.x) < frontend->_maxFlowRate) &&
         (fabsF(ofDataDelayed.flowRadXY.y) < frontend->_maxFlowRate)) {
         const uint32_t stale0 = imuSampleTime_ms - flowFuseTimeAxis_ms[0];
@@ -1037,7 +1037,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     // lockout is. Nothing is scaled by the height, so of the reset's range tests only a current range
     // is needed
     const ftype FLOW_FLOOR_RANGE_MARGIN_M = 0.1f;   // a range this far above the ground clearance reads takeoff, as detectOptFlowTakeoff() takes it
-    if (really_fuse && motorsArmed && dal.get_vehicle_landed() && !takeOffDetected &&
+    if (really_fuse && motorsArmed && dal.get_vehicle_landed() && !movedSinceArming &&
         flowResetHeight(resetHgt) && (flowResetRangeState(ofDataDelayed, range, resetHgt) != FlowResetRange::Stale) &&
         (rngAtSensor_m * prevTnb.c.z < rngOnGnd + FLOW_FLOOR_RANGE_MARGIN_M)) {
         // within the NE velocity variance limit ConstrainVariances() applies
