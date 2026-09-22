@@ -30,7 +30,7 @@ reply exists") before acting on it.
   needed MSP_Generic.send_command, and BaroDriftClearedAtArm and
   BaroDriftClearedAfterMidairDisarm, which the rebuild had duplicated content
   into). TerrainOffsetGroundEffectRecovery fails for its designed reason.
-  DataFlashErase is open, below. A full re-run is what confirms the number.
+  DataFlashErase is open, below. The confirming re-run was 76 of 78, 0 crashes.
   PR heads that now carry what refresh6 held locally: #34292's fold (the
   no-range-finder build fix, the carried flow focus height across a height
   reset, the parameter note and the test bounds), #33498's flight-event window,
@@ -589,8 +589,12 @@ established:
   longer than the window the test gives it.
 - The beta sees the same unpack error twice and passes on the retry; the branch
   fails all three attempts.
-- With #34363's own body the failure is instead "Failed to ARM with mavlink",
-  which is not yet explained.
+- With #34363's own body the failure is "Failed to ARM with mavlink", and that
+  is a symptom: the harness log shows `Rebooting SITL`, then `EOF on TCP
+  socket`, then `Connection refused` on every reconnect. SITL does not come
+  back from the reboot the test does after the chip erase, so the arm times out
+  against nothing. Deterministic on the branch, and the beta reboots fine at
+  the same point.
 
 Next step is to decide whether this is the logger leaving a partial record on a
 short log (worth reporting on #34363) or the test reading a log the download

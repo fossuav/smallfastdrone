@@ -12,9 +12,10 @@ file's checklist, not here.
 Branch `SmallFastDrone-4.7.1-refresh7` on the same base `a5eb325674`, not
 promoted. 310 commits planned against refresh6's 284; the growth is this week's
 own work (#34432, #34456 and #34457 as new PRs, and the four PR heads that
-gained commits). Copter, plane, heli and sub build. SFD set: 74 of 78 on the first full run; the three failures that were the
-refresh's own doing are fixed and re-run green, TerrainOffsetGroundEffectRecovery
-fails by design, and DataFlashErase is open (REFRESH_NOTES).
+gained commits). Copter, plane, heli and sub build. SFD set: 74 of 78 on the first full run, 76 of 78 once the three failures that
+were the refresh's own doing were fixed. TerrainOffsetGroundEffectRecovery fails
+by design; DataFlashErase is open, with SITL not coming back from the reboot the
+test does after the chip erase (REFRESH_NOTES).
 
 - The code pass stopped eight times. One was a real decision (THROW_DROP_AG's
   index), one merged two guards into `readyToUseOptFlow()` that both belong
