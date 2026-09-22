@@ -28,7 +28,7 @@ flow scale; and the height itself checks out on its own terms, `dRFND/dt`
 against GPS-Doppler climb rate giving slope 0.965 at corr 0.993 over 952
 samples, the residual consistent with the 1 s differentiation baseline.
 
-The record of it is in `../ardupilot-pr-analysis/pending-srcset-lane/`, added
+The record of it is in `../ardupilot-pr-analysis/34456/`, added
 under finding 3 rather than replacing it: log14's 0.94 is the number for a
 flight that flew the old scalers, and re-measuring the drift on the fitted
 values is a different measurement.
@@ -162,8 +162,8 @@ The takeoff did not. The EKF height rose at 0.22 m/s against a true 1.02 m/s
 AGL KF: its velocity state had wound up to -7.2 m/s over the 88 s on the
 ground, because the height clamp at `rngOnGnd` holds the innovation at zero and
 nothing corrects velocity or bias from there. Fixed on the branch at
-`8461433db6`; REFRESH_NOTES has the mechanism, the Replay numbers and what the
-master PR still needs. log6 and log7 (`797f6854`) reach -6.5 m/s, so it is not
+`8461433db6`, which became #34457; REFRESH_NOTES has the mechanism and the
+Replay numbers. log6 and log7 (`797f6854`) reach -6.5 m/s, so it is not
 a refresh6 regression.
 
 Two wrong turns worth keeping. The pinning was first put down to

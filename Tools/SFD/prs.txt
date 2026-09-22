@@ -53,6 +53,8 @@
 33497   # HereFlow output rate correction FLOW_HF_RATEF
 33498   # Inhibit Z gyro bias without yaw source
 33507   # AGL KF accel-Z bias estimation
+34457   # AGL KF: clear the velocity when the height rests on its floor (carries #33507's seven commits patch-identical; git cherry drops the duplicates)
+34456   # EKF3: select the lane that runs the source set being asked for (master; SRC_PER_CORE and ManualLaneSwitch are both upstream)
 33543   # AP_Param loaded defaults count
 33568   # Optical flow relative-aiding fallback on GPS loss
 34380   # AC_Avoid: flow height limit stops a climb without backing the vehicle down (widened exposure by #33568)

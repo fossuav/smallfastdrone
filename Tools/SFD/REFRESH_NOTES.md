@@ -46,13 +46,14 @@ reply exists") before acting on it.
 
 Each is a commit on `SmallFastDrone-4.7.1-refresh6`, shaped for the PR it
 belongs to, and measured with an A/B. Until a PR head carries its commits,
-re-fold them after every refresh (they are in "Local work").
+re-fold them after every refresh (they are in "Local work"). Entries marked
+**Opened as** are past that: they are in `prs.txt` now and arrive with the
+cherry-pick, so do not re-fold them.
 
-The two records for PRs that have no number yet live in
-`../ardupilot-pr-analysis/pending-aglkf-floor/` and `pending-srcset-lane/`
-(`988bfed`), each with its figures and a `plots/make_plots.py` that resolves the
-flights through `find_log.py` rather than carrying them, since that repo is
-public. Rename each directory to the PR number when it is opened. The SFD-O4
+Both records now live under their PR numbers,
+`../ardupilot-pr-analysis/34457/` and `34456/`, each with its figures and a
+`plots/make_plots.py` that resolves the flights through `find_log.py` rather
+than carrying them, since that repo is public. The SFD-O4
 logs are fingerprinted in `../analysis/logs/REPLAY_INDEX.md` (`dd011a6`); bare
 names collide four ways for log9 alone.
 Two rules the figures were built to, both of which a reviewer will notice if
@@ -88,9 +89,13 @@ annotation 1.1 s off the event it pointed at.
   **The A/B says the inflated value costs accuracy, which is the point.**
   Replay of log12 with `minHeight` cut to the ground clearance, so flow fuses
   below 2 m, against the flight as flown, core 1 velocity error against GPS:
-  climb window RMS 1.60 -> 1.01 m/s, descent window 2.25 -> 1.67, and above the
-  floor unchanged at 0.51 -> 0.53. Discarding that flow was **worse** than
-  fusing it. That is not a refutation of the guard, it is the parameter's own
+  re-derived 2026-09-22 and split on the mechanism instead of on hand-picked
+  spans: airborne below the floor 2.071 -> 0.628 m/s (n=171), airborne above it
+  1.093 vs 1.120 (n=272) as a control, and the 487 s of ground dwell excluded
+  because both arms read 0.04 there and including it buries the result. The
+  earlier climb/descent figures (1.60 -> 1.01, 2.25 -> 1.67) said the same thing
+  in windows that were not reconstructable. Discarding that flow was **worse**
+  than fusing it, by 3.3x. That is not a refutation of the guard, it is the parameter's own
   warning measured: set it to the sensor's focus limit and no higher. The PR
   should carry it as the reason the description says that, and the branch should
   go back to `FLOW_HGT_MIN` 0 on this airframe.
@@ -119,21 +124,26 @@ annotation 1.1 s off the event it pointed at.
   carried). A dead-zone variant and an anchored-floor variant were measured
   against it over six scenarios and did no better; the dead zone ratchets on
   baro noise. It replaced refresh6's dead-zone commit.
-- **Needs its own master PR** `AP_NavEKF: name the per-core source set option`,
-  `AP_NavEKF3: select the lane that runs the source set being asked for` and
-  `autotest: check a source set selection reaches a lane` (`3294e6418a`,
-  `2cee4deebb`, `c718acdedb`). `SRC_PER_CORE` came in with `f172c2fd03`, which
-  the base carries, so this is master and not one of the in-flight source PRs.
+- **Opened as #34456** on 2026-09-21, six commits `18e87a0803`..`de049bb620`
+  on `pr-srcset-selects-lane`, now in `prs.txt`. `SRC_PER_CORE` came in with
+  `f172c2fd03`, which the base carries, so this is master and not one of the
+  in-flight source PRs.
   With `EK3_SRC_OPTIONS` bit 3, `getActiveSourceSet()` returns the core index
   and never reads the active set, so selecting a set reached no core while the
   RC switch and `MAV_CMD_SET_EKF_SOURCE_SET` both reported success. SFD-O4
   log11 flew four minutes on GPS having asked for the second set three times;
   `XKFS.SS` held 0 and 1 per core throughout, which is the only field that said
   so. The request now selects the lane that runs the set, by setting
-  `EK3_PRIMARY` rather than calling `switchLane()`, so manual lane switching
-  applies it at once and automatic switching treats it as the preference it
-  already documents. A set with no lane warns, because `UpdateFilter()` falls
-  back to lane 0 and that reads exactly like success.
+  `EK3_PRIMARY` rather than calling `switchLane()`. Review corrected two claims
+  that were here: while armed the lane follows `EK3_PRIMARY` **only** under
+  `EK3_OPTIONS` bit 1 and is inert without it rather than being a preference the
+  filter leans towards, so that case now warns; and a set with no lane returns
+  instead of writing an out-of-range index, which `UpdateFilter()` clamps to
+  lane 0 - the old code warned that nothing had happened and then took the
+  vehicle off the lane it was on, reproduced in SITL. Lua no longer moves the
+  lane at all: the intent is a defaulted parameter that only the operator-driven
+  callers pass, because the shipped ahrs-source applets change sets
+  automatically on sensor health.
   The PR has to meet the objection that sets and lanes are separate concepts,
   because they are, and the EKF3 playbook says so. The answer is that this is
   the one configuration where the code has already made them identical, so a
@@ -152,10 +162,12 @@ annotation 1.1 s off the event it pointed at.
   drifted 1.3 m at 30 s, 2.9 at 61, 5.1 at 91 and 11.4 m at 122 s. That drift is
   the 6 % speed under-read integrated and belongs in the PR only as context, not
   as a claim about this change.
-  Figure for the PR: `pending-srcset-lane/plots/srcset_lane_before_after.png`,
+  Figure for the PR: `34456/plots/srcset_lane_before_after.png`,
   log11 against log14, the same aircraft and the same switch action.
-- **Needs its own master PR** `AP_NavEKF3: clear the AGL KF velocity when the
-  height rests on its floor` (`8461433db6`). The code it touches merged with the
+- **Opened as #34457** on 2026-09-21, `b54b956541` plus its test `9b74c85f80`
+  on `pr-aglkf-floor-velocity`, now in `prs.txt`. The branch carries #33507's
+  seven commits patch-identical for the test helpers, and `git cherry` drops the
+  duplicates whichever merges first. The code it touches merged with the
   AGL KF, which the base took in from the promoted set - #33587 by elimination
   against the other three, so check the number on GitHub before filing. It does
   **not** belong to #33359, #33478 or #33507: those stack on top of the clamp,
@@ -186,7 +198,7 @@ annotation 1.1 s off the event it pointed at.
   step 2.17 -> 0.43 m, height error against the range finder over the first
   seven seconds of flight -0.93 m mean / -2.39 m worst -> -0.40 / -0.72. The
   thirteen Copter flow, AGL KF and ground effect tests pass unchanged.
-  Figures for the PR, under `pending-aglkf-floor/plots/`:
+  Figures for the PR, under `34457/plots/`:
   `aglkf_1_replay_ab_log9.png` is the Replay A/B on one flight, code before
   against after, which is the honest before/after because the sensor stream is
   identical; `aglkf_2_ground_windup.png` is the real-world pair, log9 running to
