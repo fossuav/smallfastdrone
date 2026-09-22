@@ -18,26 +18,24 @@ reply exists") before acting on it.
 ## Current state
 
 - Shipping: `SmallFastDrone-4.7.1-beta` = refresh6, promoted 2026-09-21 at
-  `b19fee0640`, 297 commits on base `a5eb325674`, and carried on past it since
-  (the parameter note, and the AGL KF floor fix below, flown on SFD-O4 log10).
-  A running total goes stale on the commit that writes it, so this one is the
-  promotion's. The refresh5 beta is kept as
-  `SmallFastDrone-4.7.1.5-beta`. Copter, plane, heli and sub build, and so does
-  a copter with AP_RANGEFINDER_ENABLED 0. SFD set (71 tests, including the MSP
-  VTX pair and Sub FuseMag): 70 pass, 0 crashes; TerrainOffsetGroundEffectRecovery
-  fails, for its designed reason. Over refresh5 it fixes:
-  - #33568's position jump when GPS is lost while moving and flow takes over
-    (REFRESH_HISTORY 2026-09-15).
-  - Six merged-upstream PRs that refresh5 dropped: #33780 (IIS2MDC fixes),
-    #33988 (board rotation during gyro cal), #33990 (DShot GCR quintets), #34122
-    (NTF units), #34057 (MAG_CAL=7 yaw anchor), #34120 (ICP201XX). They are
-    merged to master, not in 4.7, and were in neither the base nor prs.txt; they
-    are now in prs.txt. The MSP VTX tests, lost the same way, are back too.
-  - Three stack interactions the refresh6 test failures exposed, fixed on the
-    branch (below): flow aiding churning every 5 s on the ground after landing,
-    a baro ground-effect error locked into the EKF height for a whole flight
-    (now #34432), and a height reset reading as movement in the flow focus
-    check.
+  `b19fee0640`, and carried on past it since (the parameter note, the AGL KF
+  floor fix flown on SFD-O4 log10, the source set lane fix, and #34456/#34457
+  once those were opened). The refresh5 beta is kept as
+  `SmallFastDrone-4.7.1.5-beta`.
+- Ready, not promoted: `SmallFastDrone-4.7.1-refresh7` (2026-09-22) on the same
+  base `a5eb325674`, 310 planned commits. Copter, plane, heli and sub build.
+  SFD set (78 steps, the new tests of #34432, #34456, #34457 and #32768's two
+  included): 74 of 78 on the first full run, and the three failures that were
+  the refresh's own doing are fixed and re-run green (the MSP VTX pair, which
+  needed MSP_Generic.send_command, and BaroDriftClearedAtArm and
+  BaroDriftClearedAfterMidairDisarm, which the rebuild had duplicated content
+  into). TerrainOffsetGroundEffectRecovery fails for its designed reason.
+  DataFlashErase is open, below. A full re-run is what confirms the number.
+  PR heads that now carry what refresh6 held locally: #34292's fold (the
+  no-range-finder build fix, the carried flow focus height across a height
+  reset, the parameter note and the test bounds), #33498's flight-event window,
+  #32553's SIM_TERRAIN line, #32768's four new commits, and #34432, #34456 and
+  #34457 as PRs rather than local work.
 - `upstream/ArduPilot-4.7` is 6 commits past the base (AP_HAL_Linux CAN fix,
   ArduSub guided/terrain, a Sub scripting binding). None touches SFD code, so the
   base was not rebuilt onto it.
@@ -479,7 +477,9 @@ AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
   `get_raw_rpm_and_error_rate()`; re-apply the AP_Vehicle `1.0f` commit.
 - **VALT AltHold guard** - #32270 guards on `MODE_ALTHOLD_ENABLED`, which 4.7
   does not define (`-Werror=undef`). Drop the guard and the trailing
-  `#endif // MODE_ALTHOLD_ENABLED` in mode_althold.cpp.
+  `#endif // MODE_ALTHOLD_ENABLED` in mode_althold.cpp, and the
+  `#if MODE_VALT_ENABLED && !MODE_ALTHOLD_ENABLED` #error block its head now
+  adds to Copter.h (refresh7's build break).
 - **zeroStatesVarCov()** - master's; 4.7 has `zeroRows()`/`zeroCols()`
   (`ResetVelocityToFlow`, and anywhere else a PR head uses it).
 - **takeOffDetected -> movedSinceArming** - #32232 renamed it; PR heads written
@@ -533,17 +533,23 @@ FLOW_OPTIONS's docs).
     on MSP_Generic, not TestSuite), and register MSPVTXConfig and
     MSPDisplayPortVTXConfig after CRSF;
   - master helpers the PR-head tests call: send_position_target_local_ned
-    (AutoTestCopter), statustext_count_in_collections and
-    assert_ekfs_match_sim_state (TestSuite).
+    (AutoTestCopter), statustext_count_in_collections,
+    assert_ekfs_match_sim_state, assert_log_dsf_no_drops and
+    assert_current_log_filesizes (TestSuite). `download_full_log_list` is
+    replaced with master's, which only adds the LOG_ENTRY_sanity_check keyword
+    that #34363's head passes; it defaults to 4.7's behaviour.
   Drop registrations with no test anywhere on the branch: HomeAltResetTest,
-  ModeFlowHold, UTMGlobalPosition, UTMGlobalPositionWaypoint.
+  ModeFlowHold, UTMGlobalPosition, UTMGlobalPositionWaypoint, and quadplane's
+  CircuitStatusScript and CompassLearnCopyFromEKFAffinity (master tests 4.7
+  lacks, whose registration lines ride in on a PR hunk without the bodies).
 - AmslAltPreservedOnRearmAtDifferentElevation's 5 s wait before it reads the
   log (owed to #32768).
-- The refresh6 fixes, until their PR heads carry them (drop each as it lands):
-  the #34292 aiding guard and FlowFocusHoldAfterLanding, the #33498 in-flight
-  count, #34432 and BaroGroundEffectRangefinderSwitch,
-  the #32553 SIM_TERRAIN line. Cherry-pick them from the previous branch by
-  subject; `audit_dropped.py` lists any that were missed.
+- The refresh6 fixes are all in their PR heads as of refresh7 and come back
+  with the PRs: #34292's aiding guard and FlowFocusHoldAfterLanding, #33498's
+  flight-event count, #34432 with BaroGroundEffectRangefinderSwitch, #32553's
+  SIM_TERRAIN line. `audit_dropped.py` still reports them as absent because the
+  branch's copy differs from the previous branch's commit; check the test is
+  present by name before re-folding anything.
 - `SITL: add SIM_SONAR_OFFSET` (until 4.7 has master's `568727a218`).
 - Replay: master's `9c7f12df34` and `d3a32025cd`, and the reboot after raising
   the buffer (until 4.7 has them).
@@ -566,6 +572,58 @@ FLOW_OPTIONS's docs).
   restore), `check the SITL gyro rate` and `only compare EKF3 cores while armed`
   (the PR heads carry both), the old local throw and VALT commits (#32475 and
   #32270 carry them), and `ebed712c36` (#32972 carries the spool-up anchor).
+
+### Open on refresh7: DataFlashErase
+
+New to the set this refresh (#34363 modifies it, so the derivation picks it up)
+and failing on the branch where the shipping beta passes it. What is
+established:
+
+- It is not the test body. With 4.7's own DataFlashErase the branch still fails,
+  so the difference is in the code, not in which version of the test runs.
+- The downloaded log ends inside an FMT record: 7246 bytes, the last FMT
+  starting at 7222 with 24 of its 89 bytes present, and only FMTU and SIM2
+  records before it. The test deliberately writes "a very short log", and this
+  branch defines more log message types than 4.7 (XKFA, XKVL, XKFR, EKFC,
+  XKF7 and the per-core XKF5 of #34363 itself), so the format preamble is
+  longer than the window the test gives it.
+- The beta sees the same unpack error twice and passes on the retry; the branch
+  fails all three attempts.
+- With #34363's own body the failure is instead "Failed to ARM with mavlink",
+  which is not yet explained.
+
+Next step is to decide whether this is the logger leaving a partial record on a
+short log (worth reporting on #34363) or the test reading a log the download
+truncated, and either fix it on the branch or carry 4.7's DataFlashErase as a
+standing divergence the way refresh6 did without noticing.
+
+### Traps found in refresh7
+
+- **`plan` used to leave `progress.idx` alone.** A run then resumed at the
+  previous refresh's index, skipped that many commits of the new list and left
+  the branch with only its tail - 20 commits of 310, and a build that looked
+  fine because the tail was self-consistent. `do_plan` now resets the index and
+  truncates `applied.log`. If a branch ever looks too small, check
+  `git rev-list --count <base>..HEAD` against the plan before anything else.
+- **The hot-file rebuild can leave a method mangled rather than conflicted**:
+  two PR heads carrying different versions of one test interleave into a
+  truncated body, a duplicated block or a def with no body, and the file then
+  does not compile so no other gate runs. `Tools/SFD/repair_test_methods.py FILE
+  <previous branch>` replaces each broken method with the previous branch's copy
+  until the file compiles, and names what it touched. Re-check those names with
+  `check_pr_test_lines.py` afterwards: for a PR whose head moved this refresh
+  the previous branch's copy is the older one.
+- **A duplicate can survive the rebuild without a conflict.** refresh7 ended
+  with two defs each of OpticalFlowAGLKfFloorVelocity,
+  BaroGroundEffectRangefinderSwitch and hover_and_check_matched_frequency, and
+  two registrations each of BaroGroundEffectRangefinderSwitch and
+  EK3_SourceSetSelectsLane. `check_suite_load.py` reports both kinds; keep the
+  copy whose signature the call sites match (the positional
+  hover_and_check_matched_frequency, not master's keyword-only one).
+- **#32972 and #34457 replay their parent's commits at an older revision.**
+  #32972 carries #32768's AP_AHRS work (the `void resetHeightDatum()`
+  signature) and #34457 carries #33507's AGL KF commits; where they conflict,
+  ours is the newer side. Resolve to ours and let the empty pick be skipped.
 
 ## Phase 2 - tests
 

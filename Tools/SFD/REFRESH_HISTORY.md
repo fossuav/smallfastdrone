@@ -7,6 +7,34 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-09-22 - refresh7
+
+Branch `SmallFastDrone-4.7.1-refresh7` on the same base `a5eb325674`, not
+promoted. 310 commits planned against refresh6's 284; the growth is this week's
+own work (#34432, #34456 and #34457 as new PRs, and the four PR heads that
+gained commits). Copter, plane, heli and sub build. SFD set: 74 of 78 on the first full run; the three failures that were the
+refresh's own doing are fixed and re-run green, TerrainOffsetGroundEffectRecovery
+fails by design, and DataFlashErase is open (REFRESH_NOTES).
+
+- The code pass stopped eight times. One was a real decision (THROW_DROP_AG's
+  index), one merged two guards into `readyToUseOptFlow()` that both belong
+  (`flowVelResetUnhealthy` from #33478 and `flowFocusBelow` from #34292), one
+  took #34456's `select_lane` argument onto 4.7's accessor, one merged #34432
+  into the branch's own reset ordering, and four were #32972 or #34457 replaying
+  a parent PR's commits at an older revision, where ours is the newer side.
+- Fixups still needed: the `ekf3.EKF3` accessors, the two master-only AP_AHRS
+  backend headers, `zeroStatesVarCov`, the `takeOffDetected` rename and the
+  VALT guard - the last now also as a `#error` block in Copter.h. The GPS fix
+  enum and the #31274 getter came through clean this time, carried by rerere.
+- Two traps cost most of the time and are written up in REFRESH_NOTES: `plan`
+  not resetting the progress index (the branch silently kept only the last 20
+  commits of the plan), and the hot-file rebuild mangling methods rather than
+  conflicting on them. `Tools/SFD/repair_test_methods.py` is the second one's
+  tool.
+- No parameter or default changes between refresh6 and refresh7, so
+  `sfd_defaults.parm` is untouched. #27893 and #34360 merged to master and are
+  marked in prs.txt; they stay in the manifest because 4.7 does not carry them.
+
 ## 2026-09-21 - SFD-O4 log15: the flow scale that was limiting the lane
 
 The flow under-read has been the limiting number in the whole flow-lane story
