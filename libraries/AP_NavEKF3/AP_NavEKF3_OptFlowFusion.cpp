@@ -119,7 +119,7 @@ void NavEKF3_core::SelectFlowFusion()
     const auto *rngSensor = (rng != nullptr) ? rng->get_backend(rangeDataDelayed.sensor_idx) : nullptr;
     const bool rngGood = (rngSensor != nullptr) && (rngSensor->orientation() == ROTATION_PITCH_270) &&
                          (rngSensor->status() == AP_DAL_RangeFinder::Status::Good);
-    if (!takeOffDetected) {
+    if (!movedSinceArming) {
         flowFocusBelow = false;
         flowFocusResting = false;
         // the reading on the ground is where a landing comes to rest, whatever RNGFNDx_GNDCLR says;
@@ -927,7 +927,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     const uint32_t FLOW_RESET_PAUSE_MAX_MS = 40000;
     if (really_fuse && !flowVelResetUnhealthy &&
         frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid &&
-        PV_AidingMode == AID_RELATIVE && takeOffDetected &&
+        PV_AidingMode == AID_RELATIVE && movedSinceArming &&
         (fabsF(ofDataDelayed.flowRadXY.x) < frontend->_maxFlowRate) &&
         (fabsF(ofDataDelayed.flowRadXY.y) < frontend->_maxFlowRate)) {
         const uint32_t stale0 = imuSampleTime_ms - flowFuseTimeAxis_ms[0];
