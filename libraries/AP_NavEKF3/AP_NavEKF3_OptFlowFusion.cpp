@@ -70,7 +70,7 @@ void NavEKF3_core::SelectFlowFusion()
         flowFocusRngPosD = stateStruct.position.z;
         flowFocusRngValid = true;
     }
-    if (!takeOffDetected) {
+    if (!movedSinceArming) {
         flowFocusBelow = false;
     } else if (flowDataToFuse && tiltOK && flowFocusRngValid) {
         // Within a few cm of the range finder ground clearance the vehicle is on or at the ground,
@@ -863,7 +863,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
     const uint32_t FLOW_RESET_DEFER_REPORT_MS = 10000;
     if (really_fuse && !flowVelResetUnhealthy &&
         frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid &&
-        PV_AidingMode == AID_RELATIVE && takeOffDetected &&
+        PV_AidingMode == AID_RELATIVE && movedSinceArming &&
         (fabsF(ofDataDelayed.flowRadXY.x) < frontend->_maxFlowRate) &&
         (fabsF(ofDataDelayed.flowRadXY.y) < frontend->_maxFlowRate)) {
         const uint32_t stale0 = imuSampleTime_ms - flowFuseTimeAxis_ms[0];
