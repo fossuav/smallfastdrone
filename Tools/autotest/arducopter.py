@@ -17299,6 +17299,7 @@ return update, 1000
             "AUTA_FEN_ENAB": 1,
             "AUTA_FEN_MRGXY": 10,
             "AUTA_FEN_MRGZ": 10,
+            "FENCE_ALT_MIN": 3,     # a deliberate pilot floor, which staging must keep
         })
         # Drive the trigger LOW first and hold it there. RC9 sits at mid from boot,
         # which the applet reads as the staging position, so the rising edge is
@@ -17384,8 +17385,8 @@ return update, 1000
             raise NotAchievedException("vehicle is outside its own show-box fence")
 
         # The vertical band, which is the other half of the staging gesture. Staged
-        # at 20 m, so UP_M + margin above and a minimum floored at 0 -- the floor
-        # landing at 0 is the design working, not a failure to write it.
+        # at 20 m, so UP_M + margin above, and the band has no floor to give there
+        # (20 - DOWN_M 25 - margin 10 < 0) -- so the pilot's floor must survive.
         alt_max = self.get_parameter("FENCE_ALT_MAX")
         alt_min = self.get_parameter("FENCE_ALT_MIN")
         # Referenced to where it was staged, not to the takeoff ask -- the vehicle
@@ -17394,8 +17395,8 @@ return update, 1000
         if abs(alt_max - want_max) > 3:
             raise NotAchievedException("FENCE_ALT_MAX %.1f, want ~%.1f" %
                                        (alt_max, want_max))
-        if alt_min != 0:
-            raise NotAchievedException("FENCE_ALT_MIN %.1f, want 0" % alt_min)
+        if alt_min != 3:
+            raise NotAchievedException("FENCE_ALT_MIN %.1f, want the pilot's 3 kept" % alt_min)
 
         # Land the way the other autoacro tests do. do_RTL() goes through
         # distance_to_home(), which waits on a GLOBAL_POSITION_INT that is not
@@ -18876,9 +18877,12 @@ return update, 1000
         measured 152 (2026-09-19), so the margin is real rather than arithmetic
         sitting on the answer.
 
-        The fence is armed REPORT ONLY and only after takeoff. Report-only cannot
-        RTL, which matters because a breach action firing mid-figure is worse than
-        no fence; and arming after the climb keeps FENCE_ALT_MIN out of the takeoff.
+        The vehicle is configured the way it flies: FENCE_ENABLE 0, FENCE_TYPE 13,
+        and the applet enables the staged box for the display only and restores
+        both at handback. FENCE_ACTION is the operator's; this test flies it at 0
+        (report only) so a breach is announced rather than acted on. The two
+        symptoms that design exists to remove are asserted after the show: no
+        breach on the landing, and ready to arm again on the ground.
         '''
         if not self.realflight_address:
             raise NotAchievedException("Specify an IP address with --realflight-address or REALFLIGHT_IPADDR to run this test")
@@ -18895,6 +18899,9 @@ return update, 1000
         params["AUTA_FEN_ENAB"] = 1
         params["AUTA_FEN_MRGXY"] = 70
         params["AUTA_FEN_MRGZ"] = 10
+        params["FENCE_ENABLE"] = 0
+        params["FENCE_TYPE"] = 13
+        params["FENCE_ACTION"] = 0
         self.set_parameters(params)
 
         # RC7 sits at mid from boot, which the applet reads as the staging
@@ -18934,40 +18941,44 @@ return update, 1000
             if side < 320:
                 raise NotAchievedException("fence length %.1f m, want >= 325" % side)
 
-        # Arm it REPORT ONLY, after the climb. Report-only takes no action on a
-        # breach, so this cannot pull the vehicle out of a figure; it just tells us.
-        # POLYGON AND ALT-MAX ONLY. The band's FENCE_ALT_MIN sits at 7 m against a
-        # show whose floor is 23, so nothing in the display can reach it and the
-        # only thing that ever will is the landing -- arming it here tests nothing
-        # and guarantees a breach on the way down, which is what the first run did.
-        self.set_parameters({
-            "FENCE_ACTION": 0,
-            "FENCE_TYPE": 5,    # alt max + polygon
-            "FENCE_ENABLE": 1,
-        })
+        if self.get_parameter("FENCE_ENABLE") != 0:
+            raise NotAchievedException("staging enabled the fence; only the display may")
 
-        try:
-            self.context_collect('STATUSTEXT')
-            self.set_rc(7, 2000)
-            self.wait_statustext("AutoAcro: display starting", check_context=True, timeout=15)
-            self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=200)
+        self.context_clear_collection('STATUSTEXT')
+        self.set_rc(7, 2000)
+        self.wait_statustext("AutoAcro: display starting", check_context=True, timeout=15)
+        # The show's own enable, from the box staged above. The type carries the
+        # floor because staging from 39 writes one (39 - DOWN_M 25 - MRGZ 10 = 4).
+        self.wait_statustext("Fence: enabled for the show, type 13",
+                             check_context=True, timeout=15)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=200)
+        self.wait_statustext("Fence: restored", check_context=True, timeout=15)
 
-            # THE ASSERTION THIS TEST EXISTS FOR. Report-only means a breach
-            # announces itself ("<fence names> breached") and does nothing, so the
-            # show either stayed inside its own box or the log says which it did not.
-            breaches = [m.text for m in self.context_collection('STATUSTEXT')
-                        if "breached" in m.text.lower()]
-            if breaches:
-                raise NotAchievedException("fence breached during the display: %s" %
-                                           "; ".join(sorted(set(breaches))))
-        finally:
-            # Off before any descent, including the one an abort causes -- otherwise
-            # a failed run reports a breach that belongs to the landing.
-            self.set_parameters({"FENCE_ENABLE": 0})
+        # Report-only means a breach announces itself ("<fence names> breached")
+        # and does nothing, so the show stayed inside its own box or this says not.
+        breaches = [m.text for m in self.context_collection('STATUSTEXT')
+                    if "breached" in m.text.lower()]
+        if breaches:
+            raise NotAchievedException("fence breached during the display: %s" %
+                                       "; ".join(sorted(set(breaches))))
+        for name, want in (("FENCE_ENABLE", 0), ("FENCE_TYPE", 13)):
+            got = self.get_parameter(name)
+            if got != want:
+                raise NotAchievedException("%s %u after the show, want %u restored" %
+                                           (name, got, want))
 
+        # The two field symptoms: a floor breach on the landing, and the arming
+        # check refusing afterwards because the vehicle sits outside the last box.
+        self.context_clear_collection('STATUSTEXT')
         self.set_rc(7, 1000)
         self.change_mode("RTL")
         self.wait_disarmed(timeout=300)
+        breaches = [m.text for m in self.context_collection('STATUSTEXT')
+                    if "breached" in m.text.lower()]
+        if breaches:
+            raise NotAchievedException("fence breached on the landing: %s" %
+                                       "; ".join(sorted(set(breaches))))
+        self.wait_ready_to_arm(timeout=60)
 
     def RealFlightSlowShow8(self, model, home):
         '''The RealFlight display with every sized figure at 8 m -- the slow-show A/B.
