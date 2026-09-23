@@ -17289,6 +17289,38 @@ return update, 1000
         self.launch_autoacro_rise255(extra_params={"AUTA_JF_DROP": 6})
         self.fly_autoacro_display(65)
 
+    def AutoAcroShowRepeat(self):
+        '''Fly the curated display twice on one trigger (AUTA_SHOWS 2), chained'''
+        # The shows CHAIN: the schedule reverses an odd number of times, so show 2
+        # starts where show 1 ended and flies mirrored down the line, and its opener
+        # climbs back the height show 1 spent instead of diving from a hover.
+        # MECHANISM ONLY on this model: native spends ~52 m a show (its band artifact,
+        # see AutoAcroFullDisplay) where the run-up can buy back ~9, so show 2 cannot
+        # complete here and the test cancels once the opener has shown the chain works.
+        # RealFlightShowFenceRepeat flies both shows.
+        self.launch_autoacro_rise255(extra_params={"AUTA_JF_DROP": 6, "AUTA_SHOWS": 2})
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(65, mode="GUIDED")
+        self.change_mode("LOITER")
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("AUTA_MOVE", 0)
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: display starting", check_context=True, timeout=15)
+        hdg1 = self.poll_message('VFR_HUD').heading
+        self.wait_statustext("AutoAcro: show 2/2", check_context=False, timeout=200)
+        self.wait_statustext("Line: climbing", check_context=False, timeout=15)
+        self.wait_statustext("Line: running", check_context=False, timeout=15)
+        hdg2 = self.poll_message('VFR_HUD').heading
+        turn = abs((hdg2 - hdg1 + 180) % 360 - 180)
+        if turn < 150:
+            raise NotAchievedException("show 2 heading %u against show 1's %u, want reversed" %
+                                       (hdg2, hdg1))
+        self.set_rc(9, 1000)
+        self.wait_statustext("AutoAcro: cancelled by switch", check_context=True, timeout=15)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def AutoAcroShowFence(self):
         '''Stage the show-box polygon fence from the middle switch position'''
         # The fence is written from the IDLE path on a rising edge to the middle
@@ -18863,7 +18895,7 @@ return update, 1000
         self.set_parameters(params)
         self.fly_autoacro_display(takeoff_alt=39, trigger_ch=7)
 
-    def RealFlightShowFence(self, model, home):
+    def RealFlightShowFence(self, model, home, shows=1):
         '''Stage the show-box fence on RealFlight and fly the display inside it.
 
         The fence MECHANISM is airframe-independent: RealFlight and native SITL run
@@ -18902,6 +18934,7 @@ return update, 1000
         params["FENCE_ENABLE"] = 0
         params["FENCE_TYPE"] = 13
         params["FENCE_ACTION"] = 0
+        params["AUTA_SHOWS"] = shows
         self.set_parameters(params)
 
         # RC7 sits at mid from boot, which the applet reads as the staging
@@ -18951,6 +18984,11 @@ return update, 1000
         # floor because staging from 39 writes one (39 - DOWN_M 25 - MRGZ 10 = 4).
         self.wait_statustext("Fence: enabled for the show, type 13",
                              check_context=True, timeout=15)
+        if shows > 1:
+            # The repeat chains, mirrored from where show 1 ended, so the staged
+            # box has to have been planned for both shows.
+            self.wait_statustext("AutoAcro: show %u/%u" % (shows, shows),
+                                 check_context=True, timeout=200 * shows)
         self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=200)
         self.wait_statustext("Fence: restored", check_context=True, timeout=15)
 
@@ -18979,6 +19017,12 @@ return update, 1000
             raise NotAchievedException("fence breached on the landing: %s" %
                                        "; ".join(sorted(set(breaches))))
         self.wait_ready_to_arm(timeout=60)
+
+    def RealFlightShowFenceRepeat(self, model, home):
+        '''The fenced RealFlight display flown twice (AUTA_SHOWS 2) inside one staged
+        box. Show 2 chains mirrored from where show 1 ended, so the box is planned
+        for both; this is the test that it holds them.'''
+        self.RealFlightShowFence(model, home, shows=2)
 
     def RealFlightSlowShow8(self, model, home):
         '''The RealFlight display with every sized figure at 8 m -- the slow-show A/B.
@@ -19174,6 +19218,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightShowFenceRepeat, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             Test(self.RealFlightSlowShow8, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
@@ -19232,6 +19280,7 @@ return update, 1000
             self.ScriptingFlipOnASwitch,
             self.AutoAcroDisplay,
             self.AutoAcroFullDisplay,
+            self.AutoAcroShowRepeat,
             self.AutoAcroSlowShow8,
             self.AutoAcroFlip,
             self.AutoAcroLoop,
@@ -19362,6 +19411,7 @@ return update, 1000
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightShowFence"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightShowFenceRepeat"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightSlowShow8"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
