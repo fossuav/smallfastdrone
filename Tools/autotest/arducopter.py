@@ -17289,6 +17289,35 @@ return update, 1000
         self.launch_autoacro_rise255(extra_params={"AUTA_JF_DROP": 6})
         self.fly_autoacro_display(65)
 
+    def AutoAcroStartOffset(self):
+        '''AUTA_START_M moves the show's start back along the line before it flies'''
+        # The box's centre sits ahead of the start, so centring it on the staging point
+        # means starting behind it. Asserted from the ground: the first move must begin
+        # 15 m back along the display heading from where the switch was flicked.
+        self.launch_autoacro_rise255(extra_params={"AUTA_JF_DROP": 6, "AUTA_START_M": -15})
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.takeoff(65, mode="GUIDED")
+        self.change_mode("LOITER")
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("AUTA_MOVE", 0)
+        here = self.poll_message('GLOBAL_POSITION_INT')
+        hdg = self.poll_message('VFR_HUD').heading
+        self.set_rc(9, 2000)
+        self.wait_statustext("AutoAcro: moving -15 m to the start", check_context=True, timeout=15)
+        self.wait_statustext("AutoAcro: move 1/20", check_context=True, timeout=60)
+        at = self.poll_message('GLOBAL_POSITION_INT')
+        want = self.offset_location_heading_distance(
+            mavutil.location(here.lat * 1e-7, here.lon * 1e-7, 0, 0), hdg + 180, 15)
+        miss = self.get_distance(mavutil.location(at.lat * 1e-7, at.lon * 1e-7, 0, 0), want)
+        if miss > 3:
+            raise NotAchievedException("show started %.1f m from its offset start" % miss)
+        self.wait_statustext("AutoAcro: display complete", check_context=True, timeout=200)
+        self.wait_mode("LOITER")
+        self.set_rc(9, 1000)
+        self.change_mode("RTL")
+        self.wait_disarmed(timeout=300)
+
     def AutoAcroShowRepeat(self):
         '''Fly the curated display twice on one trigger (AUTA_SHOWS 2), chained'''
         # The shows CHAIN: the schedule reverses an odd number of times, so show 2
@@ -19281,6 +19310,7 @@ return update, 1000
             self.AutoAcroDisplay,
             self.AutoAcroFullDisplay,
             self.AutoAcroShowRepeat,
+            self.AutoAcroStartOffset,
             self.AutoAcroSlowShow8,
             self.AutoAcroFlip,
             self.AutoAcroLoop,
