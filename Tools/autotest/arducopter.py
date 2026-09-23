@@ -18924,7 +18924,7 @@ return update, 1000
         self.set_parameters(params)
         self.fly_autoacro_display(takeoff_alt=39, trigger_ch=7)
 
-    def RealFlightShowFence(self, model, home, shows=1):
+    def RealFlightShowFence(self, model, home, shows=1, start_m=0):
         '''Stage the show-box fence on RealFlight and fly the display inside it.
 
         The fence MECHANISM is airframe-independent: RealFlight and native SITL run
@@ -18964,6 +18964,7 @@ return update, 1000
         params["FENCE_TYPE"] = 13
         params["FENCE_ACTION"] = 0
         params["AUTA_SHOWS"] = shows
+        params["AUTA_START_M"] = start_m
         self.set_parameters(params)
 
         # RC7 sits at mid from boot, which the applet reads as the staging
@@ -18986,7 +18987,12 @@ return update, 1000
         self.set_rc(7, 1500)   # middle: lay the fence down the current heading
         self.wait_statustext("Fence: plan", check_context=True, timeout=20)
         self.wait_statustext("Fence: box", check_context=True, timeout=20)
+        if start_m:
+            # The box goes round the MOVED start, and the staging line says so.
+            self.wait_statustext("start %+d" % start_m, check_context=True, timeout=20)
         self.wait_statustext("Fence: alt", check_context=True, timeout=20)
+        here = self.poll_message('GLOBAL_POSITION_INT')
+        hdg = self.poll_message('VFR_HUD').heading
 
         items = self.download_using_mission_protocol(mavutil.mavlink.MAV_MISSION_TYPE_FENCE)
         if len(items) != 4:
@@ -19013,6 +19019,15 @@ return update, 1000
         # floor because staging from 39 writes one (39 - DOWN_M 25 - MRGZ 10 = 4).
         self.wait_statustext("Fence: enabled for the show, type 13",
                              check_context=True, timeout=15)
+        if start_m:
+            self.wait_statustext("AutoAcro: move 1/20", check_context=True, timeout=60)
+            at = self.poll_message('GLOBAL_POSITION_INT')
+            want = self.offset_location_heading_distance(
+                mavutil.location(here.lat * 1e-7, here.lon * 1e-7, 0, 0),
+                hdg + (180 if start_m < 0 else 0), abs(start_m))
+            miss = self.get_distance(mavutil.location(at.lat * 1e-7, at.lon * 1e-7, 0, 0), want)
+            if miss > 3:
+                raise NotAchievedException("show started %.1f m from its offset start" % miss)
         if shows > 1:
             # The repeat chains, mirrored from where show 1 ended, so the staged
             # box has to have been planned for both shows.
@@ -19046,6 +19061,12 @@ return update, 1000
             raise NotAchievedException("fence breached on the landing: %s" %
                                        "; ".join(sorted(set(breaches))))
         self.wait_ready_to_arm(timeout=60)
+
+    def RealFlightShowFenceStartOffset(self, model, home):
+        '''The fenced RealFlight display with AUTA_START_M -15: the start moves back
+        15 m before the show, the staged box goes round the moved start, and the show
+        must fly inside it with every fence assertion of RealFlightShowFence.'''
+        self.RealFlightShowFence(model, home, start_m=-15)
 
     def RealFlightShowFenceRepeat(self, model, home):
         '''The fenced RealFlight display flown twice (AUTA_SHOWS 2) inside one staged
@@ -19247,6 +19268,10 @@ return update, 1000
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
             }),
+            Test(self.RealFlightShowFenceStartOffset, speedup=1, kwargs={
+                'model': 'realflight-Rise255',
+                'home': 'EliField'
+            }),
             Test(self.RealFlightShowFenceRepeat, speedup=1, kwargs={
                 'model': 'realflight-Rise255',
                 'home': 'EliField'
@@ -19442,6 +19467,7 @@ return update, 1000
             ret["RealFlightFullDisplay"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightShowFence"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightShowFenceRepeat"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
+            ret["RealFlightShowFenceStartOffset"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightSlowShow8"] = "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
             ret["RealFlightAutoAcroReversalPair"] = \
                 "Requires a running RealFlight simulator (--realflight-address or REALFLIGHT_IPADDR)"
