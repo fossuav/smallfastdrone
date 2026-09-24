@@ -9427,6 +9427,20 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         print("log difference: %s" % str(log_difference))
         return log_difference[0]
 
+    def test_replay_global_position_sensor_bit(self):
+        self.set_rc_default()
+        self.GlobalPositionSensor()
+        current_log_filepath = self.current_onboard_log_filepath()
+        self.reboot_sitl()
+        return current_log_filepath
+
+    def test_replay_global_position_sensor_ext_nav_bit(self):
+        self.set_rc_default()
+        self.GlobalPositionSensorExtNav()
+        current_log_filepath = self.current_onboard_log_filepath()
+        self.reboot_sitl()
+        return current_log_filepath
+
     def GPSBlendingLog(self):
         '''Test GPS Blending'''
         '''ensure we get dataflash log messages for blended instance'''
@@ -9911,6 +9925,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             ('GPS', self.test_replay_gps_bit),
             ('Beacon', self.test_replay_beacon_bit),
             ('OpticalFlow', self.test_replay_optical_flow_bit),
+            ('GlobalPositionSensor', self.test_replay_global_position_sensor_bit),
+            ('GlobalPositionSensorExtNav', self.test_replay_global_position_sensor_ext_nav_bit),
         ]
         for (name, func) in bits:
             self.start_subtest("%s" % name)
