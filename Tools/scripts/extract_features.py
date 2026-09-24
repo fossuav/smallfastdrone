@@ -220,6 +220,7 @@ class ExtractFeatures(object):
 
             ('HAL_PICCOLO_CAN_ENABLE', r'AP_PiccoloCAN::update',),
             ('EK3_FEATURE_EXTERNAL_NAV', r'NavEKF3_core::CorrectExtNavVelForSensorOffset'),
+            ('EK3_FEATURE_POSITION_RESET', r'NavEKF3_core::setLatLng'),
             ('EK3_FEATURE_EXTERNAL_POSITION_FUSION', r'NavEKF3_core::FuseSetLatLng'),
             ('EK3_FEATURE_DRAG_FUSION', r'NavEKF3_core::FuseDragForces'),
             ('EK3_FEATURE_OPTFLOW_FUSION', r'NavEKF3_core::FuseOptFlow'),
