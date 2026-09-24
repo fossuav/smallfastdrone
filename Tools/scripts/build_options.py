@@ -41,6 +41,7 @@ BUILD_OPTIONS = [
     Feature('AHRS', 'InertialLabs', 'AP_EXTERNAL_AHRS_INERTIALLABS_ENABLED', 'Enable InertialLabs external AHRS', 0, "AHRS_EXT"),  # noqa
     Feature('AHRS', 'VISUALODOM', 'HAL_VISUALODOM_ENABLED', 'Enable Visual Odometry', 0, None),
     Feature('AHRS', 'EKF3_EXTNAV', 'EK3_FEATURE_EXTERNAL_NAV', 'Enable External navigation for EKF3', 0, 'EKF3'),
+    Feature('AHRS', 'EKF3_EXTPOS', 'EK3_FEATURE_EXTERNAL_POSITION_FUSION', 'Enable fusion of external position estimates for EKF3', 0, 'EKF3'),  # noqa: E501
     Feature('AHRS', 'EKF3_WINDEST', 'EK3_FEATURE_DRAG_FUSION', 'Enable Wind estimation for EKF3', 0, 'EKF3'),
     Feature('AHRS', 'EKF3_OPTFLOW', 'EK3_FEATURE_OPTFLOW_FUSION', 'Enable OpticalFlow fusion for EKF3', 0, 'EKF3,OPTICALFLOW'),
     Feature('AHRS', 'AHRS_POS_RESET', 'AP_AHRS_POSITION_RESET_ENABLED', 'Enable setting position from external position estimates', 0, None),  # noqa: E501
