@@ -307,136 +307,144 @@ bool NavEKF3_core::setLatLng(const Location &loc, float posAccuracy, uint32_t ti
 
 #if EK3_FEATURE_EXTERNAL_POSITION_FUSION
     if (frontend->_options & (int32_t)NavEKF3::Options::SetLatLngFusion) {
-        // treat as an alternative position source
-        // if GPS is passing alignment quality checks and is being fused, then update an offset to allow for drift
-        // of this position source.
-        const uint32_t timeoutThreshold = (uint32_t)MAX(((int32_t)frontend->posRetryTimeNoVel_ms-(int32_t)1000),1000);
-        const bool gpsVelTimeout = (imuSampleTime_ms - lastVelPassTime_ms) > timeoutThreshold;
-        const bool gpsPosTimeout = (imuSampleTime_ms - lastPosPassTime_ms) > timeoutThreshold;
-        useSetLatLngAsMeasurement = (posxy_source_last != AP_NavEKF_Source::SourceXY::GPS) || gpsVelTimeout || gpsPosTimeout || (imuSampleTime_ms - lastTimeGpsReceived_ms) > 1000;
-        if (frontend->_options & (int32_t)NavEKF3::Options::JammingExpected) {
-            useSetLatLngAsMeasurement = useSetLatLngAsMeasurement || !gpsGoodToAlign;
-        }
-        if (useSetLatLngAsMeasurement) {
-            velPosObs[3] = newPosNE.x + setLatLngPosOffsetNE.x;
-            velPosObs[4] = newPosNE.y + setLatLngPosOffsetNE.y;
-            if ((imuSampleTime_ms - lastSetlatLngPassTime_ms) < 5000) {
-                fusePosData = true;
-                setLatLngDataToFuse = true;
-                FuseVelPosNED();
-                setLatLngDataToFuse = false;
-            } else {
-                // reset the corresponding covariances
-                zeroRows(P,7,8);
-                zeroCols(P,7,8);
-
-                P[7][7] = P[8][8] = sq(setLatLngPosAcc);
-
-                ResetPositionNE(velPosObs[3], velPosObs[4]);
-
-                lastSetlatLngPassTime_ms = imuSampleTime_ms;
-                lastResetlatLngTime_ms = imuSampleTime_ms;
-            }
-        } else {
-            if (frontend->_options & (int32_t)NavEKF3::Options::SetLatLngOffset) {
-                setLatLngPosOffsetNE.x = stateStruct.position.x - newPosNE.x;
-                setLatLngPosOffsetNE.y = stateStruct.position.y - newPosNE.y;
-            } else {
-                setLatLngPosOffsetNE.zero();
-            }
-        }
-    } else {
-#endif // EK3_FEATURE_EXTERNAL_POSITION_FUSION
-        // Legacy local behaviour used by cruise-mode wind correction: when wind states
-        // are active, fuse the position as an observation that only updates the wind
-        // states, then reset the position to the measurement.
-        if (!inhibitWindStates && stateIndexLim >= 23 && is_positive(P[7][7]) && is_positive(P[8][8])) {
-            // Apply a 5-sigma circular innovation limit
-            Vector2F innovation = posResetNE - newPosNE;
-            ftype R_OBS = sq(setLatLngPosAcc);
-            ftype innovationVariance = P[7][7] + P[8][8] + 2.0F * R_OBS;
-            ftype testRatio = innovation.length() / (5.0F * sqrtF(innovationVariance));
-            if(is_positive(testRatio)) {
-                innovation *= (1.0F/testRatio);
-            }
-
-            // Fuse NE axis measurements sequentially.
-            for (uint8_t obsIndex=0; obsIndex<=1; obsIndex++) {
-                uint8_t stateIndex = 7 + obsIndex;
-
-                // calculate the Kalman gain and calculate innovation variances
-                ftype innovVar = P[stateIndex][stateIndex] + R_OBS;
-                ftype innovVarInv = 1.0f/innovVar;
-
-                // only apply state corrections to wind states
-                zero_range(&Kfusion[0], 0, 21);
-                Kfusion[22] = P[22][stateIndex]*innovVarInv;
-                Kfusion[23] = P[23][stateIndex]*innovVarInv;
-
-                // update the covariance - take advantage of direct observation of a single state at index = stateIndex to reduce computations
-                // this is a numerically optimised implementation of standard equation P = (I - K*H)*P;
-                for (uint8_t i=0; i<=stateIndexLim; i++) {
-                    for (uint8_t j= 0; j<=stateIndexLim; j++) {
-                        KHP[i][j] = Kfusion[i] * P[stateIndex][j];
-                    }
-                }
-                // Check that we are not going to drive any variances negative and skip the update if so
-                bool healthyFusion = true;
-                for (uint8_t i= 0; i<=stateIndexLim; i++) {
-                    if (KHP[i][i] > P[i][i]) {
-                        healthyFusion = false;
-                    }
-                }
-                if (healthyFusion) {
-                    // update the covariance matrix
-                    for (uint8_t i= 0; i<=stateIndexLim; i++) {
-                        for (uint8_t j= 0; j<=stateIndexLim; j++) {
-                            P[i][j] = P[i][j] - KHP[i][j];
-                        }
-                    }
-
-                    // force the covariance matrix to be symmetrical and limit the variances to prevent ill-conditioning.
-                    ForceSymmetry();
-                    ConstrainVariances();
-
-                    // update states and re-normalise the quaternions
-                    for (uint8_t i = 0; i<=stateIndexLim; i++) {
-                        statesArray[i] = statesArray[i] - Kfusion[i] * innovation[obsIndex];
-                    }
-                    stateStruct.quat.normalize();
-
-                    // record good fusion status
-                    if (obsIndex == 0) {
-                        faultStatus.bad_npos = false;
-                    } else if (obsIndex == 1) {
-                        faultStatus.bad_epos = false;
-                    }
-                } else {
-                    // record bad fusion status
-                    if (obsIndex == 0) {
-                        faultStatus.bad_npos = true;
-                    } else if (obsIndex == 1) {
-                        faultStatus.bad_epos = true;
-                    }
-                }
-            }
-        }
-
-        // reset the corresponding covariances
-        zeroRows(P,7,8);
-        zeroCols(P,7,8);
-
-        P[7][7] = P[8][8] = sq(setLatLngPosAcc);
-
-        ResetPositionNE(newPosNE.x,newPosNE.y);
-#if EK3_FEATURE_EXTERNAL_POSITION_FUSION
-        useSetLatLngAsMeasurement = false;
+        FuseSetLatLng(newPosNE);
+        return true;
     }
+#endif // EK3_FEATURE_EXTERNAL_POSITION_FUSION
+
+    // If wind states are active, fuse the position as an observation and only modify the wind states
+    if (!inhibitWindStates && stateIndexLim >= 23 && is_positive(P[7][7]) && is_positive(P[8][8])) {
+        // Apply a 5-sigma circular innovation limit
+        Vector2F innovation = posResetNE - newPosNE;
+        ftype R_OBS = sq(setLatLngPosAcc);
+        ftype innovationVariance = P[7][7] + P[8][8] + 2.0F * R_OBS;
+        ftype testRatio = innovation.length() / (5.0F * sqrtF(innovationVariance));
+        if(is_positive(testRatio)) {
+            innovation *= (1.0F/testRatio);
+        }
+
+        // Fuse NE axis measurements sequentially.
+        for (uint8_t obsIndex=0; obsIndex<=1; obsIndex++) {
+            uint8_t stateIndex = 7 + obsIndex;
+
+            // calculate the Kalman gain and calculate innovation variances
+            ftype innovVar = P[stateIndex][stateIndex] + R_OBS;
+            ftype innovVarInv = 1.0f/innovVar;
+
+            // only apply state corrections to wind states
+            zero_range(&Kfusion[0], 0, 21);
+            Kfusion[22] = P[22][stateIndex]*innovVarInv;
+            Kfusion[23] = P[23][stateIndex]*innovVarInv;
+
+            // update the covariance - take advantage of direct observation of a single state at index = stateIndex to reduce computations
+            // this is a numerically optimised implementation of standard equation P = (I - K*H)*P;
+            for (uint8_t i=0; i<=stateIndexLim; i++) {
+                for (uint8_t j= 0; j<=stateIndexLim; j++) {
+                    KHP[i][j] = Kfusion[i] * P[stateIndex][j];
+                }
+            }
+            // Check that we are not going to drive any variances negative and skip the update if so
+            bool healthyFusion = true;
+            for (uint8_t i= 0; i<=stateIndexLim; i++) {
+                if (KHP[i][i] > P[i][i]) {
+                    healthyFusion = false;
+                }
+            }
+            if (healthyFusion) {
+                // update the covariance matrix
+                for (uint8_t i= 0; i<=stateIndexLim; i++) {
+                    for (uint8_t j= 0; j<=stateIndexLim; j++) {
+                        P[i][j] = P[i][j] - KHP[i][j];
+                    }
+                }
+
+                // force the covariance matrix to be symmetrical and limit the variances to prevent ill-conditioning.
+                ForceSymmetry();
+                ConstrainVariances();
+
+                // update states and re-normalise the quaternions
+                for (uint8_t i = 0; i<=stateIndexLim; i++) {
+                    statesArray[i] = statesArray[i] - Kfusion[i] * innovation[obsIndex];
+                }
+                stateStruct.quat.normalize();
+
+                // record good fusion status
+                if (obsIndex == 0) {
+                    faultStatus.bad_npos = false;
+                } else if (obsIndex == 1) {
+                    faultStatus.bad_epos = false;
+                }
+            } else {
+                // record bad fusion status
+                if (obsIndex == 0) {
+                    faultStatus.bad_npos = true;
+                } else if (obsIndex == 1) {
+                    faultStatus.bad_epos = true;
+                }
+            }
+        }
+    }
+
+    // reset the corresponding covariances
+    zeroRows(P,7,8);
+    zeroCols(P,7,8);
+
+    P[7][7] = P[8][8] = sq(setLatLngPosAcc);
+
+    ResetPositionNE(newPosNE.x,newPosNE.y);
+#if EK3_FEATURE_EXTERNAL_POSITION_FUSION
+    useSetLatLngAsMeasurement = false;
 #endif // EK3_FEATURE_EXTERNAL_POSITION_FUSION
 
     return true;
 }
 #endif // EK3_FEATURE_POSITION_RESET
+
+#if EK3_FEATURE_EXTERNAL_POSITION_FUSION
+// use a position received via the setLatLng interface as an alternative
+// position source to GPS, or learn its offset from the position estimate
+void NavEKF3_core::FuseSetLatLng(const Vector2F &newPosNE)
+{
+    // treat as an alternative position source
+    // if GPS is passing alignment quality checks and is being fused, then update an offset to allow for drift
+    // of this position source.
+    const uint32_t timeoutThreshold = (uint32_t)MAX(((int32_t)frontend->posRetryTimeNoVel_ms-(int32_t)1000),1000);
+    const bool gpsVelTimeout = (imuSampleTime_ms - lastVelPassTime_ms) > timeoutThreshold;
+    const bool gpsPosTimeout = (imuSampleTime_ms - lastPosPassTime_ms) > timeoutThreshold;
+    useSetLatLngAsMeasurement = (posxy_source_last != AP_NavEKF_Source::SourceXY::GPS) || gpsVelTimeout || gpsPosTimeout || (imuSampleTime_ms - lastTimeGpsReceived_ms) > 1000;
+    if (frontend->_options & (int32_t)NavEKF3::Options::JammingExpected) {
+        useSetLatLngAsMeasurement = useSetLatLngAsMeasurement || !gpsGoodToAlign;
+    }
+    if (useSetLatLngAsMeasurement) {
+        velPosObs[3] = newPosNE.x + setLatLngPosOffsetNE.x;
+        velPosObs[4] = newPosNE.y + setLatLngPosOffsetNE.y;
+        if ((imuSampleTime_ms - lastSetlatLngPassTime_ms) < 5000) {
+            fusePosData = true;
+            setLatLngDataToFuse = true;
+            FuseVelPosNED();
+            setLatLngDataToFuse = false;
+        } else {
+            // reset the corresponding covariances
+            zeroRows(P,7,8);
+            zeroCols(P,7,8);
+
+            P[7][7] = P[8][8] = sq(setLatLngPosAcc);
+
+            ResetPositionNE(velPosObs[3], velPosObs[4]);
+
+            lastSetlatLngPassTime_ms = imuSampleTime_ms;
+            lastResetlatLngTime_ms = imuSampleTime_ms;
+        }
+    } else {
+        if (frontend->_options & (int32_t)NavEKF3::Options::SetLatLngOffset) {
+            setLatLngPosOffsetNE.x = stateStruct.position.x - newPosNE.x;
+            setLatLngPosOffsetNE.y = stateStruct.position.y - newPosNE.y;
+        } else {
+            setLatLngPosOffsetNE.zero();
+        }
+    }
+}
+#endif // EK3_FEATURE_EXTERNAL_POSITION_FUSION
 
 
 // reset the stateStruct's NE position to the specified position
