@@ -280,10 +280,6 @@ bool NavEKF3_core::setLatLng(const Location &loc, float posAccuracy, uint32_t ti
     setLatLngUseTime_ms = imuSampleTime_ms;
     lastLocSetTime_ms = imuSampleTime_ms;
 
-    // Store the current position so it can be used as the prior for the wind-state observation
-    posResetNE.x = stateStruct.position.x;
-    posResetNE.y = stateStruct.position.y;
-
     // Don't allow data to time travel into the future
     const uint32_t timeStampConstrained_ms = MIN(timestamp_ms, imuSampleTime_ms);
     const int32_t delta_ms = int32_t(imuDataDelayed.time_ms - timeStampConstrained_ms);
@@ -319,7 +315,7 @@ bool NavEKF3_core::setLatLng(const Location &loc, float posAccuracy, uint32_t ti
     // If wind states are active, fuse the position as an observation and only modify the wind states
     if (!inhibitWindStates && stateIndexLim >= 23 && is_positive(P[7][7]) && is_positive(P[8][8])) {
         // Apply a 5-sigma circular innovation limit
-        Vector2F innovation = posResetNE - newPosNE;
+        Vector2F innovation = stateStruct.position.xy() - newPosNE;
         ftype R_OBS = sq(setLatLngPosAcc);
         ftype innovationVariance = P[7][7] + P[8][8] + 2.0F * R_OBS;
         ftype testRatio = innovation.length() / (5.0F * sqrtF(innovationVariance));
