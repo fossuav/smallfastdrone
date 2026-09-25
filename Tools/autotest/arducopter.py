@@ -17339,8 +17339,24 @@ return update, 1000
         hdg1 = self.poll_message('VFR_HUD').heading
         self.wait_statustext("AutoAcro: show 2/2", check_context=False, timeout=200)
         self.wait_statustext("Line: climbing", check_context=False, timeout=15)
-        self.wait_statustext("Line: running", check_context=False, timeout=15)
-        hdg2 = self.poll_message('VFR_HUD').heading
+        # The nose must hold through the handover. The last move leaves on the heading
+        # show 2 flies, and the opener once left yaw to Guided's auto-yaw, which swung
+        # the nose ~150 deg and back while the velocity turned round (field 2026-09-25).
+        # Sampled to the line's delivery and no further: the float loop after it goes
+        # over the top inverted, where the heading folds 180.
+        hdg_s2 = self.poll_message('VFR_HUD').heading
+        hdg2 = hdg_s2
+        swing = 0
+        while True:
+            m = self.assert_receive_message(['VFR_HUD', 'STATUSTEXT'], timeout=15)
+            if m.get_type() == 'STATUSTEXT':
+                if m.text.startswith("Line: delivered"):
+                    break
+                continue
+            hdg2 = m.heading
+            swing = max(swing, abs((hdg2 - hdg_s2 + 180) % 360 - 180))
+        if swing > 30:
+            raise NotAchievedException("nose swung %u deg between shows" % swing)
         turn = abs((hdg2 - hdg1 + 180) % 360 - 180)
         if turn < 150:
             raise NotAchievedException("show 2 heading %u against show 1's %u, want reversed" %
@@ -17804,9 +17820,11 @@ return update, 1000
     def AutoAcroRewindFlick(self):
         '''Fly the rewind and juicy flick (schedule moves 8, 9) on the native Rise255'''
         self.launch_autoacro_rise255()
+        # "and back" and "pumping at" fire only on the paths the show flies by default
+        # (AUTA_RW_BACK 1, AUTA_JF_SPD > 0): the mirrored rewind and the coasting flick.
         self.fly_autoacro_moves((
-            (8, "Rewind", ["Rewind: rewinding"]),
-            (9, "JuicyFlick", ["JuicyFlick: snap", "JuicyFlick: whip back"]),
+            (8, "Rewind", ["Rewind: rewinding", "Rewind: and back"]),
+            (9, "JuicyFlick", ["JuicyFlick: pumping at", "JuicyFlick: snap", "JuicyFlick: whip back"]),
         ))
 
     def AutoAcroPivotLoop(self):
