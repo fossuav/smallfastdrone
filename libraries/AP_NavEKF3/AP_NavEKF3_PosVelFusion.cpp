@@ -229,8 +229,9 @@ bool NavEKF3_core::setLatLng(const Location &loc, float posAccuracy, uint32_t ti
         return false;
     }
 
-    // Don't use data more than 5 seconds old
-    if (imuSampleTime_ms - timestamp_ms > 5000) {
+    // Don't use data more than 5 seconds old.  The difference is signed
+    // as a timestamp slightly in the future is normal and is handled below
+    if (int32_t(imuSampleTime_ms - timestamp_ms) > 5000) {
         return false;
     }
 
