@@ -295,7 +295,10 @@ bool NavEKF3_core::setLatLng(const Location &loc, float posAccuracy, uint32_t ti
     if (isnan(posAccuracy)) {
         setLatLngPosAcc = frontend->_gpsHorizPosNoise;
     } else {
-        setLatLngPosAcc = MAX(posAccuracy, frontend->_gpsHorizPosNoise);
+        // bound the accuracy as for other position sources; a huge value
+        // would overflow the variance and one that is merely large would
+        // pass the innovation checks without constraining the position
+        setLatLngPosAcc = constrain_ftype(posAccuracy, frontend->_gpsHorizPosNoise, 100.0f);
     }
 
     // without air data aiding, the position time offset creates a circular data dependency
