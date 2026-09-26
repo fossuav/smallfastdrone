@@ -18983,6 +18983,10 @@ return update, 1000
         params["FENCE_ACTION"] = 0
         params["AUTA_SHOWS"] = shows
         params["AUTA_START_M"] = start_m
+        # The aircraft has flown RU_REL 1 since 2026-09-25. At the default 0 the
+        # split-S's run-up braked toward the position controller's own target for
+        # 1.7 s on every rep here, where the aircraft enters in 0.15-0.18 s.
+        params["AUTA_RU_REL"] = 1
         self.set_parameters(params)
 
         # RC7 sits at mid from boot, which the applet reads as the staging
