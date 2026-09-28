@@ -36,6 +36,12 @@ reply exists") before acting on it.
   reset, the parameter note and the test bounds), #33498's flight-event window,
   #32553's SIM_TERRAIN line, #32768's four new commits, and #34432, #34456 and
   #34457 as PRs rather than local work.
+  Brought up to #34292's `2f411ad1c4` on 2026-09-28, three commits: a range
+  finder stuck out of range low no longer holds flow off through a climb, the
+  carried range sample moves with `resetHeightDatum()`, the GNDCLR note and
+  FlowFocusHoldReleasesWithDeadRangeFinder. The four #34292 tests, the flow and
+  AGL KF neighbours and the four height datum tests pass, 11 of 11. #33498 and
+  #34432 merged to master on 2026-09-23 (neither in 4.7).
 - `upstream/ArduPilot-4.7` is 6 commits past the base (AP_HAL_Linux CAN fix,
   ArduSub guided/terrain, a Sub scripting binding). None touches SFD code, so the
   base was not rebuilt onto it.
