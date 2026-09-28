@@ -30,7 +30,12 @@ reply exists") before acting on it.
   needed MSP_Generic.send_command, and BaroDriftClearedAtArm and
   BaroDriftClearedAfterMidairDisarm, which the rebuild had duplicated content
   into). TerrainOffsetGroundEffectRecovery fails for its designed reason.
-  DataFlashErase is open, below. The confirming re-run was 76 of 78, 0 crashes.
+  The confirming re-run was 76 of 78, 0 crashes. DataFlashErase is resolved
+  (2026-09-28, "DataFlashErase" below). Full set on 2026-09-28 at the tip, with
+  #34292's head, the firmware name and the DataFlashErase fix: 77 of 78, 0
+  crashes, the one failure TerrainOffsetGroundEffectRecovery (mean +0.273 m).
+  Plane, heli and sub build; check_param_tables clean; audit_dropped's six
+  are each superseded by a PR head's copy; param_changes reports nothing.
   PR heads that now carry what refresh6 held locally: #34292's fold (the
   no-range-finder build fix, the carried flow focus height across a height
   reset, the parameter note and the test bounds), #33498's flight-event window,
@@ -562,6 +567,9 @@ FLOW_OPTIONS's docs).
   branch's copy differs from the previous branch's commit; check the test is
   present by name before re-folding anything.
 - `SITL: add SIM_SONAR_OFFSET` (until 4.7 has master's `568727a218`).
+- #30956's `11093ee6bc` (wait_armed) and `ad1ce89ce3` (AP_Logger reserved
+  space), and 4.7's DataFlashErase body over the PR heads' (until 4.7 has
+  #30956; see "DataFlashErase").
 - Replay: master's `9c7f12df34` and `d3a32025cd`, and the reboot after raising
   the buffer (until 4.7 has them).
 - HeightDatumKeptOnMidairRearm's three 4.7 adaptations (carry the PR head's
@@ -584,33 +592,29 @@ FLOW_OPTIONS's docs).
   (the PR heads carry both), the old local throw and VALT commits (#32475 and
   #32270 carry them), and `ebed712c36` (#32972 carries the spool-up anchor).
 
-### Open on refresh7: DataFlashErase
+### DataFlashErase (standing divergence)
 
-New to the set this refresh (#34363 modifies it, so the derivation picks it up)
-and failing on the branch where the shipping beta passes it. What is
-established:
+Keep 4.7's DataFlashErase; do not take the PR heads' copy. #34363 changes only
+the log size bounds of master's rewrite of the test, which came with #30956
+(merged to master 2026-06-09, not in 4.7), and the refresh took the whole
+rewrite with it. On 4.7 that body failed three ways, each measured on
+2026-09-28:
 
-- It is not the test body. With 4.7's own DataFlashErase the branch still fails,
-  so the difference is in the code, not in which version of the test runs.
-- The downloaded log ends inside an FMT record: 7246 bytes, the last FMT
-  starting at 7222 with 24 of its 89 bytes present, and only FMTU and SIM2
-  records before it. The test deliberately writes "a very short log", and this
-  branch defines more log message types than 4.7 (XKFA, XKVL, XKFR, EKFC,
-  XKF7 and the per-core XKF5 of #34363 itself), so the format preamble is
-  longer than the window the test gives it.
-- The beta sees the same unpack error twice and passes on the retry; the branch
-  fails all three attempts.
-- With #34363's own body the failure is "Failed to ARM with mavlink", and that
-  is a symptom: the harness log shows `Rebooting SITL`, then `EOF on TCP
-  socket`, then `Connection refused` on every reconnect. SITL does not come
-  back from the reboot the test does after the chip erase, so the arm times out
-  against nothing. Deterministic on the branch, and the beta reboots fine at
-  the same point.
+- "Failed to ARM": it arms with DISARM_DELAY 1 at SIM_SPEEDUP 1, and 4.7's
+  wait_armed() waits for the next heartbeat before looking, which arrives after
+  the disarm. The "Rebooting SITL / EOF / Connection refused" lines recorded
+  here earlier are the normal reboot reconnect, not the failure.
+- With #30956's `11093ee6bc` (check the flag before waiting): about 240 dropped
+  log messages at the start of the short log on every attempt.
+- With #30956's `ad1ce89ce3` too (4 kB reserved for non-messagewriter
+  messages): no drops, but the first log is 689 kB against master's 1000 kB
+  floor; the bounds are calibrated to master's logging.
 
-Next step is to decide whether this is the logger leaving a partial record on a
-short log (worth reporting on #34363) or the test reading a log the download
-truncated, and either fix it on the branch or carry 4.7's DataFlashErase as a
-standing divergence the way refresh6 did without noticing.
+4.7's own body, with both picks, fails its first attempt on a log cut off in
+an FMT record and passes the retry, as the shipping beta does. Both picks are
+carried (Local work) until 4.7 has #30956: the logger one because the stack
+logs more message types than 4.7 and the startup drops are real, the harness
+one because it is master's and costs nothing.
 
 ### Traps found in refresh7
 
