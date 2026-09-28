@@ -41,7 +41,8 @@ reply exists") before acting on it.
   carried range sample moves with `resetHeightDatum()`, the GNDCLR note and
   FlowFocusHoldReleasesWithDeadRangeFinder. The four #34292 tests, the flow and
   AGL KF neighbours and the four height datum tests pass, 11 of 11. #33498 and
-  #34432 merged to master on 2026-09-23 (neither in 4.7).
+  #34432 merged to master on 2026-09-23 (neither in 4.7). The firmware string
+  is "SmallFastDrone V4.7.1" again (Local work).
 - `upstream/ArduPilot-4.7` is 6 commits past the base (AP_HAL_Linux CAN fix,
   ArduSub guided/terrain, a Sub scripting binding). None touches SFD code, so the
   base was not rebuilt onto it.
@@ -523,6 +524,10 @@ FLOW_OPTIONS's docs).
   (takeoff window asserted post-detection). Keep #34210's `vibe_comp_active()`
   broadening when resolving it.
 - The parameter index pins above.
+- `Copter: name the firmware SmallFastDrone`: `THISFIRMWARE` in
+  `ArduCopter/version.h` is "SmallFastDrone V<version>", not "ArduCopter". SFD-only,
+  never a PR. The base carries upstream's version.h, so re-apply it on every
+  refresh and whenever 4.7 bumps the version (4.7.0 had it; the 4.7.1 base lost it).
 - The SFD README and all of `Tools/SFD` (the base carries neither).
 - Tests the rebuild wipes because they live on the branch, not in any PR's own
   diff. Re-fold them from the previous branch with `refold_methods.py`, then
