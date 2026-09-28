@@ -422,7 +422,9 @@ bool NavEKF3_core::resetHeightDatum(void)
     // clear the baro data buffer
     storedBaro.reset();
 
-    // reset the vertical position and velocity states
+    // reset the vertical position and velocity states.  The carried range sample
+    // moves with the datum: the ground did not shift relative to the vehicle
+    flowFocusRngPosD += oldHgt;
     stateStruct.position.z = 0.0f;
     stateStruct.velocity.z = 0.0f;
     for (uint8_t i=0; i<imu_buffer_length; i++) {

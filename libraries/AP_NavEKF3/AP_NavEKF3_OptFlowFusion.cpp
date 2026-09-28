@@ -85,12 +85,16 @@ void NavEKF3_core::SelectFlowFusion()
             // A range finder stops reporting below its minimum, which is where the flow is worst,
             // so a stale range cannot simply release the check. The carried height is used for no
             // more than 5 s, as it cannot see the ground change under a vehicle that has moved.
-            // Beyond that a hold continues only while the sensor that gave the sample reports out
-            // of range low, as it does on the ground until disarm.
+            // Beyond that a hold continues while the sensor that gave the sample reports out of
+            // range low, as it does on the ground until disarm, and the carried height still has
+            // the vehicle near the floor: a sensor stuck below its minimum is what a failed one
+            // looks like, and it must not hold the flow off through a climb. The height is only
+            // asked to still be near the floor, not under it, so noise there cannot end the hold
             const bool aglEstValid = imuSampleTime_ms - rngValidMeaTime_ms < 5000;
             const uint32_t outOfRangeLowTime_ms = rngOutOfRangeLowTime_ms[rangeDataDelayed.sensor_idx];
             const bool rngOutOfRangeLow = (outOfRangeLowTime_ms != 0) && (imuSampleTime_ms - outOfRangeLowTime_ms < 500);
-            flowFocusBelow = (flowFocusBelow && rngOutOfRangeLow) || (aglEstValid && (aglEst < minHeight));
+            flowFocusBelow = (flowFocusBelow && rngOutOfRangeLow && (aglEst < minHeight + 0.5f)) ||
+                             (aglEstValid && (aglEst < minHeight));
         }
         if (flowFocusBelow) {
             flowDataToFuse = false;
