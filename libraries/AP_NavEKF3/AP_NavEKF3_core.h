@@ -398,6 +398,9 @@ public:
     */
     void getFilterStatus(nav_filter_status &status) const;
 
+    // what this lane is navigating on, and the state of its optical flow
+    void getLaneStatus(nav_lane_status &status) const;
+
     // send an EKF_STATUS_REPORT message to GCS
     void send_status_report(class GCS_MAVLINK &link) const;
 
@@ -1413,8 +1416,8 @@ private:
     ftype hgtMea;                   // height measurement derived from either baro, gps or range finder data (m)
     bool inhibitGndState;           // true when the terrain position state is to remain constant
     uint32_t prevFlowFuseTime_ms;   // time both flow measurement components passed their innovation consistency checks
+    uint32_t flowFuseTimeAxis_ms[2]; // time each flow axis last passed its innovation consistency check
 #if EK3_FEATURE_OPTFLOW_AGL_KF
-    uint32_t flowFuseTimeAxis_ms[2];// per-axis time the flow innovation test last passed, used to detect a single-axis lockout
     uint8_t flowVelResetCount;      // count of horizontal velocity resets triggered by optical flow recovery
     uint8_t flowVelResetWindowCount;// count of optical-flow horizontal velocity resets in the current rate window
     uint32_t flowVelResetWindow_ms; // start time of the optical-flow horizontal velocity reset rate window
