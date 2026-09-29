@@ -405,6 +405,9 @@ public:
     */
     void getFilterStatus(nav_filter_status &status) const;
 
+    // what this lane is navigating on, and the state of its optical flow
+    void getLaneStatus(nav_lane_status &status) const;
+
     // send an EKF_STATUS_REPORT message to GCS
     void send_status_report(class GCS_MAVLINK &link) const;
 
@@ -1446,6 +1449,7 @@ private:
     bool flowVelResetUnhealthy;     // true when the flow sensor reports a lockout sample too poor to recover from
     uint32_t flowQualRecoverStart_ms; // start of the current run of flow samples clear of the quality that releases flowVelResetUnhealthy, 0 if none
 #endif
+    uint32_t flowPassTimeAxis_ms[2]; // time each flow axis last passed its innovation consistency check, written nowhere else
     Vector2 flowTestRatio;          // square of optical flow innovations divided by fail threshold used by main filter where >1.0 is a fail
     Vector2F auxFlowTestRatio;      // sum of squares of optical flow innovation divided by fail threshold used by 1-state terrain offset estimator
     ftype R_LOS;                    // variance of optical flow rate measurements (rad/sec)^2
