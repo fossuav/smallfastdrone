@@ -17,37 +17,42 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.1-beta` = refresh6, promoted 2026-09-21 at
-  `b19fee0640`, and carried on past it since (the parameter note, the AGL KF
-  floor fix flown on SFD-O4 log10, the source set lane fix, and #34456/#34457
-  once those were opened). The refresh5 beta is kept as
-  `SmallFastDrone-4.7.1.5-beta`.
-- Ready, not promoted: `SmallFastDrone-4.7.1-refresh7` (2026-09-22) on the same
-  base `a5eb325674`, 310 planned commits. Copter, plane, heli and sub build.
-  SFD set (78 steps, the new tests of #34432, #34456, #34457 and #32768's two
-  included): 74 of 78 on the first full run, and the three failures that were
-  the refresh's own doing are fixed and re-run green (the MSP VTX pair, which
-  needed MSP_Generic.send_command, and BaroDriftClearedAtArm and
-  BaroDriftClearedAfterMidairDisarm, which the rebuild had duplicated content
-  into). TerrainOffsetGroundEffectRecovery fails for its designed reason.
-  The confirming re-run was 76 of 78, 0 crashes. DataFlashErase is resolved
-  (2026-09-28, "DataFlashErase" below). Full set on 2026-09-28 at the tip, with
-  #34292's head, the firmware name and the DataFlashErase fix: 77 of 78, 0
-  crashes, the one failure TerrainOffsetGroundEffectRecovery (mean +0.273 m).
-  Plane, heli and sub build; check_param_tables clean; audit_dropped's six
-  are each superseded by a PR head's copy; param_changes reports nothing.
-  PR heads that now carry what refresh6 held locally: #34292's fold (the
-  no-range-finder build fix, the carried flow focus height across a height
-  reset, the parameter note and the test bounds), #33498's flight-event window,
-  #32553's SIM_TERRAIN line, #32768's four new commits, and #34432, #34456 and
-  #34457 as PRs rather than local work.
-  Brought up to #34292's `2f411ad1c4` on 2026-09-28, three commits: a range
-  finder stuck out of range low no longer holds flow off through a climb, the
-  carried range sample moves with `resetHeightDatum()`, the GNDCLR note and
-  FlowFocusHoldReleasesWithDeadRangeFinder. The four #34292 tests, the flow and
-  AGL KF neighbours and the four height datum tests pass, 11 of 11. #33498 and
-  #34432 merged to master on 2026-09-23 (neither in 4.7). The firmware string
-  is "SmallFastDrone V4.7.1" again (Local work).
+- Shipping: `SmallFastDrone-4.7.1-beta` = refresh7, promoted 2026-09-28 at
+  `57093e0cb4`, 310 planned commits on base `a5eb325674`. **Not yet pushed**:
+  `origin/SmallFastDrone-4.7.1-beta` is still refresh6's `b4c5a092e7`, and the
+  push is a force push needing `/prepare-for-push SmallFastDrone-4.7.1-beta`
+  on `origin`. The refresh6 beta is kept as `SmallFastDrone-4.7.1.6-beta` and
+  holds everything `origin` has; the refresh5 beta as `.5-beta`.
+  Copter, plane, heli and sub build. SFD set 77 of 78, 0 crashes, the one
+  failure TerrainOffsetGroundEffectRecovery for its designed reason (mean
+  +0.273 m). DataFlashErase is resolved ("DataFlashErase" below). It carries
+  #34292 at `2f411ad1c4`, the firmware name "SmallFastDrone V4.7.1" (Local
+  work), and #33498 and #34432 as merged to master, not in 4.7.
+- Owed to the next refresh: PR heads moved on 2026-09-29, after the promotion.
+  Every open PR in prs.txt was rebased onto master that day; beyond the rebase
+  these changed code the beta carries:
+  - #34456 `0b1f1fb7ff`: a lane selection that cannot be made is refused
+    before the source set changes, `set_posvelyaw_source_set()` returns it,
+    RC stops announcing it and MAVLink returns FAILED; `EK3_PRIMARY` is set
+    with `set_and_notify()`. The SFD boards set `EK3_OPTIONS` bit 1, so the
+    armed refusal does not bite in normal flying.
+  - #33569 `d5eacd52fd`: `@Range` 1 40 to match the floor. #34361
+    `a78f5f410b`: the no-flow getHAGL test and docs.
+  - #30980 `eb73dccad2`: compassmot drives the motors with or without the rate
+    thread, and compassmot and the motor test refuse each other.
+  - #32471 `c9f68beab8`: the hover Z-bias learner is re-seeded on arming and
+    disarm saves only when learning ran; #32473 `dbf7c6ed12` restacked on it.
+  - #33568 `02faf4127d`: `&& !gpsVelUsed` on the fall back to relative aiding.
+  - #32514 `b1743055b1`: redesigned. The EKF failsafe expects a position only
+    where the mode or the source set needs one (new
+    `AP_AHRS::has_horiz_pos_vel_source()`); the old gate reset is gone.
+  - #34292 `2714d632d1`: `= 0` defaults on the new `minHeight` arguments (each
+    commit now builds), Peter's comments, and FlowFocusHoldAfterLanding flown
+    with and without baro ground effect against true height.
+  - #32398, #32401, #31274: commits split per module; #31274's
+    `are_motors_running()` gains `max_error_rate = 0.0f`.
+  New: #34533 (SIM_FLOW_OFS split out of #34292; #34292 and #33484 still carry
+  the two commits patch-identically until it merges).
 - `upstream/ArduPilot-4.7` is 6 commits past the base (AP_HAL_Linux CAN fix,
   ArduSub guided/terrain, a Sub scripting binding). None touches SFD code, so the
   base was not rebuilt onto it.

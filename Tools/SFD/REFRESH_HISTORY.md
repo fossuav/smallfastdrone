@@ -7,6 +7,38 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-09-28/29 - refresh7 promoted, then every open PR rebased
+
+refresh7 was brought up to #34292's `2f411ad1c4` and promoted to the beta at
+`57093e0cb4` (refresh6 kept as `.6-beta`); the beta has not been pushed yet.
+DataFlashErase, open on refresh7, came from #34363 taking master's rewrite of
+the test (from #30956): on 4.7 it failed to arm because 4.7's wait_armed()
+waits for a heartbeat first, then dropped about 240 log messages, then missed
+master's calibrated sizes (689 kB against a 1000 kB floor). Two #30956 commits
+(`11093ee6bc`, `ad1ce89ce3`) and 4.7's own test body fixed it; recorded under
+"DataFlashErase" in REFRESH_NOTES. The firmware string went back to
+"SmallFastDrone V4.7.1"; the 4.7.1 base had lost 4.7.0's.
+
+On 2026-09-29 every open PR in prs.txt was rebased onto master, 24 in all, and
+the six with conflicts resolved: #32471's covariance writes had to become
+`Pmut` (master made `P` const), #32768 met #34432's ground effect guard in
+PosVelFusion, and #32238's conflict was only context from a reverted master
+commit. Five had commits that CI's check_branch_conventions rejected and were
+split or reworded. A rerere resolution recorded during an SFD refresh dropped
+a blank line from #34362 on replay, so the later conflict rebases ran with
+rerere off; check a rebase against the pre-rebase patch whenever rerere
+resolved anything.
+
+Review work the same day, each change tested against a check that fails
+without it: #34456 (refusals reported to the caller), #33569 (range floor),
+#34361 (no-flow getHAGL test), #30980 (compassmot with the rate thread,
+CompassMotFastRate new), #32471 (learner re-seeded, save only what was
+learnt), #33568 (`!gpsVelUsed`), #32514 (redesigned) and #34292. For #34292
+the dev call asked whether Rishabh's AGL KF should drive the flow floor; it
+measured worse (123 flow samples fused in the landing hold, 5 with the range
+still fresh, against 0), so the range stays. The per-PR records are in
+`../ardupilot-pr-analysis`.
+
 ## 2026-09-22 - refresh7
 
 Branch `SmallFastDrone-4.7.1-refresh7` on the same base `a5eb325674`, not
