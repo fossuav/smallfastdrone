@@ -2068,6 +2068,15 @@ void NavEKF3::getFilterStatus(nav_filter_status &status) const
     }
 }
 
+bool NavEKF3::getLaneStatus(uint8_t lane, nav_lane_status &status) const
+{
+    if (core == nullptr || lane >= num_cores) {
+        return false;
+    }
+    core[lane].getLaneStatus(status);
+    return true;
+}
+
 // send an EKF_STATUS_REPORT message to GCS
 void NavEKF3::send_status_report(GCS_MAVLINK &link) const
 {
