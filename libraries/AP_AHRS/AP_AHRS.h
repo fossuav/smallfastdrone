@@ -472,6 +472,9 @@ public:
     // set the EKF origin (which is immutable once set).
     bool using_gps_for_pos(void) const;
 
+    // what one EKF lane is navigating on; false unless EKF3 is active and has that lane
+    bool get_ekf_lane_status(uint8_t lane, nav_lane_status &status) const;
+
     // set and save the ALT_M_NSE parameter value
     void set_alt_measurement_noise(float noise);
 
