@@ -3704,6 +3704,16 @@ bool AP_AHRS::using_gps_for_pos(void) const
     return true;
 }
 
+bool AP_AHRS::has_horiz_pos_vel_source(void) const
+{
+#if HAL_NAVEKF3_AVAILABLE
+    if (active_EKF_type() == EKFType::THREE) {
+        return ekf3.EKF3.has_horiz_pos_vel_source();
+    }
+#endif
+    return true;
+}
+
 // set and save the alt noise parameter value
 void AP_AHRS::set_alt_measurement_noise(float noise)
 {
