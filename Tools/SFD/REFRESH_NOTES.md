@@ -46,6 +46,10 @@ reply exists") before acting on it.
   - #32514 `b1743055b1`: redesigned. The EKF failsafe expects a position only
     where the mode or the source set needs one (new
     `AP_AHRS::has_horiz_pos_vel_source()`); the old gate reset is gone.
+  - #32475 `5f333a9acb`: an upward throw needs a position only when
+    THROW_NEXTMODE does (ThrowUpwardNoPositionNextMode); drops unchanged.
+    Without it an upward throw on a no-position THROW_SRC_INI set would not
+    arm.
   - #34292 `2714d632d1`: `= 0` defaults on the new `minHeight` arguments (each
     commit now builds), Peter's comments, and FlowFocusHoldAfterLanding flown
     with and without baro ground effect against true height.
