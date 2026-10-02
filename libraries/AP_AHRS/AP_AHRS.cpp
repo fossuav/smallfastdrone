@@ -336,7 +336,7 @@ bool AP_AHRS::get_ekf_lane_status(uint8_t lane, nav_lane_status &status) const
 {
 #if HAL_NAVEKF3_AVAILABLE
     // configured rather than active: the lanes keep running while AHRS has fallen back to DCM
-    if (configured_ekf_type() == EKFType::THREE && ekf3.started) {
+    if (configured_ekf_type() == EKFType::THREE && _ekf3_started) {
         return EKF3.getLaneStatus(lane, status);
     }
 #endif
