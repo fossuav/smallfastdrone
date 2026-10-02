@@ -171,9 +171,9 @@ void NavEKF3_core::setWindMagStateLearningMode()
         updateStateIndexLim();
 
         // set the initial covariance values
-        Pmut[13][13] = sq(ACCEL_BIAS_LIM_SCALER * frontend->_accBiasLim * dtEkfAvg);
-        Pmut[14][14] = P[13][13];
-        Pmut[15][15] = P[13][13];
+        P[13][13] = sq(ACCEL_BIAS_LIM_SCALER * frontend->_accBiasLim * dtEkfAvg);
+        P[14][14] = P[13][13];
+        P[15][15] = P[13][13];
     }
 
     // While the vehicle holds the accel bias inhibit, ConstrainVariances floors
@@ -184,9 +184,9 @@ void NavEKF3_core::setWindMagStateLearningMode()
     // than one floored across an arbitrarily long disarmed period.
     const bool vehicleInhibitAccelBias = frontend->getInhibitAccelBiasLearning();
     if (prevVehicleInhibitAccelBias && !vehicleInhibitAccelBias && !inhibitDelVelBiasStates) {
-        Pmut[13][13] = sq(ACCEL_BIAS_LIM_SCALER * frontend->_accBiasLim * dtEkfAvg);
-        Pmut[14][14] = P[13][13];
-        Pmut[15][15] = P[13][13];
+        P[13][13] = sq(ACCEL_BIAS_LIM_SCALER * frontend->_accBiasLim * dtEkfAvg);
+        P[14][14] = P[13][13];
+        P[15][15] = P[13][13];
     }
     prevVehicleInhibitAccelBias = vehicleInhibitAccelBias;
 
