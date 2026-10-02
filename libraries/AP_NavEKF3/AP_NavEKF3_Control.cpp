@@ -203,9 +203,9 @@ void NavEKF3_core::setWindMagStateLearningMode()
     const bool vehicleInhibitAccelBias = frontend->getInhibitAccelBiasLearning();
     vehicleInhibitAccelBiasArmedOnly = motorsArmed && (vehicleInhibitAccelBiasArmedOnly || !prevVehicleInhibitAccelBias);
     if (prevVehicleInhibitAccelBias && !vehicleInhibitAccelBias && !inhibitDelVelBiasStates && !vehicleInhibitAccelBiasArmedOnly) {
-        Pmut[13][13] = sq(ACCEL_BIAS_LIM_SCALER * frontend->_accBiasLim * dtEkfAvg);
-        Pmut[14][14] = P[13][13];
-        Pmut[15][15] = P[13][13];
+        P[13][13] = sq(ACCEL_BIAS_LIM_SCALER * frontend->_accBiasLim * dtEkfAvg);
+        P[14][14] = P[13][13];
+        P[15][15] = P[13][13];
     }
     prevVehicleInhibitAccelBias = vehicleInhibitAccelBias;
 
