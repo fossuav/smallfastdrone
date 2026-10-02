@@ -100,6 +100,7 @@ void NavEKF3_core::readRangeFinder(void)
 
                 // limit the measured range to be no less than the on-ground range
                 rangeDataNew.rng = MAX(storedRngMeas[sensorIndex][midIndex],rngOnGnd);
+                rangeDataNew.onFloor = storedRngMeas[sensorIndex][midIndex] <= rngOnGnd;
 
                 // get position in body frame for the current sensor
                 rangeDataNew.sensor_idx = sensorIndex;
