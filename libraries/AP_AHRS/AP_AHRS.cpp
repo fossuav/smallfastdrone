@@ -336,7 +336,7 @@ bool AP_AHRS::get_ekf_lane_status(uint8_t lane, nav_lane_status &status) const
 {
 #if HAL_NAVEKF3_AVAILABLE
     if (active_EKF_type() == EKFType::THREE) {
-        return ekf3.EKF3.getLaneStatus(lane, status);
+        return EKF3.getLaneStatus(lane, status);
     }
 #endif
     return false;
@@ -3720,7 +3720,7 @@ bool AP_AHRS::has_horiz_pos_vel_source(void) const
 {
 #if HAL_NAVEKF3_AVAILABLE
     if (active_EKF_type() == EKFType::THREE) {
-        return ekf3.EKF3.has_horiz_pos_vel_source();
+        return EKF3.has_horiz_pos_vel_source();
     }
 #endif
     return true;
