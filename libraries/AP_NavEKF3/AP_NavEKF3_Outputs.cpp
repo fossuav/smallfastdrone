@@ -339,8 +339,10 @@ bool NavEKF3_core::getHAGL(float &HAGL) const
     }
 #endif
 #if EK3_FEATURE_OPTFLOW_SRTM
-    // aged here rather than by terrain_srtm_alt_valid, which only updates while flow is fusing
-    if (!gndOffsetValid && (terrain_srtm_alt_ms != 0) &&
+    // aged here rather than by terrain_srtm_alt_valid, which only updates while flow is fusing.
+    // The option is checked here because the terrain height now reaches the core without it
+    if (frontend->option_is_enabled(NavEKF3::Option::OptflowMayUseTerrainAlt) &&
+        !gndOffsetValid && (terrain_srtm_alt_ms != 0) &&
         ((imuSampleTime_ms - terrain_srtm_alt_ms) < TERRAIN_SRTM_ALT_TIMEOUT_MS)) {
         // terrain_srtm_alt is measured up from the public origin, so pair it with the
         // position getPosD reports against that same origin, not the local one
