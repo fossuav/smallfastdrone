@@ -336,8 +336,8 @@ bool AP_AHRS::get_ekf_lane_status(uint8_t lane, nav_lane_status &status) const
 {
 #if HAL_NAVEKF3_AVAILABLE
     // configured rather than active: the lanes keep running while AHRS has fallen back to DCM
-    if (configured_ekf_type() == EKFType::THREE && ekf3.started) {
-        return ekf3.EKF3.getLaneStatus(lane, status);
+    if (configured_ekf_type() == EKFType::THREE && _ekf3_started) {
+        return EKF3.getLaneStatus(lane, status);
     }
 #endif
     return false;
@@ -3721,7 +3721,7 @@ bool AP_AHRS::configured_to_use_horizontal_position_or_velocity_source(void) con
 {
 #if HAL_NAVEKF3_AVAILABLE
     if (active_EKF_type() == EKFType::THREE) {
-        return ekf3.EKF3.has_horiz_pos_vel_source();
+        return EKF3.has_horiz_pos_vel_source();
     }
 #endif
     return true;
