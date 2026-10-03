@@ -17,26 +17,30 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` = refresh8, promoted 2026-10-02 from
-  `SmallFastDrone-4.7.2-refresh8` (worktree `../sfd-refresh8`), on base
-  `SmallFastDrone-4.7-base` rebuilt on 4.7.2-beta1 at `ec107ee728` (the 4.7.1
-  base is kept as `SmallFastDrone-4.7-base.4`). 316 planned commits. Adds
-  #34543, #34583 and #34584; drops #33780, #33988, #34122 and #34360, which
-  4.7.2 carries. Copter, plane, heli and sub build. SFD set on the final
-  binary: 81 of 83 (TakeoffCheck joined the set with its Copter override).
-  TerrainOffsetGroundEffectRecovery fails for its designed reason (+0.288 m);
-  EK3_NoGPSLeakWhenNotSource missed its "ekf3 imu0 initialised" statustext
-  once and passed in the first full run and 3 of 3 alone.
-- **Not pushed.** `SmallFastDrone-4.7.2-beta` is new on `origin`; the base push
-  is a force push (it was rebuilt, not advanced). Both need
-  `/prepare-for-push`. From now on promote with
-  `refresh.sh promote SmallFastDrone-4.7.2-beta`.
-- `SmallFastDrone-4.7.1-beta` stays as refresh7 (plus Tools commits), not
-  pushed; `origin` still has refresh6's `b4c5a092e7` for it.
-- Topped up 2026-10-02 to #33478's `1b6f63bff1` (the notes' top-up recipe:
-  the PR's new own diff replayed on its old merge-base, the code delta landed
-  on the beta). SFD set 81 of 84 before the test fix below, then #33478's three
-  tests pass.
+- Built: `SmallFastDrone-4.7.2-refresh9` (worktree `../sfd-refresh9`),
+  2026-10-03, on the same base (`ec107ee728`, 4.7.2-beta1). 307 planned
+  commits. Built after 22 PRs were rebased onto master on 2026-10-03 (below),
+  and takes the SFD-O4 field fixes from the PR heads (#32514, #33507 on #34457)
+  rather than the beta's local copies. Copter, plane, heli and sub build. SFD
+  set 84 of 85, the one failure TerrainOffsetGroundEffectRecovery for its
+  designed reason (+0.275 m). **Not promoted** at the time of writing.
+- Code against the shipping beta differs only where the beta was stale:
+  `NavEKF3::getOriginLLH()` keeps the `common_origin_valid` early return
+  (current #32768; refresh8 had #32972's old copy of that commit, which dropped
+  it), and the AGL KF coast stop gains #33507's
+  `EK3_FEATURE_RANGEFINDER_MEASUREMENTS` guard.
+- Rebased onto master 2026-10-03 and force-pushed: #32270 #32514 #34361 #34363
+  #34362 #32471 #32473 #34457 #33507 #32768 #32972 #30980 #34209 #33568 #34292
+  #34210 #34543 #34456 #32553 #32475 #33484 #33318. The conflicts were master's
+  CI bucket rebalance (`0d59c702e7`, Copter tests1c/1d and the QuadPlane bucket
+  classes); each PR's own registrations went back in the list it used. Code
+  unchanged except #33318 (merged #33569's tunable gain onto its AGL KF
+  height), #33484 (covariance writes through `Pmut`, folded into the commits
+  that add them) and #32972 (restacked on current #32768 with only its own five
+  commits, dropping ten stale copies). #32473 sits on #32471 and #33507 on
+  #34457. #32232 (rishabsingh3003) also conflicts and is theirs to rebase.
+- Shipping: `SmallFastDrone-4.7.2-beta` = refresh8 plus the #33478 top-up and
+  the 2026-10-02 field fixes, pushed at `09f48f04ea`.
 - Behaviour change to decide on: #33585 dropped EK3_OPTIONS bit 5 (flat ground
   above the range finder). The fallback is now always on, with no option to
   turn it off, so no `sfd_defaults.parm` line can keep the old behaviour. No SFD
@@ -46,19 +50,10 @@ reply exists") before acting on it.
   returning early without bit 2, which #33585 removes; EK3_GetHaglTerrainAlt
   and TouchdownGroundEffectAlt both failed without it. Whichever of the two
   merges second needs it.
-- Field fixes from SFD-O4 log22-30 (2026-10-02), local work on the beta and
-  ported to their PRs on local branches, not pushed: `caafe6151b` (AGL KF
-  floor gate on the reading before offset correction) as #33507
-  `pr33507-port` `06dd0ef90e` + test, restacked on the new #34457;
-  `9cc29cd372` (AGL KF hold after landing) as #34457 `pr34457-port`
-  `7568122335` + test; `f547e6f7bd` (no position expected while landed) as
-  #32514 `pr32514-port` `8d4ffc52a8` + test. Once pushed, the next refresh
-  takes them from the PR heads and drops the beta's copies. A /pr-review
-  round reworked all three the same day and a second replaced #34457's
-  landed hold with a coast stop; the beta carries the final versions
-  (`c79168dc9b`, `b433fdbf3d`). Pushed 2026-10-02: #32514 `591e6bfe4b`,
-  #34457 `18276345bf`, #33507 `5963bd0583`. Record:
-  `../analysis/logs/log22-30_sfdo4.md`.
+- The SFD-O4 log22-30 field fixes (2026-10-02) are in their PR heads and come
+  with the cherry-pick from refresh9 on; the beta's local copies (`caafe6151b`,
+  `9cc29cd372`, `f547e6f7bd`, `82f7660a18`, `130891e901`, `c79168dc9b`,
+  `b433fdbf3d`) are not re-folded. Record: `../analysis/logs/log22-30_sfdo4.md`.
 
 ### Fixes made on refresh6, to port to their PRs
 
@@ -508,11 +503,16 @@ AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
   `#endif // MODE_ALTHOLD_ENABLED` in mode_althold.cpp, and the
   `#if MODE_VALT_ENABLED && !MODE_ALTHOLD_ENABLED` #error block its head now
   adds to Copter.h (refresh7's build break).
+- **GPS fix enum (again)** - the rebased #32768 heads bring master's
+  `AP_GPS_FixType::FIX_3D` into EKF2's and EKF3's PosVelFusion cleanly, so
+  rerere no longer covers it: `AP_NavEKF2/3: use 4.7's GPS fix enum in the
+  datum reset PRs`.
 - **zeroStatesVarCov()** - no longer needed: 4.7.2 has master's
   `zeroStatesVarCov()`. refresh8 reverts refresh7's `bdce18e96c`; do not
   re-pick it.
-- **Pmut -> P** - master renamed the covariance matrix `Pmut`; #32471's and
-  #32473's accel bias variance writes in `setWindMagStateLearningMode()` come
+- **Pmut -> P** - master renamed the covariance matrix `Pmut`; #33484's flow
+  reset covariance (`AP_NavEKF3: use 4.7's covariance matrix name in the flow
+  reset`), and #32471's and #32473's accel bias variance writes in `setWindMagStateLearningMode()` come
   in as `Pmut[13..15]` (`AP_NavEKF3: use 4.7's covariance matrix name in the
   accel bias PRs`).
 - **More `ekf3.EKF3`** - #32514's `has_horiz_pos_vel_source()` and #34543's
@@ -681,6 +681,13 @@ one because it is master's and costs nothing.
   ours is the newer side. Resolve to ours and let the empty pick be skipped.
 
 ## Phase 2 - tests
+
+refresh9 did not redo the hot-file rebuild. With the base unchanged, it took
+the shipping beta's Tools/autotest whole and replaced only the methods a PR
+changed between its locked head and its new one (compare each PR's own methods
+at both heads, ignoring the tests*() lists). That is far cheaper than the
+rebuild and keeps every 4.7 adaptation, but it trusts the beta's files; after a
+base change or a large test rework, rebuild as below.
 
 1. `refresh.sh tests` replays the list keeping only autotest hunks and keeps
    both sides on collisions. Fine where PRs touch disjoint code.

@@ -7,6 +7,23 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-03 - 22 PRs rebased onto master, refresh9
+
+Master's Copter CI bucket rebalance left 23 of the stack's PRs conflicting, all
+on test registrations bar #33318 (against #33569's merge). The 22 of them that
+are ours were re-stacked by cherry-pick in a scratch worktree, checked (same
+code, every registered test defined, every new test registered, copter builds)
+and force-pushed with leases on the PR heads. #33484 needed `Pmut` for master's
+const `P`; #32972 dropped its stale copies of #32768.
+
+refresh9 on the unchanged base then took the field fixes from the PR heads.
+Ten code-pass stops, all in shapes seen before except #33507's new floor gate,
+whose before-takeoff branch #32232 had removed (the flag then rides on #32232's
+substituted reading). Tests carried forward from the beta with the moved heads'
+methods replaced. 84 of 85. It also undid refresh8's loss of the
+`common_origin_valid` early return in getOriginLLH, which #32972's stale copy
+had brought in.
+
 ## 2026-10-02 - #33478 topped up on the 4.7.2 beta
 
 #33478 moved to `1b6f63bff1` (velD fusion gated on a settled AGL KF velocity
