@@ -241,6 +241,7 @@ class TestBuildOptions(object):
             'AP_RANGEFINDER_ENABLED',  # only at vehicle level ATM
             'HAL_PERIPH_SUPPORT_LONG_CAN_PRINTF',  # no symbol
             'AP_DRONECAN_VOLZ_FEEDBACK_ENABLED',  # broken, no subscriber
+            'AP_DRONECAN_LOG_CIRCUIT_STATUS_ENABLED',  # no symbol
             # Baro drivers either come in because you have
             # external-probing enabled or you have them specified in
             # your hwdef.  If you're not probing and its not in your
@@ -279,17 +280,21 @@ class TestBuildOptions(object):
             'AP_COMPASS_AK8963_ENABLED',  # probed on a board-by-board basis, not on CubeOrange for example
             'AP_COMPASS_LSM303D_ENABLED',  # probed on a board-by-board basis, not on CubeOrange for example
             'AP_BARO_THST_COMP_ENABLED',  # compiler is optimising this symbol away
+            'AP_GPS_DEBUG_LOGGING_ENABLED',  # must have a backend compiled in to be present
         ])
         if target.lower() != "copter":
+            feature_define_whitelist.add('MODE_ALTHOLD_ENABLED')
             feature_define_whitelist.add('MODE_ZIGZAG_ENABLED')
             feature_define_whitelist.add('MODE_SYSTEMID_ENABLED')
             feature_define_whitelist.add('MODE_SPORT_ENABLED')
             feature_define_whitelist.add('MODE_FOLLOW_ENABLED')
             feature_define_whitelist.add('MODE_TURTLE_ENABLED')
+            feature_define_whitelist.add('MODE_VALT_ENABLED')
             feature_define_whitelist.add('MODE_GUIDED_NOGPS_ENABLED')
             feature_define_whitelist.add('MODE_FLOWHOLD_ENABLED')
             feature_define_whitelist.add('MODE_FLIP_ENABLED')
             feature_define_whitelist.add('MODE_BRAKE_ENABLED')
+            feature_define_whitelist.add('MODE_THROW_ENABLED')
             feature_define_whitelist.add('AP_TEMPCALIBRATION_ENABLED')
             feature_define_whitelist.add('AC_PAYLOAD_PLACE_ENABLED')
             feature_define_whitelist.add('AP_AVOIDANCE_ENABLED')
@@ -301,7 +306,9 @@ class TestBuildOptions(object):
             feature_define_whitelist.add('AP_COPTER_ADVANCED_FAILSAFE_ENABLED')
             feature_define_whitelist.add('AP_INERTIALSENSOR_FAST_SAMPLE_WINDOW_ENABLED')
             feature_define_whitelist.add('AP_COPTER_AHRS_AUTO_TRIM_ENABLED')
+            feature_define_whitelist.add('AP_COPTER_CUSTOMCONTROL_ENABLED')
             feature_define_whitelist.add('AP_RC_TRANSMITTER_TUNING_ENABLED')
+            feature_define_whitelist.add('AP_AVOIDANCE_ALTHOLD_ENABLED')
 
         if target.lower() in ['antennatracker', 'blimp', 'sub', 'plane', 'copter']:
             # plane has a dependency for AP_Follow which is not
@@ -328,6 +335,7 @@ class TestBuildOptions(object):
             feature_define_whitelist.add('AP_PLANE_GLIDER_PULLUP_ENABLED')
             feature_define_whitelist.add('AP_QUICKTUNE_ENABLED')
             feature_define_whitelist.add('AP_PLANE_SYSTEMID_ENABLED')
+            feature_define_whitelist.add('AP_PLANE_CUSTOMCONTROL_ENABLED')
 
         if target.lower() not in ["plane", "copter"]:
             feature_define_whitelist.add('HAL_ADSB_ENABLED')
