@@ -987,11 +987,11 @@ bool NavEKF3_core::ResetVelocityToFlow(const of_elements &ofDataDelayed, ftype r
     const ftype measVarY = flowVar + sq(fx) * rangeVar + sq(prevTnb.b.z) * vertVar;
     const ftype measCovXY = prevTnb.a.z * prevTnb.b.z * vertVar - fy * fx * rangeVar;
     zeroStatesVarCov(4, 5);
-    Pmut[4][4] = (sq(prevTnb.b.y) * measVarX - 2.0f * prevTnb.b.y * prevTnb.a.y * measCovXY +
+    P[4][4] = (sq(prevTnb.b.y) * measVarX - 2.0f * prevTnb.b.y * prevTnb.a.y * measCovXY +
                sq(prevTnb.a.y) * measVarY) / sq(det);
-    Pmut[5][5] = (sq(prevTnb.b.x) * measVarX - 2.0f * prevTnb.b.x * prevTnb.a.x * measCovXY +
+    P[5][5] = (sq(prevTnb.b.x) * measVarX - 2.0f * prevTnb.b.x * prevTnb.a.x * measCovXY +
                sq(prevTnb.a.x) * measVarY) / sq(det);
-    Pmut[4][5] = Pmut[5][4] = ((prevTnb.b.y * prevTnb.a.x + prevTnb.a.y * prevTnb.b.x) * measCovXY -
+    P[4][5] = P[5][4] = ((prevTnb.b.y * prevTnb.a.x + prevTnb.a.y * prevTnb.b.x) * measCovXY -
                          prevTnb.b.y * prevTnb.b.x * measVarX -
                          prevTnb.a.y * prevTnb.a.x * measVarY) / sq(det);
 
