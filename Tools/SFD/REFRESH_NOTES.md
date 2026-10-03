@@ -23,7 +23,8 @@ reply exists") before acting on it.
   and takes the SFD-O4 field fixes from the PR heads (#32514, #33507 on #34457)
   rather than the beta's local copies. Copter, plane, heli and sub build. SFD
   set 84 of 85, the one failure TerrainOffsetGroundEffectRecovery for its
-  designed reason (+0.275 m). **Not promoted** at the time of writing.
+  designed reason (+0.275 m). Promoted to `SmallFastDrone-4.7.2-beta` 2026-10-03;
+  the previous beta (refresh8 + field fixes) is kept as `.2-beta`.
 - Code against the shipping beta differs only where the beta was stale:
   `NavEKF3::getOriginLLH()` keeps the `common_origin_valid` early return
   (current #32768; refresh8 had #32972's old copy of that commit, which dropped
@@ -40,7 +41,7 @@ reply exists") before acting on it.
   commits, dropping ten stale copies). #32473 sits on #32471 and #33507 on
   #34457. #32232 (rishabsingh3003, maintainer edits allowed) was rebased the
   same way with permission, to `8b490c6438`.
-- Shipping: `SmallFastDrone-4.7.2-beta` = refresh8 plus the #33478 top-up and
+- Previously shipped (`SmallFastDrone-4.7.2.2-beta`): refresh8 plus the #33478 top-up and
   the 2026-10-02 field fixes, pushed at `09f48f04ea`.
 - Behaviour change to decide on: #33585 dropped EK3_OPTIONS bit 5 (flat ground
   above the range finder). The fallback is now always on, with no option to
