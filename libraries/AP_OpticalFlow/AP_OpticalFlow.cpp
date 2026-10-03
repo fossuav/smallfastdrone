@@ -112,7 +112,7 @@ const AP_Param::GroupInfo AP_OpticalFlow::var_info[] = {
     // @Increment: 0.01
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_HGT_MIN", 8, AP_OpticalFlow, _height_min, 0.0f),
+    AP_GROUPINFO("_HGT_MIN", 9, AP_OpticalFlow, _height_min, 0.0f),
 
     AP_GROUPEND
 };
