@@ -148,7 +148,7 @@ private:
         bool     takeoff_pos_ne_valid;
         Vector2f last_pos_ne_m;     // EKF-origin XY on the previous update, to measure a position reset
         bool     last_pos_ne_valid;
-        uint16_t ne_reset_count;    // AHRS NE position reset count at the previous update
+        uint32_t ne_reset_ms;       // time of the last AHRS NE position reset seen by the previous update
     } _state;
 };
 

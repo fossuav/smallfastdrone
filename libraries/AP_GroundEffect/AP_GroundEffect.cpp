@@ -105,12 +105,13 @@ void AP_GroundEffect::update(bool armed, bool land_complete, bool throttle_up)
 
     // an EKF position reset moves the position without the vehicle moving, so move the
     // takeoff point with it, or a reset could carry the drift test across its threshold
-    const uint16_t ne_reset_count = ahrs.get_position_NE_reset_count();
-    if (ne_reset_count != _state.ne_reset_count) {
+    Vector2f ne_reset_m;
+    const uint32_t ne_reset_ms = ahrs.getLastPosNorthEastReset(ne_reset_m);
+    if (ne_reset_ms != _state.ne_reset_ms) {
         if (have_pos_ne && _state.last_pos_ne_valid) {
             _state.takeoff_pos_ne_m += pos_ne_m - _state.last_pos_ne_m;
         }
-        _state.ne_reset_count = ne_reset_count;
+        _state.ne_reset_ms = ne_reset_ms;
     }
     _state.last_pos_ne_m = pos_ne_m;
     _state.last_pos_ne_valid = have_pos_ne;
