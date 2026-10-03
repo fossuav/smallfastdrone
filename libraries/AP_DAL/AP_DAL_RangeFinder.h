@@ -71,6 +71,9 @@ public:
 
     const Vector3f &get_pos_offset() const { return _RRNI.pos_offset; }
 
+    // as AP_RangeFinder_Backend::on_ground(), from the logged reading and the downward ground clearance
+    bool on_ground() const;
+
     // system time of the backend's last reading, if AP_DAL_RangeFinder::have_reading_time()
     uint32_t last_reading_ms() const { return _RRNJ.last_reading_ms; }
 
