@@ -38,7 +38,8 @@ reply exists") before acting on it.
   height), #33484 (covariance writes through `Pmut`, folded into the commits
   that add them) and #32972 (restacked on current #32768 with only its own five
   commits, dropping ten stale copies). #32473 sits on #32471 and #33507 on
-  #34457. #32232 (rishabsingh3003) also conflicts and is theirs to rebase.
+  #34457. #32232 (rishabsingh3003, maintainer edits allowed) was rebased the
+  same way with permission, to `8b490c6438`.
 - Shipping: `SmallFastDrone-4.7.2-beta` = refresh8 plus the #33478 top-up and
   the 2026-10-02 field fixes, pushed at `09f48f04ea`.
 - Behaviour change to decide on: #33585 dropped EK3_OPTIONS bit 5 (flat ground
