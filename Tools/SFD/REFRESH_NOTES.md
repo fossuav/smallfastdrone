@@ -17,7 +17,18 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Built: `SmallFastDrone-4.7.2-refresh9` (worktree `../sfd-refresh9`),
+- Built: `SmallFastDrone-4.7.2-refresh10` (worktree `../sfd-refresh10`),
+  2026-10-04, on the same base (`ec107ee728`). 364 planned commits: the 16 PR
+  heads reworked for the 2026-10-03 AI reviews, plus #34601 and #33639, minus
+  #34361 and #33497 (both closed). Copter, plane, heli and sub build. SFD set
+  90 of 90 (OpticalFlowFallbackKeepsAbsolute flaked once on harness waits under
+  suite load, then passed twice alone). TerrainOffsetGroundEffectRecovery now
+  passes, so its disable is gone; #33568's OpticalFlowFallbackHeightLimit runs
+  here because #34380 is in the stack, though upstream disables it until #34380
+  lands. Not yet promoted.
+- #33639 merged to master on 2026-10-04. It stays in prs.txt until 4.7 carries
+  it, like the other merged PRs.
+- Previously built: `SmallFastDrone-4.7.2-refresh9` (worktree `../sfd-refresh9`),
   2026-10-03, on the same base (`ec107ee728`, 4.7.2-beta1). 307 planned
   commits. Built after 22 PRs were rebased onto master on 2026-10-03 (below),
   and takes the SFD-O4 field fixes from the PR heads (#32514, #33507 on #34457)
@@ -47,11 +58,6 @@ reply exists") before acting on it.
   above the range finder). The fallback is now always on, with no option to
   turn it off, so no `sfd_defaults.parm` line can keep the old behaviour. No SFD
   default set bit 5.
-- Port to #34361: `AP_NavEKF3: serve the terrain database from getHAGL only
-  with EK3_OPTIONS bit 2` (refresh8). #34361 relied on `writeTerrainData()`
-  returning early without bit 2, which #33585 removes; EK3_GetHaglTerrainAlt
-  and TouchdownGroundEffectAlt both failed without it. Whichever of the two
-  merges second needs it.
 - The SFD-O4 log22-30 field fixes (2026-10-02) are in their PR heads and come
   with the cherry-pick from refresh9 on; the beta's local copies (`caafe6151b`,
   `9cc29cd372`, `f547e6f7bd`, `82f7660a18`, `130891e901`, `c79168dc9b`,
@@ -530,6 +536,15 @@ AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
 - **ArduCopter surface tracking** - a 3-way artifact once dropped master's
   `get_pilot_speed_*_adjusted_ms()` into #32471's commit; 4.7 has no callers.
   Delete if it recurs.
+- **AP_GroundEffect reset accessor** - #34362 follows EKF position resets with
+  master's `get_position_NE_reset_count()`, which 4.7's AHRS lacks. Detect the
+  reset by the change in `getLastPosNorthEastReset()`'s time instead
+  (`AP_GroundEffect: follow position resets with 4.7's reset time accessor`).
+- **SITL thread timing** - backport master's `ec488ac50e` and `22aa584f33`
+  (`usleep(10)` in `SITL_State::wait_clock()`). 4.7's 1 ms poll caps the logger
+  I/O thread at one 4 kB block per real millisecond, and #34601's
+  RateThreadPostFilterGyroLog then drops two thirds of its GYR samples (it fails
+  on plain 4.7 plus #34601, passes on master). Drop once 4.7 has them.
 
 ## Parameter indices
 
@@ -543,8 +558,7 @@ moves, and move the newcomer:
 | THROW_DROP_AG | 21 | #32475 takes 25 |
 | VALT_POS_EXPO | 29 | #32270 takes 25 |
 | GNDEFF_ subgroup | 24 | from merged #32472, untouched |
-| FLOW_HF_RATEF (AP_OpticalFlow) | 8 | #33497 and #34292 both take 8 |
-| FLOW_HGT_MIN (AP_OpticalFlow) | 9 | |
+| FLOW_HGT_MIN (AP_OpticalFlow) | 9 | #34292 takes 8, which shipped betas gave to FLOW_HF_RATEF (#33497, dropped in refresh10); keep 8 empty so a saved FLOW_HF_RATEF never loads as FLOW_HGT_MIN |
 | SIM_SONAR_OFFSET (SITL var_info3) | 57 | local backport; master has it in its own group |
 
 Check with `check_param_tables.py`, never by eye. A duplicate index builds
