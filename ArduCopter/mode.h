@@ -969,6 +969,9 @@ public:
     bool is_autopilot() const override { return false; }
     bool crash_check_enabled() const override { return false; }
 
+    // mode the flip was started from, which it returns to when complete
+    Number orig_mode_number() const { return orig_control_mode; }
+
 protected:
 
     const char *name() const override { return "Flip"; }
