@@ -25,7 +25,13 @@ reply exists") before acting on it.
   suite load, then passed twice alone). TerrainOffsetGroundEffectRecovery now
   passes, so its disable is gone; #33568's OpticalFlowFallbackHeightLimit runs
   here because #34380 is in the stack, though upstream disables it until #34380
-  lands. Not yet promoted.
+  lands. Topped up the same day with the 2026-10-04 heads of #33585 (brief
+  range return undone), #33484, #32553 and #34380, and the ground effect dwell
+  bound moved to 0.42 m (see the history). 90 of 90 again, Replay passing alone
+  after its known stall.
+- Owed to #32553: the dwell bound of 0.42 m (`autotest: bound the ground effect
+  dwell error between the two cases`). On this stack the hover settles lower in
+  the band and 0.35 m is straddled.
 - #33639 merged to master on 2026-10-04. It stays in prs.txt until 4.7 carries
   it, like the other merged PRs.
 - Previously built: `SmallFastDrone-4.7.2-refresh9` (worktree `../sfd-refresh9`),

@@ -31,6 +31,21 @@ millisecond; master's `ec488ac50e` made it `usleep(10)`. Backported with its
 comment follow-up, the test logs every sample (66618, none repeated), and a
 full rerun is 90 of 90 bar one harness flake that passed twice alone.
 
+Topped up later the same day with the heads that answered the overnight AI
+reviews: #33585's brief range return is now saved and undone, #33484 and
+#32553 have wording and test changes, and #34380 is rebased onto #33585
+unchanged. Code by cherry-pick, tests by the method carry. TerrainOffsetGround
+EffectRecovery then failed at 0.37 m against its 0.35 m bound. On this stack it
+reads 0.33-0.37 m with the reopen and 0.57-0.60 m without, against 0.26-0.28 m
+and 0.49-0.51 m on #32553 alone and on the plain base: the reopen works as well,
+but both cases sit about 0.08 m higher. Not #34362 (#32553 with it reads as on
+master) and not the arm-time datum reset (0.57 m with it disabled). The flights
+show the stack settling lower in the dwell, 0.46-0.62 m against 0.58-0.83 m on
+the range finder, deeper in the simulated band, with its EKF height closer to
+the range finder during the takeoff. The commit that does it was not found: the
+commits in between do not build on their own. The bound is now 0.42 m, which
+separates both cases with margin.
+
 ## 2026-10-03 - 22 PRs rebased onto master, refresh9
 
 Master's Copter CI bucket rebalance left 23 of the stack's PRs conflicting, all
