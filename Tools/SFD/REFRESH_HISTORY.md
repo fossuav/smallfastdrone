@@ -34,8 +34,9 @@ full rerun is 90 of 90 bar one harness flake that passed twice alone.
 Topped up later the same day with the heads that answered the overnight AI
 reviews: #33585's brief range return is now saved and undone, #33484 and
 #32553 have wording and test changes, and #34380 is rebased onto #33585
-unchanged. Code by cherry-pick, tests by the method carry. TerrainOffsetGround
-EffectRecovery then failed at 0.37 m against its 0.35 m bound. On this stack it
+unchanged. Code by cherry-pick, tests by the method carry.
+TerrainOffsetGroundEffectRecovery then failed at 0.37 m against its 0.35 m
+bound. On this stack it
 reads 0.33-0.37 m with the reopen and 0.57-0.60 m without, against 0.26-0.28 m
 and 0.49-0.51 m on #32553 alone and on the plain base: the reopen works as well,
 but both cases sit about 0.08 m higher. Not #34362 (#32553 with it reads as on
