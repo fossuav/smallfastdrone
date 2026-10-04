@@ -7,6 +7,30 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-04 - refresh10, the AI-review rework
+
+The 16 EKF/flow/baro PRs were reworked for the 2026-10-03 AI reviews and
+pushed (fixups to already-pushed commits went on top, not squashed in).
+refresh10 on the unchanged base takes those heads, adds #34601 and #33639, and
+drops #34361 (redundant with #34362's drift gate; the terrain database is too
+coarse at ground effect heights) and #33497 (closed). 364 planned commits.
+Tests carried from the beta with the moved heads' methods replaced, as in
+refresh9.
+
+Two local fixes besides the usual fixups. #34362's new position-reset tracking
+needs an AHRS reset count 4.7 lacks, so it watches the reset time instead.
+FLOW_HGT_MIN arrived at index 8, FLOW_HF_RATEF's slot in the shipped beta, and
+is pinned back to 9.
+
+SFD set 89 of 90 on the first run: #34601's RateThreadPostFilterGyroLog lost
+two thirds of its GYR samples to dropped log blocks. A/B on this machine: it
+passes on #34601's master head and fails on plain 4.7 plus #34601, so the cause
+is 4.7's SITL, not the stack. 4.7's `SITL_State::wait_clock()` polls with
+`usleep(1000)`, capping the logger I/O thread at one 4 kB block per real
+millisecond; master's `ec488ac50e` made it `usleep(10)`. Backported with its
+comment follow-up, the test logs every sample (66618, none repeated), and a
+full rerun is 90 of 90 bar one harness flake that passed twice alone.
+
 ## 2026-10-03 - 22 PRs rebased onto master, refresh9
 
 Master's Copter CI bucket rebalance left 23 of the stack's PRs conflicting, all
