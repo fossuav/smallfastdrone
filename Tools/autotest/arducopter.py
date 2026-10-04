@@ -17753,7 +17753,9 @@ return update, 100
             raise NotAchievedException("insufficient XKF5 samples in the dwell (%u)" % len(dwell_errors))
         rms = math.sqrt(sum(e * e for e in dwell_errors) / len(dwell_errors))
         self.progress("height above ground error 5-20 s after arming, in the dwell: rms %.2f m" % rms)
-        if rms > 0.35:
+        # about 0.5 m without the reopen and 0.3 m with it; how deep the hover settles in the
+        # band moves both, so the bound sits between them with margin either side
+        if rms > 0.42:
             raise NotAchievedException("height above ground error %.2f m rms in the dwell" % rms)
         if not reopened_in_dwell:
             raise NotAchievedException("terrain offset uncertainty was not reopened in the dwell")
