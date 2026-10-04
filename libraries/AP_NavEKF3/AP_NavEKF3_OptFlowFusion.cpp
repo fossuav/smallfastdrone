@@ -195,6 +195,11 @@ void NavEKF3_core::EstimateTerrainOffset(const of_elements &ofDataDelayed, bool 
     } else {
         inhibitGndState = false;
 
+        if (rangeDataToFuse && flatGndEngaged && !flatGndSaved.valid) {
+            flatGndSaved = {terrainState, Popt, prevPosN, prevPosE, timeAtLastAuxEKF_ms, gndHgtValidTime_ms,
+                            gndKnownNE, terrainAnchorOffset, terrainAnchorValid, lastGoodRngMeas, true};
+        }
+
         // propagate ground position state noise each time this is called using the difference in position since the last observations and an RMS gradient assumption
         // limit distance to prevent intialisation after bad gps causing bad numerical conditioning
         ftype distanceTravelledSq = sq(stateStruct.position[0] - prevPosN) + sq(stateStruct.position[1] - prevPosE);

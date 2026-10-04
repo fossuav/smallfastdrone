@@ -1454,6 +1454,23 @@ private:
     ftype lastGoodRngMeas;          // last range measurement fused into the terrain estimator (m)
     bool flatGndEngaged;            // true while flow navigation continues on the flat-ground assumption
     uint32_t flatGndRngResumeTime_ms; // start of the current unbroken run of valid range measurements, or 0
+    // the terrain estimate the flat-ground fallback was using when range data returned, put
+    // back if the return ends before it ends the fallback
+    struct {
+        ftype terrainState;
+#if EK3_FEATURE_OPTFLOW_FUSION
+        ftype Popt;
+#endif
+        ftype prevPosN;
+        ftype prevPosE;
+        uint32_t timeAtLastAuxEKF_ms;
+        uint32_t gndHgtValidTime_ms;
+        Vector2F gndKnownNE;
+        ftype terrainAnchorOffset;
+        bool terrainAnchorValid;
+        ftype lastGoodRngMeas;
+        bool valid;
+    } flatGndSaved;
     Vector3F delAngBodyOF;          // bias corrected delta angle of the vehicle IMU measured summed across the time since the last OF measurement
     ftype delTimeOF;                // time that delAngBodyOF is summed across
     bool flowFusionActive;          // true when optical flow fusion is active

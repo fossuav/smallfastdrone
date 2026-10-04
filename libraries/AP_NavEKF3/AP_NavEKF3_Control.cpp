@@ -920,26 +920,61 @@ void NavEKF3_core::updateFlatGroundAssumed(void)
     // is used rather than the terrain update time, which a range height source holds still
     if (imuSampleTime_ms - rngValidMeaTime_ms >= 500) {
         flatGndRngResumeTime_ms = 0;
+        if (flatGndSaved.valid) {
+            if (!aboveFlowHgtLimit(flatGndSaved.terrainState - stateStruct.position.z + 1)) {
+                // under the height limit over the ground held, a return that broke off is that
+                // ground come back into range on a descent, so it is kept and ends the fallback
+                flatGndEngaged = false;
+            } else {
+                // a return too short to end the fallback was something passed over, not the ground
+                terrainState = flatGndSaved.terrainState;
+#if EK3_FEATURE_OPTFLOW_FUSION
+                Popt = flatGndSaved.Popt;
+#endif
+                prevPosN = flatGndSaved.prevPosN;
+                prevPosE = flatGndSaved.prevPosE;
+                timeAtLastAuxEKF_ms = flatGndSaved.timeAtLastAuxEKF_ms;
+                gndHgtValidTime_ms = flatGndSaved.gndHgtValidTime_ms;
+                gndKnownNE = flatGndSaved.gndKnownNE;
+                terrainAnchorOffset = flatGndSaved.terrainAnchorOffset;
+                terrainAnchorValid = flatGndSaved.terrainAnchorValid;
+                lastGoodRngMeas = flatGndSaved.lastGoodRngMeas;
+                gndOffsetValid = ((imuSampleTime_ms - gndHgtValidTime_ms) < 5000) ||
+                                 (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER);
+#if EK3_FEATURE_OPTFLOW_AGL_KF
+                // past UpdateAglKf()'s 5 s timeout, so the next range sample re-initialises it
+                // rather than blending from the obstacle
+                aglKfValid = false;
+                lastAglRngFuseTime_ms = imuSampleTime_ms - 5001;
+#endif
+            }
+        }
+        flatGndSaved.valid = false;
     } else if (flatGndRngResumeTime_ms == 0) {
         flatGndRngResumeTime_ms = imuSampleTime_ms;
     }
     if (!frontend->sources.useVelXYSource(AP_NavEKF_Source::SourceXY::OPTFLOW, core_index) ||
         !gndOffsetMeasured || !flowScaleHgtUsable()) {
         flatGndEngaged = false;
+        flatGndSaved.valid = false;
         return;
     }
-    const ftype hagl = terrainState - stateStruct.position.z;
-    // trust the ground height only near where it was last known: over sloping ground the
-    // error grows with distance flown, relative to height above it
-    const ftype flatGndDistFactor = 10;
-    if ((stateStruct.position.xy() - gndKnownNE).length() > flatGndDistFactor * MAX(hagl, 1)) {
-        flatGndEngaged = false;
-        return;
-    }
-    // 1 m of hysteresis once engaged, so baro noise at the limit does not toggle it
-    if (!aboveFlowHgtLimit(hagl + (flatGndEngaged ? 1 : 0))) {
-        flatGndEngaged = false;
-        return;
+    // while a return is pending the terrain state is the returned surface's, so the two checks
+    // below would judge it rather than the ground the fallback was holding
+    if (!flatGndSaved.valid) {
+        const ftype hagl = terrainState - stateStruct.position.z;
+        // trust the ground height only near where it was last known: over sloping ground the
+        // error grows with distance flown, relative to height above it
+        const ftype flatGndDistFactor = 10;
+        if ((stateStruct.position.xy() - gndKnownNE).length() > flatGndDistFactor * MAX(hagl, 1)) {
+            flatGndEngaged = false;
+            return;
+        }
+        // 1 m of hysteresis once engaged, so baro noise at the limit does not toggle it
+        if (!aboveFlowHgtLimit(hagl + (flatGndEngaged ? 1 : 0))) {
+            flatGndEngaged = false;
+            return;
+        }
     }
     // engage only once the range data has gone, so the checks below see why it went, and end
     // once the ground has been measured again without a break for 2 s, so a later loss has to
@@ -947,6 +982,7 @@ void NavEKF3_core::updateFlatGroundAssumed(void)
     if (gndOffsetValid) {
         if ((flatGndRngResumeTime_ms != 0) && (imuSampleTime_ms - flatGndRngResumeTime_ms >= 2000)) {
             flatGndEngaged = false;
+            flatGndSaved.valid = false;
         }
         return;
     }
