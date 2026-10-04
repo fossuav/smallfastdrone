@@ -717,6 +717,7 @@ const AP_Param::GroupInfo NavEKF3::var_info2[] = {
     // @Description: This parameter sets the size of the dead zone that is applied to negative baro height spikes that can occur when taking off or landing when a vehicle with lift rotors is operating in ground effect. Set to about 0.5m less than the amount of negative offset in baro height that occurs just prior to takeoff when lift motors are spooling up. Set to 0 if no ground effect is present. A negative value applies the same dead zone using its magnitude and also raises the baro observation noise in ground effect to at least that many metres, which de-weights the baro more than the default scaling once the magnitude exceeds twice EK3_ALT_M_NSE. Before liftoff a negative value also holds the height at its value from before the motors spooled up in place of using the baro, on copters and VTOL aircraft only.
     // @Range: -10.0 10.0
     // @Increment: 0.5
+    // @Units: m
     // @User: Advanced
     AP_GROUPINFO("GND_EFF_DZ", 7, NavEKF3, _baroGndEffectDeadZone, 4.0f),
 
@@ -965,15 +966,19 @@ void NavEKF3::checkFlowRangeWarning(void)
 */
 void NavEKF3::UpdateFilter(void)
 {
-    // the vehicle sets the accel bias inhibit before logging starts, when the DAL
-    // drops events; a replayable log does not start the cores until it has
-    if (core && _inhibitAccelBiasLearningPending) {
-        if (_inhibitAccelBiasLearning) {
-            dal.log_event3(AP_DAL::Event::setInhibitAccelBiasLearning);
-        } else {
-            dal.log_event3(AP_DAL::Event::unsetInhibitAccelBiasLearning);
-        }
-        _inhibitAccelBiasLearningPending = false;
+    // the vehicle can set the inhibit before logging starts or from another thread, and the
+    // DAL drops an event it cannot write, so log it until the DAL has the current level
+    const bool inhibit = _inhibitAccelBiasLearning;
+    if (core && (inhibit != _inhibitAccelBiasLearningLogged) &&
+        dal.log_event3(inhibit ? AP_DAL::Event::setInhibitAccelBiasLearning :
+                                 AP_DAL::Event::unsetInhibitAccelBiasLearning)) {
+        _inhibitAccelBiasLearningLogged = inhibit;
+    }
+
+    // a selection made before logging starts, or one the logger refused, still has to reach Replay
+    if (sourceSetEventPending &&
+        dal.log_event3(AP_DAL::Event(uint8_t(AP_DAL::Event::setSourceSet0)+sourceSetEvent))) {
+        sourceSetEventPending = false;
     }
 
     dal.start_frame(AP_DAL::FrameType::UpdateFilterEKF3);
@@ -1018,9 +1023,12 @@ void NavEKF3::UpdateFilter(void)
             // a selected source set names the lane that runs it
             user_primary = sourceSetLane;
         } else {
-            // selected before the cores existed
+            // selected before the cores existed, so go back to the set of the lane in use
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3 source set %u has no lane", sourceSetLane+1);
             sourceSetLaneSelected = false;
+            sources.setPosVelYawSourceSet((AP_NavEKF_Source::SourceSetSelection)user_primary);
+            sourceSetEvent = user_primary;
+            sourceSetEventPending = true;
         }
     }
     bool lane_switching_enabled = true;
@@ -1224,14 +1232,15 @@ bool NavEKF3::setPosVelYawSourceSet(uint8_t source_set_idx)
     }
 
     if (source_set_idx < AP_NAKEKF_SOURCE_SET_MAX) {
-        dal.log_event3(AP_DAL::Event(uint8_t(AP_DAL::Event::setSourceSet0)+source_set_idx));
+        sourceSetEvent = source_set_idx;
+        sourceSetEventPending = !dal.log_event3(AP_DAL::Event(uint8_t(AP_DAL::Event::setSourceSet0)+source_set_idx));
     }
     sources.setPosVelYawSourceSet((AP_NavEKF_Source::SourceSetSelection)source_set_idx);
 
-    if (per_core) {
-        sourceSetLaneSelected = true;
-        sourceSetLane = source_set_idx;
-    }
+    // without a source set per core the selection names no lane, so an older one is forgotten
+    // rather than brought back if the option is set later
+    sourceSetLaneSelected = per_core;
+    sourceSetLane = source_set_idx;
     return true;
 }
 
@@ -1432,10 +1441,7 @@ float NavEKF3::hoverZBiasCorrection(uint8_t imu_index) const
 // reproduces the flight.
 void NavEKF3::setInhibitAccelBiasLearning(bool inhibit)
 {
-    if (inhibit != _inhibitAccelBiasLearning) {
-        _inhibitAccelBiasLearning = inhibit;
-        _inhibitAccelBiasLearningPending = true;
-    }
+    _inhibitAccelBiasLearning = inhibit;
 }
 
 // returns active source set used by EKF3

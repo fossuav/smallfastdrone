@@ -588,6 +588,8 @@ private:
     bool runCoreSelection;                          // true when the primary core has stabilised and the core selection logic can be started
     bool sourceSetLaneSelected;                     // a source set has been selected with a source set per core, so its lane is the user's
     uint8_t sourceSetLane;                          // the lane that runs the selected source set
+    bool sourceSetEventPending;                     // the selection of sourceSetEvent has not yet been written to the DAL
+    uint8_t sourceSetEvent;                         // the source set last selected
     bool coreSetupRequired[MAX_EKF_CORES];          // true when this core index needs to be setup
     uint8_t coreImuIndex[MAX_EKF_CORES];            // IMU index used by this core
     float coreRelativeErrors[MAX_EKF_CORES];        // relative errors of cores with respect to primary
@@ -600,8 +602,8 @@ private:
 
     // flag to inhibit all accel bias learning, set by vehicle code
     bool _inhibitAccelBiasLearning;
-    // _inhibitAccelBiasLearning has changed and not yet been written to the DAL
-    bool _inhibitAccelBiasLearningPending;
+    // the value of _inhibitAccelBiasLearning the DAL last accepted
+    bool _inhibitAccelBiasLearningLogged;
 
     // warn while disarmed if flow navigation above the range finder may drift
     void checkFlowRangeWarning(void);
