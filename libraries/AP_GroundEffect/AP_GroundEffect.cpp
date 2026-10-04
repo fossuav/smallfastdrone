@@ -188,10 +188,22 @@ void AP_GroundEffect::update(bool armed, bool land_complete, bool throttle_up)
     const bool touchdown_signal = slow_horizontal && slow_descent && near_ground;
     if (!touchdown_signal) {
         _state.touchdown_time_ms = 0;
-    } else if ((_state.touchdown_time_ms == 0) ||
-               (is_positive(height_m) && (height_m < _state.touchdown_height_m - AP_GROUNDEFFECT_TOUCHDOWN_PROGRESS_M))) {
-        _state.touchdown_time_ms = tnow_ms;
-        _state.touchdown_height_m = height_m;
+    } else {
+        // progress is measured against the same source, as heights above ground and above
+        // takeoff cannot be compared; a source changing is not progress, or one that comes
+        // and goes would hold the window open
+        const uint8_t src = height_is_agl ? 1 : 0;
+        if ((_state.touchdown_time_ms == 0) ||
+            (_state.touchdown_height_valid[src] && is_positive(height_m) &&
+             (height_m < _state.touchdown_height_m[src] - AP_GROUNDEFFECT_TOUCHDOWN_PROGRESS_M))) {
+            _state.touchdown_time_ms = tnow_ms;
+            _state.touchdown_height_valid[0] = _state.touchdown_height_valid[1] = false;
+            _state.touchdown_height_m[src] = height_m;
+            _state.touchdown_height_valid[src] = true;
+        } else if (!_state.touchdown_height_valid[src]) {
+            _state.touchdown_height_m[src] = height_m;
+            _state.touchdown_height_valid[src] = true;
+        }
     }
     // a touchdown that has not come any closer within the window is not a touchdown. GNDEFF_ALT
     // of zero asks for no altitude gate at all, so it gets no time bound either
