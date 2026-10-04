@@ -96,7 +96,8 @@ public:
     void log_SetOriginLLH2(const Location &loc);
     void log_writeDefaultAirSpeed2(const float aspeed, const float uncertainty);
 
-    void log_event3(Event event);
+    // returns false if the event should be written again later: logging has not started, or the logger refused it
+    bool log_event3(Event event);
     void log_SetOriginLLH3(const Location &loc);
     void log_SetLatLng(const Location &loc, float posAccuracy, uint32_t timestamp_ms);
 
@@ -378,7 +379,7 @@ public:
 #if HAL_LOGGING_ENABLED
     // write out a DAL log message. If old_msg is non-null, then
     // only write if the content has changed
-    static void WriteLogMessage(enum LogMessages msg_type, void *msg, const void *old_msg, uint8_t msg_size);
+    static bool WriteLogMessage(enum LogMessages msg_type, void *msg, const void *old_msg, uint8_t msg_size);
 #endif
 
 private:
@@ -425,6 +426,7 @@ private:
 
     static bool logging_started;
     static bool force_write;
+    bool rofm_resend;  // ROFM is due out in the log that has just started
 
     bool ekf2_init_done;
     bool ekf3_init_done;
