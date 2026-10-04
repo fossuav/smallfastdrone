@@ -2408,29 +2408,83 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if not flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
             raise NotAchievedException("relative position lost above the rangefinder range")
 
-        self.start_subtest("A brief return from something passed over keeps it")
-        # a second or so of in-range readings at height, as from a roof flown over, does not
-        # end the fallback; only ground measured again without a break for 2 s does
-        self.reboot_sitl()
-        climb_out_of_range()
-        if not horiz_pos_rel():
-            raise NotAchievedException("the climb out did not engage the fallback, so the leg proves nothing")
-        sonar_scale = self.get_parameter("SIM_SONAR_SCALE")
-        # four times the metres per volt, so at about 20 m it reads about 5 m: under the 5.6 m
-        # a re-engagement needs, so the fallback has to have stayed on for the flag to survive
-        self.set_parameter("SIM_SONAR_SCALE", sonar_scale * 4)
-        t_start = self.get_sim_time()
-        self.wait_ekf_flags(mavutil.mavlink.EKF_POS_VERT_AGL, 0, timeout=10)
-        assert_rangefinder_between(3, 5.4)
-        self.set_parameter("SIM_SONAR_SCALE", sonar_scale)
-        window = self.get_sim_time() - t_start
-        if window > 1.5:
-            raise NotAchievedException("the return lasted %.1f s, too close to 2 s to prove anything" % window)
-        wait_terrain_offset_stale()
-        flags = ekf_flags()
-        self.disarm_vehicle(force=True)
-        if not flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
-            raise NotAchievedException("relative position dropped after a brief in-range return at height")
+        for options in 0, 1 << 3:  # without and with the AGL KF for flow scaling (AglKfForOptflow)
+            self.start_subtest("A brief return from something passed over keeps it (EK3_OPTIONS %u)" % options)
+            # a second or so of in-range readings at height, as from a roof flown over, does not
+            # end the fallback, and is undone once it has gone; only ground measured again without
+            # a break for 2 s is taken as the ground
+            self.set_parameter("EK3_OPTIONS", options)
+            self.reboot_sitl()
+            climb_out_of_range()
+            if not horiz_pos_rel():
+                raise NotAchievedException("the climb out did not engage the fallback, so the leg proves nothing")
+            sonar_scale = self.get_parameter("SIM_SONAR_SCALE")
+            # eight times the metres per volt, so at 20-28 m it reads 2.5-3.5 m: close enough that
+            # the obstacle's height would be under the height limit, and under the 5.6 m a
+            # re-engagement needs, so the fallback has to have stayed on for the flag to survive
+            tset_us = self.get_sim_time() * 1e6
+            self.set_parameter("SIM_SONAR_SCALE", sonar_scale * 8)
+            # setting a parameter takes a share of the return's length, so it is held only briefly
+            # and measured from the log afterwards
+            self.delay_sim_time(0.3, "the return")
+            self.set_parameter("SIM_SONAR_SCALE", sonar_scale)
+            # the return is undone once it has been gone 500 ms; one taken as the ground would hold
+            # the terrain offset valid for 5 s after it
+            self.delay_sim_time(2, "the return to be undone")
+            offset_fused = ekf_flags() & mavutil.mavlink.EKF_POS_VERT_AGL
+            tundone_us = self.get_sim_time() * 1e6
+            # past the 5 s the terrain offset stays valid for after a fusion
+            self.delay_sim_time(6, "outlast the terrain offset timeout")
+            flags = ekf_flags()
+            alt = self.get_altitude(relative=True)
+            tend_us = self.get_sim_time() * 1e6
+            self.disarm_vehicle(force=True)
+            if offset_fused:
+                raise NotAchievedException("the brief return was fused as the ground")
+            if not flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
+                raise NotAchievedException("relative position dropped after a brief in-range return at height")
+            # the return's length as the EKF saw it, and its height above ground during and after it
+            good_us = []
+            hagl_during = None
+            hagl_after = None
+            agl_kf_valid_after = False
+            dfreader = self.dfreader_for_current_onboard_log()
+            while True:
+                m = dfreader.recv_match(type=['XKF5', 'XKFA', 'RFND'])
+                if m is None:
+                    break
+                if not tset_us < m.TimeUS < tend_us:
+                    continue
+                if m.get_type() == 'XKFA':
+                    if m.C == 0 and m.TimeUS > tundone_us and m.Valid:
+                        agl_kf_valid_after = True
+                elif m.get_type() == 'RFND':
+                    if m.Instance == 0 and m.Stat == 4 and m.TimeUS < tundone_us and 2 <= m.Dist <= 3.5:  # Good
+                        good_us.append(m.TimeUS)
+                elif m.C == 0 and m.TimeUS < tundone_us:
+                    hagl_during = m.HAGL if hagl_during is None else min(hagl_during, m.HAGL)
+                elif m.C == 0:
+                    hagl_after = m.HAGL if hagl_after is None else min(hagl_after, m.HAGL)
+            if not good_us:
+                raise NotAchievedException("the range finder never read the return at 2-3.5 m")
+            if hagl_during is None or hagl_after is None:
+                raise NotAchievedException("no XKF5 around the return")
+            window = (good_us[-1] - good_us[0]) * 1e-6
+            self.progress("return of %.1f s; height above ground min %.1f m during it, %.1f m after, at %.1f m up" %
+                          (window, hagl_during, hagl_after, alt))
+            if window > 1.4:
+                raise NotAchievedException("the return lasted %.1f s, too close to 2 s to prove anything" % window)
+            if hagl_during > alt - 10:
+                raise NotAchievedException("the return was not fused (height above ground %.1f m), so the leg proves nothing" %
+                                           hagl_during)
+            if hagl_after < alt - 3:
+                raise NotAchievedException("the return was taken as the ground: height above ground %.1f m at %.1f m up" %
+                                           (hagl_after, alt))
+            # the AGL KF built on the return would otherwise scale flow by the obstacle's height for
+            # the 5 s it stays valid after its last range sample
+            if agl_kf_valid_after:
+                raise NotAchievedException("the AGL KF still used the brief return after it had gone")
+        self.set_parameter("EK3_OPTIONS", 0)
 
         self.start_subtest("A range finder lost in range after a climb out and back drops it")
         # the fallback ends once range data has been fused again for 2 s, so a later failure
@@ -17654,26 +17708,17 @@ return update, 100
         if not 0.6 <= mean_height <= 1.2:
             raise NotAchievedException("dwell was not about 0.9m above the ground (mean %.2f m)" % mean_height)
         reopened_in_dwell = self.statustext_in_collections("terrain offset reopened")
-        self.set_rc(3, 1700)
-        self.wait_altitude(12, 20, relative=True, timeout=60)
-        self.set_rc(3, 1500)
-        self.delay_sim_time(20, reason="let the terrain filter settle after the climb out")
         self.change_mode('LAND')
         self.wait_disarmed()
 
-        # The ground is flat, so the terrain offset above 5m is reported against
-        # the value it held on the ground, which is the ground clearance.
-        # That value is taken in the second after arming: the arming datum reset
-        # has settled it, and the motors have not yet disturbed the baro. Measure
-        # only above 5m, clear of the band, and only while the rangefinder reads
-        # Good: above RNGFND1_MAX the terrain filter stops fusing and the offset
-        # is a frozen value that says nothing about recovery.
+        # The ground is flat, so the terrain offset is the ground clearance in the second
+        # after arming: the arming datum reset has settled it, and the motors have not yet
+        # disturbed the baro. HAGL is compared with the range finder only while it reads Good.
         dfreader = self.dfreader_for_path(flight_log)
         rangefinder_good = False
         range_m = None
         arm_time = None
         on_ground = []
-        offsets = []
         dwell_errors = []
         while True:
             m = dfreader.recv_match(type=['XKF5', 'RFND', 'EV'])
@@ -17693,22 +17738,14 @@ return update, 100
                 continue
             if m.TimeUS - arm_time < 1e6:
                 on_ground.append(m.TOfs)
-            elif m.HAGL > 5.0 and rangefinder_good:
-                offsets.append(m.TOfs)
         if len(on_ground) < 5:
             raise NotAchievedException("insufficient XKF5 samples after arming (%u)" % len(on_ground))
-        if len(offsets) < 100:
-            raise NotAchievedException("insufficient XKF5 samples above 5m with range (%u)" % len(offsets))
         on_ground.sort()
         ground = on_ground[len(on_ground) // 2]
         clearance = max(self.get_parameter("RNGFND1_GNDCLR"), 0.05)
         if abs(ground - clearance) > 0.05:
             raise NotAchievedException("terrain offset at arming %.3f m is not the ground clearance %.3f m"
                                        % (ground, clearance))
-        errors = [o - ground for o in offsets]
-        mean = sum(errors) / len(errors)
-        self.progress("terrain offset above 5m, relative to %+.3f m on the ground: mean %+.3f m over %u samples"
-                      % (ground, mean, len(errors)))
         # Above the ground effect the range fusion pulls the offset back whatever happened in
         # the dwell; it is in the dwell, once the takeoff window closes 5 s after arming, that a
         # terrain offset frozen by its collapsed uncertainty shows as a height above ground error.
