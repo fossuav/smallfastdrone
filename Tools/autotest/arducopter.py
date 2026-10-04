@@ -5151,6 +5151,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "RC8_OPTION": 90,         # EKF source set selector
             "SCR_ENABLE": 1,
             "LOG_DISARMED": 1,
+            "LOG_REPLAY": 1,
         })
         self.customise_SITL_commandline(["--serial5=sim:vicon"])
         # a script selects a set the same way, and must get the same lane
@@ -5160,6 +5161,10 @@ function update()
   if not done and param:get('SCR_USER1') == 1 then
     ahrs:set_posvelyaw_source_set(1)
     done = true
+  end
+  if param:get('SCR_USER2') == 1 then
+    gcs:send_text(6, string.format("active source set %d", ahrs:get_posvelyaw_source_set()+1))
+    param:set('SCR_USER2', 0)
   end
   return update, 100
 end
@@ -5226,6 +5231,9 @@ return update, 100
         # the first RC read comes before the cores exist; the selection must wait for
         # them rather than be refused, and the lane must follow once they run. Read
         # from the log, which also holds what was sent before the GCS link came up
+        # the script would select the second set on every boot, so only the RC switch selects here
+        self.set_parameter("SCR_USER1", 0)
+
         def boot_on_switch(pwm):
             self.set_rc(8, pwm)
             self.reboot_sitl()
@@ -5233,33 +5241,45 @@ return update, 100
             dfreader = self.dfreader_for_current_onboard_log()
             primary = None
             texts = []
+            events = []
             while True:
-                m = dfreader.recv_match(type=['XKF4', 'MSG'])
+                m = dfreader.recv_match(type=['XKF4', 'MSG', 'REV3'])
                 if m is None:
                     break
                 if m.get_type() == 'MSG':
                     texts.append(m.Message)
+                elif m.get_type() == 'REV3':
+                    events.append(m.Event)
                 elif m.C == 0:
                     primary = m.PI
             no_lane = any("has no lane" in t for t in texts)
             selected = any("Using EKF Source Set" in t for t in texts)
-            return primary, no_lane, selected
+            return primary, no_lane, selected, events
 
         self.start_subtest("an RC switch held at the second set through boot selects its lane")
-        primary, no_lane, selected = boot_on_switch(1500)
+        primary, no_lane, selected, events = boot_on_switch(1500)
         if not selected:
             raise NotAchievedException("the RC switch made no selection at boot")
+        # made before logging starts, so Replay only gets it if it waits for the log
+        if 14 not in events:  # AP_DAL::Event::setSourceSet1
+            raise NotAchievedException("the selection made at boot is not in the log (events %s)" % events)
         if no_lane:
             raise NotAchievedException("a selection made at boot was refused")
         if primary != 1:
             raise NotAchievedException("lane %s after booting on the second set, want 1" % primary)
 
         self.start_subtest("a set with no lane selected at boot is reported once the cores run")
-        primary, no_lane, selected = boot_on_switch(2000)
+        primary, no_lane, selected, events = boot_on_switch(2000)
+        if 13 not in events:  # AP_DAL::Event::setSourceSet0, going back to the lane in use
+            raise NotAchievedException("going back to the first set is not in the log (events %s)" % events)
         if not no_lane:
             raise NotAchievedException("no warning for a set with no lane selected at boot")
         if primary != 0:
             raise NotAchievedException("lane %s after booting on a set with no lane, want 0" % primary)
+        # the dropped set does not stay the active one
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("SCR_USER2", 1)
+        self.wait_statustext("active source set 1", check_context=True, timeout=10)
         self.set_rc(8, 1000)
 
     def OpticalFlowLimits(self):
@@ -17114,25 +17134,42 @@ return update, 100
         if updates != 0:
             raise NotAchievedException("flow fused in a hover below the floor (%u updates)" % updates)
 
-        self.start_subtest("LOITER landing with an origin and the default disarm delay")
         # LOITER needs a position, so this is where losing aiding on the ground was an EKF
-        # failsafe; with the default delay the vehicle sits armed for 10 s before disarming
+        # failsafe; with the default delay the vehicle sits armed for 10 s before disarming.
+        # The second pass lands reading 0.2 m more than the default RNGFND1_GNDCLR, as a taller
+        # vehicle left at that default does, under a 0.3 m floor, so the rest test has to go by
+        # what the range finder read on the ground before takeoff rather than by RNGFND1_GNDCLR
+        for sonar_offset_m, hgt_min_m in (0, 0), (0.2, 0.3):
+            self.start_subtest("LOITER landing with an origin and the default disarm delay "
+                               "(SIM_SONAR_OFFSET %.1f, FLOW_HGT_MIN %.1f)" % (sonar_offset_m, hgt_min_m))
+            self.set_parameters({
+                "SIM_BARO_GEFF_M": 0,
+                "DISARM_DELAY": 10,
+                "SIM_SONAR_OFFSET": sonar_offset_m,
+                "FLOW_HGT_MIN": hgt_min_m,
+            })
+            self.reboot_sitl()
+            self.wait_ready_to_arm(require_absolute=False)
+            self.set_origin(self.sitl_start_location())
+            landed_rng_m = self.poll_message('RANGEFINDER').distance
+            self.takeoff(5, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
+            self.context_collect('STATUSTEXT')
+            self.set_rc(3, 1000)
+            self.wait_disarmed(timeout=120)
+            self.set_rc(3, 1500)
+            self.progress("range on the ground %.2f m, RNGFND1_GNDCLR %.2f m" %
+                          (landed_rng_m, self.get_parameter("RNGFND1_GNDCLR")))
+            if hgt_min_m and not self.get_parameter("RNGFND1_GNDCLR") + 0.05 < landed_rng_m < hgt_min_m:
+                raise NotAchievedException("landed range %.2f m is not between the clearance and the floor, "
+                                           "so the pass proves nothing" % landed_rng_m)
+            for text in "EKF variance", "EKF Failsafe":
+                if self.statustext_in_collections(text):
+                    raise NotAchievedException("'%s' after a LOITER landing below the focus floor" % text)
+            self.context_stop_collecting('STATUSTEXT')
         self.set_parameters({
-            "SIM_BARO_GEFF_M": 0,
-            "DISARM_DELAY": 10,
+            "SIM_SONAR_OFFSET": 0,
+            "FLOW_HGT_MIN": 0,
         })
-        self.reboot_sitl()
-        self.wait_ready_to_arm(require_absolute=False)
-        self.set_origin(self.sitl_start_location())
-        self.takeoff(5, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
-        self.context_collect('STATUSTEXT')
-        self.set_rc(3, 1000)
-        self.wait_disarmed(timeout=120)
-        self.set_rc(3, 1500)
-        for text in "EKF variance", "EKF Failsafe":
-            if self.statustext_in_collections(text):
-                raise NotAchievedException("'%s' after a LOITER landing below the focus floor" % text)
-        self.context_stop_collecting('STATUSTEXT')
 
     def ThrowDoubleDrop(self):
         '''Test a more complicated drop-mode scenario'''
