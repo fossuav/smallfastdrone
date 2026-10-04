@@ -47,6 +47,14 @@ the range finder during the takeoff. The commit that does it was not found: the
 commits in between do not build on their own. The bound is now 0.42 m, which
 separates both cases with margin.
 
+A second top-up took the heads that answered the 11:00 AI reviews, as patches
+from each locked head to the new one (several were squashed onto their unflown
+commits). Two conflicts, both where PRs meet: AP_DAL::WriteLogMessage, where
+#34292's forced output on a dropped block meets #32471's new return value (keep
+both: mark the block and return false), and the top of NavEKF3::UpdateFilter,
+where #32471's inhibit retry and #34456's source set retry both go (keep both).
+Whichever of those PRs merges second needs the same. 90 of 90.
+
 ## 2026-10-03 - 22 PRs rebased onto master, refresh9
 
 Master's Copter CI bucket rebalance left 23 of the stack's PRs conflicting, all

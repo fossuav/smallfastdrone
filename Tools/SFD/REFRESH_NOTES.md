@@ -28,7 +28,11 @@ reply exists") before acting on it.
   lands. Topped up the same day with the 2026-10-04 heads of #33585 (brief
   range return undone), #33484, #32553 and #34380, and the ground effect dwell
   bound moved to 0.42 m (see the history). 90 of 90 again, Replay passing alone
-  after its known stall.
+  after its known stall. Promoted to `SmallFastDrone-4.7.2-beta` 2026-10-04 at
+  `291108f58c`; the previous beta (refresh9) is kept as `.3-beta`.
+- Topped up again 2026-10-04 with the heads that answered the 11:00 AI reviews:
+  #34292 (rest test learns the landed range), #33568, #32471/#32473 (inhibit
+  event retried), #34362, #34456, #32972 and #32553. 90 of 90.
 - Owed to #32553: the dwell bound of 0.42 m (`autotest: bound the ground effect
   dwell error between the two cases`). On this stack the hover settles lower in
   the band and 0.35 m is straddled.
