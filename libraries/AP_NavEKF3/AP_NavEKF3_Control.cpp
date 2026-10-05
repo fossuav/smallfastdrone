@@ -953,7 +953,7 @@ void NavEKF3_core::updateFlatGroundAssumed(void)
         }
         flatGndSaved.valid = false;
     } else if (flatGndRngResumeTime_ms == 0) {
-        flatGndRngResumeTime_ms = imuSampleTime_ms;
+        flatGndRngResumeTime_ms = rngValidMeaTime_ms;
     }
     if (!frontend->sources.useVelXYSource(AP_NavEKF_Source::SourceXY::OPTFLOW, core_index) ||
         !gndOffsetMeasured || !flowScaleHgtUsable()) {
@@ -980,9 +980,10 @@ void NavEKF3_core::updateFlatGroundAssumed(void)
     }
     // engage only once the range data has gone, so the checks below see why it went, and end
     // once the ground has been measured again without a break for 2 s, so a later loss has to
-    // pass those checks afresh. A shorter return, from something passed over, leaves it engaged
+    // pass those checks afresh. A shorter return, from something passed over, leaves it engaged.
+    // Timed to the latest sample, as a break is only seen 500 ms after it
     if (gndOffsetValid) {
-        if ((flatGndRngResumeTime_ms != 0) && (imuSampleTime_ms - flatGndRngResumeTime_ms >= 2000)) {
+        if ((flatGndRngResumeTime_ms != 0) && (rngValidMeaTime_ms - flatGndRngResumeTime_ms >= 2000)) {
             flatGndEngaged = false;
             flatGndSaved.valid = false;
         }
