@@ -7,6 +7,21 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-05 - refresh10 topup4, the OSD lanes and #34630
+
+Takes #34543's arrow lane marker and #34630, which shows each flow lockout
+reset on the OSD lane item and adds an option to quiet the reset messages.
+#34630 stacks on #33484 and a copy of #34543 whose lane status reuses
+#33484's per-axis flow timer; its versions were taken, as the beta already
+carries #33484, and they give the lane its own timer and put #33484's back
+under EK3_FEATURE_OPTFLOW_AGL_KF. #34630 first claimed EK3_OPTIONS bit 4,
+which #33478 already uses for AglKfVelForVelD; it now uses bit 6 upstream
+too. Bit 5 was avoided because the vehicles' EK3_OPTIONS 62 sets it.
+
+Builds with the AGL KF off. 89 of 90 on the full set: LoiterNoCompassYawGPS
+waited 3.6 s for GLOBAL_POSITION_INT while another job was running and passed
+on --resume. The lock records #34630 at its reviewed head 6ed939c51b.
+
 ## 2026-10-05 - refresh10 topup3, the review fixes
 
 The 2026-10-04 flights validated #34456, #32473, #34362, #33585 and #33484;
