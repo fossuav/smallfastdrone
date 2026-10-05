@@ -7,6 +7,16 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-05 - EK3_OPTIONS 92 as the SFD default
+
+sfd_defaults.parm now sets EK3_OPTIONS 92: bits 2 (flow may use terrain
+data above the range finder), 3 (AGL KF scales flow), 4 (AGL KF velD) and 6
+(quiet per-reset flow lockout messages). Bit 1 (manual lane switching) stays a
+per-vehicle choice, as it turns off automatic lane switching, and bit 5 is
+unused since #33585 made the flat-ground fallback always on. A vehicle with a
+saved EK3_OPTIONS keeps it; the O4's saved 62 still sets bit 1 and the unused
+bit 5, and not bit 6.
+
 ## 2026-10-05 - refresh10 topup4, the OSD lanes and #34630
 
 Takes #34543's arrow lane marker and #34630, which shows each flow lockout
