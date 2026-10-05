@@ -15540,6 +15540,9 @@ return update, 100
                     "EKF altitude %.2f m does not track true %.2f m after takeoff" % (ekf_alt, true_alt))
         finally:
             self.land_and_disarm()
+        # SIM_BARO_DRIFT accumulates into an offset that setting the rate back
+        # to zero does not undo
+        self.reboot_sitl()
 
     def ekf_position_D_m(self):
         '''EKF height as position down in metres, from LOCAL_POSITION_NED
