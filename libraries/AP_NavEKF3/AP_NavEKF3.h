@@ -505,6 +505,7 @@ private:
         OptflowMayUseTerrainAlt = (1<<2),
         AglKfForOptflow         = (1<<3),  // Use IMU-aided AGL KF for optflow scaling
         AglKfVelForVelD         = (1<<4),  // Fuse AGL KF vertical velocity as a velD observation
+        QuietFlowVelResets      = (1<<6),  // no message for each optical flow velocity reset
     };
     bool option_is_enabled(Option option) const {
         return (_options & (uint32_t)option) != 0;
