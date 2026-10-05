@@ -7,6 +7,32 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-05 - refresh10 topup3, the review fixes
+
+The 2026-10-04 flights validated #34456, #32473, #34362, #33585 and #33484;
+their results were posted and those PRs squashed one commit per module, with
+#33484's four SIM_FLOW_OFS/SIM_FLOW_QUAL commits kept as they were so they
+still match #34292's by patch-id. topup3 takes, by cherry-pick onto the beta,
+the fixes for the AI reviews that followed: #33585's fallback end timed to
+the latest range sample, #34380's height limit raised only while the terrain
+offset is being fused, and test or wording changes on #33484, #34292, #32972
+and #32471. The #33585 and #34380 changes were pushed before a /pr-review and
+reviewed afterwards; the review keyed the raise on fusion and tightened every
+new test, and the rules this broke are now in PR_REVIEW_RULES.md.
+
+The full set ran 87 of 90. Two of the new tests failed only under the batch's
+load: the reach model toggled from a polling loop landed late and let the
+vehicle read past 28 m, and a 1.7 s brief return measured 2.0 s against its
+bound. Both were reworked (a SIM_STATE hook, the outage read from RFND, a
+recentred window) and A/B'd with 22 busy loops loading the host. The third,
+VibrationRectificationBiasLearning, missed its "Hover Z-bias" text during a
+3.5 minute reconnect after a reboot; it passes alone and on resume, and would
+be robust reading MSG from the log. One local fixup: 4.7's
+send_set_parameter() has no add_to_context. 90 of 90 after --resume.
+
+The lock records #33585 and #34380 at their reviewed heads, bca14b045e and
+49e01bf7eb, which were not yet pushed to their PRs when topup3 shipped.
+
 ## 2026-10-04 - refresh10, the AI-review rework
 
 The 16 EKF/flow/baro PRs were reworked for the 2026-10-03 AI reviews and
