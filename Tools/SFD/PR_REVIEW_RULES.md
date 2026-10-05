@@ -124,3 +124,36 @@ The flight-test repos are private. Public-facing text - PR bodies, comments,
 commit messages, the public archive - cites the evidence only as "flight
 tests show X" with the numbers, never the repo, its file names, or any
 vehicle, person or location.
+
+## Squashing, fixes and stacking
+
+Squash only what flight testing has settled. A commit whose behaviour has
+been flown keeps its content until the flight that exercises it has been
+analysed and the behaviour verified; until then it may be reworded, and a
+fix to it goes on top as a new commit. Once verified, the PR's fixups can
+be squashed into it. Changes none of which has been flight tested may be
+squashed together freely. Never fold an unflown change into a flown commit:
+the result would claim a flight it never had.
+
+A fix that changes functionality - code, or what a test checks - goes
+through /pr-review before it is pushed or reported done, and so does
+anything changed after that review. Comment, parameter-description,
+PR-description and commit-message changes do not need one. (2026-10-05:
+#33585's fallback-end timing and #34380's fresh-range raise were pushed
+after SITL A/B but before /pr-review, and were reviewed afterwards.)
+
+Know the stack before rewriting anything. Check which other PR branches
+contain a head before squashing or restacking it
+(`git branch -a --contains <head>`). Rewriting a lower PR means every PR
+above it is restacked by cherry-pick in its original commit order, its tree
+checked against the old head plus the lower PR's change, and pushed in the
+same grant.
+
+Assume any part of a PR may be asked for as a PR of its own. Changes that
+serve more than the PR's own fix - SITL fault injection, DAL or logging
+plumbing, a helper another PR also carries - stay as separate commits,
+unchanged, through every squash: an identical commit in two PRs drops out
+by patch-id when either merges, and a reviewer can ask for it to be split
+out without the rest. On 2026-10-04 squashing #33484 folded SIM_FLOW_QUAL
+into the SIM_FLOW_OFS commits it shares with #34292, so they stopped
+matching; they were restored as the four original commits.
