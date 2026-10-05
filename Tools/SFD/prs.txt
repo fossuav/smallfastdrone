@@ -52,6 +52,7 @@
 34457   # AGL KF: clear the velocity when the height rests on its floor (carries #33507's seven commits patch-identical; git cherry drops the duplicates)
 34456   # EKF3: select the lane that runs the source set being asked for (master; SRC_PER_CORE and ManualLaneSwitch are both upstream)
 34543   # AP_OSD: show the status of each EKF3 core (pairs with #34456)
+34630   # EKF3: show flow lockout resets on the OSD and make their messages optional (stacks on #33484 and #34543)
 33543   # AP_Param loaded defaults count
 33568   # Optical flow relative-aiding fallback on GPS loss
 34380   # EKF3: lift the flow height limit where flow nav carries on above it (#33568 relies on it for its fall back)
