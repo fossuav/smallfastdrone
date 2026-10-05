@@ -2428,7 +2428,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             tset_us = self.get_sim_time() * 1e6
             # sent without waiting for the acknowledgement, which takes a varying share of the
             # return's length; the length is measured from the log afterwards
-            self.send_set_parameter("SIM_SONAR_SCALE", sonar_scale * 8, add_to_context=True)
+            self.context_get().parameters.append(("SIM_SONAR_SCALE", sonar_scale))
+            self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale * 8)
             self.delay_sim_time(hold, "the return")
             self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale)
             # the return is undone once it has been gone 500 ms; one taken as the ground would hold
