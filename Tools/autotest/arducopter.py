@@ -3972,33 +3972,53 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         })
         self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
         self.set_analog_rangefinder_parameters()
-        # below the limit it is held at 27 m; just above it, at the raised 28.5 m
-        for reach, floor, ceiling in ((25, 0, 29), (27, 27.8, 30.5)):
-            self.start_subtest("return lost at %u m" % reach)
+        # below the limit it is held at 27 m, out of reach; one that reaches the limit is let
+        # past it while it measures and held at it once the return goes, so it stays in reach
+        for reach, floor, ceiling, keeps_rel in ((25, 0, 29, False), (27.5, 27.6, 30.5, True)):
+            self.start_subtest("return lost at %.1f m" % reach)
             self.reboot_sitl()
             self.wait_ready_to_arm(require_absolute=False)
             ground_alt = self.get_altitude(altitude_source='SIM_STATE.alt')
             self.takeoff(5, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1800)
             self.set_rc(3, 1900)
             reach_lost = False
+            out_of_reach = False
+            out_since = 0
+            longest_out = 0
+            back_in_reach = False
+            rel_lost_at = None
             max_alt = 0
             tstart = self.get_sim_time()
             while self.get_sim_time_cached() - tstart < 60:
                 alt = self.get_altitude(altitude_source='SIM_STATE.alt') - ground_alt
                 max_alt = max(max_alt, alt)
-                if not reach_lost and alt > reach:
+                if (alt > reach) != out_of_reach:
                     # full scale reads as out of range high, as a lidar past its reach does
-                    self.set_parameter("SIM_SONAR_GLITCH", 1)
-                    reach_lost = True
-            self.progress("highest %.1f m with a %u m reach under a 27 m limit" % (max_alt, reach))
+                    out_of_reach = alt > reach
+                    self.set_parameter("SIM_SONAR_GLITCH", 1 if out_of_reach else 0)
+                    reach_lost = reach_lost or out_of_reach
+                    back_in_reach = back_in_reach or (not out_of_reach and longest_out >= 1)
+                    out_since = self.get_sim_time_cached()
+                if out_of_reach:
+                    longest_out = max(longest_out, self.get_sim_time_cached() - out_since)
+                flags = self.assert_receive_message('EKF_STATUS_REPORT').flags
+                if rel_lost_at is None and not flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
+                    rel_lost_at = alt
+            self.progress("highest %.1f m with a %.1f m reach under a 27 m limit, relative position %s" %
+                          (max_alt, reach, "kept" if rel_lost_at is None else "lost at %.1f m" % rel_lost_at))
             self.set_rc(3, 1500)
             self.set_parameter("SIM_SONAR_GLITCH", 0)
-            if not reach_lost:
-                raise NotAchievedException("never climbed past the %u m reach" % reach)
+            # past the 0.5 s after which an unmeasured range drops the raise
+            if not reach_lost or longest_out < 1:
+                raise NotAchievedException("out of the %.1f m reach for at most %.1f s" % (reach, longest_out))
             if max_alt > ceiling:
-                raise NotAchievedException("climbed to %.1f m with a %u m reach" % (max_alt, reach))
+                raise NotAchievedException("climbed to %.1f m with a %.1f m reach" % (max_alt, reach))
             if max_alt < floor:
-                raise NotAchievedException("held at %.1f m with a %u m reach, under the raised limit" % (max_alt, reach))
+                raise NotAchievedException("held at %.1f m with a %.1f m reach, under the raised limit" % (max_alt, reach))
+            if keeps_rel and not back_in_reach:
+                raise NotAchievedException("never came back into the %.1f m reach" % reach)
+            if keeps_rel and rel_lost_at is not None:
+                raise NotAchievedException("relative position lost at %.1f m with a %.1f m reach" % (rel_lost_at, reach))
             self.land_and_disarm()
         self.reboot_sitl()
 
