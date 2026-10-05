@@ -2409,8 +2409,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException("relative position lost above the rangefinder range")
 
         # without and with the AGL KF for flow scaling (AglKfForOptflow), and a return that
-        # lasts most of the 2 s, which a break seen only 500 ms late must not let through
-        for options, hold, window_min, window_max in (0, 0.3, 0, 1.4), (1 << 3, 0.3, 0, 1.4), (0, 1.7, 1.7, 2.0):
+        # lasts most of the 2 s, which a break seen only 500 ms late must not let through. The
+        # EKF times a return about 0.1 s shorter than the log's first and last Good samples
+        for options, hold, window_min, window_max in (0, 0.3, 0, 1.4), (1 << 3, 0.3, 0, 1.4), (0, 1.6, 1.6, 2.0):
             self.start_subtest("A brief return from something passed over keeps it (EK3_OPTIONS %u, %.1f s)" %
                                (options, hold))
             # a second or so of in-range readings at height, as from a roof flown over, does not
@@ -3981,34 +3982,56 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.wait_ready_to_arm(require_absolute=False)
             ground_alt = self.get_altitude(altitude_source='SIM_STATE.alt')
             self.takeoff(5, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1800)
+            # the reach is modelled from a message hook, sending without waiting for the
+            # acknowledgement, so a loaded host cannot let the vehicle read past it
+            self.set_parameter("SIM_SONAR_GLITCH", 0)
+            self.context_set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_SIM_STATE, 20)
+            self.context_set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_EKF_STATUS_REPORT, 10)
+            st = {"alt": 0, "max_alt": 0, "out": False, "rel_lost_at": None, "ekf_reports": 0}
+
+            def reach_hook(mav, m, st=st, reach=reach, ground_alt=ground_alt):
+                if m.get_type() == 'SIM_STATE':
+                    st["alt"] = m.alt - ground_alt
+                    st["max_alt"] = max(st["max_alt"], st["alt"])
+                    if (st["alt"] > reach) != st["out"]:
+                        # full scale reads as out of range high, as a lidar past its reach does
+                        st["out"] = st["alt"] > reach
+                        self.send_set_parameter_direct("SIM_SONAR_GLITCH", 1 if st["out"] else 0)
+                elif m.get_type() == 'EKF_STATUS_REPORT':
+                    st["ekf_reports"] += 1
+                    if st["rel_lost_at"] is None and not m.flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
+                        st["rel_lost_at"] = st["alt"]
+
             self.set_rc(3, 1900)
-            reach_lost = False
-            out_of_reach = False
-            out_since = 0
-            longest_out = 0
-            back_in_reach = False
-            rel_lost_at = None
-            max_alt = 0
-            tstart = self.get_sim_time()
-            while self.get_sim_time_cached() - tstart < 60:
-                alt = self.get_altitude(altitude_source='SIM_STATE.alt') - ground_alt
-                max_alt = max(max_alt, alt)
-                if (alt > reach) != out_of_reach:
-                    # full scale reads as out of range high, as a lidar past its reach does
-                    out_of_reach = alt > reach
-                    self.set_parameter("SIM_SONAR_GLITCH", 1 if out_of_reach else 0)
-                    reach_lost = reach_lost or out_of_reach
-                    back_in_reach = back_in_reach or (not out_of_reach and longest_out >= 1)
-                    out_since = self.get_sim_time_cached()
-                if out_of_reach:
-                    longest_out = max(longest_out, self.get_sim_time_cached() - out_since)
-                flags = self.assert_receive_message('EKF_STATUS_REPORT').flags
-                if rel_lost_at is None and not flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
-                    rel_lost_at = alt
-            self.progress("highest %.1f m with a %.1f m reach under a 27 m limit, relative position %s" %
-                          (max_alt, reach, "kept" if rel_lost_at is None else "lost at %.1f m" % rel_lost_at))
+            tclimb_us = self.get_sim_time() * 1e6
+            self.install_message_hook(reach_hook)
+            try:
+                self.delay_sim_time(60, "climb at full stick against the limit")
+            finally:
+                self.remove_message_hook(reach_hook)
+            tend_us = self.get_sim_time() * 1e6
             self.set_rc(3, 1500)
             self.set_parameter("SIM_SONAR_GLITCH", 0)
+            rel_lost_at, max_alt = st["rel_lost_at"], st["max_alt"]
+            # what the range finder did, from the log rather than from what the hook asked for
+            good_us = []
+            dfreader = self.dfreader_for_current_onboard_log()
+            while True:
+                m = dfreader.recv_match(type=['RFND'])
+                if m is None:
+                    break
+                if m.Instance == 0 and tclimb_us < m.TimeUS < tend_us and m.Stat == 4:  # Good
+                    good_us.append(m.TimeUS)
+            if not good_us:
+                raise NotAchievedException("no Good range reading in the climb")
+            gaps = [(b - a) * 1e-6 for a, b in zip(good_us, good_us[1:])]
+            # a return lost and never regained leaves no Good sample after it
+            tail = (tend_us - good_us[-1]) * 1e-6
+            longest_out = max(gaps + [tail])
+            reach_lost = longest_out > 0.5
+            back_in_reach = max(gaps + [0]) >= 1
+            self.progress("highest %.1f m with a %.1f m reach under a 27 m limit, relative position %s" %
+                          (max_alt, reach, "kept" if rel_lost_at is None else "lost at %.1f m" % rel_lost_at))
             # past the 0.5 s after which an unmeasured range drops the raise
             if not reach_lost or longest_out < 1:
                 raise NotAchievedException("out of the %.1f m reach for at most %.1f s" % (reach, longest_out))
@@ -4016,6 +4039,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 raise NotAchievedException("climbed to %.1f m with a %.1f m reach" % (max_alt, reach))
             if max_alt < floor:
                 raise NotAchievedException("held at %.1f m with a %.1f m reach, under the raised limit" % (max_alt, reach))
+            if st["ekf_reports"] < 100:
+                raise NotAchievedException("only %u EKF_STATUS_REPORT in 60 s" % st["ekf_reports"])
             if keeps_rel and not back_in_reach:
                 raise NotAchievedException("never came back into the %.1f m reach" % reach)
             if keeps_rel and rel_lost_at is not None:
