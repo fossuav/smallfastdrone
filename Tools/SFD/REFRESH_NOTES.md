@@ -491,6 +491,11 @@ template: `AP_AHRS: adapt the stacked PRs to 4.7's EKF accessors`,
 AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
 `SITL: add SIM_SONAR_OFFSET`.
 
+- **send_set_parameter add_to_context** - #33585's brief-return leg puts
+  SIM_SONAR_SCALE in the test context with master's
+  `send_set_parameter(..., add_to_context=True)`; 4.7's has no such keyword.
+  Append `("SIM_SONAR_SCALE", sonar_scale)` to `self.context_get().parameters`
+  and send with `send_set_parameter_direct()`. `check_test_api.py` flags it.
 - **SIM_SONAR_OFFSET** - #34292's and #33507's tests set it; master added it in
   `568727a218` along with moving every SONAR_ parameter into a new group.
   Carried as the parameter alone at var_info3 index 57 plus the one line in
