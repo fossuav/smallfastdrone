@@ -2408,8 +2408,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if not flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
             raise NotAchievedException("relative position lost above the rangefinder range")
 
-        for options in 0, 1 << 3:  # without and with the AGL KF for flow scaling (AglKfForOptflow)
-            self.start_subtest("A brief return from something passed over keeps it (EK3_OPTIONS %u)" % options)
+        # without and with the AGL KF for flow scaling (AglKfForOptflow), and a return that
+        # lasts most of the 2 s, which a break seen only 500 ms late must not let through
+        for options, hold, window_min, window_max in (0, 0.3, 0, 1.4), (1 << 3, 0.3, 0, 1.4), (0, 1.7, 1.7, 2.0):
+            self.start_subtest("A brief return from something passed over keeps it (EK3_OPTIONS %u, %.1f s)" %
+                               (options, hold))
             # a second or so of in-range readings at height, as from a roof flown over, does not
             # end the fallback, and is undone once it has gone; only ground measured again without
             # a break for 2 s is taken as the ground
@@ -2423,11 +2426,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             # the obstacle's height would be under the height limit, and under the 5.6 m a
             # re-engagement needs, so the fallback has to have stayed on for the flag to survive
             tset_us = self.get_sim_time() * 1e6
-            self.set_parameter("SIM_SONAR_SCALE", sonar_scale * 8)
-            # setting a parameter takes a share of the return's length, so it is held only briefly
-            # and measured from the log afterwards
-            self.delay_sim_time(0.3, "the return")
-            self.set_parameter("SIM_SONAR_SCALE", sonar_scale)
+            # sent without waiting for the acknowledgement, which takes a varying share of the
+            # return's length; the length is measured from the log afterwards
+            self.send_set_parameter("SIM_SONAR_SCALE", sonar_scale * 8, add_to_context=True)
+            self.delay_sim_time(hold, "the return")
+            self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale)
             # the return is undone once it has been gone 500 ms; one taken as the ground would hold
             # the terrain offset valid for 5 s after it
             self.delay_sim_time(2, "the return to be undone")
@@ -2472,8 +2475,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             window = (good_us[-1] - good_us[0]) * 1e-6
             self.progress("return of %.1f s; height above ground min %.1f m during it, %.1f m after, at %.1f m up" %
                           (window, hagl_during, hagl_after, alt))
-            if window > 1.4:
-                raise NotAchievedException("the return lasted %.1f s, too close to 2 s to prove anything" % window)
+            if not window_min <= window <= window_max:
+                raise NotAchievedException("the return lasted %.1f s, outside %.2f-%.2f s, so the leg proves nothing" %
+                                           (window, window_min, window_max))
             if hagl_during > alt - 10:
                 raise NotAchievedException("the return was not fused (height above ground %.1f m), so the leg proves nothing" %
                                            hagl_during)
