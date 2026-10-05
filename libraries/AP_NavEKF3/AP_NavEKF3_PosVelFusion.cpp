@@ -319,8 +319,11 @@ void NavEKF3_core::ResetHeight(void)
         // A timeout reset either moves the datum (the height measurement shifted) or corrects
         // drift in position.z. A terrain state still being fused drifted along with
         // position.z, so it follows the reset either way; one frozen above the range did not,
-        // and carrying it would move the remembered ground by the drift. A source change, as at
-        // an external nav start, moves the datum by definition, so remembered ground follows it
+        // and carrying it would move the remembered ground by the drift. One fused within the
+        // last 5 s, which gndOffsetValid covers, still follows: it misses at most 5 s of drift,
+        // where not carrying it would step height above ground by the whole of a datum move.
+        // A source change, as at an external nav start, moves the datum by definition, so
+        // remembered ground follows it
         if ((gndOffsetValid || (prevHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER) ||
              (gndOffsetMeasured && (activeHgtSource != prevHgtSource))) &&
             (activeHgtSource != AP_NavEKF_Source::SourceZ::RANGEFINDER)) {
