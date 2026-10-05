@@ -22,6 +22,37 @@ flight with `LOG_REPLAY 1` and `LOG_DISARMED 2`. Every log is replayed, and
 each flight names the Replay A/B that gives its baseline.
 
 
+## This afternoon, 2026-10-05
+
+Firmware: the beta at `96250adaf3` (refresh10 with three top-ups). New
+since the refresh10 flights:
+
+- #33585: the flat-ground fallback ends after 2 s of range samples rather
+  than 2 s of clock.
+- #34380: the 1.5 m raise of the flow height limit holds only while the
+  terrain offset is being fused.
+- #34543's arrow lane marker, and #34630: a flow lockout reset turns the
+  recovered axis's arrow on the OSD lane item off for 250 ms, and
+  `EK3_OPTIONS` bit 6 quiets the per-reset messages.
+- SFD boards default to `EK3_OPTIONS 92` (bits 2, 3, 4, 6). A saved value
+  wins, so the O4 still has 62. Set 94 before flying: 92 plus bit 1, which
+  the per-core lanes need to change lane while armed. Bit 5 means nothing
+  now, and with bit 6 set the reset messages are gone, so XKF7.FVC and the
+  OSD are the only signs of a reset.
+
+Suggested order for one afternoon: flight 2 first, as it covers the most
+(#34380, #33568, the new #33585 timing and the OSD items), then flights 1
+and 4 together, then flight 3.
+
+Checks for any flight with the flow lane running, with the OSD EKF lane
+item on screen:
+
+- The flow arrows show which axes are fusing. A lockout reset (XKF7.FVC
+  increments) turns that axis's arrow off for 250 ms, and no "flow vel
+  reset" message appears with bit 6 set.
+- The lane marker arrow points at the lane flying.
+
+
 ## Flight 1: baro as height source at takeoff (#32972, #32553)
 
 Change `EK3_RNG_USE_HGT -1`. Keep `EK3_GND_EFF_DZ -8`, `GNDEFF_ALT 0.5`
@@ -87,6 +118,15 @@ Pass for #34380:
 - Relative position stays valid above it.
 - The opposite case, where the range finder is the height source and the
   vehicle backs down into range, is covered by SITL. Do not fly it.
+- The 15 m range finder reaches well past the 9.5 m cap, so today's
+  fresh-range change should not show. If the return is lost between 9 and
+  10.5 m, the limit should come back to 9.5 m within 0.5 s and the vehicle
+  hold where it can still measure, with relative position kept.
+
+Pass for #33585's new timing, on the descent back into range at step 4:
+
+- The fallback ends once the range has been back for 2 s, with no step in
+  height above ground (XKF5.HAGL) and no loss of relative position.
 
 Afterwards set `EK3_SRC_OPTIONS` back to 8 and `AVOID_ENABLE` back to 0,
 unless the cap is wanted.
@@ -114,6 +154,16 @@ Pass:
   +/-0.5 m/s before and +/-0.1 m/s after.
 - Armed on the ground, relative aiding stops once and does not restart.
 - On the climb, relative aiding restarts at roughly 0.2-0.4 m.
+
+Two known limits of the rest reading, from the 2026-10-05 review:
+
+- It is learned on the ground before takeoff from a flow sample, and kept
+  until the EKF restarts. Check OF.Qual is non-zero on the ground before
+  each takeoff, or the flight uses the previous flight's reading.
+- It compares range readings, so land on the same hard, level surface you
+  took off from. Soft ground, a dip or a tilted stance reading more than
+  5 cm further can leave flow aiding off after landing and trigger the
+  EKF failsafe while landed.
 
 
 ## Flight 4: hover Z-bias learning (#32471), two packs
@@ -151,6 +201,7 @@ is convenient.
   cause is not yet found.
 - Afterwards, restore refresh10's values: `EK3_RNG_USE_HGT 6`,
   `EK3_SRC_OPTIONS 8`, `AVOID_ENABLE 0`, and `ACC_ZBIAS_LEARN` as wanted.
+  Keep `EK3_OPTIONS 94`.
 - The A/B Replay binaries can be built before flying: beta without the
   #32553 reopen, beta without #33568, and beta without #32471's bias
   application.
