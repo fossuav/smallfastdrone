@@ -115,12 +115,12 @@ bool NavEKF3_core::getHeightControlLimit(float &height) const
         if (gndOffsetValid && flowScaleHgtUsable() &&
             (activeHgtSource != AP_NavEKF_Source::SourceZ::RANGEFINDER) && (height > 1.0f)) {
             // the fallback only takes over once the range has reached 1 m above the limit, so a
-            // range finder near the limit is let up to just past there to show it can, and one
-            // that cannot is held there rather than climbing on until the range data goes stale
+            // range finder near the limit is let up to just past there to show it can while the
+            // ground is still being measured, and held at the limit 0.5 s after that stops
             if (lastGoodRngMeas >= height + 1.0f) {
                 return false;
             }
-            if (lastGoodRngMeas >= height - 0.5f) {
+            if ((lastGoodRngMeas >= height - 0.5f) && (imuSampleTime_ms - gndHgtValidTime_ms < 500)) {
                 height += 1.5f;
             }
         }
