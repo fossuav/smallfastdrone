@@ -2996,6 +2996,72 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                     "height above ground moved %+.2f m across a %+.2f m datum reset"
                     % (agl_move, move))
 
+        self.start_subtest("A reset within 5 s of losing the range still carries the ground")
+        # the terrain state stops being fused when the range goes, but for 5 s it is still
+        # taken as following position.z, so a datum move then carries it rather than stepping
+        # height above ground by the whole move
+        self.set_parameter("RNGFND1_MAX", 60)
+        self.wait_ready_to_arm()
+        self.takeoff(10, mode='ALT_HOLD')
+        self.delay_sim_time(10, reason="let the terrain state settle on the rangefinder")
+        self.set_parameter("SIM_BARO_GLITCH", 30)
+        self.delay_sim_time(8, reason="2 s short of the 10 s height retry time")
+        # out of range above 5 m, so the range is lost 2 s before the reset
+        self.set_parameter("RNGFND1_MAX", 5)
+        cut = self.get_sim_time()
+        self.delay_sim_time(8, reason="past the height timeout")
+        self.set_parameters({
+            "SIM_BARO_GLITCH": 0,
+            "RNGFND1_MAX": 60,
+        })
+        self.delay_sim_time(8, reason="let it settle back")
+        self.change_mode('LAND')
+        self.wait_disarmed()
+
+        dfreader = self.dfreader_for_current_onboard_log()
+        xkf5 = []
+        xkf1 = []
+        rng_good = []
+        while True:
+            m = dfreader.recv_match(type=['XKF5', 'XKF1', 'RFND'])
+            if m is None:
+                break
+            if m.get_type() == 'RFND':
+                if m.Instance == 0 and m.Stat == 4:  # Good
+                    rng_good.append(m.TimeUS/1e6)
+                continue
+            if m.C != 0:
+                continue
+            if m.get_type() == 'XKF5':
+                xkf5.append((m.TimeUS/1e6, m.HAGL))
+            else:
+                xkf1.append((m.TimeUS/1e6, m.PD))
+        # the log also holds the first flight
+        resets = [(xkf1[i][0], xkf1[i][1] - xkf1[i-1][1]) for i in range(1, len(xkf1))
+                  if abs(xkf1[i][1] - xkf1[i-1][1]) > 5 and xkf1[i][0] > cut]
+        if not resets:
+            raise NotAchievedException("no height reset occurred, so nothing was tested")
+        # the reset onto the glitch is the one within 5 s of the range going, measured from the
+        # last Good reading the log holds rather than from when the parameter was set
+        t, move = resets[0]
+        last_good = max([g for g in rng_good if g < t] or [0])
+        if last_good < cut - 1:
+            raise NotAchievedException("the range was lost %.2f s before the cut, not by it" % (cut - last_good))
+        gap = t - last_good
+        if not 0.5 < gap < 5:
+            raise NotAchievedException("reset %.2f s after the last Good range, want 0.5-5 s" % gap)
+        before = [r for r in xkf5 if r[0] < t]
+        after = [r for r in xkf5 if r[0] >= t]
+        if not before or not after:
+            raise NotAchievedException("no XKF5 sample on both sides of the reset at %.2fs" % t)
+        agl_move = after[0][1] - before[-1][1]
+        self.progress("reset %.2fs after the last Good range moved the datum %+.2f m and the AGL %+.2f m"
+                      % (gap, move, agl_move))
+        if abs(agl_move) > 0.5:
+            raise NotAchievedException(
+                "height above ground moved %+.2f m across a %+.2f m datum reset %.2f s after range loss"
+                % (agl_move, move, gap))
+
     def EK3_TerrainStateFollowsDatumReset(self):
         """A height source change carries the terrain state with the vertical datum"""
         # ResetPositionD() re-expresses position.z against a different height reference.
