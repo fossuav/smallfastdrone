@@ -594,6 +594,11 @@ private:
     // the value of _inhibitAccelBiasLearning the DAL last accepted into the current log
     bool _inhibitAccelBiasLearningLogged;
 
+    // warn while disarmed if flow navigation above the range finder may drift
+    void checkFlowRangeWarning(void);
+    bool flowRangeWarned;
+    uint32_t flowRangeCheck_ms;
+
     // update the yaw reset data to capture changes due to a lane switch
     // new_primary - index of the ekf instance that we are about to switch to as the primary
     // old_primary - index of the ekf instance that we are currently using as the primary
