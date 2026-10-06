@@ -2410,10 +2410,14 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
 
         # without and with the AGL KF for flow scaling (AglKfForOptflow), and a return that
         # lasts most of the 2 s, which a break seen only 500 ms late must not let through. The
-        # EKF times a return about 0.1 s shorter than the log's first and last Good samples
-        for options, hold, window_min, window_max in (0, 0.3, 0, 1.4), (1 << 3, 0.3, 0, 1.4), (0, 1.6, 1.6, 2.0):
-            self.start_subtest("A brief return from something passed over keeps it (EK3_OPTIONS %u, %.1f s)" %
-                               (options, hold))
+        # EKF times a return about 0.1 s shorter than the log's first and last Good samples. The
+        # last case drops flow as a velocity source part way through, which must not leave the
+        # obstacle behind as the ground
+        cases = ((0, 0.3, 0, 1.4, False), (1 << 3, 0.3, 0, 1.4, False), (0, 1.6, 1.6, 2.0, False),
+                 (0, 0.8, 0, 1.9, True))
+        for options, hold, window_min, window_max, drop_flow in cases:
+            self.start_subtest("A brief return from something passed over keeps it (EK3_OPTIONS %u, %.1f s%s)" %
+                               (options, hold, ", flow dropped" if drop_flow else ""))
             # a second or so of in-range readings at height, as from a roof flown over, does not
             # end the fallback, and is undone once it has gone; only ground measured again without
             # a break for 2 s is taken as the ground
@@ -2431,7 +2435,15 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             # return's length; the length is measured from the log afterwards
             self.context_get().parameters.append(("SIM_SONAR_SCALE", sonar_scale))
             self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale * 8)
-            self.delay_sim_time(hold, "the return")
+            if drop_flow:
+                # late enough that the return has been fused, which the log check below confirms
+                self.delay_sim_time(hold * 0.4, "the return is fused")
+                self.send_set_parameter_direct("EK3_SRC1_VELXY", 0)
+                self.delay_sim_time(hold * 0.4, "flow dropped as a velocity source")
+                self.send_set_parameter_direct("EK3_SRC1_VELXY", 5)
+                self.delay_sim_time(hold * 0.2, "the rest of the return")
+            else:
+                self.delay_sim_time(hold, "the return")
             self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale)
             # the return is undone once it has been gone 500 ms; one taken as the ground would hold
             # the terrain offset valid for 5 s after it
@@ -2453,14 +2465,19 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             hagl_during = None
             hagl_after = None
             agl_kf_valid_after = False
+            hagl_us = []
+            drop_us = None
             dfreader = self.dfreader_for_current_onboard_log()
             while True:
-                m = dfreader.recv_match(type=['XKF5', 'XKFA', 'RFND'])
+                m = dfreader.recv_match(type=['XKF5', 'XKFA', 'RFND', 'PARM'])
                 if m is None:
                     break
                 if not tset_us < m.TimeUS < tend_us:
                     continue
-                if m.get_type() == 'XKFA':
+                if m.get_type() == 'PARM':
+                    if m.Name == 'EK3_SRC1_VELXY' and m.Value == 0 and drop_us is None:
+                        drop_us = m.TimeUS
+                elif m.get_type() == 'XKFA':
                     if m.C == 0 and m.TimeUS > tundone_us and m.Valid:
                         agl_kf_valid_after = True
                 elif m.get_type() == 'RFND':
@@ -2468,18 +2485,25 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                         good_us.append(m.TimeUS)
                 elif m.C == 0 and m.TimeUS < tundone_us:
                     hagl_during = m.HAGL if hagl_during is None else min(hagl_during, m.HAGL)
+                    hagl_us.append((m.TimeUS, m.HAGL))
                 elif m.C == 0:
                     hagl_after = m.HAGL if hagl_after is None else min(hagl_after, m.HAGL)
-            if not good_us:
-                raise NotAchievedException("the range finder never read the return at 2-3.5 m")
+            if len(good_us) < 3:
+                raise NotAchievedException("the range finder read the return at 2-3.5 m only %u times" % len(good_us))
             if hagl_during is None or hagl_after is None:
                 raise NotAchievedException("no XKF5 around the return")
-            window = (good_us[-1] - good_us[0]) * 1e-6
+            window_us = good_us[-1] - good_us[0]
+            window = window_us * 1e-6
             self.progress("return of %.1f s; height above ground min %.1f m during it, %.1f m after, at %.1f m up" %
                           (window, hagl_during, hagl_after, alt))
-            if not window_min <= window <= window_max:
+            if not round(window_min * 1e6) <= window_us <= round(window_max * 1e6):
                 raise NotAchievedException("the return lasted %.1f s, outside %.2f-%.2f s, so the leg proves nothing" %
                                            (window, window_min, window_max))
+            if drop_flow:
+                # the drop has to land inside a return already fused, or no snapshot was at stake
+                fused_us = [t for t, h in hagl_us if h < alt - 10]
+                if drop_us is None or not fused_us or not fused_us[0] < drop_us < good_us[-1]:
+                    raise NotAchievedException("flow was not dropped inside a fused return, so the case proves nothing")
             if hagl_during > alt - 10:
                 raise NotAchievedException("the return was not fused (height above ground %.1f m), so the leg proves nothing" %
                                            hagl_during)
