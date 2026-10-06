@@ -7,6 +7,21 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-06 - refresh10 topup9, #33359's step-up fix
+
+Takes #33359's fix for the terrain step found in refresh8's log29: flying
+off a 0.84 m step and back up, the range finder height switch re-engaged
+with the terrain offset still part way to the lower ground, and the height
+reset on the source change pulled the altitude down 0.45 m. Where only the
+AGL KF makes terrain stable, the switch now waits for the AGL KF to agree
+within 0.15 m with the range sample being fused, and takes the terrain
+offset from the range when it disagrees by more than 0.3 m. Replay of six
+flights, two indoors: the step lands at +0.10/-0.35 m instead of
+-0.57/-0.63 m, and the other flights are unchanged. The new
+EK3_RngHgtSwitchStepUp flies a 3.5 m step up in SITL.
+
+SmallFastDronev1 builds. 91 of 91 on the full set, the new test included.
+
 ## 2026-10-06 - refresh10 topup8, #34208's lock-free target and #34642
 
 #34208 drops its std::atomic loads, stores and fences for a plain volatile
