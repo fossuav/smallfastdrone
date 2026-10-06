@@ -3716,7 +3716,7 @@ bool AP_AHRS::using_gps_for_pos(void) const
     return true;
 }
 
-bool AP_AHRS::has_horiz_pos_vel_source(void) const
+bool AP_AHRS::configured_to_use_horizontal_position_or_velocity_source(void) const
 {
 #if HAL_NAVEKF3_AVAILABLE
     if (active_EKF_type() == EKFType::THREE) {
