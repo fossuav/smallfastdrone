@@ -3999,9 +3999,15 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
         self.set_analog_rangefinder_parameters()
         # below the limit it is held at 27 m, out of reach; one that reaches the limit is let
-        # past it while it measures and held at it once the return goes, so it stays in reach
-        for reach, floor, ceiling, keeps_rel in ((25, 0, 29, False), (27.5, 27.6, 30.5, True)):
-            self.start_subtest("return lost at %.1f m" % reach)
+        # past it while it measures and held at it once the return goes, so it stays in reach.
+        # Centring the stick past the reach leaves it there: AC_Avoid only limits a climb, so
+        # nothing brings it back into reach, and below the 28 m fallback it loses relative
+        # position.  That is accepted for a range finder that falls short of RNGFND1_MAX; the
+        # leg checks it holds its height there rather than climbing on or dropping
+        for reach, floor, ceiling, keeps_rel, centre in ((25, 0, 29, False, False),
+                                                         (27.5, 27.6, 30.5, True, False),
+                                                         (27.5, 27.6, 29.5, None, True)):
+            self.start_subtest("return lost at %.1f m%s" % (reach, ", stick centred past it" if centre else ""))
             self.reboot_sitl()
             self.wait_ready_to_arm(require_absolute=False)
             ground_alt = self.get_altitude(altitude_source='SIM_STATE.alt')
@@ -4011,12 +4017,15 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             self.set_parameter("SIM_SONAR_GLITCH", 0)
             self.context_set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_SIM_STATE, 20)
             self.context_set_message_rate_hz(mavutil.mavlink.MAVLINK_MSG_ID_EKF_STATUS_REPORT, 10)
-            st = {"alt": 0, "max_alt": 0, "out": False, "rel_lost_at": None, "ekf_reports": 0}
+            st = {"alt": 0, "max_alt": 0, "out": False, "rel_lost_at": None, "ekf_reports": 0,
+                  "centred": False, "hold": []}
 
             def reach_hook(mav, m, st=st, reach=reach, ground_alt=ground_alt):
                 if m.get_type() == 'SIM_STATE':
                     st["alt"] = m.alt - ground_alt
                     st["max_alt"] = max(st["max_alt"], st["alt"])
+                    if st["centred"]:
+                        st["hold"].append(st["alt"])
                     if (st["alt"] > reach) != st["out"]:
                         # full scale reads as out of range high, as a lidar past its reach does
                         st["out"] = st["alt"] > reach
@@ -4030,7 +4039,17 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             tclimb_us = self.get_sim_time() * 1e6
             self.install_message_hook(reach_hook)
             try:
-                self.delay_sim_time(60, "climb at full stick against the limit")
+                if centre:
+                    tstart = self.get_sim_time()
+                    while st["max_alt"] < reach + 0.3:
+                        if self.get_sim_time() - tstart > 60:
+                            raise NotAchievedException("never climbed past the %.1f m reach" % reach)
+                        self.delay_sim_time(0.2, "climb past the reach")
+                    self.set_rc(3, 1500)
+                    st["centred"] = True
+                    self.delay_sim_time(20, "stick centred past the reach")
+                else:
+                    self.delay_sim_time(60, "climb at full stick against the limit")
             finally:
                 self.remove_message_hook(reach_hook)
             tend_us = self.get_sim_time() * 1e6
@@ -4065,6 +4084,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 raise NotAchievedException("held at %.1f m with a %.1f m reach, under the raised limit" % (max_alt, reach))
             if st["ekf_reports"] < 100:
                 raise NotAchievedException("only %u EKF_STATUS_REPORT in 60 s" % st["ekf_reports"])
+            if centre:
+                hold = st["hold"]
+                if len(hold) < 100:
+                    raise NotAchievedException("only %u SIM_STATE with the stick centred" % len(hold))
+                self.progress("stick centred: held %.1f-%.1f m" % (min(hold), max(hold)))
+                if max(hold) - min(hold) > 1:
+                    raise NotAchievedException("moved %.1f-%.1f m with the stick centred" % (min(hold), max(hold)))
             if keeps_rel and not back_in_reach:
                 raise NotAchievedException("never came back into the %.1f m reach" % reach)
             if keeps_rel and rel_lost_at is not None:
