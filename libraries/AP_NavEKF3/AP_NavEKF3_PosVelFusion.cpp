@@ -1581,6 +1581,19 @@ void NavEKF3_core::selectHeightForFusion()
         }
 #endif
 
+        // Where only the AGL KF makes terrain stable, switching in resets the height to the AGL KF, so wait
+        // until it has caught up with the range sample being fused, or the reset carries its lag into the height
+        bool aglSettled = true;
+#if EK3_FEATURE_OPTFLOW_AGL_KF
+        const ftype rngHgt = MAX(rangeDataDelayed.rng * prevTnb.c.z, rngOnGnd);
+        const bool aglOnlyStable = !terrainHgtStable && aglKfValid &&
+                                   frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow);
+        if (aglOnlyStable) {
+            aglSettled = rangeDataToFuse && (imuSampleTime_ms - lastAglRngFuseTime_ms < 200) &&
+                         (fabsF(aglKfH - rngHgt) < 0.15f);
+        }
+#endif
+
         // If the terrain height is consistent and we are moving slowly, then it can be
         // used as a height reference in combination with a range finder
         // apply a hysteresis to the speed check to prevent rapid switching
@@ -1609,7 +1622,18 @@ void NavEKF3_core::selectHeightForFusion()
             } else if (frontend->sources.getPosZSource(core_index) == AP_NavEKF_Source::SourceZ::GPS) {
                 activeHgtSource = AP_NavEKF_Source::SourceZ::GPS;
             }
-        } else if (belowLowerSwHgt && trustTerrain && (prevTnb.c.z >= 0.7f)) {
+        } else if (belowLowerSwHgt && trustTerrain && aglSettled && (prevTnb.c.z >= 0.7f)) {
+#if EK3_FEATURE_OPTFLOW_AGL_KF
+            // Switching in freezes the terrain offset, which after a step up can still be the lower ground's.
+            // Take it from the range when they disagree by more than baro drift did at a switch in flight
+            // tests (under 0.25 m, against 0.66 m on a step).
+            if ((activeHgtSource != AP_NavEKF_Source::SourceZ::RANGEFINDER) && aglOnlyStable) {
+                if (fabsF((terrainState - stateStruct.position.z) - rngHgt) > 0.3f) {
+                    terrainState = stateStruct.position.z + rngHgt;
+                    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "EKF3 IMU%u terrain offset reset from range", (unsigned)imu_index);
+                }
+            }
+#endif
             // reliable terrain and range finder so start using range finder height
             activeHgtSource = AP_NavEKF_Source::SourceZ::RANGEFINDER;
         }
