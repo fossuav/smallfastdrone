@@ -7,6 +7,29 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-06 - refresh10 topup7, the review-round fixes
+
+Takes the heads pushed after the 2026-10-05 AI reviews: #33585's flat-ground
+snapshot is now dropped across a landing rather than restored, with a test
+case for a range return cut short by losing flow; #32768's test reboots SITL
+at its end so the next test starts clean; #34380 gains a comment on the range
+gap it leaves; #32972 is restacked; #34543 and #34630 take the new OSD
+commits.
+
+The first full run tested a stale SITL binary. The 2026-10-05
+`./waf configure --out` builds of other boards rewrote this worktree's
+lockfile out_dir, so every later `./waf copter` built the flight board and
+reported success while build/sitl stayed at 2026-10-05 12:48. The topup4-6
+runs predate that and stand. The same mistake made the 2026-10-05 #32553
+no-reopen Replay byte-identical to the beta, so its "nothing to correct" was
+wrong; a genuine build shows the reopen halving the height-above-ground error
+in log36's low dwell (FIELD_PLAN.md has the numbers).
+
+Re-run on the rebuilt binary: 89 of 90. Replay timed out waiting for
+GLOBAL_POSITION_INT in its GPS-yaw RTL, twice within a minute after the full
+run, then passed five times: alone through the runner, directly, in a clean
+worktree at the same commit, and on the topup6 beta.
+
 ## 2026-10-05 - EK3_OPTIONS 92 as the SFD default
 
 sfd_defaults.parm now sets EK3_OPTIONS 92: bits 2 (flow may use terrain
