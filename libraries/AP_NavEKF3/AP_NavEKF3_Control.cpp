@@ -922,7 +922,8 @@ void NavEKF3_core::updateFlatGroundAssumed(void)
     // is used rather than the terrain update time, which a range height source holds still
     if (imuSampleTime_ms - rngValidMeaTime_ms >= 500) {
         flatGndRngResumeTime_ms = 0;
-        if (flatGndSaved.valid) {
+        // a snapshot from before a landing belongs to the last flight, so it is dropped, not restored
+        if (flatGndSaved.valid && gndOffsetMeasured) {
             if (!aboveFlowHgtLimit(flatGndSaved.terrainState - stateStruct.position.z + 1)) {
                 // under the height limit over the ground held, a return that broke off is that
                 // ground come back into range on a descent, so it is kept and ends the fallback
@@ -958,7 +959,13 @@ void NavEKF3_core::updateFlatGroundAssumed(void)
     if (!frontend->sources.useVelXYSource(AP_NavEKF_Source::SourceXY::OPTFLOW, core_index) ||
         !gndOffsetMeasured || !flowScaleHgtUsable()) {
         flatGndEngaged = false;
-        flatGndSaved.valid = false;
+        // a pending return is still judged by its length, so losing flow or height in the middle
+        // of one cannot leave the obstacle's height behind as the ground. A landing, which clears
+        // gndOffsetMeasured, ends it
+        if (!gndOffsetMeasured ||
+            ((flatGndRngResumeTime_ms != 0) && (rngValidMeaTime_ms - flatGndRngResumeTime_ms >= 2000))) {
+            flatGndSaved.valid = false;
+        }
         return;
     }
     // while a return is pending the terrain state is the returned surface's, so the two checks
