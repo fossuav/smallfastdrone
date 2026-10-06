@@ -32,7 +32,7 @@ Firmware `96250adaf3`. All five logs replay exactly.
 | #34456 | In-flight refusal validated (log37, `EK3_OPTIONS 92`). |
 | #34292 | Floor works and aiding is kept; no phantom velocity on this airframe to remove. |
 | #32972 | Mixed. Negative `EK3_GND_EFF_DZ` holds height through spool-up (0.03-0.07 m against 0.21-0.27 m), but -8 is worse after liftoff (0.35 against 0.17 m rms). Replay sweep done; no more flying needed. |
-| #32553 | Not testable here: nothing reaches the terrain offset to correct. Dropped from the plan. |
+| #32553 | Helps. Replaying log36 without the reopen, height above ground during the 0.6 m dwell (59-75 s) is off by 0.47 m rms on core 1 against 0.21 m as flown (core 0: 0.11 against 0.04 m); with `EK3_GND_EFF_DZ=2` it is 0.54 against 0.22 m. No difference above range. The 2026-10-06 retraction: the first A/B used a no-reopen binary that was byte-identical to the beta, so its "nothing to correct" was wrong. |
 | #34380 | Not flown: in log37 the flow lane was never primary, so no limit was published. |
 | #33568 | Not flown: `EK3_SRC_OPTIONS` stayed 8. |
 | #34630 | No resets: log39's acro was above the range finder, so both flow axes dropped together and no single-axis lockout occurred. |
