@@ -375,7 +375,8 @@ public:
     // are we using (aka fusing) external nav for yaw?
     bool using_extnav_for_yaw() const;
 
-    // true if the primary core has a horizontal position or velocity source to fuse
+    // true if the primary core's source set includes a horizontal position or velocity source (either is
+    // enough), whether or not it is delivering
     bool has_horiz_pos_vel_source() const;
 
     // are we using a gps
