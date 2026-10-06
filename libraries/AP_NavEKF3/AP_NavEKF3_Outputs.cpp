@@ -116,7 +116,8 @@ bool NavEKF3_core::getHeightControlLimit(float &height) const
             (activeHgtSource != AP_NavEKF_Source::SourceZ::RANGEFINDER) && (height > 1.0f)) {
             // the fallback only takes over once the range has reached 1 m above the limit, so a
             // range finder near the limit is let up to just past there to show it can while the
-            // ground is still being measured, and held at the limit 0.5 s after that stops
+            // ground is still being measured, and held at the limit 0.5 s after that stops. One
+            // whose reach ends inside that 1 m, left there with no climb demand, loses relative position
             if (lastGoodRngMeas >= height + 1.0f) {
                 return false;
             }
