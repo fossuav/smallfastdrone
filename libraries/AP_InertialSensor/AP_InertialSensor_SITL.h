@@ -47,6 +47,8 @@ private:
     const uint16_t accel_sample_hz;
     // simulated raw gyro samples per backend sample
     uint8_t gyro_nsamples;
+    // generate every gyro sample that is due, set when INS_GYRO_RATE raises the rate
+    bool gyro_catch_up;
     // timestamp of the gyro sample being generated
     uint64_t gyro_sample_us;
 

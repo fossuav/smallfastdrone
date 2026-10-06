@@ -363,15 +363,16 @@ void AP_InertialSensor_SITL::timer_update(void)
     }
     if (now >= next_gyro_sample) {
         if (((1U << gyro_instance) & sitl->gyro_fail_mask) == 0) {
-            if (next_gyro_sample == 0 || now - next_gyro_sample > 10000UL) {
+            if (next_gyro_sample == 0 || (gyro_catch_up && now - next_gyro_sample > 10000UL)) {
                 // first sample, or a gap from the fail mask or a clock jump:
                 // resync rather than generate every missed sample
                 next_gyro_sample = now;
             }
-            // the timer runs at the simulation rate, which can be below the
-            // gyro rate, so generate every sample that is due
-            while (now >= next_gyro_sample) {
-                gyro_sample_us = next_gyro_sample;
+            // with the gyro rate raised by INS_GYRO_RATE the timer, which runs at the
+            // simulation rate, can fall below it, so generate every sample that is due.
+            // Otherwise generate one and skip any that were missed, as before
+            do {
+                gyro_sample_us = gyro_catch_up ? next_gyro_sample : now;
 #if AP_SIM_INS_FILE_ENABLED
                 if (sitl->gyro_file_rw == SITL::SIM::INSFileMode::INS_FILE_READ
                     || sitl->gyro_file_rw == SITL::SIM::INSFileMode::INS_FILE_READ_STOP_ON_EOF) {
@@ -379,6 +380,9 @@ void AP_InertialSensor_SITL::timer_update(void)
                 } else
 #endif
                 generate_gyro();
+                next_gyro_sample += 1000000UL / gyro_sample_hz;
+            } while (gyro_catch_up && now >= next_gyro_sample);
+            while (now >= next_gyro_sample) {
                 next_gyro_sample += 1000000UL / gyro_sample_hz;
             }
         }
@@ -447,6 +451,7 @@ void AP_InertialSensor_SITL::start()
         const uint8_t mult = constrain_int16(get_fast_sampling_rate(), 1, 8);
         gyro_sample_hz *= mult;
         gyro_nsamples = 8 / mult;
+        gyro_catch_up = mult > 1;
         _set_gyro_raw_sample_rate(gyro_instance, gyro_sample_hz);
     }
 
