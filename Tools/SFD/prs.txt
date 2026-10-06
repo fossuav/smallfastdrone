@@ -61,6 +61,7 @@
 33879   # FFT notch tune: persist the tracking mode and name the notch used
 34209   # EKF3: do not learn XY accel bias in unaided flight
 34208   # Copter: interpolate the rate target in the fast rate thread
+34642   # AP_InertialSensor: SITL gyro rate follows INS_GYRO_RATE (split out of #34208)
 34583   # AC_AttitudeControl: throttle-gain boost once per loop + throttle mix slew dt with the fast rate thread
 34584   # AC_AttitudeControl: record per-loop rate modifiers for the fast rate thread (carries #34583's three commits, same SHAs)
 34601   # AP_InertialSensor: log every filtered gyro sample with the rate thread

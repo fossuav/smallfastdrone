@@ -7,6 +7,19 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-06 - refresh10 topup8, #34208's lock-free target and #34642
+
+#34208 drops its std::atomic loads, stores and fences for a plain volatile
+sequence and published copy, after the maintainers asked for no first use
+of std:: atomics; neither thread takes a lock or a barrier. Its SITL gyro
+rate commits moved to #34642, which now catches up gyro samples only when
+INS_GYRO_RATE raises the rate, so low SIM_RATE_HZ setups are unchanged.
+The beta already carried the older SITL change and SITLGyroRate, so only
+the deltas were applied; they match the PRs line for line. #34642 is
+listed after #34208 in prs.txt.
+
+SmallFastDronev1 builds. 90 of 90 on the full set.
+
 ## 2026-10-06 - refresh10 topup7, the review-round fixes
 
 Takes the heads pushed after the 2026-10-05 AI reviews: #33585's flat-ground
