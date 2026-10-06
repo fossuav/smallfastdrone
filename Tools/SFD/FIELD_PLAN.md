@@ -38,24 +38,48 @@ Firmware `96250adaf3`. All five logs replay exactly.
 | #34630 | No resets: log39's acro was above the range finder, so both flow axes dropped together and no single-axis lockout occurred. |
 | #32471 | Not flown. |
 
+## Since then (2026-10-06, beta `fde4de75a6`)
+
+| PR | Status |
+|---|---|
+| #33359 | Replay of logs 31-35 and 39 (probe on the height source): the switch engaged in flight with the vehicle's terrain-stable flag clear for ~72 s on log31, including a 21 s hover below 0.9 m that tracked the range to 0.10 m rms. Refresh8's log29 (the 0.84 m step) showed a defect: back up the step the switch re-engaged on a stale terrain offset and pulled the height down 0.45 m. Fixed in topup9 (`d52e4a8a8c`); Replay of log29 lands at +0.10/-0.35 m instead of -0.57/-0.63 m. **Fly it: item 1 below.** |
+| #34208 | Lock-free rate target (volatile sequence instead of std::atomic) in topup8. Same behaviour by design; any flight on the fast rate thread exercises it. |
+| #34642 | SITL-only (gyro rate follows INS_GYRO_RATE). Nothing to fly. |
+| #34380 | Review fix is a comment and a test leg; the flight below is unchanged. |
+
 ## Next flight
 
-Firmware unchanged (`96250adaf3`). Keep `EK3_OPTIONS 94`.
+Firmware `fde4de75a6` (topup9). Keep `EK3_OPTIONS 94`.
 
-1. **#34380, per-core lanes.** `AVOID_ENABLE 1`, `EK3_SRC_OPTIONS 8`.
+1. **#33359 step-up, the log29 sortie again.** `EK3_RNG_USE_HGT 6`,
+   `EK3_OPTIONS` bit 3 (94 has it), GPS lane (set 1), LOITER. Take off from
+   the top of the step, hover at about 0.45 m for 10 s, fly off the edge
+   and hover over the lower ground for at least 10 s, fly back over the top,
+   hover 10 s and land on top. Do it twice.
+   Pass: crossing back up, the log shows "EKF3 IMU0/1 terrain offset reset
+   from range" if the offset is stale, and the EKF altitude does not step
+   down when the switch re-engages. Landed back on top, EKF altitude is
+   within about 0.15 m of where it was before takeoff (log29: -0.45 m).
+   Off the edge it
+   still hands back to baro within about 0.3 s with no altitude step.
+   Baseline: Replay of the same log with `d52e4a8a8c` reverted.
+   Risk: the old behaviour stepped the EKF altitude down 0.4 m at about
+   0.3 m up, and Copter moves its target with a height reset. Hover no lower
+   than 0.4 m and keep STABILIZE on a switch.
+2. **#34380, per-core lanes.** `AVOID_ENABLE 1`, `EK3_SRC_OPTIONS 8`.
    Select set 2 before arming (or in flight, which needs `EK3_OPTIONS`
    bit 1). Take off on the flow lane and climb at full stick from 5 m to
    about 25 m in LOITER. Pass: it climbs through 9.5 m without being held,
    relative position stays valid, and the descent back into range is clean.
    Without #34380, AC_Avoid would hold it at about 9.5 m.
-2. **#33568 with #34380, single source set.** This is flight 2 below:
+3. **#33568 with #34380, single source set.** This is flight 2 below:
    `EK3_SRC_OPTIONS 0`, `AVOID_ENABLE 1`, take off on set 1, switch to set
    2 in flight (no lane change, so bit 1 is not involved). Pass: XKF4.AID
    goes 0 to 2, the flow speed limit caps LOITER, and the climb passes
    9.5 m.
-3. **#32471.** Flight 4 below: one pack at `ACC_ZBIAS_LEARN 9`, then one at
+4. **#32471.** Flight 4 below: one pack at `ACC_ZBIAS_LEARN 9`, then one at
    11, each with a 60 s hover.
-4. **#34630, if time allows.** Hard acro on the flow lane while staying
+5. **#34630, if time allows.** Hard acro on the flow lane while staying
    inside the range finder's reach, below about 12 m, so a lockout has a
    fresh range to recover against. Watch the OSD lane item: a reset turns
    that axis's arrow off for 250 ms, with no message (bit 6). XKF7.FVC
@@ -65,6 +89,8 @@ Restore `EK3_SRC_OPTIONS 8` and `AVOID_ENABLE 0` afterwards.
 
 
 ## Flight 1: baro as height source at takeoff (#32972, #32553)
+
+Done 2026-10-05 (log36); no repeat needed. Kept for reference.
 
 Change `EK3_RNG_USE_HGT -1`. Keep `EK3_GND_EFF_DZ -8`, `GNDEFF_ALT 0.5`
 and `GNDEFF_TMO 2`. Fly on the GPS lane (set 1).
