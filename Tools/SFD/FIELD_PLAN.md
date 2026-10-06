@@ -22,35 +22,46 @@ flight with `LOG_REPLAY 1` and `LOG_DISARMED 2`. Every log is replayed, and
 each flight names the Replay A/B that gives its baseline.
 
 
-## This afternoon, 2026-10-05
+## Where it stands after 2026-10-05 (logs 35-39)
 
-Firmware: the beta at `96250adaf3` (refresh10 with three top-ups). New
-since the refresh10 flights:
+Firmware `96250adaf3`. All five logs replay exactly.
 
-- #33585: the flat-ground fallback ends after 2 s of range samples rather
-  than 2 s of clock.
-- #34380: the 1.5 m raise of the flow height limit holds only while the
-  terrain offset is being fused.
-- #34543's arrow lane marker, and #34630: a flow lockout reset turns the
-  recovered axis's arrow on the OSD lane item off for 250 ms, and
-  `EK3_OPTIONS` bit 6 quiets the per-reset messages.
-- SFD boards default to `EK3_OPTIONS 92` (bits 2, 3, 4, 6). A saved value
-  wins, so the O4 still has 62. Set 94 before flying: 92 plus bit 1, which
-  the per-core lanes need to change lane while armed. Bit 5 means nothing
-  now, and with bit 6 set the reset messages are gone, so XKF7.FVC and the
-  OSD are the only signs of a reset.
+| PR | Status |
+|---|---|
+| #33585 | Validated again with the new end timing: flow lane primary above range to 22 m, 6.4% drift, no HAGL step when the range came back. Squashed. |
+| #34456 | In-flight refusal validated (log37, `EK3_OPTIONS 92`). |
+| #34292 | Floor works and aiding is kept; no phantom velocity on this airframe to remove. |
+| #32972 | Mixed. Negative `EK3_GND_EFF_DZ` holds height through spool-up (0.03-0.07 m against 0.21-0.27 m), but -8 is worse after liftoff (0.35 against 0.17 m rms). Replay sweep done; no more flying needed. |
+| #32553 | Not testable here: nothing reaches the terrain offset to correct. Dropped from the plan. |
+| #34380 | Not flown: in log37 the flow lane was never primary, so no limit was published. |
+| #33568 | Not flown: `EK3_SRC_OPTIONS` stayed 8. |
+| #34630 | No resets: log39's acro was above the range finder, so both flow axes dropped together and no single-axis lockout occurred. |
+| #32471 | Not flown. |
 
-Suggested order for one afternoon: flight 2 first, as it covers the most
-(#34380, #33568, the new #33585 timing and the OSD items), then flights 1
-and 4 together, then flight 3.
+## Next flight
 
-Checks for any flight with the flow lane running, with the OSD EKF lane
-item on screen:
+Firmware unchanged (`96250adaf3`). Keep `EK3_OPTIONS 94`.
 
-- The flow arrows show which axes are fusing. A lockout reset (XKF7.FVC
-  increments) turns that axis's arrow off for 250 ms, and no "flow vel
-  reset" message appears with bit 6 set.
-- The lane marker arrow points at the lane flying.
+1. **#34380, per-core lanes.** `AVOID_ENABLE 1`, `EK3_SRC_OPTIONS 8`.
+   Select set 2 before arming (or in flight, which needs `EK3_OPTIONS`
+   bit 1). Take off on the flow lane and climb at full stick from 5 m to
+   about 25 m in LOITER. Pass: it climbs through 9.5 m without being held,
+   relative position stays valid, and the descent back into range is clean.
+   Without #34380, AC_Avoid would hold it at about 9.5 m.
+2. **#33568 with #34380, single source set.** This is flight 2 below:
+   `EK3_SRC_OPTIONS 0`, `AVOID_ENABLE 1`, take off on set 1, switch to set
+   2 in flight (no lane change, so bit 1 is not involved). Pass: XKF4.AID
+   goes 0 to 2, the flow speed limit caps LOITER, and the climb passes
+   9.5 m.
+3. **#32471.** Flight 4 below: one pack at `ACC_ZBIAS_LEARN 9`, then one at
+   11, each with a 60 s hover.
+4. **#34630, if time allows.** Hard acro on the flow lane while staying
+   inside the range finder's reach, below about 12 m, so a lockout has a
+   fresh range to recover against. Watch the OSD lane item: a reset turns
+   that axis's arrow off for 250 ms, with no message (bit 6). XKF7.FVC
+   counts them.
+
+Restore `EK3_SRC_OPTIONS 8` and `AVOID_ENABLE 0` afterwards.
 
 
 ## Flight 1: baro as height source at takeoff (#32972, #32553)
