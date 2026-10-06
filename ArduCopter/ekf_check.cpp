@@ -51,7 +51,7 @@ void Copter::ekf_check()
     // if we have a position estimate where the mode or the source set needs one
     const bool over_threshold = ekf_over_threshold();
     const bool has_position = ekf_has_relative_position() || ekf_has_absolute_position();
-    const bool position_expected = flightmode->requires_position() || landing_with_GPS() || ahrs.has_horiz_pos_vel_source();
+    const bool position_expected = flightmode->requires_position() || landing_with_GPS() || ahrs.configured_to_use_horizontal_position_or_velocity_source();
     const bool checks_passed = !over_threshold && (has_position || !position_expected);
 
     // return if ekf checks have never passed
