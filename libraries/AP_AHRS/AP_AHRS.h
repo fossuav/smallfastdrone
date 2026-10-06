@@ -463,7 +463,6 @@ public:
     // true if the active backend is configured to use a horizontal position or velocity source (either
     // is enough), whether or not it is delivering; false only for an EKF3 source set with neither
     bool configured_to_use_horizontal_position_or_velocity_source(void) const;
-    bool has_horiz_pos_vel_source(void) const { return configured_to_use_horizontal_position_or_velocity_source(); }
 
     // check if GPS is being used to estimate position or velocity
     // always returns true for External and SIM EKF types
