@@ -491,13 +491,14 @@ private:
     AP_Int32 _options;              // bit mask of processing options
     AP_Float _aglKfVelMaxSpd;       // maximum horizontal speed for AGL KF vertical velocity fusion (m/s)
     AP_Int16 _flowQualMin;          // flow quality below which a lockout is not recovered by a reset
+    AP_Float _aglKfAccelBiasPnse;   // AGL KF accel-Z bias state process noise : m/s/s/s
 
     // enum for processing options
     enum class Option {
         JammingExpected         = (1<<0),
         ManualLaneSwitch        = (1<<1),
         OptflowMayUseTerrainAlt = (1<<2),
-        AglKfForOptflow         = (1<<3),  // Use IMU-aided 2-state AGL KF for optflow scaling
+        AglKfForOptflow         = (1<<3),  // Use IMU-aided AGL KF for optflow scaling
         AglKfVelForVelD         = (1<<4),  // Fuse AGL KF vertical velocity as a velD observation
     };
     bool option_is_enabled(Option option) const {
