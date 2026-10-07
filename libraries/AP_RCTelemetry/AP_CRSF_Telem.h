@@ -458,6 +458,7 @@ private:
         bool init_done;
         uint32_t params_mode_start_ms;
         bool params_mode_active;
+        bool params_mode_armed;
     } _custom_telem;
 
     struct {

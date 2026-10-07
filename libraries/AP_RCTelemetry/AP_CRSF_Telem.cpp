@@ -434,6 +434,13 @@ void AP_CRSF_Telem::enter_scheduler_params_mode()
     debug("parameter passthrough enabled");
     set_scheduler_entry(HEARTBEAT, 50, 200);            // heartbeat        5Hz
     disable_tx_entries();
+    _custom_telem.params_mode_armed = hal.util->get_soft_armed();
+    if (_custom_telem.params_mode_armed) {
+        // when armed keep the telemetry the pilot needs to see failsafes
+        enable_scheduler_entry(BATTERY);
+        enable_scheduler_entry(FLIGHT_MODE);
+        enable_scheduler_entry(STATUS_TEXT);
+    }
 }
 
 void AP_CRSF_Telem::exit_scheduler_params_mode()
@@ -446,10 +453,6 @@ void AP_CRSF_Telem::exit_scheduler_params_mode()
 
 bool AP_CRSF_Telem::should_enter_scheduler_params_mode() const
 {
-    if (hal.util->get_soft_armed()) {
-        return false;
-    }
-
     if (_pending_request.frame_type > 0 && _pending_request.frame_type != AP_CRSF_Protocol::CRSF_FRAMETYPE_PARAM_DEVICE_INFO) {
         return true;
     }
@@ -481,6 +484,9 @@ void AP_CRSF_Telem::adjust_packet_weight(bool queue_empty)
         // fast window stop
         _custom_telem.params_mode_active = false;
         exit_scheduler_params_mode();
+    } else if (_custom_telem.params_mode_active && !_custom_telem.params_mode_armed && hal.util->get_soft_armed()) {
+        // armed during a fast window, restore the armed telemetry
+        enter_scheduler_params_mode();
     }
 }
 
