@@ -496,6 +496,11 @@ AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
   `send_set_parameter(..., add_to_context=True)`; 4.7's has no such keyword.
   Append `("SIM_SONAR_SCALE", sonar_scale)` to `self.context_get().parameters`
   and send with `send_set_parameter_direct()`. `check_test_api.py` flags it.
+- **context_set_speedup** - #34678's StabilizeInvertedLanded calls master's
+  `context_set_speedup(1)`; 4.7 has no such helper. Save `self.speedup`, set
+  it to 1 and `set_parameter("SIM_SPEEDUP", 1)` (the context restores the
+  parameter), and put `self.speedup` back before the final disarm.
+  `check_test_api.py` flags it.
 - **SIM_SONAR_OFFSET** - #34292's and #33507's tests set it; master added it in
   `568727a218` along with moving every SONAR_ parameter into a new group.
   Carried as the parameter alone at var_info3 index 57 plus the one line in

@@ -7,6 +7,19 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-08 - refresh10 topup11, #34678 and the flight card split
+
+Adds #34678: righting a copter on its back in Stabilize or Drift no longer
+raises a flow_of_control internal error that blocks arming until reboot. Its
+StabilizeInvertedLanded fails on this 4.7 base without the fix ("Internal
+Errors 0x100000") and passes with it; the test needed master's
+context_set_speedup() replaced by hand (REFRESH_NOTES post-merge fixups).
+FIELD_PLAN.md is now only the flights still to fly, with the history moved to
+FLIGHT_VALIDATION.md, and the top-level README's feature list and upstreaming
+order are brought up to date.
+
+SmallFastDronev1 builds. 92 of 92 on the full set.
+
 ## 2026-10-08 - refresh10 topup10, review follow-ups
 
 #33359 reads the AGL KF height for its switch only within the height
