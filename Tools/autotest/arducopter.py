@@ -448,6 +448,19 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException(
                 "VALT_POS_EXPO=3 should leave pos_desired marching at full stick (got %.4f m)" % errors[3])
 
+        self.start_subtest("FS_EKF_ACTION=4 changes to VALT on an EKF failsafe")
+        # the failsafe lands on a value it does not handle, so without the VALT action this is LAND
+        self.set_parameter("FS_EKF_ACTION", 4)
+        self.takeoff(10, mode="LOITER")
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_statustext("EKF Failsafe: changed to VALT Hold Mode", check_context=True, timeout=30)
+        self.wait_mode(VALT)
+        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.wait_statustext("EKF Failsafe Cleared", check_context=True, timeout=60)
+        self.do_RTL()
+        self.wait_disarmed()
+
     def ModeLandAdvancedFailsafe(self):
         '''LAND_FS_OPTIONS bit 0 engages on an RC-failsafe LAND and a healthy vehicle still lands without the cap tripping'''
         self.set_parameters({
