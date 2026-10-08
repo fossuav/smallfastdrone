@@ -8,6 +8,39 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-10-08: refresh11 log44, flight card item 1 again (#33478 step hold)
+
+Firmware `4fc73825` (topup12). Replays exactly. The log40 sortie over the
+~0.7 m step: four edge crossings, landed on top. Core 1 (flow lane, fusing
+the AGL KF velocity) against core 0, with the hold and in a Replay without
+it:
+
+| Edge | Core 1 - core 0, hold | Without the hold |
+|---|---|---|
+| Off, 88.6 s (6-8 s after) | +0.33 m | +0.99 to +1.33 m |
+| Back on top, 110.3 s | +0.63 m peak | +1.36 m |
+| Off, 122.4 s | within 0.12 m | +0.79 to +1.16 m |
+| Back on top, 132.0 s | -0.13 to -0.32 m | +0.30 to +0.71 m |
+
+Landed: core 1 +0.05 m from its height after arming, against +0.41 m
+without the hold (core 0 +0.26 m both ways, its baro drift). XKFA.VFuse
+paused after each edge and resumed. #33478's step hold: validated. Arming
+stepped both cores' height -1.66 m on the ground (#32768's arm datum, as on
+log42; hands off).
+
+## 2026-10-08: #34457 floor behaviour, logs 31-44
+
+All fourteen logs carry #34457's floor commits. Armed on the ground before
+takeoff the AGL KF height stayed within 0.02 m of its floor on every log.
+After touchdown it held within 0.07 m except log39 core 1, where the main
+filter believed it was climbing at 0.3-0.57 m/s on the ground after an acro
+sortie, so the coast stop (which leaves anything faster than 0.25 m/s to
+the IMU) never fired and the AGL KF height coasted 0.28 -> 1.8 m. Fixed on
+fix2/34457 (not yet flown or in the beta): with the range last read near
+the floor and reading too low for 1 s, an AGL KF height 0.3 m above that
+reading is held on the floor. Replay: log39 held at the floor, the other
+13 logs unchanged. log38's 0.14 m is a real hop.
+
 ## 2026-10-08: refresh11 logs 41-43, flight card items 2, 3 and 5
 
 Firmware `9d8e8053`. All three replay exactly. No failsafes, EKF errors or
