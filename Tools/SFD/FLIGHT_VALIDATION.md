@@ -8,6 +8,25 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-10-08: refresh11 log40, flight card item 1 (#33359 step-up)
+
+Firmware `9d8e8053`, `EK3_OPTIONS 94`, `EK3_RNG_USE_HGT 6`, core 0 (GPS)
+primary throughout. Replays exactly. One sortie over a ~0.7 m step with two
+excursions over the lower ground. Touchdown is measured against the altitude
+before takeoff, so 0 is right.
+
+| Replay | core 0 | core 1 |
+|---|---|---|
+| as flown | -0.16 m | +0.36 m |
+| #33359 fix removed | -0.57 m | +0.01 m |
+| `EK3_OPTIONS` bit 4 off (#33478) | -0.16 m | -0.21 m |
+| fix removed, bit 4 off | -0.57 m | -0.69 m |
+
+| PR | Status |
+|---|---|
+| #33359 | Helps. The third crossing reset core 0's offset ("IMU0 terrain offset reset from range") and the switch-in step was 0.15 m against 0.55 m without the fix. The second crossing did not reset: the disagreement was 0.23 m, under the 0.3 m threshold, and both cores stepped down about 0.27 m, the same with and without the fix. A 0.2 m threshold lands at +0.10/0.00 m (bit 4 off); 0.15 m overshoots to +0.26/+0.20 m. The residual is baro drift over the excursion, which the offset inherits either way, so the threshold is unchanged on one flight. Hand-back to baro off the edge was clean (core 0 within 0.11 m). |
+| #33478 | Problem. Off the edge, core 1 (flow lane) fused the AGL KF velocity as velD and climbed at 0.25 m/s for 5 s while baro was the source and flat: 0.9 m of height error, and baro innovations up to 1.4 m at a test ratio of 0.14. The PR describes a step as a brief transient (0.36 m/s in SITL); here it was sustained. With bit 4 off, core 1 tracks core 0. The vehicle was not affected because core 0 was primary. |
+
 ## 2026-10-06 to 10-08: Replay of earlier flights against the current code
 
 | PR | Status |
