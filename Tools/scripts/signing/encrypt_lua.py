@@ -36,14 +36,6 @@ MAGIC = b"LXA2.0"
 UID_LEN = 12
 NONCE_LEN = 24
 
-parser = ArgumentParser(description='Lua encryption utility')
-parser.add_argument("script", type=str, help="script to encrypt")
-parser.add_argument("identity", type=str,
-                    help="the drone's sfd-identity/1 JSON file, as saved by the configurator")
-parser.add_argument("-o", "--output", type=str, default=None,
-                    help="output file (default: alongside the script, as .lxa)")
-args = parser.parse_args()
-
 try:
     import monocypher
 except ImportError:
@@ -74,27 +66,39 @@ def load_identity(path):
     return uid, public_key
 
 
-uid, drone_public = load_identity(args.identity)
+def encrypt(msg, uid, drone_public):
+    '''return msg as a .lxa v2 file that only the drone with this uid can read'''
+    # ephemeral key pair: its private half exists only for this file, and only
+    # here. Losing it costs nothing, which is the point of it being ephemeral.
+    ephemeral_private = monocypher.generate_key()
+    ephemeral_public = monocypher.compute_key_exchange_public_key(ephemeral_private)
+    shared = monocypher.key_exchange(ephemeral_private, drone_public)
 
-with open(args.script, "rb") as f:
-    msg = f.read()
+    nonce = secrets.token_bytes(NONCE_LEN)
+    mac, ciphertext = monocypher.lock(shared, nonce, msg)
+    return MAGIC + uid + ephemeral_public + nonce + mac + ciphertext
 
-# ephemeral key pair: its private half exists only for this file, and only
-# here. Losing it costs nothing, which is the point of it being ephemeral.
-ephemeral_private = monocypher.generate_key()
-ephemeral_public = monocypher.compute_key_exchange_public_key(ephemeral_private)
-shared = monocypher.key_exchange(ephemeral_private, drone_public)
 
-nonce = secrets.token_bytes(NONCE_LEN)
-mac, ciphertext = monocypher.lock(shared, nonce, msg)
+def main():
+    parser = ArgumentParser(description='Lua encryption utility')
+    parser.add_argument("script", type=str, help="script to encrypt")
+    parser.add_argument("identity", type=str,
+                        help="the drone's sfd-identity/1 JSON file, as saved by the configurator")
+    parser.add_argument("-o", "--output", type=str, default=None,
+                        help="output file (default: alongside the script, as .lxa)")
+    args = parser.parse_args()
 
-out = args.output or (os.path.splitext(args.script)[0] + ".lxa")
-with open(out, "wb") as f:
-    f.write(MAGIC)
-    f.write(uid)
-    f.write(ephemeral_public)
-    f.write(nonce)
-    f.write(mac)
-    f.write(ciphertext)
+    uid, drone_public = load_identity(args.identity)
 
-print("wrote %s (%u bytes) for drone %s" % (out, os.path.getsize(out), uid.hex()))
+    with open(args.script, "rb") as f:
+        msg = f.read()
+
+    out = args.output or (os.path.splitext(args.script)[0] + ".lxa")
+    with open(out, "wb") as f:
+        f.write(encrypt(msg, uid, drone_public))
+
+    print("wrote %s (%u bytes) for drone %s" % (out, os.path.getsize(out), uid.hex()))
+
+
+if __name__ == '__main__':
+    main()
