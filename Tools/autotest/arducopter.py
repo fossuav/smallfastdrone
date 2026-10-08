@@ -4003,10 +4003,11 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # Centring the stick past the reach leaves it there: AC_Avoid only limits a climb, so
         # nothing brings it back into reach, and below the 28 m fallback it loses relative
         # position.  That is accepted for a range finder that falls short of RNGFND1_MAX; the
-        # leg checks it holds its height there rather than climbing on or dropping
+        # leg pins it, holding height with relative position lost, so a change that brings the
+        # vehicle back into reach has to update the leg
         for reach, floor, ceiling, keeps_rel, centre in ((25, 0, 29, False, False),
                                                          (27.5, 27.6, 30.5, True, False),
-                                                         (27.5, 27.6, 29.5, None, True)):
+                                                         (27.5, 27.6, 29.5, False, True)):
             self.start_subtest("return lost at %.1f m%s" % (reach, ", stick centred past it" if centre else ""))
             self.reboot_sitl()
             self.wait_ready_to_arm(require_absolute=False)
@@ -4093,6 +4094,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                     raise NotAchievedException("moved %.1f-%.1f m with the stick centred" % (min(hold), max(hold)))
             if keeps_rel and not back_in_reach:
                 raise NotAchievedException("never came back into the %.1f m reach" % reach)
+            if keeps_rel is False and rel_lost_at is None:
+                raise NotAchievedException("relative position kept with a %.1f m reach" % reach)
             if keeps_rel and rel_lost_at is not None:
                 raise NotAchievedException("relative position lost at %.1f m with a %.1f m reach" % (rel_lost_at, reach))
             self.land_and_disarm()
