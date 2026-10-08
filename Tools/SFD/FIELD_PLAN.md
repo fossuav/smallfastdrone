@@ -1,7 +1,6 @@
 # SFD flight card
 
-Firmware: topup12 or later; flight 1 needs a beta carrying #34457's floor
-hold (`7f83487786`, topup13). Keep `EK3_OPTIONS 94`. Fly every flight with
+Firmware: topup13 or later (carries #34457's floor hold for flight 1). Keep `EK3_OPTIONS 94`. Fly every flight with
 `LOG_REPLAY 1` and `LOG_DISARMED 2`. Keep STABILIZE on a switch. What
 earlier flights showed is in `FLIGHT_VALIDATION.md`; the log40/log44 step
 sortie is done.

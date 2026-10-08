@@ -373,10 +373,22 @@ After:
   same content as the head the beta carries (empty diff against the
   pre-squash head), so a refresh picks them up with nothing to resolve;
   relock then. #34457 gained the floor hold (`931be4dc21`, `7f83487786`) and
-  #33507 was rebased onto it (`c34e097cc4`); neither change is in the beta
-  yet, and the card's flight 1 needs it (topup13). Records in each PR's
-  `../ardupilot-pr-analysis/<PR>/README.md`. Not squashed yet: #34292
-  (batch 6), and #32471, #32473, #34630 and #32270 (unflown or open review).
+  #33507 was rebased onto it (`c34e097cc4`). Records in each PR's
+  `../ardupilot-pr-analysis/<PR>/README.md`. #34292 was squashed the same
+  day (`4566254c91` -> `d3b59dec34`, 33 -> 17 commits). Not squashed:
+  #32471, #32473, #34630 and #32270 (unflown or open review).
+- topup13 (2026-10-08) carries #34457's floor hold (`29fef9c3a2`,
+  `db4abcbff0`) for the card's flight 1; #33507's rebase onto it changes
+  nothing here. The touchdown test assumed SITL reads about 0.1 m on the
+  ground (master's default ground clearance); the 4.7 SITL reads 0.55 m,
+  so the range finder never went out of range low. `80626ee223` sets the
+  ground clearance from the reading on the ground; owed to #34457, where it
+  is a no-op. On this stack 0.29 m with the hold, 1.47 m without. Seen in
+  the failing run: with the range finder still reading, the 0.5 m/s/s
+  injected accel offset took the 3-state AGL KF 1.3 m off a steady 0.56 m
+  range in 6 s, its bias state learning 0.19 of it. A step that size is a
+  SITL provocation, not a field case, but it bounds how fast the bias
+  state follows.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
