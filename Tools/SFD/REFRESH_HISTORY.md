@@ -63,7 +63,7 @@ reported success while build/sitl stayed at 2026-10-05 12:48. The topup4-6
 runs predate that and stand. The same mistake made the 2026-10-05 #32553
 no-reopen Replay byte-identical to the beta, so its "nothing to correct" was
 wrong; a genuine build shows the reopen halving the height-above-ground error
-in log36's low dwell (FIELD_PLAN.md has the numbers).
+in log36's low dwell (FLIGHT_VALIDATION.md has the numbers).
 
 Re-run on the rebuilt binary: 89 of 90. Replay timed out waiting for
 GLOBAL_POSITION_INT in its GPS-yaw RTL, twice within a minute after the full

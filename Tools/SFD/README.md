@@ -135,6 +135,13 @@ PR's net change to the file in order, auto-resolving the additive conflicts via
 matches the current PR heads (not the loiter branch). See REFRESH_NOTES.md
 "Phase 2" for the two manual conflict shapes and the standing validation findings.
 
+## Flight testing
+
+`FIELD_PLAN.md` is the flight card: the flights still to fly, in order, each
+with its settings and pass criteria. `FLIGHT_VALIDATION.md` records what earlier
+flights and Replays showed for each PR. Per-PR detail lives in
+`../ardupilot-pr-analysis/<PR>/README.md`.
+
 ## Review rules
 
 `PR_REVIEW_RULES.md` in this directory carries the local review rules that sit
