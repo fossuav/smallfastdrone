@@ -46,10 +46,12 @@ Firmware `96250adaf3`. All five logs replay exactly.
 | #34208 | Lock-free rate target (volatile sequence instead of std::atomic) in topup8. Same behaviour by design; any flight on the fast rate thread exercises it. |
 | #34642 | SITL-only (gyro rate follows INS_GYRO_RATE). Nothing to fly. |
 | #34380 | Review fix is a comment and a test leg; the flight below is unchanged. |
+| #33359 (topup10) | The switch reads the AGL KF height only within the observation's limits; identical on Replay of six flights, so item 1 is unchanged. |
 
 ## Next flight
 
-Firmware `fde4de75a6` (topup9). Keep `EK3_OPTIONS 94`.
+Firmware: topup10 (the beta at or after "lock refresh10's topup10"). Keep
+`EK3_OPTIONS 94`.
 
 1. **#33359 step-up, the log29 sortie again.** `EK3_RNG_USE_HGT 6`,
    `EK3_OPTIONS` bit 3 (94 has it), GPS lane (set 1), LOITER. Take off from

@@ -7,6 +7,18 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-08 - refresh10 topup10, review follow-ups
+
+#33359 reads the AGL KF height for its switch only within the height
+observation's tilt and freshness limits, so a stale one cannot hold the
+range finder above the switch height; Replay of six flights is identical
+with and without it. #32514 renames the AHRS horizontal source query
+(no behaviour change). #34380 adds the centred-stick short-reach test leg
+and asserts the accepted loss. #33507 and #34457 were rebased and squashed
+upstream with their own lines unchanged, so only their lock lines move.
+
+SmallFastDronev1 builds. 91 of 91 on the full set.
+
 ## 2026-10-06 - refresh10 topup9, #33359's step-up fix
 
 Takes #33359's fix for the terrain step found in refresh8's log29: flying
