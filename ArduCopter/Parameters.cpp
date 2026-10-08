@@ -266,8 +266,8 @@ const AP_Param::Info Copter::var_info[] = {
 
     // @Param: FS_EKF_ACTION
     // @DisplayName: EKF Failsafe Action
-    // @Description: Controls the action that will be taken when an EKF failsafe is invoked
-    // @Values: 0:Report only, 1:Switch to Land mode if current mode requires position, 2:Switch to AltHold mode if current mode requires position, 3:Switch to Land mode from all modes
+    // @Description: Controls the action that will be taken when an EKF failsafe is invoked. VALT falls back to AltHold if it cannot be entered.
+    // @Values: 0:Report only, 1:Switch to Land mode if current mode requires position, 2:Switch to AltHold mode if current mode requires position, 3:Switch to Land mode from all modes, 4:Switch to VALT mode if current mode requires position
     // @User: Advanced
     GSCALAR(fs_ekf_action, "FS_EKF_ACTION",    FS_EKF_ACTION_DEFAULT),
 
@@ -780,8 +780,8 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
 
     // @Param: FS_OPTIONS
     // @DisplayName: Failsafe options bitmask
-    // @Description: Bitmask of additional options for battery, radio, GCS & EKF failsafes. 0 (default) disables all options. Bit 6 needs FS_EKF_ACTION 2 and an RC transmitter: the mode is restored once the EKF checks have passed for 3 seconds with the roll and pitch sticks centred and no radio, battery, GCS, terrain, ADS-B or dead-reckoning failsafe active, at most three times a flight.
-    // @Bitmask: 0:Continue if in Auto on RC failsafe, 1:Continue if in Auto on GCS failsafe, 2:Continue if in Guided on RC failsafe, 3:Continue if landing on any failsafe, 4:Continue if in pilot controlled modes on GCS failsafe, 5:Release Gripper, 6:Return to Loiter or PosHold when an EKF failsafe that changed to AltHold clears
+    // @Description: Bitmask of additional options for battery, radio, GCS & EKF failsafes. 0 (default) disables all options. Bit 6 needs FS_EKF_ACTION 2 or 4 and an RC transmitter: the mode is restored once the EKF checks have passed for 3 seconds with the roll and pitch sticks centred and no radio, battery, GCS, terrain, ADS-B or dead-reckoning failsafe active, at most three times a flight.
+    // @Bitmask: 0:Continue if in Auto on RC failsafe, 1:Continue if in Auto on GCS failsafe, 2:Continue if in Guided on RC failsafe, 3:Continue if landing on any failsafe, 4:Continue if in pilot controlled modes on GCS failsafe, 5:Release Gripper, 6:Return to Loiter or PosHold when an EKF failsafe that changed to AltHold or VALT clears
     // @User: Advanced
     AP_GROUPINFO("FS_OPTIONS", 36, ParametersG2, fs_options, (float)Copter::FailsafeOption::GCS_CONTINUE_IF_PILOT_CONTROL),
 
