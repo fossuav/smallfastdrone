@@ -367,6 +367,16 @@ After:
   innovation against the 2 m/s floor, and the old fast climb trips the step
   hold at its onset. It passed on topup11 by 0.02 m/s (2.02). It passes on
   the PR branch; the test needs a provocation that survives the bias state.
+- 2026-10-08 the flown PRs were squashed, so `applied.lock` no longer
+  matches their heads: #33585, #34380, #33359, #33478, #32553, #32514,
+  #33568, #32972, #34363, #33484, #34543 and #34208. Each squash has the
+  same content as the head the beta carries (empty diff against the
+  pre-squash head), so a refresh picks them up with nothing to resolve;
+  relock then. #34457 gained the floor hold (`931be4dc21`, `7f83487786`) and
+  #33507 was rebased onto it (`c34e097cc4`); neither change is in the beta
+  yet, and the card's flight 1 needs it (topup13). Records in each PR's
+  `../ardupilot-pr-analysis/<PR>/README.md`. Not squashed yet: #34292
+  (batch 6), and #32471, #32473, #34630 and #32270 (unflown or open review).
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
