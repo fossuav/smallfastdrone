@@ -359,6 +359,14 @@ After:
 
 ### Owed, not tied to one refresh
 
+- topup12 (2026-10-08) carries #33478's step hold from `fix/33478`
+  (`e0d009ff31`, `6185109557`) ahead of the PR, for the flight that repeats
+  log40. Lock #33478 once the PR head carries them. On this stack
+  `EK3_AglKfVelMixedSources` fails: #33507's AGL KF bias state absorbs the
+  test's 3x range mismatch, so its slow climb claims only 0.94 m/s of velD
+  innovation against the 2 m/s floor, and the old fast climb trips the step
+  hold at its onset. It passed on topup11 by 0.02 m/s (2.02). It passes on
+  the PR branch; the test needs a provocation that survives the bias state.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
