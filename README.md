@@ -38,14 +38,13 @@ under review upstream, or work local to this repo with no PR yet.
 - Optical Flow Nav Above Rangefinder Range (https://github.com/ArduPilot/ardupilot/pull/33585)
 - Optical Flow Axis Lockout Recovery (https://github.com/ArduPilot/ardupilot/pull/33484)
 - Optical Flow Minimum Focus Height FLOW_HGT_MIN (https://github.com/ArduPilot/ardupilot/pull/34292)
-- HereFlow Output Rate Correction FLOW_HF_RATEF (https://github.com/ArduPilot/ardupilot/pull/33497)
-- Inhibit Z Gyro Bias from Optical Flow without Yaw Source (https://github.com/ArduPilot/ardupilot/pull/33498)
+- Inhibit Z Gyro Bias from Optical Flow without Yaw Source (https://github.com/ArduPilot/ardupilot/pull/33498) - **merged**
+- AGL KF Velocity Floor, Decay and Coast Fixes (https://github.com/ArduPilot/ardupilot/pull/34457)
 - AGL KF Accel-Z Bias Estimation (https://github.com/ArduPilot/ardupilot/pull/33507)
 - Optical Flow Relative-Aiding Fallback on GPS Loss (https://github.com/ArduPilot/ardupilot/pull/33568)
-- Flow Height Limit Stops a Climb Without Backing Down (https://github.com/ArduPilot/ardupilot/pull/34380)
+- Lift the Flow Height Limit Where Flow Nav Carries On Above It (https://github.com/ArduPilot/ardupilot/pull/34380)
 - Configurable Optical Flow Nav Gain Detune Height EK3_FLOW_GAIN_H (https://github.com/ArduPilot/ardupilot/pull/33569) - **merged**
 - SRTM Height Sign Fix for Flow Scaling (https://github.com/ArduPilot/ardupilot/pull/34360) - **in 4.7.2**
-- Terrain-Database AGL from getHAGL (https://github.com/ArduPilot/ardupilot/pull/34361)
 
 ### EKF & Inertial Navigation ###
 
@@ -59,11 +58,12 @@ under review upstream, or work local to this repo with no PR yet.
 - getLLH Returns GPS Only When GPS Is the Position Source (https://github.com/ArduPilot/ardupilot/pull/32945) - **merged**
 - Hover Z-Bias Learning (https://github.com/ArduPilot/ardupilot/pull/32471)
 - Acro Bias Inhibit (https://github.com/ArduPilot/ardupilot/pull/32473)
-- EKF Failsafe Gate Reset on Source Set Change (https://github.com/ArduPilot/ardupilot/pull/32514)
+- EKF Failsafe Expects a Position Only Where the Mode or Source Set Needs One (https://github.com/ArduPilot/ardupilot/pull/32514)
 - No XY Accel Bias Learning in Unaided Flight (https://github.com/ArduPilot/ardupilot/pull/34209)
 - Log XKF5 and XKFA for Every Core (https://github.com/ArduPilot/ardupilot/pull/34363)
 - Source Set Selection Chooses the Lane Running It (https://github.com/ArduPilot/ardupilot/pull/34456)
 - OSD Status of Each EKF3 Core (https://github.com/ArduPilot/ardupilot/pull/34543)
+- Flow Lockout Resets on the OSD, Optional Reset Messages (https://github.com/ArduPilot/ardupilot/pull/34630)
 
 ### Barometer & Ground Effect ###
 
@@ -71,20 +71,24 @@ under review upstream, or work local to this repo with no PR yet.
 - Baro Height Datum Reset (https://github.com/ArduPilot/ardupilot/pull/32770) - **merged** (supersedes closed https://github.com/ArduPilot/ardupilot/pull/32400)
 - Ground Effect Altitude/Timeout (https://github.com/ArduPilot/ardupilot/pull/32472) - **merged**
 - Baro Drift Reset on Arming (https://github.com/ArduPilot/ardupilot/pull/32768)
-- Terrain Offset Reset on Ground Effect Clear (https://github.com/ArduPilot/ardupilot/pull/32553)
+- Reopen the Terrain Variance after Takeoff Ground Effect (https://github.com/ArduPilot/ardupilot/pull/32553)
 - Protect Height Fusion from Baro Ground Effect at Takeoff (https://github.com/ArduPilot/ardupilot/pull/32972)
 - Stop touchdown_expected Latching in Cruise (https://github.com/ArduPilot/ardupilot/pull/34362)
+- Keep Baro Ground Effect out of a Height Source Switch (https://github.com/ArduPilot/ardupilot/pull/34432) - **merged**
 
 ### Rates, Notch & Control ###
 
 - Quintuple Notch (https://github.com/ArduPilot/ardupilot/pull/30994) - **merged**
 - Notch Count Cap for Quintuple Notches (https://github.com/ArduPilot/ardupilot/pull/33587) - **merged**
-- Fast Rates (https://github.com/ArduPilot/ardupilot/pull/27893 - **merged**, https://github.com/ArduPilot/ardupilot/pull/29000, https://github.com/ArduPilot/ardupilot/pull/30980)
+- Fast Rates (https://github.com/ArduPilot/ardupilot/pull/27893 - **merged**, https://github.com/ArduPilot/ardupilot/pull/29000, https://github.com/ArduPilot/ardupilot/pull/30980 - **merged**)
 [![Fast rates](https://img.youtube.com/vi/B8Dp2jwDamU/0.jpg)](https://www.youtube.com/playlist?list=PL_O9QDs-WAVyBpf7URQQgCmNQwv_aTcMf)
+- Loiter Control Feel When the EKF Limits Ground Speed (https://github.com/ArduPilot/ardupilot/pull/33639) - **merged**
 - AC_Loiter Brake/Drag Feed-forward Fix (https://github.com/ArduPilot/ardupilot/pull/33318)
 - Rate Target Interpolation in the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34208)
 - Throttle-Gain Boost and Throttle Mix with the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34583)
 - Per-Loop Rate Modifiers for the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34584)
+- Log Every Filtered Gyro Sample with the Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34601) - **merged**
+- SITL Gyro Rate Follows INS_GYRO_RATE, for testing (https://github.com/ArduPilot/ardupilot/pull/34642)
 - Persist the Fixed Notch Conversion to INS_HNTC2 (https://github.com/ArduPilot/ardupilot/pull/34251)
 - Persist the FFT Notch Tune Tracking Mode (https://github.com/ArduPilot/ardupilot/pull/33879)
 - NTF Log Units Fix (https://github.com/ArduPilot/ardupilot/pull/34122) - **in 4.7.2**
@@ -93,6 +97,7 @@ under review upstream, or work local to this repo with no PR yet.
 
 - VALT Velocity Alt-Hold Mode (https://github.com/ArduPilot/ardupilot/pull/32270)
 - Advanced Land Failsafe, LAND_FS_OPTIONS (https://github.com/ArduPilot/ardupilot/pull/34210)
+- Right a Flipped Copter in Stabilize without an Internal Error (https://github.com/ArduPilot/ardupilot/pull/34678)
 - Throw mode improvements - local to this branch, no PR yet: drop detection and
   recovery, quaternion uprighting, operation without GPS, next-mode selection,
   EKF source-set switching on completion, stage feedback on the OSD and to the
@@ -149,86 +154,89 @@ the order that makes them easiest to merge: dependencies before dependents, smal
 and already-approved work first, and the heavy diffs last so they rebase onto a
 smaller backlog.
 
-Annotations are the state at the last review sweep, not a promise - re-check before
-acting on them. "AI" is the automated dev-call review; "stale" means the PR has been
-pushed since that round, so the verdict no longer describes the current head.
-Regenerate the whole column with `Tools/SFD/ai_review_status.py`.
+Annotations are the state on 2026-10-08, not a promise - re-check before acting on
+them. "AI" is the automated review's verdict at the PR's current head, with its
+date; "stale" means the PR has been pushed since that round. "Conflicts" means
+GitHub reports a merge conflict with master. Regenerate the AI column with
+`Tools/SFD/ai_review_status.py`.
 
 ### 1. Approved, waiting only on a merge
 
-1. #34251 Copter, Plane: persist the fixed notch conversion to INS_HNTC2 - 2 files, approved by IamPete1 - CI failing, no AI review
-2. #32391 Copter: add separate LEVEL arming check for lean angle - 3 files, approved by peterbarker - CI failing, no AI review
-3. #29000 Copter: switch off fast rate while doing temperature calibration - 1 file, approved by tridge - **needs rebase**, no AI review
+1. #34457 AP_NavEKF3: AGL KF velocity floor, decay and coast fixes - 5 files, no human review - AI: accept (10-08). Merge first: #33507 is stacked on it.
+2. #33507 AP_NavEKF3: estimate accel-Z bias in the AGL KF - 9 files, approved by rishabsingh3003 - AI: accept (10-08). Carries #34457's five commits.
+3. #34251 Copter, Plane: persist the fixed notch conversion to INS_HNTC2 - 2 files, approved by IamPete1 - AI: request changes (09-12)
+4. #32391 Copter: add separate LEVEL arming check for lean angle - 3 files, approved by peterbarker - AI: request changes (09-30)
+5. #29000 Copter: switch off fast rate while doing temperature calibration - 1 file, approved by tridge - AI: comment (09-18)
 
-#33879 pairs with #34251: the latter stops seeding the INS_HNTC2 defaults, the former forces the tuned values into storage so they survive a default change. No human has reviewed it, so it sits below the approved three rather than with them.
+#33879 pairs with #34251: the latter stops seeding the INS_HNTC2 defaults, the former forces the tuned values into storage so they survive a default change. No human has reviewed it.
 
-4. #33879 FFT notch tune: persist the tracking mode and name the notch used - 4 files, comments only - AI: approve (08-25)
+6. #33879 FFT notch tune: persist the tracking mode and name the notch used - 4 files, no human review - AI: approve, stale since 08-25
 
 ### 2. Small self-contained fixes
 
-1. #33543 AP_Param: publish actual loaded defaults count, not the pre-count - 1 file, comments only - AI: comment (09-08)
-2. #33318 AC_Loiter: remove drag from feed-forward accel to fix loiter overshoot - 2 files, comments only - no AI review
-3. #31005 Copter: don't fall out of the sky at zero throttle on min alt fences - 2 files, comments only - no AI review
-4. #33497 AP_OpticalFlow: add FLOW_HF_RATEF to correct HereFlow output rate - 4 files, comments only - no AI review
-5. #34363 AP_NavEKF3: log XKF5 and XKFA for every core - 3 files, changes requested by peterbarker - no AI review
-6. #30841 Control ESC Logging - 5 files, comments only - no AI review
-7. #32398 Copter: make ARM_DELAY customizable via hwdef and avoid race in ARMING_DELAY_MSEC - 6 files, changes requested by peterbarker - no AI review
-8. #32238 Add FAST_BOOT bitmask parameter - 4 files, comments only (self-approved) - **needs rebase**, no AI review
-9. #31274 Motortest error rate - 5 files, comments only - **needs rebase**, no AI review
-10. #32232 AP_NavEKF3: ground clearance fusion fix - 7 files, changes requested by tridge - AI: stale since 09-11 (was request changes); round answered 09-11, headline finding refuted and two test fixes pushed
+1. #34678 Copter: avoid an internal error when righting a flipped copter in Stabilize - 2 files, new - no AI review yet
+2. #33543 AP_Param: publish actual loaded defaults count, not the pre-count - 1 file - AI: comment (09-30)
+3. #34642 AP_InertialSensor: let the SITL gyro rate follow INS_GYRO_RATE - 3 files, SITL only - no AI review yet
+4. #32514 Copter: expect a position in the EKF failsafe only where the mode or source set needs one - 6 files, changes requested by peterbarker (structure; rename done, estimates-object question answered) - AI: accept (10-06)
+5. #33318 AC_Loiter: remove drag from feed-forward accel to fix loiter overshoot - 2 files - AI: request changes (10-03)
+6. #31005 Copter: don't fall out of the sky at zero throttle on min alt fences - 2 files - AI: request changes (09-30)
+7. #34363 AP_NavEKF3: log XKF5 and XKFA for every core - 4 files, changes requested by peterbarker - AI: request changes (10-03)
+8. #30841 Control ESC Logging - 5 files - AI: request changes (09-30)
+9. #32398 Copter: make ARM_DELAY customizable via hwdef and avoid race in ARMING_DELAY_MSEC - 6 files, changes requested by peterbarker - AI: comment (09-30)
+10. #32238 Add FAST_BOOT bitmask parameter - 4 files - **conflicts** - AI: request changes (09-30)
+11. #31274 Motortest error rate - 5 files - **conflicts**, largely superseded upstream - AI: request changes (09-30)
+12. #32232 AP_NavEKF3: ground clearance fusion fix - 7 files, changes requested by tridge - AI: comment (10-03)
 
 ### 3. Baro and ground effect
 
-#32972 is stacked on #32768, so that pair merges in order.
+#32972 is stacked on #32768, so that pair merges in order. #32768 is under maintainer review; leave it unchanged until that finishes.
 
-1. #32768 AP_NavEKF3: clear baro temperature drift on arming - 25 files, changes requested by peterbarker - AI: approve (09-07), contingent on two pending CI jobs
-2. #32972 AP_NavEKF3: protect height fusion from baro ground effect at takeoff - 21 files, comments only - AI: comment (09-10)
-3. #32553 AP_NavEKF3: reset terrain offset from baro when ground effect clears - 3 files, changes requested by rishabsingh3003 - no AI review
-4. #34362 AP_GroundEffect: stop touchdown_expected latching in cruise - 3 files, comments only - no AI review
-5. #32514 Copter: reset EKF failsafe gate on source set change - 2 files, comments only - no AI review
+1. #32768 AP_NavEKF3: clear baro temperature drift on arming - 26 files, changes requested by peterbarker and tridge - AI: comment (10-06)
+2. #32972 AP_NavEKF3: protect height fusion from baro ground effect at takeoff - 26 files - **conflicts** - AI: accept (10-06)
+3. #32553 AP_NavEKF3: reopen the terrain variance after takeoff ground effect - 5 files, changes requested by rishabsingh3003 - AI: comment (10-04)
+4. #34362 AP_GroundEffect: stop touchdown_expected latching in cruise - 3 files - AI: accept (10-04)
 
 ### 4. Optical flow and the AGL Kalman filter
 
-#33359 introduces the AGL-KF height the rest build on. #34360 must precede #33585 and #34361, and #33585 is also stacked on #33478. #33569 currently detunes against the raw terrain state and should adopt #33359's height once that lands.
+#33359 introduces the AGL-KF height the rest build on. #33585 is stacked on #33478, #34380 on #33585, and #33568 must follow #34380: once #33568 turns the flow height limit on, master's AC_Avoid turns a climb above it into a descent. #34630 stacks on #33484 and #34543.
 
-1. #33359 AP_NavEKF3: use the AGL KF for the optical-flow rangefinder height switch and observation - 1 file, comments only - AI: stale since 07-29
-2. #33478 AP_NavEKF3: fuse rangefinder-aided AGL KF velocity as a velD observation - 9 files, comments only - no AI review
-3. #34360 AP_NavEKF3: fix the sign of the SRTM height used for flow scaling - 3 files, comments only - AI: comment (09-10)
-4. #33585 AP_NavEKF3: keep optical flow nav alive above the rangefinder range - 12 files, comments only - AI: request changes (09-10)
-5. #34361 AP_NavEKF3: use the terrain database AGL in getHAGL - 4 files, comments only - AI: comment (09-10)
-6. #33507 AP_NavEKF3: estimate accel-Z bias in the AGL KF - 8 files, changes requested by rishabsingh3003 - no AI review
-7. #33484 AP_NavEKF3: recover horizontal velocity from single-axis optical flow lockout - 15 files, comments only - AI: stale since 09-10 (was request changes); round answered in four commits, and the cross-PR question against #33585 decided 09-11
-8. #34292 AP_OpticalFlow: add FLOW_HGT_MIN, the sensor's minimum focus height - 21 files, changes requested by peterbarker and tridge - AI: stale since 09-10 (was request changes); split out of #33484, so it follows it
-9. #33568 AP_NavEKF3: fall back to relative aiding when optical flow replaces lost GPS - 4 files, comments only - no AI review
-10. #34380 AC_Avoid: do not back away from the optical flow height limit - 2 files, no human review - AI: approve (09-14); follows #33568, which widens how many vehicles reach the limit
-11. #33569 AP_NavEKF3: make the optical-flow nav gain detune height configurable (EK3_FLOW_GAIN_H) - 3 files, comments only - no AI review
-12. #33498 AP_NavEKF3: inhibit Z gyro bias from optical flow with no yaw reference - 4 files, approved by tridge, changes requested by rmackay9 - AI: approve (09-02)
+1. #33359 AP_NavEKF3: use the AGL KF for the optical-flow rangefinder height switch and observation - 5 files - AI: comment, stale since 10-08 (the step-up fix it asked for is in; one switch-out gate pushed since)
+2. #33478 AP_NavEKF3: fuse AGL KF velocity as a velD observation - 9 files - **conflicts** - AI: accept (10-04)
+3. #33585 AP_NavEKF3: keep optical flow nav alive above the rangefinder range - 13 files - AI: accept (10-06)
+4. #34380 AP_NavEKF3: lift the flow height limit where flow nav carries on above it - 13 files - AI: request changes, stale since 10-08 (wants a maintainer to accept the 1 m short-reach band; asked)
+5. #33568 AP_NavEKF3: fall back to relative aiding when optical flow replaces lost GPS - 4 files - AI: request changes (10-04), on merge order only; rmackay9 linked a 4.7.1 user report it fixes
+6. #33484 AP_NavEKF3: recover horizontal velocity from single-axis optical flow lockout - 15 files - **conflicts** - AI: accept (10-05)
+7. #34292 AP_OpticalFlow: add FLOW_HGT_MIN, the sensor's minimum focus height - 29 files, changes requested by peterbarker and tridge - **conflicts** - AI: comment (10-05); split out of #33484, so it follows it
+8. #34456 AP_NavEKF3: select the lane that runs the source set being asked for - 13 files, changes requested by tridge - **conflicts** - AI: comment (10-04)
+9. #34543 AP_OSD: show the status of each EKF3 core - 19 files - no AI review yet
+10. #34630 AP_NavEKF3: show flow lockout resets on the OSD and make their messages optional - 28 files - **conflicts** - no AI review yet
 
 ### 5. Accel bias
 
 #32473 overlaps #32471 across 30 files, so merging them the other way round means redoing the conflict.
 
-1. #32471 AP_NavEKF3: hover Z-bias learning for vibration rectification - 38 files, approved by priseborough - **needs rebase**, AI: request changes (09-05)
-2. #32473 Copter: inhibit accel bias learning during acro flight - 38 files, comments only - **needs rebase**, no AI review
-3. #34209 AP_NavEKF3: do not learn XY accel bias in unaided flight - 2 files, changes requested by peterbarker - AI: stale since 09-02 (was approve)
+1. #32471 AP_NavEKF3: hover Z-bias learning for vibration rectification - 38 files, approved by priseborough - **conflicts** - AI: comment (10-05)
+2. #32473 Copter: inhibit accel bias learning during acro flight - 39 files - **conflicts** - AI: comment (10-04)
+3. #34209 AP_NavEKF3: do not learn XY accel bias in unaided flight - 3 files, approved by rishabsingh3003, changes requested by peterbarker and tridge - AI: request changes (10-03)
 
 ### 6. Fast rates
 
-#27893, the foundation the other two build on, merged upstream on 2026-09-08. It is still cherry-picked by the refresh because the 4.7 base predates it.
+#27893 and #30980 have merged upstream; #29000 is in group 1.
 
-1. #30980 Copter: fix compassmot so that it works with the rate thread - 3 files, comments only - no AI review
-2. #34208 Copter: interpolate the rate target in the fast rate thread - 11 files, changes requested by tridge - AI: comment (09-09)
+1. #34208 Copter: interpolate the rate target in the fast rate thread - 9 files, changes requested by lthall and tridge (both answered: the ramp is back to p = 0 and the atomics are gone) - AI: accept (10-06)
+2. #34583 AC_AttitudeControl: fix throttle-gain boost and throttle mix with the fast rate thread - 4 files - AI: comment (10-06)
+3. #34584 AC_AttitudeControl: record per-loop rate modifiers for the fast rate thread - 5 files, stacked on #34583 - no AI review yet
 
 ### 7. Larger features and boards
 
 Bigger diffs and new parameters; these want the small fixes out of the way first.
 
-1. #32401 Copter: add pending arm on switch for in-air arming - 7 files, changes requested by peterbarker - no AI review
-2. #34210 Copter: add advanced land failsafe (LAND_FS_OPTIONS bit 0) - 10 files, comments only - **needs rebase**, no AI review
-3. #32475 Copter: throw mode improvements - 7 files, comments only - no AI review
-4. #32270 Copter: add VALT velocity alt-hold flight mode - 17 files, comments only - **needs rebase**, no AI review
-5. #31216 AP_HAL_ChibiOS: iFlight Borg H7 - 6 files, changes requested by Hwurzburg - no AI review
-6. #31770 AP_Bootloader: add DFU mode via STM32 system bootloader - 5 files, changes requested by tpwrules - no AI review
+1. #32401 Copter: add pending arm on switch for in-air arming - 7 files, changes requested by peterbarker - AI: request changes (09-30)
+2. #34210 Copter: add advanced land failsafe (LAND_FS_OPTIONS bit 0) - 10 files - AI: request changes (10-03)
+3. #32475 Copter: throw mode improvements - 7 files - AI: request changes (10-03)
+4. #32270 Copter: add VALT velocity alt-hold flight mode - 17 files - AI: request changes (10-03)
+5. #31216 AP_HAL_ChibiOS: iFlight Borg H7 - 6 files, changes requested by Hwurzburg - AI: request changes, stale since 09-12
+6. #31770 AP_Bootloader: add DFU mode via STM32 system bootloader - 5 files, changes requested by tpwrules - AI: request changes, stale since 09-12
 
 
 ## SmallFastDronev1 Target ##
