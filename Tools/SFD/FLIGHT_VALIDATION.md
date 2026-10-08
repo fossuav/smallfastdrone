@@ -8,6 +8,31 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-10-08: refresh11 logs 41-43, flight card items 2, 3 and 5
+
+Firmware `9d8e8053`. All three replay exactly. No failsafes, EKF errors or
+uncommanded lane switches.
+
+| PR | Status |
+|---|---|
+| #34380 | Validated (log41, card 2). The flow lane climbed from 4 to 35 m at 2.5 m/s, through 9.5 m without being held, and relative position stayed valid. Back into range at 169 s both cores' HAGL stepped 1.3 m in one sample: upstream EKF3's terrain reset after a 5 s range gap, correcting the baro height drift built up out of reach, after which HAGL agreed with the range. Not a defect of this PR or #33585. |
+| #33568 | Validated (log42, card 3, two flights). Aiding went to mode 2 10 s after each switch to flow (the designed fallback time) and back to 0 within 0.2 s of returning to GPS. Both climbs passed 9.5 m, and there was no limit cycle at 25 m or above. Not shown: the flow speed cap, which never became the binding limit. Flow tracking at 29-33 m was poor (5.3 m of GPS movement seen as 2.4 m, and 8.5 m seen against 1.1 m). |
+| #34630 | Not provoked (log43, card 5). 62 deg of tilt and 6.7 rad/s of flow at 2-6 m, but flow quality stayed above 144 and no lockout reset happened in flight. The one reset was at touchdown. |
+| #32768 | Seen, not acted on (hands off): at the second arm of log42 the height stepped -3.4 m on the ground, the GPS altitude's drift since boot. Height above home was unaffected. |
+
+## 2026-10-08: #33478 step hold, from log40
+
+Replay of log40 found core 1's 0.9 m climb off the edge came from #33478:
+the AGL KF absorbs a range step over 3-5 s with its velocity 0.2-0.3 m/s
+wrong, and core 1 fused that as velD. fix/33478 holds the AGL KF velocity
+out of velD for 5 s after a step, only while a real height source outside
+ground effect is trusted. Replay of 12 flights (velD error, m/s): log40
+0.089 -> 0.046, log29 0.107 -> 0.043, log30 0.097 -> 0.055, log34
+0.085 -> 0.036, log39 0.232 -> 0.086, log32 0.116 -> 0.266 (fusion held
+off over its 61 samples), the rest unchanged. Log40's core 1 stays within
+0.03 m of fusion off at the edge and lands at +0.25 m against +0.36 m. Not
+yet flown: card item 1.
+
 ## 2026-10-08: refresh11 log40, flight card item 1 (#33359 step-up)
 
 Firmware `9d8e8053`, `EK3_OPTIONS 94`, `EK3_RNG_USE_HGT 6`, core 0 (GPS)
