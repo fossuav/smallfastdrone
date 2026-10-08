@@ -5221,7 +5221,10 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # the same state as a copter lying on its back on the ground.
         # Run in real time, and roll slowly, so it is still falling and
         # still inverted when the throttle comes up
-        self.context_set_speedup(1)
+        # 4.7 has no context_set_speedup(): set it by hand; the context restores SIM_SPEEDUP
+        old_speedup = self.speedup
+        self.speedup = 1
+        self.set_parameter("SIM_SPEEDUP", 1)
         self.change_mode('ACRO')
         self.set_rc_from_map({1: 2000, 3: 1300})
         self.wait_roll(180, 20)
@@ -5244,6 +5247,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # errors_count4 is the internal error count
         self.assert_received_message_field_values('SYS_STATUS', {'errors_count4': 0})
 
+        self.speedup = old_speedup
         self.disarm_vehicle(force=True)
         self.reboot_sitl()
 
