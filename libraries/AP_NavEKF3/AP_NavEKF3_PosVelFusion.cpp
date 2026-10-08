@@ -1555,10 +1555,12 @@ void NavEKF3_core::selectHeightForFusion()
         ftype heightAboveGnd;
         // The legacy terrain-offset estimator stalls near the ground, so its
         // timestamp goes stale and vetoes the switch. Gate on the AGL KF's own
-        // last-fusion time when it is the height authority.
+        // last-fusion time when it is the height authority, only while it would
+        // stand in as the height observation, so a stale one cannot hold the switch.
         uint32_t hgtValidTime_ms = gndHgtValidTime_ms;
 #if EK3_FEATURE_OPTFLOW_AGL_KF
-        if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid) {
+        if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid &&
+            (prevTnb.c.z >= frontend->DCM33FlowMin) && (imuSampleTime_ms - lastAglRngFuseTime_ms < 200)) {
             heightAboveGnd = aglKfH;
             hgtValidTime_ms = lastAglRngFuseTime_ms;
         } else
