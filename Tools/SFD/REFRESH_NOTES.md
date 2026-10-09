@@ -389,6 +389,19 @@ After:
   range in 6 s, its bias state learning 0.19 of it. A step that size is a
   SITL provocation, not a field case, but it bounds how fast the bias
   state follows.
+- topup14 (2026-10-09) carries #34696, the EKF failsafe mode restore
+  (`f209d485e5`, `91ac2ac15e` + fixup `ddb0094e4a`, `eab0be8c5e`), and
+  #32270's new `FS_EKF_ACTION` 4 for VALT (`111f758183`, `8c08d53ce3`),
+  which is committed on local `copter-valt-mode` (`d5672e0d6e`,
+  `d40430bce0`) and not yet pushed to the PR. The VALT action is a hand
+  port: 4.7 still has `#define`s where master has `FS_EKF_Action`. Its
+  commit also says bit 6 needs `FS_EKF_ACTION` 2 or 4, which belongs to
+  whichever of the two PRs lands second. Both test bodies are identical
+  to the PRs'. A landed-branch cancel for #32514's early return was tried
+  and dropped: the motors are still spooling down for about 0.5 s after
+  `land_complete` sets, so the normal cancel always runs first (a SITL
+  mutant without it passed). `EKFFailsafeRestoreMode`, `ModeVAltHold` and
+  `EKFSourceSetFailsafe` pass on this stack.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
