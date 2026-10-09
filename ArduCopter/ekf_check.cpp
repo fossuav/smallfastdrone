@@ -86,7 +86,6 @@ void Copter::ekf_check()
     const AP_Motors::SpoolState spool = motors->get_spool_state();
     if (!checks_passed && !over_threshold && ap.land_complete &&
         (spool == AP_Motors::SpoolState::GROUND_IDLE || spool == AP_Motors::SpoolState::SHUT_DOWN)) {
-        ekf_check_state.restore_pending = false;   // landing cancels a failsafe mode restore
         return;
     }
 
