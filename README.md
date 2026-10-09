@@ -59,6 +59,7 @@ under review upstream, or work local to this repo with no PR yet.
 - Hover Z-Bias Learning (https://github.com/ArduPilot/ardupilot/pull/32471)
 - Acro Bias Inhibit (https://github.com/ArduPilot/ardupilot/pull/32473)
 - EKF Failsafe Expects a Position Only Where the Mode or Source Set Needs One (https://github.com/ArduPilot/ardupilot/pull/32514)
+- EKF Failsafe Returns to Loiter or PosHold Once It Clears, FS_OPTIONS bit 6 (https://github.com/ArduPilot/ardupilot/pull/34696)
 - No XY Accel Bias Learning in Unaided Flight (https://github.com/ArduPilot/ardupilot/pull/34209)
 - Log XKF5 and XKFA for Every Core (https://github.com/ArduPilot/ardupilot/pull/34363)
 - Source Set Selection Chooses the Lane Running It (https://github.com/ArduPilot/ardupilot/pull/34456)
@@ -95,7 +96,7 @@ under review upstream, or work local to this repo with no PR yet.
 
 ### Flight Modes ###
 
-- VALT Velocity Alt-Hold Mode (https://github.com/ArduPilot/ardupilot/pull/32270)
+- VALT Velocity Alt-Hold Mode, and FS_EKF_ACTION 4 to fail over to it (https://github.com/ArduPilot/ardupilot/pull/32270)
 - Advanced Land Failsafe, LAND_FS_OPTIONS (https://github.com/ArduPilot/ardupilot/pull/34210)
 - Right a Flipped Copter in Stabilize without an Internal Error (https://github.com/ArduPilot/ardupilot/pull/34678)
 - Throw mode improvements - local to this branch, no PR yet: drop detection and
@@ -186,6 +187,7 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 10. #32238 Add FAST_BOOT bitmask parameter - 4 files - **conflicts** - AI: request changes (09-30)
 11. #31274 Motortest error rate - 5 files - **conflicts**, largely superseded upstream - AI: request changes (09-30)
 12. #32232 AP_NavEKF3: ground clearance fusion fix - 7 files, changes requested by tridge - AI: comment (10-03)
+13. #34696 Copter: return to Loiter or PosHold when the EKF failsafe clears - 5 files, new, self-reviewed in three rounds - no AI review yet
 
 ### 3. Baro and ground effect
 
