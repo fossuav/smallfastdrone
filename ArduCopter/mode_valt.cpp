@@ -26,6 +26,14 @@ bool ModeVelAltHold::init(bool ignore_checks)
     // sit in the position error for the whole flight and defeat the snap
     // below, which assumes the error goes to zero.
     pos_control->init_pos_terrain_D_m(0);
+#if AP_RANGEFINDER_ENABLED
+    // a quick return to surface tracking would otherwise slew the cleared
+    // offset back in on top of pos_desired instead of re-initialising it
+    copter.surface_tracking.reset_target_on_next_update();
+#endif
+
+    float pos_shift_d_m;
+    ekf_pos_d_reset_ms = ahrs.getLastPosDownReset(pos_shift_d_m);
 
     return true;
 }
@@ -56,6 +64,15 @@ void ModeVelAltHold::alt_hold_run_flying(float &target_roll_rad, float &target_p
 
     // Send the commanded climb rate to the position controller
     pos_control->D_set_pos_target_from_climb_rate_ms(target_climb_rate_ms);
+
+    // D_update_controller() moves pos_desired by an EKF height reset after
+    // this, so snapping to the post-reset estimate would apply it twice
+    float pos_shift_d_m;
+    const uint32_t reset_ms = ahrs.getLastPosDownReset(pos_shift_d_m);
+    if (reset_ms != ekf_pos_d_reset_ms) {
+        ekf_pos_d_reset_ms = reset_ms;
+        return;
+    }
 
     // Snap pos_desired towards the estimate so the position P loop does not
     // fight the pilot's stick input.  VALT_POS_EXPO weights the snap with

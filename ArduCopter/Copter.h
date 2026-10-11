@@ -283,6 +283,9 @@ private:
         float get_dist_for_logging() const;
         void invalidate_for_logging() { valid_for_logging = false; }
 
+        // re-initialise the offset on the next update instead of slewing to it
+        void reset_target_on_next_update() { reset_target = true; }
+
         // surface tracking surface
         enum class Surface {
             NONE = 0,

@@ -2058,6 +2058,10 @@ protected:
     // mid-stick is the resting hold state, not a take-off cue
     bool spool_up_at_zero_climb_on_ground() const override { return false; }
 
+private:
+
+    uint32_t ekf_pos_d_reset_ms;
+
 };
 #endif
 
