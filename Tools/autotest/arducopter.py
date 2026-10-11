@@ -17518,6 +17518,85 @@ return update, 100
         })
         self.reboot_sitl()
 
+    def EK3_RngHgtSwitchNoVelocity(self):
+        '''the range finder height switch keeps out of flight with no velocity estimate'''
+        # With optical flow lost the EKF holds a constant position, so its speed reads zero
+        # however fast the vehicle flies, and the switch's speed gate has nothing to test.
+        # Flying faster than EK3_RNG_USE_SPD onto ground 1 m higher, the EKF height must stay
+        # with the simulator's rather than follow the range finder down.
+        self.set_parameters({
+            "SIM_FLOW_ENABLE": 1,
+            "FLOW_TYPE": 10,
+            "SIM_GPS1_ENABLE": 0,
+            "SIM_TERRAIN": 0,
+            "EK3_OPTIONS": 1 << 3,   # AglKfForOptflow
+            "EK3_RNG_USE_HGT": 12,   # 4.8 m of the 40 m range finder, switching in below 3.36 m
+            "EK3_RNG_USE_SPD": 2,
+        })
+        self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+        self.context_collect('STATUSTEXT')
+        self.takeoff(2, mode='LOITER', require_absolute=False, takeoff_throttle=1800)
+        # no position controller, so losing flow does not end the flight
+        self.change_mode('ALT_HOLD')
+        self.set_rc(2, 1300)
+        self.wait_groundspeed(3, 100, timeout=30)
+        tlost = self.get_sim_time()
+        self.set_parameter("SIM_FLOW_ENABLE", 0)
+        self.wait_statustext("EKF3 IMU0 stopped aiding", check_context=True, timeout=30)
+        tstep = self.get_sim_time()
+        self.set_parameter("SIM_SONAR_OFFSET", -1.0)
+        self.delay_sim_time(5, reason="fly on over the higher ground")
+        tend = self.get_sim_time()
+        self.set_parameters({
+            "SIM_SONAR_OFFSET": 0,
+            "SIM_FLOW_ENABLE": 1,
+        })
+        self.set_rc(2, 1500)
+        self.wait_statustext("EKF3 IMU0 started relative aiding", check_context=True, timeout=30)
+        self.zero_throttle()
+        self.wait_disarmed(timeout=120)
+
+        dfreader = self.dfreader_for_current_onboard_log()
+        truth = None
+        err_before = []
+        err_after = []
+        speeds = []
+        rngs = []
+        while True:
+            m = dfreader.recv_match(type=['SIM', 'SIM2', 'XKF1', 'RFND'])
+            if m is None:
+                break
+            t = m.TimeUS * 1e-6
+            mtype = m.get_type()
+            if mtype == 'SIM':
+                truth = m.Alt
+            elif mtype == 'SIM2' and tstep <= t <= tend:
+                speeds.append(math.hypot(m.VN, m.VE))
+            elif mtype == 'RFND' and m.Instance == 0 and tstep <= t <= tend:
+                rngs.append(m.Dist)
+            elif mtype == 'XKF1' and m.C == 0 and truth is not None:
+                if tlost - 3 <= t <= tlost:
+                    err_before.append(-m.PD - truth)
+                elif tstep <= t <= tend:
+                    err_after.append(-m.PD - truth)
+        if len(err_before) < 20 or len(err_after) < 50 or len(speeds) < 50 or len(rngs) < 20:
+            raise NotAchievedException("too few samples: %u/%u heights, %u speeds, %u ranges" %
+                                       (len(err_before), len(err_after), len(speeds), len(rngs)))
+        # the vehicle must have been fast enough for the gate, and low enough for the switch
+        if min(speeds) < 2 or max(rngs) > 3.3:
+            raise NotAchievedException("speed down to %.1f m/s and range up to %.1f m: not a test of the switch" %
+                                       (min(speeds), max(rngs)))
+        ref = sum(err_before) / len(err_before)
+        worst = max(abs(e - ref) for e in err_after)
+        self.progress("EKF height moved up to %.2f m against the simulator's over the higher ground" % worst)
+        if worst > 0.4:
+            raise NotAchievedException("EKF height moved %.2f m against the simulator's with no velocity estimate" % worst)
+
+        self.set_parameter("RNGFND1_TYPE", 0)
+        self.reboot_sitl()
+
     def EK3_OptflowTerrainScaleHeight(self):
         '''optical flow scale height from the terrain database is right over slopes'''
         # Above the rangefinder range with EK3_OPTIONS bit 2 the optical flow scale
@@ -20431,6 +20510,7 @@ return update, 100
              self.EK3_OptflowTerrainScaleHeight,
              self.EK3_AglKfVerticalMotion,
              self.EK3_RngHgtSwitchStepUp,
+             self.EK3_RngHgtSwitchNoVelocity,
              self.EKF3RangeFinderOnGround,
              self.EK3_PerCoreLogging,
              self.EK3NoAidAccelBiasXY,
