@@ -338,6 +338,39 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_rc(3, 1500)
         self.do_RTL()
 
+        self.start_subtest("GCS take-off in VALT from mid-stick")
+        # mid-stick holds ground idle in VALT, so the take-off command itself
+        # has to spool the motors up
+        self.change_mode(VALT)
+        self.set_rc(3, 1000)
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.set_rc(3, 1500)
+        self.run_cmd(
+            mavutil.mavlink.MAV_CMD_NAV_TAKEOFF,
+            p3=1,  # NAV_TAKEOFF_FLAGS_HORIZONTAL_POSITION_NOT_REQUIRED
+            p7=10,
+        )
+        self.wait_altitude(9, 11, relative=True, timeout=30)
+        self.do_RTL()
+
+        self.start_subtest("LOITER to VALT and straight back keeps the surface tracking height")
+        # VALT clears the surface tracking offset on entry; a return inside the
+        # tracker's 1 s timeout must re-initialise it rather than add it again
+        self.context_push()  # the rangefinder is for this subtest only
+        self.set_analog_rangefinder_parameters()
+        self.reboot_sitl()
+        self.takeoff(10, mode="LOITER")
+        self.set_parameter("SIM_SONAR_OFFSET", -1)
+        self.wait_climbrate(-0.05, 0.05, minimum_duration=5, timeout=60)
+        alt = self.get_altitude(relative=True)
+        self.run_cmd_do_set_mode(VALT)
+        self.run_cmd_do_set_mode('LOITER')
+        self.wait_altitude(alt - 0.3, alt + 0.3, relative=True, minimum_duration=10, timeout=20)
+        self.do_RTL()
+        self.context_pop()
+        self.reboot_sitl()
+
         self.start_subtest("VALT holds altitude and tracks stick rate")
         self.takeoff(10, mode="ALT_HOLD")
         self.change_mode(VALT)
@@ -459,6 +492,21 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("SIM_GPS1_ENABLE", 1)
         self.wait_statustext("EKF Failsafe Cleared", check_context=True, timeout=60)
         self.do_RTL()
+        self.wait_disarmed()
+
+        self.start_subtest("FS_EKF_ACTION=4 lands instead during a radio failsafe")
+        # VALT needs the pilot's stick, so with the radio lost the action lands as action 2 does
+        self.set_parameter("FS_THR_ENABLE", 1)  # RTL, which still needs a position
+        self.takeoff(10, mode="LOITER")
+        self.set_parameter("SIM_RC_FAIL", 1)
+        self.wait_mode("RTL")
+        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.wait_statustext("EKF Failsafe: changed to Land Mode", check_context=True, timeout=30)
+        self.wait_mode("LAND")
+        self.set_parameters({
+            "SIM_GPS1_ENABLE": 1,
+            "SIM_RC_FAIL": 0,
+        })
         self.wait_disarmed()
 
     def ModeLandAdvancedFailsafe(self):
