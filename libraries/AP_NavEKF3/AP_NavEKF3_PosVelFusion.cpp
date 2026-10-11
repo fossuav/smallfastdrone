@@ -1584,9 +1584,12 @@ void NavEKF3_core::selectHeightForFusion()
         // altitude on baro through cruise/hover. When the IMU-aided AGL KF is enabled
         // and valid it provides a de-glitched height above ground that does not carry
         // baro error directly, so let it act as a stable terrain reference here too.
+        // Not while armed with no horizontal velocity measured, constant position mode
+        // included, as the speed gate below then has nothing to test.
         bool terrainStable = terrainHgtStable;
 #if EK3_FEATURE_OPTFLOW_AGL_KF
-        if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid) {
+        if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid &&
+            (onGround || (filterStatus.flags.horiz_vel && (PV_AidingMode != AID_NONE)))) {
             terrainStable = true;
         }
 #endif
@@ -1596,8 +1599,7 @@ void NavEKF3_core::selectHeightForFusion()
         bool aglSettled = true;
 #if EK3_FEATURE_OPTFLOW_AGL_KF
         const ftype rngHgt = MAX(rangeDataDelayed.rng * prevTnb.c.z, rngOnGnd);
-        const bool aglOnlyStable = !terrainHgtStable && aglKfValid &&
-                                   frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow);
+        const bool aglOnlyStable = terrainStable && !terrainHgtStable;
         if (aglOnlyStable) {
             aglSettled = rangeDataToFuse && (imuSampleTime_ms - lastAglRngFuseTime_ms < 200) &&
                          (fabsF(aglKfH - rngHgt) < 0.15f);
