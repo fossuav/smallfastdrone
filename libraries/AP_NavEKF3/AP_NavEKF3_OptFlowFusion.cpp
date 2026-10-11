@@ -1141,7 +1141,7 @@ void NavEKF3_core::UpdateAglKf()
         aglKfV = 0.0f;
     }
     // That test trusts the main filter, which can believe it is climbing on the ground after a
-    // hard flight. A range last seen near the floor that has had no reading for a second is on
+    // hard flight. A range last fused near the floor that has had no reading for a second is on
     // the ground whatever the filter says, so a height well above that last reading is a coast:
     // hold it on the floor until the range finder reads again or stops reporting too low
     const bool rngLowNearFloor = (rngLowTime_ms != 0) && (imuSampleTime_ms - rngLowTime_ms < 500) &&
@@ -1218,7 +1218,6 @@ void NavEKF3_core::UpdateAglKf()
         }
         return;
     }
-    aglKfLastRngHgt = MAX(rangeDataDelayed.rng * prevTnb.c.z, rngOnGnd);
 
     // Only fuse when vehicle tilt is within acceptable limits
     if (prevTnb.c.z < frontend->DCM33FlowMin) {
@@ -1238,6 +1237,7 @@ void NavEKF3_core::UpdateAglKf()
         aglKfP[1][1] = 1.0f;                    // 1 m/s velocity uncertainty after reset
         aglKfP[2][2] = 1.0f;                    // 1 m/s/s bias uncertainty after reset
         lastAglRngFuseTime_ms = imuSampleTime_ms;
+        aglKfLastRngHgt = aglKfH;
         aglKfLastHgtInnov = 0.0f;
         aglKfValid = true;
         return;  // skip measurement update this cycle (just used the reading for reset)
@@ -1327,6 +1327,7 @@ void NavEKF3_core::UpdateAglKf()
     aglKfP[2][2] = MAX(Pbb - 2.0f * Kb * Phb + sq(Kb) * innovVar, 0.0f);
 
     lastAglRngFuseTime_ms = imuSampleTime_ms;
+    aglKfLastRngHgt = hgtMeas;
     aglKfLastHgtInnov = hgtInnov;
     aglKfValid = true;
 }
