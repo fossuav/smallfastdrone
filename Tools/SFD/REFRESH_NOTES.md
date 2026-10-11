@@ -402,6 +402,28 @@ After:
   `land_complete` sets, so the normal cancel always runs first (a SITL
   mutant without it passed). `EKFFailsafeRestoreMode`, `ModeVAltHold` and
   `EKFSourceSetFailsafe` pass on this stack.
+- topup15 (2026-10-11) ports the code fixes from the AP-Review round
+  pushed to the PRs on 2026-10-11: #34457's floor hold armed only from a
+  fused reading (`25b2081449`, test `92b2a7ac49`), #34292's rest reading
+  cleared on disarm (`11d7e1336f`, `16009fb683`, test `2e087d9468`),
+  #33359's speed gate without a velocity estimate (`b2eaa6f864`, test
+  `d6ea6b5218`) and #32270's VALT GCS take-off, surface tracking re-init
+  and single height reset (`a1916a5c35`, tests `adf4491ab2`). The VALT
+  height-reset check is a hand port: 4.7 has `getLastPosDownReset()` where
+  master counts resets. The floor hold reaches this stack too: with the
+  old recording `OpticalFlowAGLKfNoFloorHoldInHover` held a 10 m hover at
+  0.10 m, so an airframe whose range finder reports out of range low (not
+  TD25's MAVLink sensor, which never does) was exposed. Not ported:
+  #33484's latch clear (this stack clears it on every disarmed step
+  through #32232's `3ebeb38816`), #33478's `XKFA.VHold` (this stack logs
+  the AGL KF as XKF6), and #32270's tighter ground-effect window check:
+  with #34362 here the window closes inside the baro glitch (142.0 s), so
+  that subtest exercises nothing on this stack, and on #32270 too once
+  #34362 lands. The AGL KF hover, touchdown, focus, height switch,
+  `ModeVAltHold` and `ModeAltHold` tests pass on this stack.
+  Correction to topup13: the 0.55 m ground reading is the CMAC terrain
+  tile, not 4.7. SITL reads 0.0 m without the tile and 0.55 m with it,
+  on master as here; #33507's CI failure was the same tile.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
