@@ -19,6 +19,9 @@ void NavEKF3_core::controlFilterModes()
     if (motorsArmed && !prevMotorsArmed) {
         // set the time at which we arm to assist with checks
         timeAtArming_ms =  imuSampleTime_ms;
+    } else if (!motorsArmed && prevMotorsArmed) {
+        // a rest reading only holds for the flight it was taken before
+        flowFocusRestRng = 0;
     }
 
     // Detect if we are in flight on or ground
