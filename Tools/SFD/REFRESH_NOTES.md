@@ -441,6 +441,13 @@ After:
   Two VALT commits here carry a `Claude-Session:` trailer
   (`72cf3e7dae`, `7a24be2b60`); #32270 dropped it on 2026-10-12, so the
   next refresh takes the clean messages from the PR.
+- topup17 (2026-10-13) restores throw mode's hand-off to VALT
+  (`b0a9fca7ef`, test `774be86ef5`), lost on a refresh (see the correction
+  under "NOT re-folded"). VALT still counts as needing a position before
+  the hand-off, as on 4.7.0. Not yet on any PR: the case belongs on #32270
+  against master's switch, and #32475 needs it in its moved switch.
+  `ThrowDropNextModeVALT` fails without it (stays in THROW) and passes with
+  it, with `ThrowDropSourceSwitch` and `ThrowModeNoGPS`.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
@@ -745,6 +752,11 @@ FLOW_OPTIONS's docs).
   restore), `check the SITL gyro rate` and `only compare EKF3 cores while armed`
   (the PR heads carry both), the old local throw and VALT commits (#32475 and
   #32270 carry them), and `ebed712c36` (#32972 carries the spool-up anchor).
+  *Corrected 2026-10-13:* not all of them. `9ae85814c4` (VALT in throw mode's
+  THROW_NEXTMODE hand-off list) is on neither PR, so THROW_NEXTMODE 29 stopped
+  working on the 4.7.2 beta: the vehicle stayed in THROW after a good throw.
+  Restored as topup17. Before dropping a local commit because a PR "carries
+  it", check the PR head with `git log -S` for the change itself.
 
 ### DataFlashErase (standing divergence)
 
