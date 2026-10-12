@@ -364,9 +364,27 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.set_parameter("SIM_SONAR_OFFSET", -1)
         self.wait_climbrate(-0.05, 0.05, minimum_duration=5, timeout=60)
         alt = self.get_altitude(relative=True)
+        tstart = self.get_sim_time()
         self.run_cmd_do_set_mode(VALT)
         self.run_cmd_do_set_mode('LOITER')
         self.wait_altitude(alt - 0.3, alt + 0.3, relative=True, minimum_duration=10, timeout=20)
+        # the return only tests the re-initialisation if it beat the timeout
+        dfreader = self.dfreader_for_current_onboard_log()
+        valt_start_us = None
+        while True:
+            m = dfreader.recv_match(type='MODE')
+            if m is None:
+                raise NotAchievedException("No change out of VALT in the log")
+            if m.TimeUS * 1.0e-6 < tstart:
+                continue
+            if m.Mode == VALT:
+                valt_start_us = m.TimeUS
+            elif valt_start_us is not None:
+                break
+        valt_s = (m.TimeUS - valt_start_us) * 1.0e-6
+        self.progress("VALT lasted %.3f s" % valt_s)
+        if valt_s >= 1.0:  # SURFACE_TRACKING_TIMEOUT_MS
+            raise NotAchievedException("VALT lasted %.3f s, past the surface tracking timeout" % valt_s)
         self.do_RTL()
         self.context_pop()
         self.reboot_sitl()
@@ -508,6 +526,37 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "SIM_RC_FAIL": 0,
         })
         self.wait_disarmed()
+
+        self.start_subtest("VALT off centre ignores a held vertical position offset")
+        # the position target is pos_desired plus the offset, so a snap of
+        # pos_desired alone leaves the offset in the error and VALT climbs
+        # on it whatever the stick says
+        self.context_push()  # scripting is for this subtest only
+        self.set_parameters({
+            "SCR_ENABLE": 1,
+            "RC12_OPTION": 300,  # Scripting1 enables the script's offsets
+        })
+        self.reboot_sitl()
+        self.install_example_script_context('copter-posoffset.lua')
+        self.reboot_sitl()
+        self.takeoff(10, mode="LOITER")
+        self.wait_climbrate(-0.05, 0.05, minimum_duration=3, timeout=30)
+        alt = self.get_altitude(relative=True)
+        self.set_parameter("PSC_OFS_POS_D", -3)
+        self.set_rc(12, 2000)
+        self.wait_altitude(alt + 2.7, alt + 3.3, relative=True, minimum_duration=3, timeout=30)
+        self.wait_climbrate(-0.05, 0.05, minimum_duration=3, timeout=30)
+        self.change_mode(VALT)
+        alt = self.get_altitude(relative=True)
+        self.set_rc(3, 1600)  # just outside the deadzone, about 0.02 m/s
+        self.wait_altitude(alt - 0.5, alt + 1.0, relative=True, minimum_duration=10, timeout=20)
+        self.set_rc_from_map({
+            3: 1500,
+            12: 1000,
+        })
+        self.do_RTL()
+        self.context_pop()
+        self.reboot_sitl()
 
     def ModeLandAdvancedFailsafe(self):
         '''LAND_FS_OPTIONS bit 0 engages on an RC-failsafe LAND and a healthy vehicle still lands without the cap tripping'''
