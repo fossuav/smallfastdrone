@@ -309,6 +309,7 @@ void NavEKF3_core::InitialiseVariables()
     gndOffsetMeasured = false;
     terrainAnchorValid = false;
     lastGoodRngMeas = 0;
+    terrainRngFuseTime_ms = 0;
     flatGndEngaged = false;
     flatGndRngResumeTime_ms = 0;
     flatGndSaved.valid = false;
