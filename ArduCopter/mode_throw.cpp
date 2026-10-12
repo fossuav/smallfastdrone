@@ -155,6 +155,9 @@ Mode *ModeThrow::nextmode() const
     case Mode::Number::LOITER:
     case Mode::Number::STABILIZE:
     case Mode::Number::ALT_HOLD:
+#if MODE_VALT_ENABLED
+    case Mode::Number::VALT:
+#endif
     case Mode::Number::ACRO:
         return copter.mode_from_mode_num(num);
     default:
