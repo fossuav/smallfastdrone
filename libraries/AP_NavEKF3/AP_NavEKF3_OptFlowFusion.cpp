@@ -825,6 +825,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
             // record the last time observations were accepted for fusion
             prevFlowFuseTime_ms = imuSampleTime_ms;
             flowPassTimeAxis_ms[obsIndex] = imuSampleTime_ms;
+            flowFusedAxes |= 1U << obsIndex;
 #if EK3_FEATURE_OPTFLOW_AGL_KF
             // record per-axis acceptance so a single-axis lockout can be detected
             flowFuseTimeAxis_ms[obsIndex] = imuSampleTime_ms;
