@@ -424,6 +424,23 @@ After:
   Correction to topup13: the 0.55 m ground reading is the CMAC terrain
   tile, not 4.7. SITL reads 0.0 m without the tile and 0.55 m with it,
   on master as here; #33507's CI failure was the same tile.
+- topup16 (2026-10-12) ports the second AP-Review round's fixes: #34292's
+  rest reading also cleared after a second with no stored flow sample
+  (`bb4cfced51`, test `410cdf3672`), #34380's flat-ground return timed on
+  fused range readings (`6c887a77c3`, test `0714ba939d`), #32270's VALT
+  snap taking off the position offset and its blend scaled to the loop
+  period (`6c501698b4`, tests `887003aac6`), and #33359's per-axis gate on
+  relative aiding before the AGL KF override (`82a2f4d35b`, test
+  `2aa37d5952`). 4.7 test harness gaps worked around in the tests:
+  `send_set_parameter()` has no `add_to_context`, and `takeoff()` has no
+  `altitude_max`. All the affected tests pass on this stack.
+  `EK3_RngHgtSwitchNoVelocity` also reproduces a ground velocity runaway
+  after its fast touchdown, with or without these changes and with
+  `EK3_OPTIONS` 0: the single-axis flow lockout of #33484 (and TD25's
+  ground runaway), reproducible in SITL.
+  Two VALT commits here carry a `Claude-Session:` trailer
+  (`72cf3e7dae`, `7a24be2b60`); #32270 dropped it on 2026-10-12, so the
+  next refresh takes the clean messages from the PR.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
