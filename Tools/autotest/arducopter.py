@@ -18357,6 +18357,37 @@ return update, 100
         self.wait_disarmed(timeout=90)
         self.zero_throttle()
 
+    def ThrowDropNextModeVALT(self):
+        '''Throw mode hands off to VALT when THROW_NEXTMODE is 29'''
+        VALT = 29
+        self.set_parameters({
+            "SIM_SHOVE_Z": -10.5,
+            "THROW_TYPE": 1,           # drop
+            "THROW_NEXTMODE": VALT,
+            "MOT_SPOOL_TIME": 0.5,
+        })
+        self.change_mode('THROW')
+        self.wait_ready_to_arm()
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True)
+        # a mode missing from the hand-off list leaves the vehicle in THROW with no message
+        self.wait_mode(VALT, timeout=30)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(5, "hold VALT at mid stick after the hand-off")
+        self.assert_mode(VALT)
+
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=90)
+
     def ThrowDropSourceSwitch(self):
         '''Test EKF source set switch on throw mode completion'''
         self.progress("Testing throw drop with EKF source set switch")
@@ -20748,6 +20779,7 @@ return update, 100
              self.FlowFocusHoldReleasesWithDeadRangeFinder,
              self.ThrowDoubleDrop,
              self.ThrowModeNoGPS,
+             self.ThrowDropNextModeVALT,
              self.ThrowDropSourceSwitch,
              self.ThrowAbortRestoresSourceSet,
              self.ThrowSpinDrop,
