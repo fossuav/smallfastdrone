@@ -333,6 +333,7 @@ void NavEKF3_core::InitialiseVariables()
     optFlowFusionDelayed = false;
 #endif
     flowFusionActive = false;
+    flowFusedAxes = 0;
     airSpdFusionDelayed = false;
     sideSlipFusionDelayed = false;
     airDataFusionWindOnly = false;
@@ -383,6 +384,7 @@ void NavEKF3_core::InitialiseVariables()
     bodyOdmMeasTime_ms = 0;
     bodyVelFusionDelayed = false;
     bodyVelFusionActive = false;
+    bodyVelFusedAxes = 0;
 
     // yaw sensor fusion
     yawMeasTime_ms = 0;
