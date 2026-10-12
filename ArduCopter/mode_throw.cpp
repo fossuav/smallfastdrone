@@ -967,6 +967,9 @@ void ModeThrow::throw_do_nextmode_handoff()
         case Mode::Number::STABILIZE:
         case Mode::Number::ALT_HOLD:
         case Mode::Number::ACRO:
+#if MODE_VALT_ENABLED
+        case Mode::Number::VALT:
+#endif
             set_mode((Mode::Number)g2.throw_nextmode.get(), ModeReason::THROW_COMPLETE);
             break;
         default:
