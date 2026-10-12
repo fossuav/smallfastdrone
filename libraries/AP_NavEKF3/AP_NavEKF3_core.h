@@ -1392,6 +1392,7 @@ private:
     Vector3F delAngBodyOF;          // bias corrected delta angle of the vehicle IMU measured summed across the time since the last OF measurement
     ftype delTimeOF;                // time that delAngBodyOF is summed across
     bool flowFusionActive;          // true when optical flow fusion is active
+    uint8_t flowFusedAxes;          // bit per flow axis that has passed its innovation check since relative aiding started
 
     Vector3F accelPosOffset;        // position of IMU accelerometer unit in body frame (m)
 
@@ -1427,6 +1428,7 @@ private:
     EKF_obs_buffer_t<wheel_odm_elements> storedWheelOdm;    // body velocity data buffer
     wheel_odm_elements wheelOdmDataDelayed;   // Body  frame odometry data at the fusion time horizon
 #endif
+    uint8_t bodyVelFusedAxes;           // bit per body velocity axis that has passed its innovation check since relative aiding started
 
     // GPS yaw sensor fusion
     uint32_t yawMeasTime_ms;            // system time GPS yaw angle was last input to the data buffer
