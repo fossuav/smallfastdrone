@@ -17708,7 +17708,8 @@ return update, 100
         self.reboot_sitl()
         self.context_collect('STATUSTEXT')
         # GUIDED stops the climb at the target, so a late altitude report cannot overshoot it
-        self.takeoff(2, mode='GUIDED', require_absolute=False, altitude_max=2.5, alt_minimum_duration=2)
+        # 4.7's takeoff() has no altitude_max; max_err bounds the climb at 2.5 m
+        self.takeoff(2, mode='GUIDED', require_absolute=False, max_err=0.5, alt_minimum_duration=2)
         # no position controller, so losing flow does not end the flight
         self.set_rc(3, 1500)
         self.change_mode('ALT_HOLD')
