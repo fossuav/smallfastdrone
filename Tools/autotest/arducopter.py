@@ -2577,6 +2577,77 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 raise NotAchievedException("the AGL KF still used the brief return after it had gone")
         self.set_parameter("EK3_OPTIONS", 0)
 
+        self.start_subtest("Readings the terrain gate rejects do not make a brief return the ground")
+        # an obstacle's return, fused, then readings of a lower surface that disagree with it by
+        # more than the terrain innovation gate allows. Only fused readings measure the ground
+        # again, so the obstacle is undone 500 ms after its last one and the lower readings are
+        # judged afresh; these last long enough to be taken as the ground, so the leg asserts
+        # that the obstacle is not left behind as the ground, not which of the other two is kept
+        self.reboot_sitl()
+        climb_out_of_range()
+        if not horiz_pos_rel():
+            raise NotAchievedException("the climb out did not engage the fallback, so the leg proves nothing")
+        sonar_scale = self.get_parameter("SIM_SONAR_SCALE")
+        alt = self.get_altitude(relative=True)
+        # 1.76 m for 0.2 s then 7.3 m for 3.5 s: the second is inside the 8 m range and over the
+        # 5.6 m the fallback needs to re-engage, which the obstacle is not
+        tset_us = self.get_sim_time() * 1e6
+        # 4.7's send_set_parameter() has no add_to_context, so the context records it here
+        self.context_get().parameters.append(("SIM_SONAR_SCALE", sonar_scale))
+        self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale * alt / 1.76)
+        self.delay_sim_time(0.2, "the obstacle")
+        self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale * alt / 7.3)
+        self.delay_sim_time(3.5, "the lower readings")
+        self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale)
+        tgone_us = self.get_sim_time() * 1e6
+        # past the 5 s the terrain offset stays valid for after a fusion
+        self.delay_sim_time(8, "outlast the terrain offset timeout")
+        flags = ekf_flags()
+        tend_us = self.get_sim_time() * 1e6
+        self.disarm_vehicle(force=True)
+        obstacle_us = []
+        lower_us = []
+        held_against_lower = 0
+        hagl_after = None
+        dfreader = self.dfreader_for_current_onboard_log()
+        while True:
+            m = dfreader.recv_match(type=['XKF5', 'RFND'])
+            if m is None:
+                break
+            if not tset_us < m.TimeUS < tend_us:
+                continue
+            if m.get_type() == 'RFND':
+                if m.Instance == 0 and m.Stat == 4:  # Good
+                    if 1.2 <= m.Dist <= 2.4:
+                        obstacle_us.append(m.TimeUS)
+                    elif 6.3 <= m.Dist <= 7.9:
+                        lower_us.append(m.TimeUS)
+            elif m.C == 0 and m.TimeUS < tgone_us:
+                # the terrain state stayed on the obstacle while the range read the lower surface
+                if m.HAGL < 3 and 6.3 <= m.rng <= 7.9:
+                    held_against_lower += 1
+            elif m.C == 0 and m.TimeUS > tgone_us + 1e6:
+                hagl_after = m.HAGL if hagl_after is None else min(hagl_after, m.HAGL)
+        if len(obstacle_us) < 2 or len(lower_us) < 2 or hagl_after is None:
+            raise NotAchievedException("no readings or XKF5 around the returns")
+        obstacle = (obstacle_us[-1] - obstacle_us[0]) * 1e-6
+        lower = (lower_us[-1] - lower_us[0]) * 1e-6
+        self.progress("obstacle read for %.1f s, lower readings for %.1f s, %u held against them; "
+                      "height above ground %.1f m after, at %.1f m up" %
+                      (obstacle, lower, held_against_lower, hagl_after, alt))
+        # an obstacle read for 2 s is the ground by design, and lower readings under 2 s would end
+        # the return within the 2 s whatever readings counted
+        if obstacle > 1.5 or lower < 2.5:
+            raise NotAchievedException("obstacle read for %.1f s and lower readings for %.1f s, so the leg proves nothing" %
+                                       (obstacle, lower))
+        if held_against_lower < 2:
+            raise NotAchievedException("the gate did not reject the lower readings, so the leg proves nothing")
+        if hagl_after < 4:
+            raise NotAchievedException("the obstacle was left as the ground: height above ground %.1f m at %.1f m up" %
+                                       (hagl_after, alt))
+        if not flags & mavutil.mavlink.EKF_POS_HORIZ_REL:
+            raise NotAchievedException("relative position lost after an obstacle and readings the gate rejected")
+
         self.start_subtest("A range finder lost in range after a climb out and back drops it")
         # the fallback ends once range data has been fused again for 2 s, so a later failure
         # inside the range has to pass the last good reading check afresh: at 5 m it is over
