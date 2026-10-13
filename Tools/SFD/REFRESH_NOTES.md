@@ -468,6 +468,19 @@ After:
   passes there with or without the hold; on the beta it fails without it.
   `TD_FIELD_PLAN.md`'s T3 promised the clear only after the switch back
   and is corrected. topup18's date was 2026-10-13, not 2026-10-14.
+- topup20 (2026-10-14) ports the fourth AP-Review round. #34292: a flow
+  sample with a declared sensor height (FLOW_HGT_OVR) skips the focus
+  floor, which zeroed a flow-only Rover's flow over a range finder at its
+  ground clearance (0.01 against 0.39 m/s); the SITL flow model now sees a
+  sensor mounted above a vehicle at zero height, and
+  `OpticalFlowRangefinderOnGround` covers it. #33359: a flow axis counts
+  as measured only while the speed error it can hide fits the range height
+  switch's hysteresis (`rngSwitchInSpeed()`), the all-axes stamp moves
+  after the loop, `EK3_RngHgtSwitchRegainHigh` flies the 12 m case (1.49 m
+  before, 0.09-0.18 m after) and the turning leg leans harder so it stays
+  above its own 3 m/s gate. A first cut of the #34292 branch read
+  `heightOverride` before any sample was recalled and tripped SITL's FPE
+  trap; it is guarded by `flowDataToFuse`.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
