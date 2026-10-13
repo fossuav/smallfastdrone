@@ -2632,65 +2632,83 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # again, so the obstacle is undone 500 ms after its last one and the lower readings are
         # judged afresh; these last long enough to be taken as the ground, so the leg asserts
         # that the obstacle is not left behind as the ground, not which of the other two is kept
-        self.reboot_sitl()
-        climb_out_of_range()
-        if not horiz_pos_rel():
-            raise NotAchievedException("the climb out did not engage the fallback, so the leg proves nothing")
         sonar_scale = self.get_parameter("SIM_SONAR_SCALE")
-        alt = self.get_altitude(relative=True)
-        # 1.76 m for 0.2 s then 7.3 m for 3.5 s: the second is inside the 8 m range and over the
-        # 5.6 m the fallback needs to re-engage, which the obstacle is not
-        tset_us = self.get_sim_time() * 1e6
-        # 4.7's send_set_parameter() has no add_to_context, so the context records it here
-        self.context_get().parameters.append(("SIM_SONAR_SCALE", sonar_scale))
-        self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale * alt / 1.76)
-        self.delay_sim_time(0.2, "the obstacle")
-        self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale * alt / 7.3)
-        self.delay_sim_time(3.5, "the lower readings")
-        self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale)
-        tgone_us = self.get_sim_time() * 1e6
-        # past the 5 s the terrain offset stays valid for after a fusion
-        self.delay_sim_time(8, "outlast the terrain offset timeout")
-        flags = ekf_flags()
-        tend_us = self.get_sim_time() * 1e6
-        self.disarm_vehicle(force=True)
-        obstacle_us = []
-        lower_us = []
-        held_against_lower = 0
-        hagl_after = None
-        dfreader = self.dfreader_for_current_onboard_log()
-        while True:
-            m = dfreader.recv_match(type=['XKF5', 'RFND'])
-            if m is None:
+
+        def obstacle_then_rejected_readings():
+            self.reboot_sitl()
+            climb_out_of_range()
+            if not horiz_pos_rel():
+                raise NotAchievedException("the climb out did not engage the fallback, so the leg proves nothing")
+            alt = self.get_altitude(relative=True)
+            # 1.76 m for 0.2 s then 7.3 m for 3.5 s: the second is inside the 8 m range and over the
+            # 5.6 m the fallback needs to re-engage, which the obstacle is not
+            tset_us = self.get_sim_time() * 1e6
+            # 4.7's send_set_parameter() has no add_to_context, so the context records it here
+            self.context_get().parameters.append(("SIM_SONAR_SCALE", sonar_scale))
+            self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale * alt / 1.76)
+            self.delay_sim_time(0.2, "the obstacle")
+            self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale * alt / 7.3)
+            self.delay_sim_time(3.5, "the lower readings")
+            self.send_set_parameter_direct("SIM_SONAR_SCALE", sonar_scale)
+            tgone_us = self.get_sim_time() * 1e6
+            # past the 5 s the terrain offset stays valid for after a fusion
+            self.delay_sim_time(8, "outlast the terrain offset timeout")
+            flags = ekf_flags()
+            tend_us = self.get_sim_time() * 1e6
+            self.disarm_vehicle(force=True)
+            # the sets above are not acknowledged, so a lost one would carry its scale into the next flight
+            self.set_parameter("SIM_SONAR_SCALE", sonar_scale)
+            obstacle_us = []
+            lower_us = []
+            held_us = []
+            hagl_after = None
+            dfreader = self.dfreader_for_current_onboard_log()
+            while True:
+                m = dfreader.recv_match(type=['XKF5', 'RFND'])
+                if m is None:
+                    break
+                if not tset_us < m.TimeUS < tend_us:
+                    continue
+                if m.get_type() == 'RFND':
+                    if m.Instance == 0 and m.Stat == 4:  # Good
+                        if 1.2 <= m.Dist <= 2.4:
+                            obstacle_us.append(m.TimeUS)
+                        elif 6.3 <= m.Dist <= 7.9:
+                            lower_us.append(m.TimeUS)
+                elif m.C == 0 and m.TimeUS < tgone_us:
+                    # the terrain state stayed on the obstacle while the range read the lower surface
+                    if m.HAGL < 3 and 6.3 <= m.rng <= 7.9:
+                        held_us.append(m.TimeUS)
+                elif m.C == 0 and m.TimeUS > tgone_us + 1e6:
+                    hagl_after = m.HAGL if hagl_after is None else min(hagl_after, m.HAGL)
+            if len(obstacle_us) < 2 or len(lower_us) < 2 or hagl_after is None:
+                raise NotAchievedException("no readings or XKF5 around the returns")
+            obstacle = (obstacle_us[-1] - obstacle_us[0]) * 1e-6
+            lower = (lower_us[-1] - lower_us[0]) * 1e-6
+            held = (held_us[-1] - held_us[0]) * 1e-6 if held_us else 0
+            self.progress("obstacle read for %.1f s, lower readings for %.1f s, held against them for %.1f s "
+                          "(%u XKF5); height above ground %.1f m after, at %.1f m up" %
+                          (obstacle, lower, held, len(held_us), hagl_after, alt))
+            return obstacle, lower, held, len(held_us), hagl_after, alt, flags
+
+        # an obstacle read for 2 s is the ground by design, lower readings under 2 s would end the
+        # return within the 2 s whatever readings counted, and a lower reading 5 s after the
+        # obstacle's last fused one resets the terrain state to it whatever was held. The parameter
+        # sets that time them are not acknowledged, so a flight that misses is flown again
+        for attempt in range(1, 4):
+            obstacle, lower, held, held_count, hagl_after, alt, flags = obstacle_then_rejected_readings()
+            if obstacle <= 1.5 and 2.5 <= lower <= 4.5:
                 break
-            if not tset_us < m.TimeUS < tend_us:
-                continue
-            if m.get_type() == 'RFND':
-                if m.Instance == 0 and m.Stat == 4:  # Good
-                    if 1.2 <= m.Dist <= 2.4:
-                        obstacle_us.append(m.TimeUS)
-                    elif 6.3 <= m.Dist <= 7.9:
-                        lower_us.append(m.TimeUS)
-            elif m.C == 0 and m.TimeUS < tgone_us:
-                # the terrain state stayed on the obstacle while the range read the lower surface
-                if m.HAGL < 3 and 6.3 <= m.rng <= 7.9:
-                    held_against_lower += 1
-            elif m.C == 0 and m.TimeUS > tgone_us + 1e6:
-                hagl_after = m.HAGL if hagl_after is None else min(hagl_after, m.HAGL)
-        if len(obstacle_us) < 2 or len(lower_us) < 2 or hagl_after is None:
-            raise NotAchievedException("no readings or XKF5 around the returns")
-        obstacle = (obstacle_us[-1] - obstacle_us[0]) * 1e-6
-        lower = (lower_us[-1] - lower_us[0]) * 1e-6
-        self.progress("obstacle read for %.1f s, lower readings for %.1f s, %u held against them; "
-                      "height above ground %.1f m after, at %.1f m up" %
-                      (obstacle, lower, held_against_lower, hagl_after, alt))
-        # an obstacle read for 2 s is the ground by design, and lower readings under 2 s would end
-        # the return within the 2 s whatever readings counted
-        if obstacle > 1.5 or lower < 2.5:
-            raise NotAchievedException("obstacle read for %.1f s and lower readings for %.1f s, so the leg proves nothing" %
-                                       (obstacle, lower))
-        if held_against_lower < 2:
+            self.progress("obstacle read for %.1f s and lower readings for %.1f s on attempt %u, so it proves nothing" %
+                          (obstacle, lower, attempt))
+        else:
+            raise NotAchievedException("the readings missed their lengths on 3 attempts, so the leg proves nothing")
+        if held_count < 2:
             raise NotAchievedException("the gate did not reject the lower readings, so the leg proves nothing")
+        # undone 500 ms after the obstacle's last fused reading; were rejected readings counted as
+        # the ground, it would be held until they ended
+        if held > 1:
+            raise NotAchievedException("the obstacle was held against the lower readings for %.1f s" % held)
         if hagl_after < 4:
             raise NotAchievedException("the obstacle was left as the ground: height above ground %.1f m at %.1f m up" %
                                        (hagl_after, alt))
