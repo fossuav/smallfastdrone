@@ -448,6 +448,17 @@ After:
   against master's switch, and #32475 needs it in its moved switch.
   `ThrowDropNextModeVALT` fails without it (stays in THROW) and passes with
   it, with `ThrowDropSourceSwitch` and `ThrowModeNoGPS`.
+- topup18 (2026-10-14) ports the third AP-Review round: #33359's gate that
+  counts relative aiding as velocity only while all axes pass
+  (`f3fae811d4`, test `e52590f700`), #34380's and #34457's known-limit
+  comments (`35356c9756`, `d09d9fa1ee`), #34380's bounded rejected-readings
+  leg (`0eda0bff65`) and #34292's slowed low climbs (`8df833df36`). Test
+  harness gaps on 4.7 worked around: `set_rc_from_map()` has no
+  `timeout=None`, `send_set_parameter()` no `add_to_context`, and there is
+  no `context_set_speedup()`. `EK3_RngHgtSwitchNoVelocity` passes twice
+  (0.05 / 0.10-0.11 / 0.12 m on its three legs), with
+  `EK3_RngHgtSwitchStepUp`, `EK3_OptflowAboveRangefinder` and
+  `FlowFocusHoldAfterLanding`.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
