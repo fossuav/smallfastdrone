@@ -18119,6 +18119,20 @@ return update, 100
         })
         self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
         self.set_analog_rangefinder_parameters()
+
+        def climb_to_low_hover(ground_m):
+            # each altitude sample is a poll round trip, and at full speedup on a loaded machine
+            # one late poll steps over a band this narrow, so the climb runs slowed
+            # 4.7 has no context_set_speedup(): set it by hand; the context restores SIM_SPEEDUP
+            speedup = self.speedup
+            self.speedup = 5
+            self.set_parameter("SIM_SPEEDUP", 5)
+            self.set_rc(3, 1650)
+            self.wait_altitude(ground_m + 0.25, ground_m + 0.5, altitude_source="SIM_STATE.alt", timeout=30)
+            self.set_rc(3, 1500)
+            self.speedup = speedup
+            self.set_parameter("SIM_SPEEDUP", speedup)
+
         # a baro in ground effect takes the EKF's height with it near the ground, which the
         # floor must not follow, so fly it with and without, against the true height
         for geff_m in 0, 1.5:
@@ -18162,9 +18176,7 @@ return update, 100
         # fused as zero it would not
         self.context_collect('STATUSTEXT')
         self.delay_sim_time(3, reason="the hold engages")
-        self.set_rc(3, 1650)
-        self.wait_altitude(ground_m + 0.25, ground_m + 0.5, altitude_source="SIM_STATE.alt", timeout=30)
-        self.set_rc(3, 1500)
+        climb_to_low_hover(ground_m)
         hover_start_us = self.get_sim_time() * 1e6
         self.delay_sim_time(7, reason="hover below the range finder minimum")
         hover_end_us = self.get_sim_time() * 1e6
@@ -18271,9 +18283,7 @@ return update, 100
             self.set_parameter("SIM_FLOW_OFS_X", 0)
             self.wait_statustext("EKF3 IMU0 started relative aiding", check_context=True, timeout=30)
             self.context_clear_collection('STATUSTEXT')
-            self.set_rc(3, 1650)
-            self.wait_altitude(ground_m + 0.25, ground_m + 0.5, altitude_source="SIM_STATE.alt", timeout=30)
-            self.set_rc(3, 1500)
+            climb_to_low_hover(ground_m)
             hover_start_us = self.get_sim_time() * 1e6
             self.delay_sim_time(7, reason="hover under the old ground reading")
             hover_end_us = self.get_sim_time() * 1e6
