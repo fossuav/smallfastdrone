@@ -2,11 +2,40 @@
 
 SmallFastDrone 4.7.2 beta field test plan: everything that changed in the
 beta after the 8 October flights, what to set up for it, and how to fly
-it. The 8 October logs were on `7b0e4dd8`; fly `d2014d6afb` or later.
+it. The 8 October logs were on `7b0e4dd8`; fly `d2014d6afb` or later,
+and `26f507edf4` or later for T3.
 
 - **Vehicle**: TD25, MicoAir743v2, 5"
 - **Navigation**: MAVLink flow + MAVLink range finder, no GPS, baro height
 - **Loop rate**: `SCHED_LOOP_RATE` 200
+
+## Results from 13 October
+
+Ten logs on `6f5d6dc0`: T1-T4 flown, T5 not.
+
+- **T1**: VALT climbs at 1.01-1.05 times the stick's rate off centre and
+  stops within 0.6-1.1 s of centring, carrying on 0.2-0.35 m from about
+  0.6 m/s and 0.5-0.76 m from about 1.4 m/s. How did it feel? The logs
+  cannot say whether that is too loose. `PILOT_SPD_UP` is now 1.5 (2.5
+  on 8 October), so full stick climbs 40% slower than it did, whatever
+  `VALT_POS_EXPO` does.
+- **T2**: works. Every switch to source set 2 in Loiter gave `EKF
+  Failsafe: changed to VALT Hold Mode` about 6 s later.
+- **T3**: firmware bug, fixed in `26f507edf4`. On source set 2 the
+  failsafe clears about 1 s after the change to VALT, and the restore
+  then tried Loiter 3 s after the sticks were centred, before there was a
+  position. It was refused (`Mode change to Loiter failed: requires
+  position`) and did not try again, so Loiter never came back: 6 of 13
+  restores. **Re-fly T3 on the new firmware.**
+- **T4**: works. Loiter was accepted after every re-arm, over 7 flights
+  in two boots.
+- **Flow**: much better than on 8 October. It now follows rotation in
+  flight, and median quality is 57-59 against 51. About half the samples
+  are still below `EK3_FLOW_QMIN` 60, so a lockout usually latches flow
+  out until disarm: 9 latches, 5 of them at touchdown. **Keep QMIN at
+  60.** Replayed, 50 still catches the 8 October flyaway, but on T4 it
+  turns two latches in Acro into five velocity resets of 1.3-4.2 m/s,
+  which without GPS we cannot check.
 
 ## What changed since 8 October
 
@@ -14,7 +43,7 @@ it. The 8 October logs were on `7b0e4dd8`; fly `d2014d6afb` or later.
 |---|---|---|---|
 | VALT position blend now scales with loop rate | VALT feels different at 200 Hz: looser off centre, the same at centre and full stick | every VALT flight | T1 |
 | EKF failsafe can switch to VALT (`FS_EKF_ACTION` 4) | A flow loss in Loiter drops you into VALT instead of AltHold | needs setup | T2 |
-| EKF failsafe returns to Loiter when it clears (`FS_OPTIONS` bit 6) | After a failsafe, Loiter comes back by itself once flow is healthy and the sticks are centred | needs setup | T3 |
+| EKF failsafe returns to Loiter when it clears (`FS_OPTIONS` bit 6) | After a failsafe, Loiter comes back by itself once flow is healthy and the sticks are centred | needs setup; re-fly on `26f507edf4` | T3 |
 | Flow rest reading cleared on disarm, and after 1 s with no flow sample | Nothing, unless a second flight in the same boot misbehaves near the ground | passive | T4 |
 | Throw mode can hand off to VALT (`THROW_NEXTMODE` 29) | Only if you throw or drop | optional | T5 |
 | VALT: GCS take-off, surface tracking re-init, EKF height reset, position offset | Nothing with your setup | not exercised | - |
@@ -89,11 +118,17 @@ the T2 setup.
 
 **Fly.**
 
-1. As T2 until VALT. Leave the mode switch on Loiter throughout.
-2. Source switch back to low. Expect `EKF Failsafe Cleared`.
-3. Centre roll and pitch, hands off. About 3 s after the checks pass,
-   expect `EKF Failsafe: restored Loiter Mode`. The checks pass only once
-   flow aiding has restarted, which can take several seconds.
+1. As T2 until VALT. Leave the mode switch on Loiter throughout. Expect
+   `EKF Failsafe Cleared` about 1 s later, with the switch still in the
+   middle: source set 2 has no horizontal source, so the check stops
+   expecting a position. Nothing should come back yet.
+2. Source switch back to low. Expect `started relative aiding`.
+3. Centre roll and pitch, hands off. About 3 s after aiding has started,
+   expect `EKF Failsafe: restored Loiter Mode`.
+
+*Corrected 13 October*: this said the failsafe clears only after the
+switch back. It clears on source set 2, and before `26f507edf4` the
+restore fired there and was refused; see Results.
 4. Repeat once with the roll stick held off centre: nothing should come
    back until you centre it.
 5. Repeat once and move the mode switch while in VALT: that cancels the
