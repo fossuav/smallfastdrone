@@ -903,9 +903,9 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
         } else {
             flowFusedAxes &= ~(1U << obsIndex);
         }
-        if (flowFusedAxes == 0x03) {
-            allAxesFusedTime_ms = imuSampleTime_ms;
-        }
+    }
+    if (flowFusedAxes == 0x03) {
+        allAxesFusedTime_ms = imuSampleTime_ms;
     }
 
 #if EK3_FEATURE_OPTFLOW_AGL_KF
