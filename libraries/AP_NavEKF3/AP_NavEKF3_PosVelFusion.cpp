@@ -1511,6 +1511,11 @@ void NavEKF3_core::FuseVelPosNED()
 ********************************************************/
 
 // select the height measurement to be fused from the available baro, range finder and GPS sources
+ftype NavEKF3_core::rngSwitchInSpeed() const
+{
+    return MAX((frontend->_useRngSwSpd - 1.0f), (frontend->_useRngSwSpd * 0.5f));
+}
+
 void NavEKF3_core::selectHeightForFusion()
 {
 #if AP_RANGEFINDER_ENABLED
@@ -1619,8 +1624,7 @@ void NavEKF3_core::selectHeightForFusion()
             // We can use the velocity estimate
             ftype horizSpeed = stateStruct.velocity.xy().length();
             dontTrustTerrain = (horizSpeed > frontend->_useRngSwSpd) || !terrainStable;
-            ftype trust_spd_trigger = MAX((frontend->_useRngSwSpd - 1.0f),(frontend->_useRngSwSpd * 0.5f));
-            trustTerrain = (horizSpeed < trust_spd_trigger) && terrainStable;
+            trustTerrain = (horizSpeed < rngSwitchInSpeed()) && terrainStable;
         } else {
             // We can't use the velocity estimate
             dontTrustTerrain = !terrainStable;
