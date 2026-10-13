@@ -149,3 +149,9 @@ on top of the shared playbook: the refresh sweep for newly opened PRs (which
 feeds `prs.txt` and the README), the ../ardupilot-pr-analysis archive currency
 check, and vetting review findings against the private flight-test analyses.
 Read it before a /pr-review run or a batch refresh.
+
+`ARCHITECTURE_RULES.md` holds the architectural rules that are true on the SFD
+branches but not upstream, usually because the branch carries PRs master does
+not; read the ones a change touches. Each was confirmed by the user, and
+candidates wait in `RULES_PROPOSED.md` until they are. Rules that hold on master
+go in the `aap` playbooks instead.
