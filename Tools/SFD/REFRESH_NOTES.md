@@ -448,7 +448,7 @@ After:
   against master's switch, and #32475 needs it in its moved switch.
   `ThrowDropNextModeVALT` fails without it (stays in THROW) and passes with
   it, with `ThrowDropSourceSwitch` and `ThrowModeNoGPS`.
-- topup18 (2026-10-14) ports the third AP-Review round: #33359's gate that
+- topup18 (2026-10-13) ports the third AP-Review round: #33359's gate that
   counts relative aiding as velocity only while all axes pass
   (`f3fae811d4`, test `e52590f700`), #34380's and #34457's known-limit
   comments (`35356c9756`, `d09d9fa1ee`), #34380's bounded rejected-readings
@@ -459,6 +459,15 @@ After:
   (0.05 / 0.10-0.11 / 0.12 m on its three legs), with
   `EK3_RngHgtSwitchStepUp`, `EK3_OptflowAboveRangefinder` and
   `FlowFocusHoldAfterLanding`.
+- topup19 (2026-10-13) holds #34696's restore until there is a position
+  (`26f507edf4`, test `86aab8db82`), found by the TD25 field test on
+  `6f5d6dc0`. With #32514's source-set check the failsafe clears a second
+  after a switch to a source set with no horizontal source; the restore
+  then fired without a position, was refused and spent its one attempt
+  (6 of 13 restores). On master the checks need a position, so the new leg
+  passes there with or without the hold; on the beta it fails without it.
+  `TD_FIELD_PLAN.md`'s T3 promised the clear only after the switch back
+  and is corrected. topup18's date was 2026-10-13, not 2026-10-14.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
