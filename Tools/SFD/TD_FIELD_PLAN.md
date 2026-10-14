@@ -3,11 +3,43 @@
 SmallFastDrone 4.7.2 beta field test plan: everything that changed in the
 beta after the 8 October flights, what to set up for it, and how to fly
 it. The 8 October logs were on `7b0e4dd8`; fly `d2014d6afb` or later,
-and `26f507edf4` or later for T3.
+`26f507edf4` or later for T3, and the topup21 beta (14 October) or later
+for T6.
 
 - **Vehicle**: TD25, MicoAir743v2, 5"
 - **Navigation**: MAVLink flow + MAVLink range finder, no GPS, baro height
 - **Loop rate**: `SCHED_LOOP_RATE` 200
+
+## Results from 14 October (outdoors, grass and concrete)
+
+One log on `6f5d6dc0`, three flights, Loiter outdoors in sun.
+
+- **The car bonnet.** Flying onto the bonnet in Loiter the range dropped
+  from 1.4 m to 0.3 m in a tenth of a second. The EKF's height above the
+  ground, which turns flow into speed, follows a range finder step over a
+  second or so and was still at 1.0 m. A flow axis locked out over the
+  shiny surface, and the lockout recovery reset the speed to one flow
+  sample scaled by that 1.0 m: three times too much, 2.1 m/s east that
+  the vehicle did not have. Loiter rolled 25 degrees to stop it, into the
+  wall. **Fixed in topup21**: the recovery now waits while the range and
+  that height disagree (`flow recovery deferred, range step`). Replayed on
+  this log the bonnet reset no longer happens.
+- **Failsafes over bright concrete** were the flow sensor dropping to
+  quality 0 for 0.6-8.6 s, eight times. It is otherwise excellent outside
+  (median 114 against 57-59 indoors). Each long dropout lost position
+  about 3 s later and went to VALT, and Loiter came back by itself when
+  quality returned: three times in flight 2, the limit.
+- **Loiter refused for the rest of a flight** twice (380 s, 448 s): a
+  lockout at the edge of a dropout met a sample of quality 2 or 8 and
+  latched flow out until disarm, though quality was back over 100 within
+  seconds. **Changed in topup21**: the latch now lets go once quality has
+  stayed at 66 or more (`EK3_FLOW_QMIN` 60 plus 10%) for 2 s, with `flow
+  quality recovered`. Replayed, the two latches let go 2.6 s and 11.6 s
+  after they were set.
+- **The jitter** is most likely Loiter taking over after a restore: it
+  stops the 0.4-0.7 m/s the vehicle carries with a 5-6 degree lean for
+  about a second. One restore (297.8 s) came during a dropout, so Loiter
+  braked for 1.6 s and VALT took over again.
 
 ## Results from 13 October
 
@@ -159,6 +191,27 @@ them, landing and taking off from the same spot.
 **Look for.** `stopped aiding` just after a take-off, or Loiter refusing
 after a re-arm. Either one, note the flight.
 
+### T6: Outdoors over mixed ground (topup21)
+
+**Why.** Flow should come back by itself after a dropout, and the
+recovery should not act on a sudden step in the ground.
+
+**Set.** `EK3_OPTIONS` 92 -> **28**, so every flow speed reset is
+announced (`flow vel reset`), as recommended on 8 October.
+
+**Fly.**
+
+1. Loiter at 1.5-2 m over the concrete that dropped out before, and let
+   it fail to VALT as it did on 14 October.
+2. Expect `flow quality recovered` about 2 s after flow returns if it
+   had latched (`too low to recover`), then Loiter is available again.
+3. Only if you are comfortable: walking pace in Loiter over a step you
+   can afford to hit, a low box rather than a car, with Acro ready.
+   Expect `flow recovery deferred, range step` and no lurch.
+
+**Look for.** Any lurch or lean in Loiter you did not command; note the
+time.
+
 ### T5: Throw or drop into VALT (optional)
 
 **Why.** 4.7.0 could hand off from throw to VALT; that was lost from the
@@ -180,6 +233,7 @@ holds height at centre stick, not stuck in Throw.
 | `RC7_OPTION` (any spare 3-position switch) | 0 | 90 | T2, T3 | Back to 0, or keep for testing |
 | `VALT_POS_EXPO` | 3 | 3, then 2 if loose | T1 | Whichever felt right |
 | `THROW_NEXTMODE` | 18 | 29 | T5 | Only for throw tests |
+| `EK3_OPTIONS` | 28 (92 since) | 28 | T6 | 28, so flow resets are announced |
 | `LOG_REPLAY` / `LOG_DISARMED` | 1 / 2 | 1 / 2 | all | Keep |
 
 ## Not exercised with your setup
