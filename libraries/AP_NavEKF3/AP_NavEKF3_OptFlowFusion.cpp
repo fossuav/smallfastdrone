@@ -952,6 +952,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
             // the sensor reports this sample as poor, so re-anchoring to it is as likely to adopt a
             // sensor fault as to correct a state error. Stop recovering lockouts, and flow-only relative aiding.
             flowVelResetUnhealthy = true;
+            flowQualRecoverStart_ms = 0;
             GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3 IMU%u flow quality %u too low to recover",
                           (unsigned)imu_index, (unsigned)ofDataDelayed.quality);
         } else if (axisLockout && ResetVelocityToFlow(ofDataDelayed, range, posOffsetBody)) {

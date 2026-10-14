@@ -128,6 +128,9 @@
 // after every optical flow or body odometry axis last passed its innovation check together (msec)
 #define ALL_AXES_FUSED_HOLD_MS 500
 
+// time flow quality must stay clear of the release quality, with no gap over 0.5 s, to lift a latch on a poor lockout sample (msec)
+#define FLOW_QUAL_RECOVER_MS 2000
+
 class NavEKF3_core : public NavEKF_core_common
 {
 public:
@@ -1448,6 +1451,7 @@ private:
     uint32_t flowVelResetPauseStart_ms; // start of a pause in flow velocity resets after a burst of them, 0 if none
     uint32_t flowVelResetPause_ms;  // length of that pause, doubled on each burst unless it follows a quiet spell
     bool flowVelResetUnhealthy;     // true when the flow sensor reports a lockout sample too poor to recover from
+    uint32_t flowQualRecoverStart_ms; // start of the current run of flow samples clear of the quality that releases flowVelResetUnhealthy, 0 if none
 #endif
     Vector2 flowTestRatio;          // square of optical flow innovations divided by fail threshold used by main filter where >1.0 is a fail
     Vector2F auxFlowTestRatio;      // sum of squares of optical flow innovation divided by fail threshold used by 1-state terrain offset estimator

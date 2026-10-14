@@ -180,6 +180,24 @@ void NavEKF3_core::writeWheelOdom(float delAng, float delTime, uint32_t timeStam
 // this needs to be called externally.
 void NavEKF3_core::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f &rawFlowRates, const Vector2f &rawGyroRates, const uint32_t msecFlowMeas, const Vector3f &posOffset, float heightOverride, float minHeight)
 {
+#if EK3_FEATURE_OPTFLOW_AGL_KF
+    // a poor lockout sample latches flow out, but a sensor that drops out over a bad patch and then
+    // reports an unbroken run of samples 10% clear of EK3_FLOW_QMIN has recovered, so flow aiding may
+    // restart. Checked first, so every sample breaks or extends the run: the quality 0 samples a dropout
+    // gives are dropped below, and so is a sample inside the sensor interval
+    if (flowVelResetUnhealthy) {
+        const int16_t releaseQuality = MIN(frontend->_flowQualMin + frontend->_flowQualMin / 10, 255);
+        if ((rawFlowQuality < releaseQuality) || (imuSampleTime_ms - flowMeaTime_ms > 500)) {
+            flowQualRecoverStart_ms = 0;
+        } else if (flowQualRecoverStart_ms == 0) {
+            flowQualRecoverStart_ms = imuSampleTime_ms;
+        } else if (imuSampleTime_ms - flowQualRecoverStart_ms >= FLOW_QUAL_RECOVER_MS) {
+            flowVelResetUnhealthy = false;
+            flowQualRecoverStart_ms = 0;
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "EKF3 IMU%u flow quality recovered", (unsigned)imu_index);
+        }
+    }
+#endif
     // limit update rate to maximum allowed by sensor buffers
     if ((imuSampleTime_ms - flowMeaTime_ms) < frontend->sensorIntervalMin_ms) {
         return;
