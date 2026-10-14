@@ -6144,9 +6144,10 @@ return update, 100
         self.delay_sim_time(5, "quality above EK3_FLOW_QMIN but inside the release margin")
         if self.statustext_in_collections("flow quality recovered"):
             raise NotAchievedException("latch let go at quality 42, inside the 10% margin over 40")
-        # a dropout flickering between nothing and good is not a recovery: the run must be unbroken
+        # a dropout flickering between nothing and good is not a recovery: the run must be unbroken.
+        # send_set_parameter, as set_parameter's read-back takes over a second of sim time
         for i in range(12):
-            self.set_parameter("SIM_FLOW_QUAL", 60 if i % 2 == 0 else 0)
+            self.send_set_parameter("SIM_FLOW_QUAL", 60 if i % 2 == 0 else 0)
             self.delay_sim_time(0.5, "half a second of the flicker")
         if self.statustext_in_collections("flow quality recovered"):
             raise NotAchievedException("latch let go while quality flickered to 0")
