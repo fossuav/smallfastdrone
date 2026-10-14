@@ -481,6 +481,19 @@ After:
   above its own 3 m/s gate. A first cut of the #34292 branch read
   `heightOverride` before any sample was recalled and tripped SITL's FPE
   trap; it is guarded by `flowDataToFuse`.
+- topup21 (2026-10-14) changes #33484's lockout recovery after TD25's
+  outdoor log (grass and concrete, `6f5d6dc0`). The quality latch now lets
+  go once quality has stayed at EK3_FLOW_QMIN plus 10% for 2 s, every
+  sample counted, rather than holding to disarm: outdoors the sensor drops to quality 0 over bright
+  concrete and the latch had held flow out for the rest of two flights. A
+  reset is deferred while the AGL KF height and the range differ by more
+  than 20% plus 5 cm: flying onto a car bonnet, a reset scaled flow by a
+  height three times too high (2.1 m/s phantom) and Loiter flew into a
+  wall. Replayed, the bonnet reset is deferred and the latches release
+  2.6 s and 11.6 s after they are set; indoor logs are unchanged.
+  `EK3_FlowAxisLockoutRecovery` gains a leg for each. On the beta the two
+  changes were first committed together and are split in the rebase that
+  pushes them; on #33484 they are separate commits.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
