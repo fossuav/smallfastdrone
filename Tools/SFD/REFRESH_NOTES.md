@@ -494,6 +494,11 @@ After:
   `EK3_FlowAxisLockoutRecovery` gains a leg for each. On the beta the two
   changes were first committed together and are split in the rebase that
   pushes them; on #33484 they are separate commits.
+- topup22 (2026-10-14) replaces the range step deferral's hand-picked 20%
+  margin with the speed error the step puts into a reset: the flow rate
+  times the height difference, against the flow noise term the reset
+  already allows for (EK3_FLOW_M_NSE times the range). Replayed on five
+  logs it matches the 20% margin bar one takeoff reset 0.1 s earlier.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
