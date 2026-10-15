@@ -499,6 +499,18 @@ After:
   times the height difference, against the flow noise term the reset
   already allows for (EK3_FLOW_M_NSE times the range). Replayed on five
   logs it matches the 20% margin bar one takeoff reset 0.1 s earlier.
+- topup23 (2026-10-15) takes a #33484 lockout reset only on a sample whose
+  other flow axis passed its innovation gate. TD25's dim-light flight
+  (`0ccdd748`) reset during a pitch reversal, with the flow trailing its own
+  gyro by about 40 ms, adopted 3 m/s that flow fusion undid within half a
+  second, and Loiter leaned 14-22 deg chasing it. Replayed on six logs the
+  hallway reset is gone and the four outdoor resets are unchanged; latching
+  on any sub-QMIN sample in the last 0.5 s, gating on body rate over
+  1 rad/s, and resetting from a 100 ms mean were also replayed and rejected
+  (outdoor resets lost, an arbitrary threshold, and no effect). A new
+  `EK3_FlowAxisLockoutRecovery` leg fails without the change (2.6 m/s).
+  Delaying the flow sensor's gyro to match its flow was replayed too and
+  helped only a little; it is not taken.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
