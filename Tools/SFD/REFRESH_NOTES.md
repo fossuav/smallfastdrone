@@ -377,6 +377,18 @@ After:
   `../ardupilot-pr-analysis/<PR>/README.md`. #34292 was squashed the same
   day (`4566254c91` -> `d3b59dec34`, 33 -> 17 commits). Not squashed:
   #32471, #32473, #34630 and #32270 (unflown or open review).
+- 2026-10-16 #33484 was squashed again (`9c00ef9b47` -> `f5509009fb`, same
+  tree): the latch release, which TD25 ran on `0ccdd748` (released 3.9 s
+  and 40.6 s after setting), went into the base recovery commit and its
+  legs into the base test commit. The range step deferral, its speed form
+  and the other-axis gate stay on top: that flight carried the deferral
+  but never stepped, and the gate has not flown. The beta carries the
+  same content (topup21-23), so a refresh picks it up with nothing to
+  resolve. Other on-top changes TD25 carried but could not run (#33359's
+  gates with `EK3_RNG_USE_HGT` -1, #34380's flat-ground timing with the
+  range never out of range, #34292's rest-reading clear and declared
+  height) stay unsquashed until a flight runs them; #34696's restore hold
+  waits for T3's re-fly on source set 2.
 - topup13 (2026-10-08) carries #34457's floor hold (`29fef9c3a2`,
   `db4abcbff0`) for the card's flight 1; #33507's rebase onto it changes
   nothing here. The touchdown test assumed SITL reads about 0.1 m on the
