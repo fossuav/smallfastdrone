@@ -498,6 +498,8 @@ void NavEKF3_core::detectMovementSinceArming(void)
 #if EK3_FEATURE_OPTFLOW_AGL_KF
         // give flow aiding a fresh start for the next flight
         flowVelResetUnhealthy = false;
+        // a release run cut short by disarming must not carry into the next latch
+        flowQualRecoverStart_ms = 0;
         memset(flowVelResetTimes_ms, 0, sizeof(flowVelResetTimes_ms));
         flowVelResetNext = 0;
         flowVelResetPauseStart_ms = 0;
