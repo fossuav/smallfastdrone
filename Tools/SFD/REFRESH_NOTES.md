@@ -536,6 +536,12 @@ After:
   code took the range finder and moved the height 1.7 m, now 0.05-0.11 m
   (`EK3_RngHgtSwitchRegainOdometry`, `takeoff(alt_min=)` on this
   harness). None of it changes TD25: no PX4Flow, a Copter, and no odometry.
+- topup25 (2026-10-16) carries #34783: the PX4Flow driver publishes from
+  update() in the main loop instead of calling _update_frontend() from its
+  I2C timer, which ran the AHRS, the EKF's writeOptFlowMeas() and the DAL's
+  Replay writes on the bus thread. The race #33484's store ordering guards
+  against cannot happen with it; the ordering stays as harmless. Built,
+  not run: SITL has no PX4Flow model. Added to prs.txt after #34292.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
