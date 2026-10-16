@@ -523,6 +523,19 @@ After:
   `EK3_FlowAxisLockoutRecovery` leg fails without the change (2.6 m/s).
   Delaying the flow sensor's gyro to match its flow was replayed too and
   helped only a little; it is not taken.
+- topup24 (2026-10-16) ports three AP-Review answers. #33484: the latch
+  zeroes the release-run start before it sets the flag, and the disarmed
+  clear zeroes it too (here in `VehicleStatus.cpp`'s on-ground branch,
+  where this stack clears the latch), against a PX4Flow sample on another
+  core pairing a set latch with an old start. #34292: the focus floor is
+  compiled out of Rover builds, replacing the FLOW_HGT_OVR bypass; a flow
+  Rover with a downward range finder and FLOW_HGT_OVR 0 read 0.01 m/s
+  driving at 0.39. Replay of a Rover log still runs the floor. #33359: a
+  body odometry axis counts only while its innovation is inside 1/sqrt(3)
+  of the switch's speed gap; regained at 2.6 m/s over a 3 m step the old
+  code took the range finder and moved the height 1.7 m, now 0.05-0.11 m
+  (`EK3_RngHgtSwitchRegainOdometry`, `takeoff(alt_min=)` on this
+  harness). None of it changes TD25: no PX4Flow, a Copter, and no odometry.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
