@@ -542,6 +542,16 @@ After:
   Replay writes on the bus thread. The race #33484's store ordering guards
   against cannot happen with it; the ordering stays as harmless. Built,
   not run: SITL has no PX4Flow model. Added to prs.txt after #34292.
+- topup26 (2026-10-16) carries #34543's and #34630's new OSD commits. A
+  flow core's lane item shows the flow sensor's signal strength after
+  `SYM_RSSI`, two digits before the axis arrows, `--` flashing with no flow
+  data; with `EK3_FLOW_QMIN` set the floor reads 50 and the strength flashes
+  below it (no floor: 0-99 over quality 0-255). The lane items also take the
+  AHRS semaphore. Seven commits on top, unflown; `OSDEKFLanes` passes here.
+  #34630 itself was rebuilt on #33484 `edb0cc387e` and #34543 `023c651ac8`
+  the same day, so the next refresh picks both up with no local work. The
+  AHRS-only alternative to #34543 Peter's review suggested (local branch
+  `osd-postype-ahrs`) was set aside and is not carried.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
