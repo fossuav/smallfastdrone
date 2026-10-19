@@ -552,6 +552,12 @@ After:
   the same day, so the next refresh picks both up with no local work. The
   AHRS-only alternative to #34543 Peter's review suggested (local branch
   `osd-postype-ahrs`) was set aside and is not carried.
+- topup27 (2026-10-18) carries #34292's Replay-only gate: Replay follows the
+  logged vehicle class, so it leaves the flow focus floor out of a Rover
+  log's replay as Rover's build does (ARCH-17, refined the same day). It
+  changes nothing on a vehicle; SITL Rover flow logs now replay with no
+  speed or position difference, from 0.3 m/s and 4.5 m apart. Built here
+  (Copter, Replay); `test.Copter.Replay` passes on #34292.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
