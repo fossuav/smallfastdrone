@@ -558,6 +558,12 @@ After:
   changes nothing on a vehicle; SITL Rover flow logs now replay with no
   speed or position difference, from 0.3 m/s and 4.5 m apart. Built here
   (Copter, Replay); `test.Copter.Replay` passes on #34292.
+- topup28 (2026-10-18) carries #34809: a script's `osd:draw_screen()` no
+  longer flushes the normal screen before the script's own writes, so the
+  scripting OSD sends one frame per update instead of two, half of them
+  without the script's items. The SFD demo applet (`ap_lua/sfd_pr_osd.lua`)
+  needs it for a steady list. Added to prs.txt after #34783; the autotest
+  registration was resolved by hand (the beta's test lists differ).
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
