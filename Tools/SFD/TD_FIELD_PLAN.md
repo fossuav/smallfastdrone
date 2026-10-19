@@ -246,8 +246,9 @@ there is nothing to fly. Tell us before changing any of these settings.
 - Range height switch speed gate and the gate after flow comes back:
   only with `EK3_RNG_USE_HGT` above 0 (yours is -1).
 - Flat-ground return timing: only when flying above the range finder's
-  8 m, and the flat-ground fallback also needs `EK3_OPTIONS` bit 5, which
-  is off.
+  8 m. The flat-ground fallback needs no option bit, so it would engage
+  there (corrected 2026-10-18: this said it needed `EK3_OPTIONS` bit 5,
+  which no longer exists).
 - VALT surface tracking re-init: only with surface tracking on
   (`SURFTRAK_MODE` is 0).
 - VALT GCS take-off and position offset handling: only from a GCS

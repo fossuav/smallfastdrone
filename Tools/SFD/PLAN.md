@@ -130,10 +130,11 @@ the two that exist, mirroring what `FuseOptFlow` already does at
 Order matters: the AGL KF and `terrainState` measure the ground actually under
 the vehicle, the database is a 30 m-posted model, so the database goes last.
 
-**Do not serve the flat-ground assumption here.** `EK3_OPTIONS` bit 5
-(`OptflowAssumeFlatGnd`, #33585) is on this branch and is an assumption, not a
+**Do not serve the flat-ground assumption here.** #33585's flat-ground
+fallback (once `EK3_OPTIONS` bit 5, now always on) is on this branch and
+is an assumption, not a
 measurement. `getHAGL()` callers include `AP_GroundEffect`, which uses it to
-decide the vehicle is near the ground. Master has no bit 5, so this only bites
+decide the vehicle is near the ground. Master does not have it, so this only bites
 when the change is carried onto this branch - which is exactly what we are
 doing, so get it right here.
 
@@ -142,7 +143,7 @@ and never reaches the drift fallback at all.
 
 Commit: `AP_NavEKF3: use the terrain database AGL in getHAGL`
 Target: new PR against master. Deliberately not folded into #33585 - bit 2 is
-upstream, this stands alone, and #33585's option-bit review is delicate enough.
+upstream, this stands alone, and #33585's review is delicate enough.
 
 ### Fix 2 - deadband on descent_demanded
 
