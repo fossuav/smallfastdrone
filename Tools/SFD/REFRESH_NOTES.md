@@ -564,6 +564,16 @@ After:
   without the script's items. The SFD demo applet (`ap_lua/sfd_pr_osd.lua`)
   needs it for a steady list. Added to prs.txt after #34783; the autotest
   registration was resolved by hand (the beta's test lists differ).
+- topup29 (2026-10-21) carries #32397 and a #32514 fix. #32397, merged to
+  master in March but not in 4.7: the EKF failsafe says "EKF variance:
+  position lost" or "over thresholds" rather than "EKF variance" for both;
+  refresh28's log51 raised it four times for position lost below the range
+  finder's minimum. #32514's landed hold now covers the motors spooling down
+  after land_complete: on log47 a position lost at touchdown fired the
+  failsafe 0.2 s after land complete and switched the landed vehicle to
+  ALT_HOLD. `EKFSourceSetFailsafe` gains a leg that fails without it. Added
+  #32397 to prs.txt with the master-merged PRs. Unflown; the seven EKF
+  failsafe autotests pass here.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the

@@ -15,6 +15,7 @@
 34057   # AP_NavEKF3: anchor yaw while ground-learning in MAG_CAL=7
 33639   # Loiter: keep control feel consistent when EKF limits ground speed (merged 2026-07-07; #33318 builds on it)
 34120   # AP_Baro: ICP201XX lower noise mode and FIR settling fix
+32397   # Copter: the EKF failsafe message says whether a variance or the position failed (merged 2026-03-09)
 
 # --- In review ---
 31005   # Fence: min alt disarm (still open despite the old "merged" label)
