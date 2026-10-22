@@ -3743,8 +3743,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             # and only the 3x range finder can make it this large, so this shows it claimed
             if sv_count < 10:
                 raise NotAchievedException("only %u XKF4 samples in the climb" % sv_count)
-            # 1 m/s rather than master's 2: 4.7 climbs slower here and reads 1.9-2.5, with 0 unclaimed
-            if max_ivd < 1:
+            # 0.5 m/s rather than master's 2: with the climb slowed for the step hold, 4.7 reads
+            # 0.92-0.93 claimed and 0.07 with the claim turned off
+            if max_ivd < 0.5:
                 raise NotAchievedException("AGL KF velD was never claimed in the climb (max |IVD| %.2f)" % max_ivd)
             # SV is the square root of velTestRatio. With the AGL KF value kept out of the
             # test it stays under 0.2 here; left in, it reached 0.9, and 1.4 when only the
