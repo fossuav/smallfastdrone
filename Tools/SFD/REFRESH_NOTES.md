@@ -585,6 +585,29 @@ After:
   ALT_HOLD. `EKFSourceSetFailsafe` gains a leg that fails without it. Added
   #32397 to prs.txt with the master-merged PRs. Unflown; the seven EKF
   failsafe autotests pass here.
+- refresh11 topup1 (2026-10-22) keeps the ground measured while the range
+  finder is the height source, for SFD-O4 log54's EKF failsafe at touchdown:
+  after a low hover on range height the ground time was 55 s stale, and when
+  the range went out of range low at touchdown and the height fell back to
+  baro, the ground offset and the flow lane's relative position dropped 60 ms
+  before land complete. A range height fusion that passes its innovation
+  check now stamps `lastRngHgtPassTime_ms`, which keeps `gndOffsetValid` for
+  5 s; `gndHgtValidTime_ms` and its readers (the terrain re-anchor, the
+  switch hysteresis, the flat-ground fallback, the height limit) are left as
+  they were. A first version stamped `gndHgtValidTime_ms` itself and so
+  suppressed the terrain estimator's re-anchor after a switch out of range
+  height; review caught it before push. Replay of log54: position held to
+  disarm, XKF1 and XKF5 on both cores identical. Master has the same gap in
+  the land stage of LAND, RTL, SmartRTL and AUTO; branch
+  `pr-ekf3-rng-hgt-ground` (andyp1per) carries the fix and
+  `EK3_RngHgtFlowLandingKeepsPosition`, which fails without it on master
+  and on this stack (lost 0.45 s after out of range low) and has a second,
+  in-flight leg that requires the hold to end after 5 s. Here, where range
+  height also engages in a low hover, a Loiter landing still loses position
+  about 5 s after touchdown while it waits out DISARM_DELAY, after land
+  complete. Add the PR to prs.txt when it opens. Unflown; the 18 range
+  height, flow floor, terrain state, EKF failsafe and Replay tests pass here
+  (Replay on a rerun: the first hung in a SITL reboot).
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
