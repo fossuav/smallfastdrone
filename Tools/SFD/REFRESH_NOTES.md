@@ -598,14 +598,14 @@ After:
   suppressed the terrain estimator's re-anchor after a switch out of range
   height; review caught it before push. Replay of log54: position held to
   disarm, XKF1 and XKF5 on both cores identical. Master has the same gap in
-  the land stage of LAND, RTL, SmartRTL and AUTO; branch
-  `pr-ekf3-rng-hgt-ground` (andyp1per) carries the fix and
+  the land stage of LAND, RTL, SmartRTL and AUTO; #34851 (branch
+  `pr-ekf3-rng-hgt-ground`, andyp1per) carries the fix and
   `EK3_RngHgtFlowLandingKeepsPosition`, which fails without it on master
   and on this stack (lost 0.45 s after out of range low) and has a second,
   in-flight leg that requires the hold to end after 5 s. Here, where range
   height also engages in a low hover, a Loiter landing still loses position
   about 5 s after touchdown while it waits out DISARM_DELAY, after land
-  complete. Add the PR to prs.txt when it opens. Unflown; the 18 range
+  complete. Added to prs.txt after #34809. Unflown; the 18 range
   height, flow floor, terrain state, EKF failsafe and Replay tests pass here
   (Replay on a rerun: the first hung in a SITL reboot).
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and

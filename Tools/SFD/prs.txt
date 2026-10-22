@@ -51,6 +51,7 @@
 34292   # Optical flow minimum focus height FLOW_HGT_MIN (split out of #33484)
 34783   # PX4Flow frames published from the main loop, not the I2C thread (ARCH-18; the race #33484 ordered stores against)
 34809   # AP_OSD: a script's OSD writes go out in the same frame as the screen (the demo applet sfd_pr_osd.lua needs it)
+34851   # EKF3: keep the ground measured for 5 s after range finder height ends (SFD-O4 log54's touchdown failsafe)
 33498   # Inhibit Z gyro bias without yaw source [merged to master 2026-09-23, not in 4.7]
 33507   # AGL KF accel-Z bias estimation
 34457   # AGL KF: clear the velocity when the height rests on its floor (carries #33507's seven commits patch-identical; git cherry drops the duplicates)
