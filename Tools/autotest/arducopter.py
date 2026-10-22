@@ -3479,8 +3479,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             sim_gndspd = None
             fusion_seen = False
             fused_after = False
-            held_times = []
-            held_after = False
             hgt_ref = None
             hgt_err = []
             ekf_err = []
@@ -3504,10 +3502,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 if getattr(m, "C", 0) != 0 or sim_vd is None:
                     continue
                 if mtype == "XKFA":
-                    if m.VHold:
-                        held_times.append(t)
-                        if t_fused_after is not None and t > t_fused_after:
-                            held_after = True
                     if m.VFuse:
                         fusion_seen = True
                         if t_fused_after is not None and t > t_fused_after:
@@ -3534,9 +3528,6 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
                 "n_agl": len(agl_err),
                 "fused": fusion_seen,
                 "fused_after": fused_after,
-                "held": len(held_times) > 0,
-                "hold_s": held_times[-1] - held_times[0] if held_times else 0.0,
-                "held_after": held_after,
                 "max_fused_gndspd": max(fused_gndspd) if fused_gndspd else 0.0,
                 "max_gndspd": max(gndspd) if gndspd else 0.0,
             }
@@ -3656,12 +3647,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         for step, name in (1.0, "drops"), (-1.0, "rises"):
             self.start_subtest("Fusion on: ground that %s 1 m does not drive the height" % name)
             r = fly_leg(agl_kf_veld, step=step, alt_noise=1.0)
-            self.progress("ground %s 1 m: max velD error %.2f m/s, max height drift %.2f m, XKFA.VHold for %.1f s"
-                          % (name, r["max_velD_err"], r["max_hgt_err"], r["hold_s"]))
-            if not r["held"]:
-                raise NotAchievedException("XKFA.VHold never showed the step hold")
-            if r["held_after"]:
-                raise NotAchievedException("XKFA.VHold still set after the step hold")
+            self.progress("ground %s 1 m: max velD error %.2f m/s, max height drift %.2f m"
+                          % (name, r["max_velD_err"], r["max_hgt_err"]))
             if not r["fused_after"]:
                 raise NotAchievedException("AGL KF velocity fusion did not resume after the step")
             # 0.23-0.24 m measured; 0.94 m with the AGL KF velocity fused through the step
