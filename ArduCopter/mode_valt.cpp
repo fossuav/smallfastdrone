@@ -32,7 +32,8 @@ bool ModeVelAltHold::init(bool ignore_checks)
     copter.surface_tracking.reset_target_on_next_update();
 #endif
 
-    ekf_pos_d_reset_count = ahrs.get_position_D_reset_count();
+    float pos_shift_d_m;
+    ekf_pos_d_reset_ms = ahrs.getLastPosDownReset(pos_shift_d_m);
 
     return true;
 }
@@ -66,9 +67,10 @@ void ModeVelAltHold::alt_hold_run_flying(float &target_roll_rad, float &target_p
 
     // D_update_controller() moves pos_desired by an EKF height reset after
     // this, so snapping to the post-reset estimate would apply it twice
-    const uint16_t reset_count = ahrs.get_position_D_reset_count();
-    if (reset_count != ekf_pos_d_reset_count) {
-        ekf_pos_d_reset_count = reset_count;
+    float pos_shift_d_m;
+    const uint32_t reset_ms = ahrs.getLastPosDownReset(pos_shift_d_m);
+    if (reset_ms != ekf_pos_d_reset_ms) {
+        ekf_pos_d_reset_ms = reset_ms;
         return;
     }
 
