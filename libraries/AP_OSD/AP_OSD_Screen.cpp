@@ -29,6 +29,7 @@
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/Util.h>
 #include <AP_AHRS/AP_AHRS.h>
+#include <AP_Compass/AP_Compass.h>
 #include <AP_Math/AP_Math.h>
 #include <AP_RSSI/AP_RSSI.h>
 #include <AP_Notify/AP_Notify.h>
@@ -1939,11 +1940,28 @@ void AP_OSD_Screen::draw_home(uint8_t x, uint8_t y)
     }
 }
 
-void AP_OSD_Screen::draw_heading(uint8_t x, uint8_t y)
+// yaw for the heading and compass rose panels; OPTION_MAG_HEADING reads the
+// magnetometer directly so the panels stay valid with no EKF yaw source
+float AP_OSD_Screen::get_display_yaw_rad()
 {
+#if AP_COMPASS_ENABLED
+    if (check_option(AP_OSD::OPTION_MAG_HEADING)) {
+        Compass &mag = AP::compass();
+        if (mag.available() && mag.healthy()) {
+            AP_AHRS &ahrs = AP::ahrs();
+            WITH_SEMAPHORE(ahrs.get_semaphore());
+            return mag.calculate_heading(ahrs.get_rotation_body_to_ned());
+        }
+    }
+#endif
     float roll_rad, pitch_rad, yaw_rad;
     AP::vehicle()->get_osd_attitude_rad(roll_rad, pitch_rad, yaw_rad);
-    uint16_t yaw = degrees(wrap_2PI(yaw_rad));
+    return yaw_rad;
+}
+
+void AP_OSD_Screen::draw_heading(uint8_t x, uint8_t y)
+{
+    uint16_t yaw = degrees(wrap_2PI(get_display_yaw_rad()));
     backend->write(x, y, false, "%3d%c", yaw, SYMBOL(SYM_DEGR));
 }
 
@@ -2064,9 +2082,7 @@ void AP_OSD_Screen::draw_compass(uint8_t x, uint8_t y)
         SYM_HEADING_DIVIDED_LINE,
         SYM_HEADING_LINE,
     };
-    float roll_rad, pitch_rad, yaw_rad;
-    AP::vehicle()->get_osd_attitude_rad(roll_rad, pitch_rad, yaw_rad);
-    int32_t yaw = rad_to_cd(wrap_2PI(yaw_rad));
+    int32_t yaw = rad_to_cd(wrap_2PI(get_display_yaw_rad()));
     int32_t interval = 36000 / total_sectors;
     int8_t center_sector = ((yaw + interval / 2) / interval) % total_sectors;
     for (int8_t i = -4; i <= 4; i++) {

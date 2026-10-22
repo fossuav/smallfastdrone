@@ -287,6 +287,7 @@ private:
     void draw_home(uint8_t x, uint8_t y);
     void draw_throttle(uint8_t x, uint8_t y);
     void draw_heading(uint8_t x, uint8_t y);
+    float get_display_yaw_rad();
     void draw_ekf_lane(uint8_t lane, uint8_t x, uint8_t y);
 #if AP_RPM_ENABLED
     void draw_rrpm(uint8_t x, uint8_t y);
@@ -616,6 +617,7 @@ public:
 #if AP_OSD_EXTENDED_LNK_STATS
         OPTION_RF_MODE_ALONG_WITH_LQ = 1U<<7,
 #endif
+        OPTION_MAG_HEADING = 1U<<8,
     };
 
     enum {
