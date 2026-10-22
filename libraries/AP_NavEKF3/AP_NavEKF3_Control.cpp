@@ -964,7 +964,8 @@ void NavEKF3_core::updateFlatGroundAssumed(void)
                 terrainAnchorValid = flatGndSaved.terrainAnchorValid;
                 lastGoodRngMeas = flatGndSaved.lastGoodRngMeas;
                 gndOffsetValid = ((imuSampleTime_ms - gndHgtValidTime_ms) < 5000) ||
-                                 (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER);
+                                 (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER) ||
+                                 ((imuSampleTime_ms - lastRngHgtPassTime_ms) < 5000);
 #if EK3_FEATURE_OPTFLOW_AGL_KF
                 // past UpdateAglKf()'s 5 s timeout, so the next range sample re-initialises it
                 // rather than blending from the obstacle
