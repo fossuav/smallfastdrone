@@ -17,6 +17,10 @@ reply exists") before acting on it.
 
 ## Current state
 
+- Base rebuilt 2026-10-22 on 4.7.2 (`b74b576dc9`, see the base section). The
+  beta still sits on the 4.7.2-beta1 base (`ec107ee728`) until the next refresh,
+  which re-applies the SmallFastDrone firmware name over 4.7's "version to
+  4.7.2" ("Local work").
 - Built: `SmallFastDrone-4.7.2-refresh10` (worktree `../sfd-refresh10`),
   2026-10-04, on the same base (`ec107ee728`). 364 planned commits: the 16 PR
   heads reworked for the 2026-10-03 AI reviews, plus #34601 and #33639, minus
@@ -619,9 +623,20 @@ added 2026-09-18:
   kind is one line in that file. Unknown names in defaults are ignored, so a
   default for a parameter only a stacked PR defines is harmless on the base.
 
-Backups: `1bf6b3ddc0` is `SmallFastDrone-4.7-base.2`, `5cfd779aed` is `.3`
-(local); `origin/SmallFastDrone-4.7-base.1` is the June lineage (`99414094f6`).
-The push of the base is a fast-forward.
+Rebuilt 2026-10-22 on `upstream/ArduPilot-4.7` `fbd0a3160c`: 4.7.2, plus
+three ChibiOS fixes (atomic runtime pin mode changes and toggles, the same for
+the debug pins, and the nested locking in soft-serial read cleanup from #34597)
+and an AEDROXH7 hwdef update. The quick route below replayed the 85 commits
+with one conflict: 4.7 moved AEDROXH7's MSP DisplayPort default from SERIAL6 to
+SERIAL8, and `AP_MSP_VIDEOTX_ENABLED 1` now follows it. The base's own changes
+match the old base's file for file apart from that one, no prs.txt PR is in the
+new 4.7 (patch-id check against `refs/sfdpr/*`), and SmallFastDronev1 and SITL
+Copter build. It is `b74b576dc9`.
+
+Backups: `SmallFastDrone-4.7-base.3` is the 4.7.2-beta1 base (`ec107ee728`) and
+`.2` the 4.7.1 lineage (`1bf6b3ddc0`), both local; `origin/SmallFastDrone-4.7-base.1`
+is the June lineage (`99414094f6`). A base rebuilt on a newer 4.7 is a force
+push; one that only adds commits on the same 4.7 is a fast-forward.
 
 Rebuild it when 4.7 advances in a way that matters, a baked PR's head moves, or
 an in-flight PR merges **into 4.7**. Branch off `upstream/ArduPilot-4.7`, replay
