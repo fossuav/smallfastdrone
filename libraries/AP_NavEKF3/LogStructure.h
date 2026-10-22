@@ -266,7 +266,6 @@ struct PACKED log_XKF5 {
 // @Field: Valid: 1 when rangefinder has been fused within the last 5s
 // @Field: VFuse: 1 when the AGL velocity has been fused as a velocity-down observation within the last 250ms
 // @Field: VTR: innovation test ratio of the last AGL velocity-down observation, fused or rejected
-// @Field: VHold: 1 when the AGL velocity has been held out of velocity-down fusion after a range step within the last 250ms
 struct PACKED log_XKFA {
     LOG_PACKET_HEADER;
     uint64_t time_us;
@@ -280,7 +279,6 @@ struct PACKED log_XKFA {
     uint8_t valid;
     uint8_t velFused;
     float velTestRatio;
-    uint8_t velHeld;
 };
 
 // @LoggerMessage: XKF7
@@ -482,7 +480,7 @@ struct PACKED log_XKV {
 #if EK3_FEATURE_OPTFLOW_AGL_KF
 #define LOG_STRUCTURE_FROM_NAVEKF3_XKFA \
     { LOG_XKFA_MSG, sizeof(log_XKFA), \
-      "XKFA","QBffffffBBfB","TimeUS,C,HAgl,VAgl,HAglStd,VAglStd,Bias,BiasStd,Valid,VFuse,VTR,VHold", "s#mnmnoo----", "F-----------", true },
+      "XKFA","QBffffffBBf","TimeUS,C,HAgl,VAgl,HAglStd,VAglStd,Bias,BiasStd,Valid,VFuse,VTR", "s#mnmnoo---", "F----------", true },
 #else
 #define LOG_STRUCTURE_FROM_NAVEKF3_XKFA
 #endif
