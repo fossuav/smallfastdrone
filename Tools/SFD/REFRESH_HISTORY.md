@@ -7,6 +7,28 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-22 - refresh11, onto the 4.7.2 base
+
+The base was rebuilt on ArduPilot-4.7 at 4.7.2 plus three ChibiOS fixes
+(atomic pin mode changes, soft-serial nested locking) and refresh11 stacked
+prs.txt onto it: 348 planned commits, about 30 hand stops, all in shapes the
+notes describe except two. #34630 carries #34543's ten commits by cherry-pick,
+so the plan lists them twice; rerere committed two of the copies before the
+run stopped, and the branch was moved back past them. And #33478's XKFA.VHold
+does not fit beside #33507's bias fields (69 label characters against 64),
+which SITL reports only as every test failing; it is left out as on the beta.
+
+Comparing the code with the beta found three losses: EK3_AGL_ABIAS_P, dropped
+by a resolution that kept the description line of a hunk that also added the
+parameter, and two pieces of local work, the EK3_OPTIONS 92 board default and
+FS_OPTIONS bit 6's "2 or 4" wording. All restored; the code then differs from
+the beta only by 4.7.2 and the PRs' newer heads. Tests were carried from the
+beta, taking #34630's EK3_FlowAxisLockoutRecovery (the latch ends with the
+flight) from its head. SFD set 98 of 100: AccelBiasMovingPlatform passes alone,
+and EK3_AglKfVelMixedSources reads 0.92 claimed against 0.07 unclaimed since
+the test slowed its climb, under the 1 m/s bound set for the older test; the
+shipping beta failed it the same way. Bound re-set to 0.5.
+
 ## 2026-10-08 - refresh10 topup11, #34678 and the flight card split
 
 Adds #34678: righting a copter on its back in Stabilize or Drift no longer

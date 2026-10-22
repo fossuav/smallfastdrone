@@ -17,11 +17,18 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Base rebuilt 2026-10-22 on 4.7.2 (`b74b576dc9`, see the base section). The
-  beta still sits on the 4.7.2-beta1 base (`ec107ee728`) until the next refresh,
-  which re-applies the SmallFastDrone firmware name over 4.7's "version to
-  4.7.2" ("Local work").
-- Built: `SmallFastDrone-4.7.2-refresh10` (worktree `../sfd-refresh10`),
+- Built: `SmallFastDrone-4.7.2-refresh11` (worktree `../sfd-refresh11`),
+  2026-10-22, on the 4.7.2 base (`b74b576dc9`). 348 planned commits, 271 on the
+  branch with the fixups, local work and tests. Firmware "SmallFastDrone
+  V4.7.2". Copter, plane, heli and sub build. SFD set 98 of 100, then 100:
+  AccelBiasMovingPlatform failed once under suite load and passes alone (2 of
+  2), and EK3_AglKfVelMixedSources's 4.7 bound was re-set (see "Local work");
+  it had been failing on the shipping beta too. Code against the beta differs
+  only by 4.7.2's own changes and the PRs' newer heads. Lost and restored on
+  the way: EK3_AGL_ABIAS_P (a conflict resolution, see the refresh11 traps),
+  EK3_OPTIONS 92's board default and FS_OPTIONS bit 6's wording (local work the
+  rebuild drops). #33478's XKFA.VHold is left out (standing divergences).
+- Previously built: `SmallFastDrone-4.7.2-refresh10` (worktree `../sfd-refresh10`),
   2026-10-04, on the same base (`ec107ee728`). 364 planned commits: the 16 PR
   heads reworked for the 2026-10-03 AI reviews, plus #34601 and #33639, minus
   #34361 and #33497 (both closed). Copter, plane, heli and sub build. SFD set
@@ -671,6 +678,12 @@ commits are only 4.7 adaptations of the same change is carried too).
 
 ## Standing divergences (verify each refresh)
 
+- **XKFA.VHold** - #33478 adds it and #33507 adds Bias and BiasStd; together
+  the labels are 69 characters against the logger's 64, and SITL will not boot
+  ("Log structures invalid"). Each PR fits alone; whichever merges second has
+  to split or shorten the message. The stack leaves VHold out (`AP_NavEKF3:
+  leave XKFA.VHold out beside the AGL KF bias fields`) and keeps the beta's
+  EK3_AglKfVelForVelD, which does not read it.
 - **#31274 Motortest error rate** - 4.7 already has `get_raw_rpm_and_error_rate()`
   and `motors_takeoff_check()`. What is carried is the ESC error-rate gate in
   `are_motors_running(..., float max_error_rate)`; its sole caller is in
@@ -779,8 +792,9 @@ AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
 - **#34543 on 4.7** - skip `AP_AHRS: report the primary core index with the
   estimates`: 4.7 already has `get_primary_core_index()` with the same
   contract. Keep `send_status_report()` where master has
-  `getTerrainAltVariance()`, and move `flowFuseTimeAxis_ms` out of #33484's
-  `EK3_FEATURE_OPTFLOW_AGL_KF` guard, since `getLaneStatus()` reads it.
+  `getTerrainAltVariance()`, which 4.7 lacks. #34543's head now keeps its own
+  unguarded `flowPassTimeAxis_ms` for `getLaneStatus()`, so #33484's
+  `flowFuseTimeAxis_ms` stays inside its guard (refresh11).
 - **takeOffDetected -> movedSinceArming** - #32232 renamed it; PR heads written
   before that still use the old name (#34292's head does).
 - **ArduCopter surface tracking** - a 3-way artifact once dropped master's
@@ -795,6 +809,17 @@ AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
   I/O thread at one 4 kB block per real millisecond, and #34601's
   RateThreadPostFilterGyroLog then drops two thirds of its GYR samples (it fails
   on plain 4.7 plus #34601, passes on master). Drop once 4.7 has them.
+- **VALT height reset accessor** - #32270 follows EKF height resets with
+  master's `get_position_D_reset_count()`; 4.7's AHRS has only
+  `getLastPosDownReset()`. Track the reset time instead (`Copter: follow VALT's
+  height resets with 4.7's reset time accessor`, refresh11; topup15's hand port).
+- **#34630 carries #34543 by cherry-pick**, so the plan lists #34543's ten
+  commits twice: once from #34543 and again under #34630 (refresh11's entries
+  283-292). Each copy is patch-identical to its original; skip all ten, and
+  `primary core index` in both places (see "#34543 on 4.7"). rerere had a
+  resolution for the copy of that commit, so the run committed it without
+  stopping, with master's `AP_AHRS_NavEKF2/3.cpp` and a second
+  `get_primary_core_index()`; check the log after #34630's stop for it.
 
 ## Parameter indices
 
@@ -853,8 +878,11 @@ FLOW_OPTIONS's docs).
   ModeFlowHold, UTMGlobalPosition, UTMGlobalPositionWaypoint, and quadplane's
   CircuitStatusScript and CompassLearnCopyFromEKFAffinity (master tests 4.7
   lacks, whose registration lines ride in on a PR hunk without the bodies).
-- EK3_AglKfVelMixedSources takes the AGL KF velD claim as shown above 1 m/s,
-  not master's 2. Bisected 2026-10-02: the 4.7.2 base with #33478 alone reads
+- EK3_AglKfVelMixedSources takes the AGL KF velD claim as shown above 0.5 m/s,
+  not master's 2. Since the test slows the climb for #33478's step hold, 4.7
+  reads 0.92-0.94 claimed and 0.07 with the claim off; the earlier 1 m/s bound
+  was for the faster climb and failed on the shipping beta (refresh11).
+  For the older test, bisected 2026-10-02: the 4.7.2 base with #33478 alone reads
   1.91, master 4.1; 4.7 climbs slower at full stick in LOITER (1.84 against
   2.49 m/s) and the AGL KF velocity peaks lower. Unclaimed reads 0.00. SV
   baseline is 0.41 on 4.7 without the fusion (master 0.13), so its 0.5 limit
@@ -869,6 +897,12 @@ FLOW_OPTIONS's docs).
   branch's copy differs from the previous branch's commit; check the test is
   present by name before re-folding anything.
 - `SITL: add SIM_SONAR_OFFSET` (until 4.7 has master's `568727a218`).
+- `hwdef: default SFD boards to EK3_OPTIONS 92` (topup, 2026-10-05): owed to
+  the base's `sfd_defaults.parm`, where defaults belong; carried on the branch
+  until the base is next rebuilt.
+- `Copter: describe FS_OPTIONS bit 6 with VALT's failsafe action` ("2 or 4"):
+  belongs to whichever of #34696 and #32270 lands second.
+- `Copter: let throw mode hand off to VALT` (topup17), on no PR yet.
 - #30956's `11093ee6bc` (wait_armed) and `ad1ce89ce3` (AP_Logger reserved
   space), and 4.7's DataFlashErase body over the PR heads' (until 4.7 has
   #30956; see "DataFlashErase").
@@ -922,6 +956,24 @@ an FMT record and passes the retry, as the shipping beta does. Both picks are
 carried (Local work) until 4.7 has #30956: the logger one because the stack
 logs more message types than 4.7 and the startup drops are real, the harness
 one because it is master's and costs nothing.
+
+### Traps found in refresh11
+
+- **A conflict hunk can hold more than the line it is about.** #33507's commit
+  changes the EK3_OPTIONS description and adds EK3_AGL_ABIAS_P in one hunk, so
+  a resolution that kept our description and swapped in the PR's sentence
+  dropped the parameter. The member stayed declared, so it built clean and
+  passed `check_param_tables.py`, and would have read zero: no process noise
+  on the AGL KF bias state. After a hand resolution, check every line the PR
+  commit adds is in the tree unless meant to go; the refresh11 history has the
+  script, filtered to lines the previous branch has and this one lacks.
+- **A log structure that does not validate fails every test** with "Failed to
+  set RC values", not with its own name: the 100-test run took three minutes
+  and reported 100 failures. Run one test before the set, and read
+  `validate_structure` in the console when they all fail.
+- **rerere did not replay refresh10's resolutions** for #32471's conflicts (the
+  same commits on the same EKF code), and did replay one for a commit that
+  should have been skipped. Read the log after every stop, not just the stop.
 
 ### Traps found in refresh7
 
