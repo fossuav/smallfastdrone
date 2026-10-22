@@ -2085,7 +2085,7 @@ protected:
 
 private:
 
-    uint16_t ekf_pos_d_reset_count;
+    uint32_t ekf_pos_d_reset_ms;
 
 };
 #endif
