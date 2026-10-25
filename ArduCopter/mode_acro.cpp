@@ -7,8 +7,26 @@
 /*
  * Init and run calls for acro flight mode
  */
+const char *ModeAcro::name4() const
+{
+    if (g.acro_trainer != (uint8_t)Trainer::OFF) {
+        return "ANGL";
+    }
+    return "ACRO";
+}
+
+void ModeAcro::notify_trainer_change()
+{
+    if (g.acro_trainer != trainer_notified) {
+        trainer_notified = g.acro_trainer;
+        copter.notify_flight_mode();
+    }
+}
+
 void ModeAcro::run()
 {
+    notify_trainer_change();
+
     // convert the input to the desired body frame rate
     float target_roll_rads, target_pitch_rads, target_yaw_rads;
     get_pilot_desired_rates_rads(target_roll_rads, target_pitch_rads, target_yaw_rads);
