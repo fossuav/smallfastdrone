@@ -154,3 +154,4 @@ include ../include/minimize_fpv_osd.inc
 undef AP_OPTICALFLOW_ENABLED
 define ARMING_DELAY_MS 0
 define AP_ARMING_IMU_CONSISTENCY_CHECK_TIME_MS 2000
+define AP_AHRS_EKF_RESET_ENABLED 1
