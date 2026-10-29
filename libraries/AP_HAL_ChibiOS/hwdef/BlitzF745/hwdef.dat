@@ -166,3 +166,4 @@ define HAL_FRAME_TYPE_DEFAULT 12
 include ../include/minimize_fpv_osd.inc
 define ARMING_DELAY_MS 0
 define AP_ARMING_IMU_CONSISTENCY_CHECK_TIME_MS 2000
+define AP_AHRS_EKF_RESET_ENABLED 1
