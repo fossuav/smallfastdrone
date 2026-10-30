@@ -1930,6 +1930,7 @@ protected:
 
 private:
 
+    void throw_setup();
     bool throw_detected();
     bool throw_in_freefall() const;
     bool throw_still_falling() const;
