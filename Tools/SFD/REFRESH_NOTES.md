@@ -433,6 +433,16 @@ After:
 
 ### Owed, not tied to one refresh
 
+- #32471 moved after topup1: v3, `04e501e13d`, pushed by Andy on
+  2026-10-30, is `d9e7d85f5c` (what refresh12 carries) plus `85dbca9896`
+  Copter, `117508173e` AP_InertialSensor and `04e501e13d` autotest. With
+  bit 2 clear it now saves the motors-on part of the bias rather than the
+  whole, the double count log63 flew; with bit 2 set it still saves the
+  whole. Not on refresh12 (`refresh.sh changed` lists only it): top up
+  before promotion if it is to fly. FIELD_PLAN's #32471 item (pack 3 at
+  15, fly 9 meanwhile) was written for the code before v3; rewrite it if
+  v3 is taken, and relearn after changing bit 2
+  (`../ardupilot-pr-analysis/32471/`, "second review round, v3").
 - Flight evidence for refresh12 topup1's two PRs once it is promoted:
   `FIELD_PLAN.md`, "Additions for refresh12" (#33366, #34941).
 

@@ -25,7 +25,10 @@ wherever SITL has the CMAC terrain tile cached, with or without the top-up,
 because the tile puts the resting vehicle 0.54 m above SRTM ground, past the
 0.5 m under which EKF3 holds flow valid until the vehicle moves, and
 #34543's flash check misses the shorter window that leaves. A scratch
-worktree with no tile first made it look like the top-up's.
+worktree with no tile first made it look like the top-up's. Fixed by
+`SIM_TERRAIN 0` in the test (12 of 12 with the tile cached), pushed to
+#34543 as `351aea9eaa`. #32471 moved to v3 the same evening, after the
+lock; it is not on refresh12.
 
 ## 2026-10-30 - refresh12, the 30 October review round
 

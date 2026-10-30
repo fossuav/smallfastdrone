@@ -83,6 +83,12 @@ Open after the round:
   #32475's THROW_SRC_SET/THROW_DROP_CNF both take var_info2 60/61 against
   master, so whichever merges second renumbers; SFD moves #33366's to
   30/31 (REFRESH_NOTES.md, "Parameter indices").
+- Later still: #34543 pushed `af50a66828` -> `351aea9eaa`, test only:
+  `SIM_TERRAIN 0` in OSDEKFLanes, whose no-flow-data leg missed its flash
+  whenever SITL had the CMAC terrain tile cached (quick review, COMMENT
+  for the bot's four minor rows, unchanged). #32471 pushed by Andy
+  `d9e7d85f5c` -> `04e501e13d` (v3: the motors-on part saved with bit 2
+  clear), after refresh12 topup1's lock.
 
 The beta took the code fixes as refresh11 topup5 (`0cb49e7dfb`), and a
 full refresh12 was built on the new heads (REFRESH_HISTORY.md).
