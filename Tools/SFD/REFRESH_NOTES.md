@@ -25,8 +25,10 @@ reply exists") before acting on it.
   yet: #32232 `r1030/32232` (`158e8386a3`), #32238 `r1030/32238`
   (`47714568af`), #32475 `r1030/32475-4` (`60cee67154`, reached as two
   top-ups on the tip after the run had applied `f48024f489`); the lock
-  records those heads. Copter, plane, heli and sub build for SITL and copter
-  for SmallFastDronev1 (46.8 kB free). Code against the beta differs only by
+  records those heads, #32475's moved at topup1 to its pushed `3d634e4a5f`,
+  which adds only the four test fixes the branch already carries. Copter,
+  plane, heli and sub build for SITL and copter for SmallFastDronev1 (46.8
+  kB free). Code against the beta differs only by
   the PRs' newer heads (#32475's seven code commits since topup5 and a
   comment, #31216's README and images, #34456's standalone DAL stub,
   #34882's comment). Lost and
@@ -47,6 +49,31 @@ reply exists") before acting on it.
   ThrowMode, pass on two runs here (19 of 19 each), and the PR's 19 on
   #32475 alone; the other 96 tests passed in the first run and the fixes
   touch only these tests.
+- refresh12 topup1 (2026-10-30), on the tip: the beta's records for SFD-O4
+  logs 61-65 (`2889415303`), then two PRs added to prs.txt that day. #33366
+  (robertlong13, seven commits, clean) fixes the CPU load measurement behind
+  log64's blocked takeoff; its TKOFF_CPU_AVG/PEAK move from var_info2 60/61,
+  #32475's, to 30/31 (`40c9fdd94b`, see "Parameter indices"). #34941
+  (`649e160e9c`, test `42bd2a3b79`) stops a flow lane timing out while the
+  tilt check withholds its flow, log61's Loiter that did not stop; four
+  additive conflicts with #33484's and #34543's flow state (recipe below).
+  Copter, plane, heli, sub and Replay build for SITL, copter for
+  SmallFastDronev1 with 45.9 kB free (46.8 before). `param_changes.py`:
+  TKOFF_CPU_AVG/PEAK default to 4.7's fixed 95/99.5 and BRD_IDLE_STATS 1
+  keeps its meaning (bit 0, the threads.txt reader), so no SFD default is
+  needed. OpticalFlowTiltNoTimeout passes here and fails with `649e160e9c`
+  reverted ("flow lane timed out while banked"), so the stack's port is what
+  holds the lane. SFD set 114 of 115. OSDEKFLanes's no-flow-data leg fails
+  wherever SITL has the CMAC terrain tile cached, before topup1 as after it:
+  4 of 10 and 3 of 10 in scratch worktrees given refresh12's `terrain/`, 0
+  of 40 without it, and 5 of 14 in refresh12's own worktree, which cached
+  the tile in its first SFD run. With the tile, SITL's range finder measures
+  to SRTM ground 0.55 m below the resting vehicle, so the EKF puts it 0.54 m
+  up, and EKF3's hold of flow validity until the vehicle moves, which needs
+  it under 0.5 m, no longer applies. Disarmed on the ground, the lane then
+  reports REL for about 1 s after the flow stops instead of past the 5 s
+  timeout, and the flash check #34543 tightened in `af50a66828` misses that
+  0.6 s window. A problem in #34543's test, not the top-up (see "Owed").
 - Previously built: `SmallFastDrone-4.7.2-refresh11` (worktree `../sfd-refresh11`),
   2026-10-22, on the 4.7.2 base (`b74b576dc9`). 348 planned commits, 271 on the
   branch with the fixups, local work and tests. Firmware "SmallFastDrone
@@ -400,6 +427,14 @@ After:
     and needs `/prepare-for-push`.
 
 ### Owed, not tied to one refresh
+
+- Flight evidence for refresh12 topup1's two PRs once it is promoted:
+  `FIELD_PLAN.md`, "Additions for refresh12" (#33366, #34941).
+- #34543's OSDEKFLanes depends on SITL having no terrain tile for CMAC (see
+  refresh12 topup1 under "Current state"): its no-flow-data leg needs the
+  vehicle under 0.5 m above ground on the ground. Make the leg independent
+  of the tile cache, A/B it with the tile copied in (it fails 3-4 runs in
+  10 then), fix it here first, then port it to #34543.
 
 - topup12 (2026-10-08) carries #33478's step hold from `fix/33478`
   (`e0d009ff31`, `6185109557`) ahead of the PR, for the flight that repeats
@@ -1001,6 +1036,7 @@ moves, and move the newcomer:
 | GNDEFF_ subgroup | 24 | from merged #32472, untouched |
 | FLOW_HGT_MIN (AP_OpticalFlow) | 9 | #34292 takes 8, which shipped betas gave to FLOW_HF_RATEF (#33497, dropped in refresh10); keep 8 empty so a saved FLOW_HF_RATEF never loads as FLOW_HGT_MIN |
 | SIM_SONAR_OFFSET (SITL var_info3) | 57 | local backport; master has it in its own group |
+| TKOFF_CPU_AVG, TKOFF_CPU_PEAK | 30, 31 | #33366 takes 60/61, which #32475's THROW_SRC_SET/THROW_DROP_CNF hold on the shipped betas (and on master, so upstream one of the two renumbers) |
 
 Check with `check_param_tables.py`, never by eye. A duplicate index builds
 clean and panics every SITL boot (`PANIC: Bad parameter table`, so every test
@@ -1145,6 +1181,15 @@ one because it is master's and costs nothing.
 
 ### Traps found in refresh12
 
+- **A worktree's `terrain/` is state.** SITL caches SRTM tiles there from
+  any test that uses terrain, and with the CMAC tile present the simulated
+  range finder measures to SRTM ground 0.55 m below the resting vehicle.
+  An A/B between a fresh scratch worktree and one that has run the SFD set
+  compares terrain against none, not one commit against another:
+  OSDEKFLanes failed 5 of 14 in refresh12 and 0 of 20 in a scratch build
+  of the commit before topup1, which read as the top-up's fault until the
+  tiles were copied in and both commits failed alike. Copy the tiles across
+  (or clear them in both) before comparing.
 - **rerere replays a bad resolution as readily as a good one.** refresh11's
   #33507 resolution that dropped EK3_AGL_ABIAS_P was in the cache, and
   refresh12's run replayed it without stopping. Its postimage
@@ -1322,6 +1367,13 @@ copy of the shared AGL KF commit): keep HEAD, confirm `git diff --cached` is
 empty, bump `progress.idx` without committing. Check `git show <sha> --stat`
 first - `8f7487dfa5` "refresh on-ground references" looked like a no-op and
 was, but dropping it blind could have lost `vertCompFiltState.pos`.
+
+**#34941 against #33484's and #34543's flow state** (AP_NavEKF3 Control,
+OptFlowFusion, core.cpp, core.h): every hunk is additive. Keep both, with
+#34941's `flowWithheld_ms`/`flowSampleTime_ms` lines next to
+`prevFlowFuseTime_ms` and the stack's `flowVelResetUnhealthy` clause after
+the new timeout line. The diff against HEAD should then be the PR's diff
+exactly. rerere has it from topup1.
 
 **Targeted top-up** (one or two PRs moved, branch otherwise current): land the
 old-head-to-new-head delta on the tip via a `git commit-tree` of the new tree

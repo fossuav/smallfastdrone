@@ -71,6 +71,18 @@ Open after the round:
   `3d634e4a5f`; neither PR's code changes.
 - CI on the pushed heads was still running; #34456 and #34696 had
   infrastructure/flaky jobs rerun.
+- Added to prs.txt the same evening and taken by refresh12 topup1: #33366
+  (robertlong13, the CPU load measurement behind SFD-O4 log64's blocked
+  takeoff) and #34941 (Andy's, opened that day, the flow lane timeout
+  behind log61's Loiter). Neither has had an AI review. #33366 still
+  carries Andy's CHANGES_REQUESTED of 2026-07-29 ("I will need to test on
+  my hardware"): the code comments were answered, the hardware test has
+  not run (log64 shows the bug, not the fix). Andy's field-data comment of
+  2026-10-30 leaves open whether the 99.5% peak default has margin at an
+  87% average with the rate thread. #33366's TKOFF_CPU_AVG/PEAK and
+  #32475's THROW_SRC_SET/THROW_DROP_CNF both take var_info2 60/61 against
+  master, so whichever merges second renumbers; SFD moves #33366's to
+  30/31 (REFRESH_NOTES.md, "Parameter indices").
 
 The beta took the code fixes as refresh11 topup5 (`0cb49e7dfb`), and a
 full refresh12 was built on the new heads (REFRESH_HISTORY.md).

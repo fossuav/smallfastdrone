@@ -75,6 +75,31 @@ about 3 s, and no "Internal Error". Two review findings are still open
 Restore `TKOFF_RPM_MIN` (or keep it), `ACC_ZBIAS_LEARN 8`, `EK3_FLOW_QMIN`
 and `EK3_OPTIONS 94`.
 
+## Additions for refresh12 (fly once it is promoted)
+
+Not on the beta yet: these PRs reach the aircraft with refresh12. Fold
+them into the card written at promotion.
+
+### A. #33366: takeoff not held by a stale CPU load figure
+
+`BRD_IDLE_STATS 3`: bit 0 is the threads.txt reader as before, bit 1 the
+new PM2 log message (average and peak over each 10 s PM interval, which
+bound the 2 s windows the takeoff check reads). Arm and take off twice in
+one boot. Pass: neither takeoff is held with "Takeoff blocked: CPU
+overload", and the `@SYS/threads.txt` copies the logger writes after each
+arming show LOAD and PEAK changing between armings (log64 read 0.0% at
+the first arming of every boot, then froze at 87.4%). PM2.Peak against
+the 99.5% default at an 87% average with the rate thread is the margin
+question left open on the PR. SITL cannot show any of this.
+
+### B. #34941: a flow lane held past 45 deg does not time out
+
+GPS lane primary with flow on core 1, as log65. Inside the range finder's
+reach, an acro segment holding more than 45 deg of tilt for more than 5 s.
+Pass: no "EKF3 IMU1 stopped aiding" / "started relative aiding" pair
+while tilted, and core 1's speed stays near GPS through and after the
+tilt (log65 had six such pairs, each zeroing it).
+
 ---
 
 # Earlier card (topup13)

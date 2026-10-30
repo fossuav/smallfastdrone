@@ -7,6 +7,26 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-30 - refresh12 topup1, #33366 and #34941
+
+Two PRs added to prs.txt after the SFD-O4 flights of 30 October, picked on
+refresh12's tip after the beta's records for those flights. #33366
+(robertlong13) fixes the CPU load measurement that blocked log64's takeoff:
+it started only at the logger's first read after arming, and later reads
+froze it. Its seven commits applied clean. Its TKOFF_CPU_AVG and
+TKOFF_CPU_PEAK take var_info2 60 and 61, which #32475 holds here and on
+master, so they moved to 30 and 31 in their own commit. #34941 stops a flow
+lane timing out while the tilt check withholds its flow, the cause of
+log61's Loiter that did not stop. Its EKF commit met #33484's and #34543's
+flow state in four additive conflicts; its test was folded in by method.
+OpticalFlowTiltNoTimeout fails on the stack without the EKF commit and
+passes with it. SFD set 114 of 115: OSDEKFLanes fails 3-4 runs in 10
+wherever SITL has the CMAC terrain tile cached, with or without the top-up,
+because the tile puts the resting vehicle 0.54 m above SRTM ground, past the
+0.5 m under which EKF3 holds flow valid until the vehicle moves, and
+#34543's flash check misses the shorter window that leaves. A scratch
+worktree with no tile first made it look like the top-up's.
+
 ## 2026-10-30 - refresh12, the 30 October review round
 
 A full refresh on the unchanged base after the 2026-10-30 AI-review fixes
@@ -33,11 +53,15 @@ that the code differs from the beta only by the PRs' newer heads.
 Tests carried from the beta with the moved heads' methods taken (#31274,
 #32238, #32471, #29000, #34543, #34696, #32475). SFD set 111 of 114. 4.7's
 SITL shoves again after a reboot (master's `ccd8eaacec` backported), which
-took out ThrowSrcSetHandoff's second leg. ThrowDropTwiceWithoutReentry and
-ThrowNextModeAutoStaleSubmode pass on #32475 alone and fail here every time,
-and ThrowSrcSetHandoff's first leg 1 run in 3: they need the EKF failsafe on
-a source set with no horizontal source, which #32514 removed. One of the two
-PRs has to change before both merge.
+took out ThrowSrcSetHandoff's second leg. The other failures, in
+ThrowDropTwiceWithoutReentry, ThrowNextModeAutoStaleSubmode and
+ThrowSrcSetHandoff's first leg, were four problems in #32475's tests, not a
+clash with #32514's code: one leg flaky on #32475 alone (a THRO record that
+LOG_FILE_RATEMAX drops), and three checks that leaned on master's EKF
+failsafe, which #32514 changes. Fixed by four autotest commits
+(`28223b9b5b`..`c0c0f45759`), pushed to #32475 as `3d634e4a5f`; neither
+PR's code changed. They were first recorded here as a code clash one PR had
+to resolve, from the failures alone, before the logs were read.
 
 ## 2026-10-22 - refresh11, onto the 4.7.2 base
 
