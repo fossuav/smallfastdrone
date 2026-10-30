@@ -73,7 +73,9 @@ reply exists") before acting on it.
   it under 0.5 m, no longer applies. Disarmed on the ground, the lane then
   reports REL for about 1 s after the flow stops instead of past the 5 s
   timeout, and the flash check #34543 tightened in `af50a66828` misses that
-  0.6 s window. A problem in #34543's test, not the top-up (see "Owed").
+  0.6 s window. A problem in #34543's test, not the top-up: fixed here by
+  `SIM_TERRAIN 0` in the test (`6e5082b5a8`, comment `b8a7a6be2e`), 12 of
+  12 with the tile cached, and ported to #34543 (see "Owed").
 - Previously built: `SmallFastDrone-4.7.2-refresh11` (worktree `../sfd-refresh11`),
   2026-10-22, on the 4.7.2 base (`b74b576dc9`). 348 planned commits, 271 on the
   branch with the fixups, local work and tests. Firmware "SmallFastDrone
@@ -430,11 +432,12 @@ After:
 
 - Flight evidence for refresh12 topup1's two PRs once it is promoted:
   `FIELD_PLAN.md`, "Additions for refresh12" (#33366, #34941).
-- #34543's OSDEKFLanes depends on SITL having no terrain tile for CMAC (see
-  refresh12 topup1 under "Current state"): its no-flow-data leg needs the
-  vehicle under 0.5 m above ground on the ground. Make the leg independent
-  of the tile cache, A/B it with the tile copied in (it fails 3-4 runs in
-  10 then), fix it here first, then port it to #34543.
+- Push #34543's OSDEKFLanes terrain fix: `r1030/34543-t` (`351aea9eaa`,
+  on the PR head `af50a66828`, quick-reviewed), the same lines as
+  refresh12's `6e5082b5a8` and `b8a7a6be2e`: `SIM_TERRAIN 0` in the test.
+  On the PR branch the tile shortens REL to 1.05 s and the leg still
+  passed 10 of 10; with the fix REL holds throughout and 10 of 10 pass.
+  Lock #34543 at the new head once it is pushed.
 
 - topup12 (2026-10-08) carries #33478's step hold from `fix/33478`
   (`e0d009ff31`, `6185109557`) ahead of the PR, for the flight that repeats
@@ -1189,7 +1192,9 @@ one because it is master's and costs nothing.
   OSDEKFLanes failed 5 of 14 in refresh12 and 0 of 20 in a scratch build
   of the commit before topup1, which read as the top-up's fault until the
   tiles were copied in and both commits failed alike. Copy the tiles across
-  (or clear them in both) before comparing.
+  (or clear them in both) before comparing, and check their sizes: a tile
+  file can be a 0-byte placeholder that loads nothing (TERR Status 1), as
+  #34543's worktree had.
 - **rerere replays a bad resolution as readily as a good one.** refresh11's
   #33507 resolution that dropped EK3_AGL_ABIAS_P was in the cache, and
   refresh12's run replayed it without stopping. Its postimage
