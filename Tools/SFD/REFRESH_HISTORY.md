@@ -7,6 +7,16 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-30 - refresh12 topup2, #32471 v3
+
+#32471's v3, pushed after topup1's lock, saves the hover bias less the
+bias the EKF held at arming when ACC_ZBIAS_LEARN bit 2 is clear, rather
+than the whole bias that SFD-O4 log63 counted twice. Its description met
+#32473's bit 3 on the stack and was merged by hand; the code applied
+clean and never meets #32473's acro hold, as the learner does not run in
+manual-throttle modes. Its test passes with #32471's own figures and fails
+with the learner change reverted. SFD set 115 of 115.
+
 ## 2026-10-30 - refresh12 topup1, #33366 and #34941
 
 Two PRs added to prs.txt after the SFD-O4 flights of 30 October, picked on
@@ -28,7 +38,7 @@ because the tile puts the resting vehicle 0.54 m above SRTM ground, past the
 worktree with no tile first made it look like the top-up's. Fixed by
 `SIM_TERRAIN 0` in the test (12 of 12 with the tile cached), pushed to
 #34543 as `351aea9eaa`. #32471 moved to v3 the same evening, after the
-lock; it is not on refresh12.
+lock, and was taken as topup2.
 
 ## 2026-10-30 - refresh12, the 30 October review round
 

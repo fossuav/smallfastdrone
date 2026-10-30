@@ -79,6 +79,23 @@ reply exists") before acting on it.
   (`af50a66828` -> `351aea9eaa`, quick-reviewed), the same lines; the lock
   records it. On the PR branch the tile shortens REL to 1.05 s and the leg
   still passed 10 of 10; with the fix REL holds throughout, 10 of 10.
+- refresh12 topup2 (2026-10-30), on the tip: #32471 v3 (`04e501e13d`,
+  pushed by Andy after topup1's lock): `a825555a04` Copter, `dca757eee8`
+  AP_InertialSensor, `8455b99ddb` autotest. With `ACC_ZBIAS_LEARN` bit 2
+  clear it saves the hover bias less the bias the EKF held at arming, not
+  the whole bias SFD-O4 log63 counted twice; with bit 2 set, the whole
+  bias as before. One conflict, the parameter's description against
+  #32473's bit 3 (recipe below). The learner runs only from
+  `update_throttle_hover()`, which manual-throttle modes skip, so it never
+  meets #32473's acro hold. SFD's default `ACC_ZBIAS_LEARN 8` learns
+  nothing, so no board changes out of the box. All five builds; copter for
+  SmallFastDronev1 with 45.8 kB free (24 bytes less).
+  VibrationRectificationBiasLearning passes with #32471's own figures
+  (0.141 learned against 0.15, 0.140/0.141 with a static 0.3 left out,
+  0.441/0.437/0.442 with bit 2) and fails with `a825555a04` reverted
+  ("INS_ACC2_VRFB_Z=0.430590 is not the motors-on offset 0.150000"). SFD
+  set 115 of 115, with the CMAC terrain tile still cached (OSDEKFLanes
+  included).
 - Previously built: `SmallFastDrone-4.7.2-refresh11` (worktree `../sfd-refresh11`),
   2026-10-22, on the 4.7.2 base (`b74b576dc9`). 348 planned commits, 271 on the
   branch with the fixups, local work and tests. Firmware "SmallFastDrone
@@ -433,18 +450,9 @@ After:
 
 ### Owed, not tied to one refresh
 
-- #32471 moved after topup1: v3, `04e501e13d`, pushed by Andy on
-  2026-10-30, is `d9e7d85f5c` (what refresh12 carries) plus `85dbca9896`
-  Copter, `117508173e` AP_InertialSensor and `04e501e13d` autotest. With
-  bit 2 clear it now saves the motors-on part of the bias rather than the
-  whole, the double count log63 flew; with bit 2 set it still saves the
-  whole. Not on refresh12 (`refresh.sh changed` lists only it): top up
-  before promotion if it is to fly. FIELD_PLAN's #32471 item (pack 3 at
-  15, fly 9 meanwhile) was written for the code before v3; rewrite it if
-  v3 is taken, and relearn after changing bit 2
-  (`../ardupilot-pr-analysis/32471/`, "second review round, v3").
-- Flight evidence for refresh12 topup1's two PRs once it is promoted:
-  `FIELD_PLAN.md`, "Additions for refresh12" (#33366, #34941).
+- Flight evidence for refresh12's top-ups once it is promoted:
+  `FIELD_PLAN.md`, "Additions for refresh12" (#33366, #34941, #32471 v3,
+  which starts by zeroing the saved totals).
 
 - topup12 (2026-10-08) carries #33478's step hold from `fix/33478`
   (`e0d009ff31`, `6185109557`) ahead of the PR, for the flight that repeats
@@ -1379,6 +1387,13 @@ copy of the shared AGL KF commit): keep HEAD, confirm `git diff --cached` is
 empty, bump `progress.idx` without committing. Check `git show <sha> --stat`
 first - `8f7487dfa5` "refresh on-ground references" looked like a no-op and
 was, but dropping it blind could have lost `vertCompFiltState.pos`.
+
+**#32471 v3's ACC_ZBIAS_LEARN description against #32473's bit 3**
+(ArduCopter/Parameters.cpp): take v3's sentences on what is learned,
+relearning after changing bit 2 and the moving-platform consequence, and
+keep #32473's "Apart from acro with bit 3 set" clause, its "Bits 0 and 1
+take effect after a reboot" sentence, its bit 3 text and the bitmask with
+bit 3. Index 23 stays. rerere has it from topup2.
 
 **#34941 against #33484's and #34543's flow state** (AP_NavEKF3 Control,
 OptFlowFusion, core.cpp, core.h): every hunk is additive. Keep both, with

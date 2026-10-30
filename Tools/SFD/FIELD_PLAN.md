@@ -100,6 +100,28 @@ Pass: no "EKF3 IMU1 stopped aiding" / "started relative aiding" pair
 while tilted, and core 1's speed stays near GPS through and after the
 tilt (log65 had six such pairs, each zeroing it).
 
+### C. #32471 v3: the hover bias learned as the change since arming
+
+With bit 2 clear, v3 saves the hover bias less the bias the EKF held at
+arming, where the beta saves the whole bias (log63's double count). For
+refresh12 firmware this replaces the earlier card's #32471 item: pack 3 at
+15 is no longer needed. First set `INS_ACC_VRFB_Z` and `INS_ACC2_VRFB_Z`
+to 0. The values saved so far are totals, and v3 would apply them as the
+change since arming, counting the ground bias twice once more.
+
+Pack 1, `ACC_ZBIAS_LEARN 9` (learn, plus the acro bit): hover steadily in
+LOITER at 2-5 m for at least 60 s, land and disarm. Pass: each saved value
+is about XKF2.AZ at the end of the hover minus XKF2.AZ at arming for that
+IMU's core (log62's would have been about +0.03, where the beta saved
+-0.03).
+
+Pack 2, `ACC_ZBIAS_LEARN 11` (learn and apply), same takeoff and hover.
+Pass: XKF2.AZ moves less after takeoff than in pack 1, and the EKF height
+against the range finder over the first 20 s after liftoff is closer than
+log63 flight 1 (0.14 m core 0, 1.10 m core 1, rms). Replay of log63 with
+the value this design would have saved gave 0.11 and 0.54 m. Restore
+`ACC_ZBIAS_LEARN 8` afterwards unless keeping 11.
+
 ---
 
 # Earlier card (topup13)

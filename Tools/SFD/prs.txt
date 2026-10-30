@@ -24,7 +24,7 @@
 32391   # Separate LEVEL arming check
 32398   # Customizable ARM_DELAY
 32238   # Fast boot parameter
-32471   # Hover Z-bias learning (VRF)
+32471   # Hover Z-bias learning (VRF). v3 (04e501e13d) saves the change since arming with bit 2 clear, not the total that SFD-O4 log63 counted twice
 32768   # Baro drift reset on arming
 32553   # Terrain offset reset on ground-effect clear
 32972   # Protect height fusion from baro ground effect at takeoff

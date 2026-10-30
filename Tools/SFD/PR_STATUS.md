@@ -88,7 +88,7 @@ Open after the round:
   whenever SITL had the CMAC terrain tile cached (quick review, COMMENT
   for the bot's four minor rows, unchanged). #32471 pushed by Andy
   `d9e7d85f5c` -> `04e501e13d` (v3: the motors-on part saved with bit 2
-  clear), after refresh12 topup1's lock.
+  clear), after refresh12 topup1's lock; taken by refresh12 topup2.
 
 The beta took the code fixes as refresh11 topup5 (`0cb49e7dfb`), and a
 full refresh12 was built on the new heads (REFRESH_HISTORY.md).
