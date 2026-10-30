@@ -709,7 +709,7 @@ void ModeThrow::throw_dir_reset()
     throw_dir_last_us = 0;
     throw_dir_anchor_yaw_valid = false;
     throw_dir_anchor_yaw_rad = 0.0f;
-    // the recovery target is derived from the integrator, so it goes too
+    // the recovery target belongs to the detection being abandoned
     throw_target_yaw_valid = false;
     throw_target_yaw_rad = 0.0f;
     throw_yaw_source = ThrowYawSource::None;
