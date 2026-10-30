@@ -25,6 +25,56 @@ the round was never triaged.
 
 ---
 
+## 2026-10-30
+
+The AI review bot re-reviewed 18 PRs at the heads pushed on 10-29. Andy
+asked for every suggested change to be made (except on #32768 and
+#32972, left alone), #34251 reworded rather than given the save, and the
+descriptions updated. Each fix went in as a new commit with an A/B,
+then a quick review: a Codex cold read per commit plus an audit of the
+bot's findings (Claude reviewers once the Codex quota ran out). Records:
+`../ardupilot-pr-analysis/<PR>/README.md`, "2026-10-30".
+
+| PR | Pushed (old -> new) | What changed |
+|---|---|---|
+| #29000 | `4cc85b68cf` -> `fbf9c380f9` | start-up fast rates no longer left applied under tcal; RateThreadTempCal |
+| #34251 | `64b0c17788` -> `dff8813535` (force) | commits reworded to what the diff does; re-measured in SITL |
+| #34809 | `d65d3b4baa` -> `ea1a881ad7` (force) | AP_OSD message: flush() no longer services the port since #34882 |
+| #34543 | `17f017fb8c` -> `af50a66828` | lanes kept through a DCM fallback; Rover test; flash check tightened |
+| #34630 | `d402ac272a` -> `9a64b9bc5f` | flow floor shown only with bit 3 or while latched; test tightened |
+| #34210 | `93dcf216c0` -> `aa2cf2ddcf` | ceiling winds down at any land speed (two airframes, no dive); FS_OPTIONS doc |
+| #32471 | `b399a6ab1b` -> `d9e7d85f5c` (force) | ACC_ZBIAS_LEARN AP_UInt8 (folded); restarted-log inhibit fix moved here |
+| #32473 | `9396a8ee52` -> `3ca94847db` (force) | restacked on #32471 |
+| #31216 | `758b814166` -> `2f220cecef` (force) | on master `278a68a57a`; retired ALLOW_ARM_NO_COMPASS; iFlight photos |
+| #31274 | `4ef30eefe0` -> `db7371c4d8` | gate narrowed to FC bidirectional DShot; three DShot stats fixes (need hardware) |
+| #32475 | `f7a5aeb84f` -> `60cee67154` | four blockers and five review rounds; 19 Throw tests |
+| #32232 | `5e0c45cf62` -> `158e8386a3` (rishabsingh3003) | two-range-finder substitution; XKF5 filter |
+| #32238 | `f4361d8b65` -> `47714568af` (rishabsingh3003) | ESC_CALIBRATION=9 early return replaces bit 2; DroneCAN limit documented |
+| #34456 | none | description and reply drafted; the late-REV3 fix measured to change nothing |
+
+Open after the round:
+- Description and reply drafts for 11 PRs are unposted (session
+  scratchpad `r1030/DRAFTS.md`).
+- #32238's DroneCAN bit misses DroneCAN baro/airspeed at boot; kept and
+  documented by Andy's decision, so the bot will keep raising it.
+- #32475: after THROW_SRC_SET switches to an unaided set, EKF3 dead-reckons
+  a position for about 7 s, so a next mode needing a position takes over
+  and the EKF failsafe lands it. Closing it means reading the set's source
+  configuration (ARCH-3); Andy to decide.
+- #32475 against #32514: on refresh12 ThrowDropTwiceWithoutReentry and
+  ThrowNextModeAutoStaleSubmode fail every time and ThrowSrcSetHandoff
+  sometimes, because #32514 no longer raises the EKF failsafe for a
+  source set with no horizontal source. One of the two has to adapt
+  before both can merge (ARCH-1). Later the same day: four test
+  problems, not a code clash. #32475's tests are fixed on refresh12
+  (`28223b9b5b`..`c0c0f45759`) and as `r1030/32475-5`, not pushed;
+  neither PR's code changes.
+- CI on the pushed heads was still running; #34456 and #34696 had
+  infrastructure/flaky jobs rerun.
+
+The beta took the code fixes as refresh11 topup5 (`0cb49e7dfb`), and a
+full refresh12 was built on the new heads (REFRESH_HISTORY.md).
+
 ## 2026-10-29
 
 Master at `5b36047100`. 61 PRs in the manifest: 49 open, 12 merged (#34882
