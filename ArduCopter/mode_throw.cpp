@@ -55,7 +55,7 @@ bool ModeThrow::init(bool ignore_checks)
         throw_entry_vel_ne_ms.zero();
         throw_entry_vel_valid = false;
     }
-    if (ahrs.configured_backend_has_status(AP_AHRS::Status::ATTITUDE_VALID)) {
+    if (ahrs.has_status(AP_AHRS::Status::ATTITUDE_VALID)) {
         throw_entry_yaw_rad = ahrs.get_yaw_rad();
         throw_entry_yaw_valid = true;
     } else {
@@ -667,7 +667,7 @@ void ModeThrow::throw_dir_update()
             throw_dir_q.from_euler(roll_rad, pitch_rad, 0.0f);
             throw_dir_q_valid = true;
         }
-        if (ahrs.configured_backend_has_status(AP_AHRS::Status::ATTITUDE_VALID)) {
+        if (ahrs.has_status(AP_AHRS::Status::ATTITUDE_VALID)) {
             throw_dir_anchor_yaw_rad = ahrs.get_yaw_rad();
             throw_dir_anchor_yaw_valid = true;
         } else {
@@ -819,7 +819,10 @@ bool ModeThrow::throw_drop_distance_reached() const
     // const-position mode the integrated velocity drifts far enough to
     // overshoot the release point and wedge this check.
     if (ahrs.has_status(AP_AHRS::Status::VERT_POS) && !ahrs.has_status(AP_AHRS::Status::CONST_POS_MODE)) {
-        return (drop_release_alt_m - pos_control->get_pos_estimate_U_m() >= dcsnd_m);
+        // a fall that is caught or lands short of DCSND never gets there, so
+        // the uprighting safety timeout ends this too
+        return (drop_release_alt_m - pos_control->get_pos_estimate_U_m() >= dcsnd_m) ||
+               (AP_HAL::millis() - uprighting_start_ms > 3000);
     }
     // Fallback: estimate distance from freefall physics.  This
     // overestimates after motors start (thrust slows the fall) so the
