@@ -7,6 +7,38 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-30 - refresh12, the 30 October review round
+
+A full refresh on the unchanged base after the 2026-10-30 AI-review fixes
+went to the PR branches, with #32232, #32238 and #32475 taken from local
+branches not pushed yet. 431 planned commits; ten stops in the run (one a
+hold on a commit that applied clean) and four among the fixups, all small:
+master's unsigned parameter types in the context of #32238's, #32972's and
+#32471's hunks (4.7 keeps AP_Int8/AP_Int32), #33585's and #34851's EKF
+members and terrain lines meeting the stack's, #34456's lane selection and
+Lua binding against #32471's inhibit retry and 4.7's `get_variances`, and
+#32475's mode_throw.cpp, taken whole from each PR commit with 4.7's
+`has_status()`. Eleven commits were skipped by list (#34543's primary core
+index, and the ten #34543 copies #34630 carries) and #32238's AP_UInt32
+change. #32475 moved twice more during the run and was topped up on the tip.
+
+Comparing the code with the beta found five losses, all restored: rerere
+replayed refresh11's #33507 resolution that drops EK3_AGL_ABIAS_P (the cache
+entry is now corrected), the FS_EKF_ACTION_VALT define refresh11 added by
+hand outside the conflict, the Borg H7's ALLOW_ARM_NO_COMPASS (#31216
+dropped it for master), #34851's term in #33585's flat-ground restore, and
+the Replay MSG_CREATE fix #32471 shed when master merged a weaker one. After
+that the code differs from the beta only by the PRs' newer heads.
+
+Tests carried from the beta with the moved heads' methods taken (#31274,
+#32238, #32471, #29000, #34543, #34696, #32475). SFD set 111 of 114. 4.7's
+SITL shoves again after a reboot (master's `ccd8eaacec` backported), which
+took out ThrowSrcSetHandoff's second leg. ThrowDropTwiceWithoutReentry and
+ThrowNextModeAutoStaleSubmode pass on #32475 alone and fail here every time,
+and ThrowSrcSetHandoff's first leg 1 run in 3: they need the EKF failsafe on
+a source set with no horizontal source, which #32514 removed. One of the two
+PRs has to change before both merge.
+
 ## 2026-10-22 - refresh11, onto the 4.7.2 base
 
 The base was rebuilt on ArduPilot-4.7 at 4.7.2 plus three ChibiOS fixes
