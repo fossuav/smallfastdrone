@@ -6175,7 +6175,7 @@ class TestSuite(abc.ABC):
         else:
             self.set_rc(3, 1700)
         # we may never see ourselves as armed in a heartbeat
-        self.wait_statustext("Takeoff blocked: ESC RPM out of range", check_context=True)
+        self.wait_statustext("Takeoff blocked: ESC RPM or errors out of range", check_context=True)
         self.context_pop()
         self.zero_throttle()
         self.disarm_vehicle(force=force_disarm)
@@ -6898,6 +6898,22 @@ class TestSuite(abc.ABC):
     def context_get(self):
         """Get Saved parameters."""
         return self.contexts[-1]
+
+    def context_preserve_parameters(self, names):
+        """Arrange for these parameters to be restored on context_pop().
+
+        The context restores parameters the *suite* set.  It cannot know
+        about one the vehicle writes for itself - a calibration saving
+        its results, say - so those survive the test and leak into every
+        test which follows in the session.  Registering them here with
+        their current values puts them back with everything else, and
+        does so even if the test raises.
+        """
+        values = self.get_parameters(names)
+        already = [p[0] for p in self.context_get().parameters]
+        for name in names:
+            if name not in already:
+                self.context_get().parameters.append((name, values[name]))
 
     def context_push(self):
         """Save a copy of the parameters."""
@@ -14939,6 +14955,70 @@ switch value'''
                 raise NotAchievedException("Failed to connect to MSP port")
             msp.connect()
         return msp
+
+    def osd_displayport_rows(self, msp, rows, duration):
+        '''collect the text drawn on the given rows over MSP DisplayPort for a
+        while, one entry per screen drawn'''
+        MSP_DISPLAYPORT = 182
+        CLEAR_SCREEN = 2
+        WRITE_STRING = 3
+        DRAW_SCREEN = 4
+        screens = []
+        current = {}
+        cleared = []
+
+        def collect(cmd, data):
+            if cmd != MSP_DISPLAYPORT or len(data) == 0:
+                return
+            if data[0] == CLEAR_SCREEN:
+                current.clear()
+                cleared.append(True)
+            elif not cleared:
+                # joined part way through a screen, which would read as a flash
+                return
+            elif data[0] == WRITE_STRING and len(data) >= 4 and data[1] in rows:
+                row = current.setdefault(data[1], {})
+                for i, c in enumerate(data[4:]):
+                    row[data[2] + i] = c
+            elif data[0] == DRAW_SCREEN:
+                screens.append({r: bytes(current.get(r, {}).get(c, 32) for c in range(60)).rstrip()
+                                for r in rows})
+        msp.callback = collect
+        tstart = self.get_sim_time()
+        try:
+            while self.get_sim_time_cached() - tstart < duration:
+                msp.update()
+                self.drain_mav(quiet=True)
+        finally:
+            msp.callback = None
+        if len(screens) == 0:
+            raise NotAchievedException("no OSD screens drawn over MSP DisplayPort")
+        return screens
+
+    def wait_osd_ekf_lane(self, msp, row, want, flashing=False, timeout=30):
+        '''wait for an OSD EKF lane item to show the wanted text, optionally
+        checking the text then goes and comes back as it flashes'''
+        tstart = self.get_sim_time()
+        texts = []
+        while True:
+            if self.get_sim_time_cached() - tstart > timeout:
+                raise NotAchievedException("OSD row %u never showed %s%s" %
+                                           (row, want, " flashing" if flashing else ""))
+            texts.extend(s[row] for s in self.osd_displayport_rows(msp, [row], 2))
+            self.progress("OSD row %u: %s" % (row, texts[-1]))
+            shown = [want in t for t in texts]
+            if not any(shown):
+                texts = []
+                continue
+            # screens from before the text first showed are not a flash, and
+            # a flash may run on into the next sample
+            first = shown.index(True)
+            texts = texts[first:]
+            shown = shown[first:]
+            if not flashing:
+                return texts
+            if False in shown and True in shown[shown.index(False):]:
+                return texts
 
     def msp_send_until_parameters(self, msp, frames, parameters, timeout=30):
         '''re-send the given (command, payload) MSP frames until the parameters
