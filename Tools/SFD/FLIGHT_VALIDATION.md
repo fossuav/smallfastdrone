@@ -8,6 +8,165 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-10-30: SFD-O4 logs 64-65, takeoff blocked, lockouts and landed hold
+
+Firmware `52b1d36f`, `ACC_ZBIAS_LEARN 11` still.
+
+log64 could not take off: "Takeoff blocked: CPU overload" every 2 s through
+two armings, at an average of 84-92%. The check (`342a8bdfd8`, upstream in
+4.7 and unchanged on master) blocks on average over 95% or peak over 99.5%,
+and the peak is the highest roughly 1 s load since boot: sysperf.c sets it
+at initialisation only. One busy second anywhere in the session blocks
+takeoff until reboot, and the message reports the average, not the peak
+that blocked (ARCH-2). The peak is not logged, so what spiked is unknown;
+this boot also had a radio failsafe and turtle mode before arming. Main
+loop load (PM) matched logs 61-65. `BRD_IDLE_STATS 0` turns the check off
+at once, as `use_idle_stats()` reads it live; a reboot clears the peak.
+
+(Corrected the same day: the peak-since-boot account above is wrong. The
+log does carry the figures, in the `@SYS/threads.txt` copies the logger
+writes after each arming: LOAD 0.0% PEAK 0.0% at the first arming of every
+boot, then 87.3% / 99.5% at log64's second. Measurement does not start at
+boot, because `main_loop()` tests `BRD_IDLE_STATS` before the parameters
+load; the logger's first read after arming starts it, and the first few
+samples after that start tripped the 99.5% peak. Later reads leave it
+frozen: the average stayed at exactly 87.4%. So the radio failsafe and
+turtle mode played no part. Open PR #33366 fixes the measurement and the
+check, and is in `prs.txt`; see
+`../ardupilot-pr-analysis/pending-takeoff-load-peak/`.)
+
+log65, card items 3 and 1 (acro to 56 m, range finder good 25% of it, 48%
+over 45 deg of tilt; GPS lane primary, flow on core 1 throughout):
+
+- #34630/#33484: the first lockouts provoked in flight. Core 1 reset three
+  times (XKF7.FVC 0 to 3, FVU never set), range good at 9-14 m, tilt
+  33-44 deg, quality 126-159. Each repaired a lane already wrong: 4.7 to
+  18.9 m/s at 63.6 s (GPS 18.1), 0.1 to 20.7 at 83.2 s (GPS 18.5), 1.7 to
+  16.1 at 132.5 s (GPS 18.9), and all within 1 m/s a second later. The
+  deferral at 91.9 s ("range stale") held off with core 1 2.5 m/s high,
+  converging in 2 s.
+- The near-zero speeds those resets repaired came from log61's mechanism:
+  six aiding drops, each after up to 5 s over 45 deg, zeroed core 1's
+  velocity (18.9 to 0.3 m/s at 51.4 s, GPS 18.7). Without a lockout reset
+  to re-anchor it, core 1 stayed wrong for 8 s or more (113.4 s: 4-8 m/s
+  against 16-25). The lockout reset needs the range finder, which is why
+  log65 recovered and log61, above range, did not.
+- #34457, card item 1: 23 s armed on the ground after landing. Both cores'
+  AGL KF held the 0.05 m floor throughout (core 0 0.53 at touchdown). The
+  main filters read -0.2 m/s on the ground, under the 0.25 m/s coast
+  stop log39 defeated. Passed. The main filters' terrain height read 0.4-1.8
+  m below the ground there (range out of range low), not the AGL KF's.
+
+## 2026-10-30: SFD-O4 logs 62-63, hover Z-bias packs and full-stick flow Loiter
+
+Firmware `52b1d36f`, GPS lane (core 0) for both hovers, LOITER at 2-3 m.
+
+#32471, card item 2. log62 (`ACC_ZBIAS_LEARN 9`, learn only, 58 s hover)
+saved -0.029/-0.035 against XKF2.AZ at the end of the hover of
+-0.020/-0.026: the code saves the total bias, not the card's "end minus
+arming" (-0.050 at arming, so that would be +0.03). log63 flight 1 (11,
+learn and apply, 65 s) failed all three of the card's checks: AZ swung
+0.06/0.07 after takeoff against 0.04, and the EKF height against the range
+finder over the first 20 s was 0.14/1.10 m rms against 0.04/0.64 m. Baro
+stayed within 0.2 m of the range finder in both, so core 1 (no GPS VZ) was
+following its own vertical estimate.
+
+Why: the saved total includes the ground bias, and with bit 2 clear the
+EKF has learned this boot's ground bias into its state while disarmed.
+Nothing offsets the state when the correction switches on at arming, so the
+ground bias is counted twice (ARCH-7). The residual then has to climb by
+about the previous flight's ground bias (-0.05 in log62; it climbed
+0.06/0.07). Replay of log63 flight 1 with RISK.VRFBZ patched, same sensor
+data (reproduces C=0/1 exactly):
+
+| Correction | Core 0 height err, 2-20 s rms | Core 1 | Core 1 AZ swing |
+|---|---|---|---|
+| saved total, as flown (-0.029/-0.035) | 0.14 m | 1.10 m | 0.07 |
+| none | 0.12 m | 0.65 m | 0.04 |
+| saved total with bit 2 (15; REV3 16/17 inserted) | 0.33 m | 0.75 m | 0.10 |
+| vibration part only, from log62 (+0.021/+0.015) | 0.11 m | 0.54 m | 0.03 |
+
+Applying the total with bit 2 clear is worse than applying nothing.
+#32471's record predicts that: its "Store the motors-on delta" row puts the
+double count on bit 2 and rejects storing the delta for fleet compatibility,
+so pack 2 should have flown 15. Replayed as 15 the double count is gone (AZ
+0.00 at arm), but the release at arm restores the bias variance and the bias
+swings to +0.06/+0.09 after liftoff; core 0 is worse than with no
+correction. The delta is best on this flight: the first real-flight evidence
+against that row, which stands until decided. Fly 9 until a pack at 15 has
+flown. The saved total also moved 0.025 between two consecutive flights
+(log63: -0.018 then -0.044), as large as the vibration offset itself.
+(Corrected the same day: this said "fly 9 until #32471 saves the vibration
+part", written before the record's rejected row was read.)
+
+#33568, card item 4 (log63 flight 2, flow lane, `LOIT_SPEED_MS 15`): five
+full-stick pushes of 0.5-1.6 s at 3-6 m reached 9.9 m/s. The flow speed cap
+there is 20-36 m/s ((`EK3_FLOW_MAX` - 1) x height), so it never bound; it
+binds only below `LOIT_SPEED_MS` / 6.4, 2.3 m. Not tested. What it did show:
+core 1 tracked GPS within 0.5-1 m/s throughout. Along each push direction
+the velocity never went negative after release, but stick came back 1.1-3.0
+s later with the vehicle still at 0.85 m/s or more, so no stop completed
+hands-off. #33318 did not run (`LOIT_OPTIONS 1`, its bit 1 clear); this was
+Loiter with #33639. (Corrected the same day: this credited #33318 with "no
+lurch back".)
+#34457: 6 s armed after landing, core 1's AGL KF held 0.12 m.
+
+## 2026-10-30: SFD-O4 log61, Loiter on the flow lane did not stop
+
+Firmware `52b1d36f`, GPS on core 0 and flow on core 1 (`EK3_SRC_OPTIONS 8`,
+`EK3_OPTIONS 94`). Source set 2 was selected disarmed at 136.7 s, so core 1
+was primary for the whole acro sortie: up to 40 m, above the 15 m range
+finder for most of it, and over 45 deg of tilt for 32% of the flight.
+Loiter at 255.8 s, at 26 m and 13 m/s, held a 32 deg lean and sped up to
+14.5 m/s; the pilot went back to acro at 260.1 s and to source set 1 at
+268.5 s. Loiter on GPS at 278.5 s stopped from 10.5 m/s in 1.8 s.
+
+Why Loiter did not stop: core 1 read 0.3-0.9 m/s. Loiter seeds its velocity
+I term from the current lean (6 m/s/s east), saw no motion, and kept the
+lean as if holding against wind (PIDE.I 6.0 rising to 8.9).
+
+Why core 1 read zero (Replay reproduces core 1 to 0.1 m/s):
+
+- 215.7-220.6 s over 45 deg of tilt, so no flow was fused; the IMU carried
+  the velocity (17.9 against GPS 18.3 m/s at 220 s).
+- 220.5 s: the 5 s flow timeout took core 1 to AID_NONE and straight back
+  to AID_RELATIVE, which zeroes horizontal velocity (upstream; #33568 keeps
+  it only for absolute to relative). 18.8 to 0.8 m/s at 19 m/s true, with
+  4.5 s more over 45 deg. Again at 235.3 and 240.3 s, with runaways to
+  37-48 m/s between. Core 1 ended 200-340 m from GPS.
+- AP_Terrain looks SRTM up at the primary's position, here core 1's, and
+  200-340 m off it found ground 25-35 m higher (RTER 25-35 m, 0-8 m
+  before). With bit 2 the flow fusion scaled by `-PD - RTER`, below zero
+  and clamped to the floor, so fusion drove the velocity to zero. This is
+  the collapse #33585's record leaves open; a relative lane's position is
+  not a location (ARCH-16).
+
+Replay A/B, core 1 at 254-260 s against GPS 13-14.5 m/s: as flown 0.3-3.9;
+bit 2 off (#33585's anchor, following the database's shape at the drifted
+position) 4.5-6.8; RTER stripped from the log (flat ground only) 20-30. All
+three identical from 222 to 234 s: no terrain setting gives a usable
+velocity once the lane has been reset.
+
+| PR | Status |
+|---|---|
+| #34456 | Worked: set 2 moved the primary to core 1 (136.7 s), set 1 back to core 0 in flight (268.5 s). |
+| #33585, bit 2 | Ran above range throughout. Bit 2 bypasses the anchor; see the A/B above. |
+| #33569 | Active: nav gain scaler about 0.48 on core 1 at 25 m. No bearing on a zero velocity. |
+| #33318, #33639 | Loiter on GPS stopped from 10.5 m/s in 1.8 s, no overshoot. #33318 itself did not run: `LOIT_OPTIONS 1` leaves its bit 1 clear (corrected the same day). |
+| #33568 | Not exercised: GPS never lost on core 0. |
+| #33484, #34630 | Not provoked: XKF7.FVC 0 on both cores. |
+| #34543, #34630 OSD | Ran, but core 1 reported itself healthy throughout (XKF4.SS unchanged, SV and SP 0), so nothing could flag it. What was drawn needs the pilot. |
+| #33478, #33507 | AGL KF valid 68% of samples, velD fused under 1%. Not exercised. |
+| #34457 | Disarmed 1.4 s after landing; AGL KF held 0.07-0.08 m on both cores with RFND out of range low. Card item 1 still needs 10 s armed on the ground. |
+| #32768 | Arming stepped both cores' height 2.9 m (origin 41 s, armed 154 s). Hands off. |
+| #32553 | "terrain offset reopened after takeoff" on both cores at 160.7 s. |
+| #32471, `7ab6409ca3` | `ACC_ZBIAS_LEARN 8`: armed releases leaving acro at 255.8 and 278.5 s ran the new path. AZ moved at most 0.02 m/s/s (0.07 on core 1 at 278.5). No A/B yet. |
+| #31274, DShot error counting | Ran all flight on bdshot: ESC.Err max 0.03-0.16% per output. |
+| #32238, `16fe775812` | `BRD_FAST_BOOT 1` with `ESC_CALIBRATION 0`: the ESC calibration startup check waits for the radio again. 9 skips it. |
+| #32514 | Source set change in flight at 268.5 s; no EKF failsafe. |
+| #34210, #34696, #32475, #32270, #34678 | Not exercised. |
+
+
 ## 2026-10-30: squash audit of SFD-O4 logs 54-59 and the T25/TD25 flights
 
 Which held-back commits these flights ran: SFD-O4 log54 (`0e2c9772`), 55-57

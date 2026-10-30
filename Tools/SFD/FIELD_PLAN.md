@@ -88,6 +88,8 @@ sortie is done.
 
 ### 1. #34457: land after hard flying and stay armed
 
+Done 2026-10-30, log65: passed (see `FLIGHT_VALIDATION.md`).
+
 The case log39 hit: after an acro sortie a lane's main filter thought it
 was climbing on the ground, and its AGL KF height coasted 1.5 m. Fly hard
 acro on the flow lane inside the range finder's reach (below about 12 m),
@@ -99,6 +101,12 @@ the whole time on the ground (log39 core 1: 0.28 -> 1.8 m), and XKF1.VD
 on the ground shows whether the main filter thought it was climbing.
 
 ### 2. #32471: hover Z-bias learning, two packs
+
+Flown 2026-10-30, logs 62-63, but pack 2 was the wrong setting: 11 leaves
+bit 2 clear, which double-counts the ground bias as #32471's record says
+it will. Still owed: pack 3 at `ACC_ZBIAS_LEARN 15`, same takeoff and
+hover. Replay of log63 as 15 was worse than no correction on core 0 (see
+`FLIGHT_VALIDATION.md`).
 
 Pack 1, `ACC_ZBIAS_LEARN 9` (bit 0 plus the acro bit): hover steadily in
 LOITER at 2-5 m for at least 60 s, land and disarm. On disarm
@@ -113,6 +121,8 @@ pack with either.
 
 ### 3. #34630, if time allows: provoke a lockout
 
+Done 2026-10-30, log65: three resets, each repaired the lane.
+
 log43 never tripped one: flow quality stayed above 144 and no axis
 dropped out. Fly harder: full-rate roll and pitch flips in ACRO or
 STABILIZE at 3-8 m, inside the range finder's reach, on the flow lane.
@@ -121,9 +131,11 @@ the resets.
 
 ### 4. #33568, optional: the flow speed cap
 
-log42 never reached the flow speed limit. On the flow lane in LOITER below
-about 5 m, full stick in one direction for 3 s. Pass: ground speed is held
-below the flow limit (EKF3 flow speed cap) rather than `LOIT_SPEED`.
+log42 and log63 never reached the flow speed limit. The cap is
+(`EK3_FLOW_MAX` - 1) x height, 6.4 x height at 7.4, so it binds only below
+`LOIT_SPEED_MS` / 6.4: 2.3 m at 15. On the flow lane in LOITER at about
+1.5 m, full stick in one direction for at least 3 s. Pass: ground speed is
+held near 6.4 x height (about 10 m/s at 1.5 m) rather than `LOIT_SPEED_MS`.
 
 ### 5. #34678, optional ground check: righting a flipped copter
 
