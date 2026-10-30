@@ -41,8 +41,8 @@ reply exists") before acting on it.
   three checks that leaned on master's EKF failsafe, which #32514 changes
   (a "position lost" wait, "EKF Failsafe Cleared" before AUTO, and a
   handoff wait the failsafe made certain). Fixed by four autotest commits
-  on top of the lock, `28223b9b5b`..`c0c0f45759`, ported to #32475 as
-  `r1030/32475-5` (record: `../ardupilot-pr-analysis/32475/`, "the
+  on top of the lock, `28223b9b5b`..`c0c0f45759`, ported to #32475 and
+  pushed as `3d634e4a5f` (record: `../ardupilot-pr-analysis/32475/`, "the
   refresh12 failures"). With them the 18 Throw tests in the SFD set, and
   ThrowMode, pass on two runs here (19 of 19 each), and the PR's 19 on
   #32475 alone; the other 96 tests passed in the first run and the fixes
@@ -730,10 +730,6 @@ After:
   RateThreadPostFilterGyroLog, Replay). The three bidirectional DShot
   statistics fixes in #31274 have never run on hardware; FIELD_PLAN.md has
   the card. Unflown. Records: `../ardupilot-pr-analysis/<PR>/`, "2026-10-30".
-- Push #32475's four test fixes (`r1030/32475-5`, four commits on
-  `60cee67154`, the same as refresh12's `28223b9b5b`..`c0c0f45759`). Its
-  tests had leaned on master's EKF failsafe, which #32514 changes; with
-  them they hold on both, so neither PR's code has to change for the other.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the

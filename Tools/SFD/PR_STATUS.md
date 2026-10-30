@@ -67,8 +67,8 @@ Open after the round:
   source set with no horizontal source. One of the two has to adapt
   before both can merge (ARCH-1). Later the same day: four test
   problems, not a code clash. #32475's tests are fixed on refresh12
-  (`28223b9b5b`..`c0c0f45759`) and as `r1030/32475-5`, not pushed;
-  neither PR's code changes.
+  (`28223b9b5b`..`c0c0f45759`) and on #32475, pushed `60cee67154` ->
+  `3d634e4a5f`; neither PR's code changes.
 - CI on the pushed heads was still running; #34456 and #34696 had
   infrastructure/flaky jobs rerun.
 
