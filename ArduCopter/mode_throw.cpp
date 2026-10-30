@@ -620,7 +620,7 @@ bool ModeThrow::throw_detected()
             // A window that never needed the spin allowance is plain freefall
             // on the IMU alone, so with no velocity aiding it keeps to the
             // timer rather than wait on an unaided vertical velocity.
-            if (!drop_confirm_spun && ahrs.configured_backend_has_status(AP_AHRS::Status::CONST_POS_MODE)) {
+            if (!drop_confirm_spun && ahrs.has_status(AP_AHRS::Status::CONST_POS_MODE)) {
                 return time_confirmed;
             }
             // A falling vehicle sheds upward velocity at close to g; one being
