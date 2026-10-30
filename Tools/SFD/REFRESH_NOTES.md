@@ -34,15 +34,19 @@ reply exists") before acting on it.
   the FS_EKF_ACTION_VALT define, the Borg H7's ALLOW_ARM_NO_COMPASS, #34851's
   term in #33585's flat-ground restore and the Replay MSG_CREATE fix (see
   "Local work"). SFD set 111 of 114 on the first run, all three failures
-  new #32475 tests that pass on #32475 alone. ThrowDropTwiceWithoutReentry
-  and ThrowNextModeAutoStaleSubmode need the EKF failsafe to report a
-  position lost on a source set with no horizontal source, which #32514 no
-  longer does (see "Owed"); they fail every time. ThrowSrcSetHandoff's second
-  leg failed on 4.7's SITL shoving again after a reboot (master's
-  `ccd8eaacec` backported); its first leg's wait for a position then passes
-  2 of 3, racing the EKF taking GPS back up with no failsafe to hold it off,
-  the same #32514 cause. ThrowDropEKFFailsafePosHold failed once in a
-  throw-only rerun and passes alone (4 of 4).
+  new #32475 tests. ThrowSrcSetHandoff's second leg failed on 4.7's SITL
+  shoving again after a reboot (master's `ccd8eaacec` backported). The rest
+  were four test problems, not a clash between #32475's and #32514's code:
+  one leg flaky on #32475 alone (a THRO record LOG_FILE_RATEMAX drops), and
+  three checks that leaned on master's EKF failsafe, which #32514 changes
+  (a "position lost" wait, "EKF Failsafe Cleared" before AUTO, and a
+  handoff wait the failsafe made certain). Fixed by four autotest commits
+  on top of the lock, `28223b9b5b`..`c0c0f45759`, ported to #32475 as
+  `r1030/32475-5` (record: `../ardupilot-pr-analysis/32475/`, "the
+  refresh12 failures"). With them the 18 Throw tests in the SFD set, and
+  ThrowMode, pass on two runs here (19 of 19 each), and the PR's 19 on
+  #32475 alone; the other 96 tests passed in the first run and the fixes
+  touch only these tests.
 - Previously built: `SmallFastDrone-4.7.2-refresh11` (worktree `../sfd-refresh11`),
   2026-10-22, on the 4.7.2 base (`b74b576dc9`). 348 planned commits, 271 on the
   branch with the fixups, local work and tests. Firmware "SmallFastDrone
@@ -726,23 +730,10 @@ After:
   RateThreadPostFilterGyroLog, Replay). The three bidirectional DShot
   statistics fixes in #31274 have never run on hardware; FIELD_PLAN.md has
   the card. Unflown. Records: `../ardupilot-pr-analysis/<PR>/`, "2026-10-30".
-- #32475's ThrowDropTwiceWithoutReentry and ThrowNextModeAutoStaleSubmode
-  (2026-10-30) provoke a position loss by moving throw onto a source set
-  with no horizontal source and wait for the EKF failsafe: "position lost",
-  then for the stale-AUTO case "EKF Failsafe" after arming and its clearing
-  before AUTO. #32514 expects a position only where the mode or the source
-  set needs one, and holds the count while landed, so on this stack the
-  failsafe never comes; it is the shared-state change ARCH-1 is about, and
-  whichever of the two PRs merges second has to meet it. Measured
-  2026-10-30: both pass on #32475's head alone (`60cee67154`, master); with
-  #32514's two gates taken out of `ekf_check()`, ThrowDropTwiceWithoutReentry
-  passes here and the stale-AUTO test still fails, its failsafe tripping
-  while disarmed, before the arm, where it takes no action and never reports
-  clearing (on #32475 alone it trips just after the arm). Both fail
-  consistently here, in the set and alone (2 of 2). ThrowSrcSetHandoff's
-  first leg waits for "Loiter waiting for position", which the failsafe
-  guarantees on #32475 alone; here it depends on whether the EKF has taken
-  GPS back up within the 100 ms settle, and passed 2 of 3.
+- Push #32475's four test fixes (`r1030/32475-5`, four commits on
+  `60cee67154`, the same as refresh12's `28223b9b5b`..`c0c0f45759`). Its
+  tests had leaned on master's EKF failsafe, which #32514 changes; with
+  them they hold on both, so neither PR's code has to change for the other.
 - Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
   offer the Replay reboot upstream: master sets the larger buffer without it.
 - `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
