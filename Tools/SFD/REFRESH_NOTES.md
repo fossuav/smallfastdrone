@@ -75,7 +75,10 @@ reply exists") before acting on it.
   timeout, and the flash check #34543 tightened in `af50a66828` misses that
   0.6 s window. A problem in #34543's test, not the top-up: fixed here by
   `SIM_TERRAIN 0` in the test (`6e5082b5a8`, comment `b8a7a6be2e`), 12 of
-  12 with the tile cached, and ported to #34543 (see "Owed").
+  12 with the tile cached, and pushed to #34543 as `351aea9eaa`
+  (`af50a66828` -> `351aea9eaa`, quick-reviewed), the same lines; the lock
+  records it. On the PR branch the tile shortens REL to 1.05 s and the leg
+  still passed 10 of 10; with the fix REL holds throughout, 10 of 10.
 - Previously built: `SmallFastDrone-4.7.2-refresh11` (worktree `../sfd-refresh11`),
   2026-10-22, on the 4.7.2 base (`b74b576dc9`). 348 planned commits, 271 on the
   branch with the fixups, local work and tests. Firmware "SmallFastDrone
@@ -432,12 +435,6 @@ After:
 
 - Flight evidence for refresh12 topup1's two PRs once it is promoted:
   `FIELD_PLAN.md`, "Additions for refresh12" (#33366, #34941).
-- Push #34543's OSDEKFLanes terrain fix: `r1030/34543-t` (`351aea9eaa`,
-  on the PR head `af50a66828`, quick-reviewed), the same lines as
-  refresh12's `6e5082b5a8` and `b8a7a6be2e`: `SIM_TERRAIN 0` in the test.
-  On the PR branch the tile shortens REL to 1.05 s and the leg still
-  passed 10 of 10; with the fix REL holds throughout and 10 of 10 pass.
-  Lock #34543 at the new head once it is pushed.
 
 - topup12 (2026-10-08) carries #33478's step hold from `fix/33478`
   (`e0d009ff31`, `6185109557`) ahead of the PR, for the flight that repeats
