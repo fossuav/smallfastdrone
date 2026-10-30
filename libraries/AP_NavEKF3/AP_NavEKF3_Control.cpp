@@ -344,7 +344,9 @@ void NavEKF3_core::setAidingMode()
         }
         case AID_RELATIVE: {
             // Check if the fusion has timed out (flow measurements have been rejected for too long)
-            bool flowFusionTimeout = ((imuSampleTime_ms - prevFlowFuseTime_ms) > 5000);
+            // time the tilt check withheld flow for was not spent rejecting it, so it does not count
+            const uint32_t flowUnfused_ms = imuSampleTime_ms - prevFlowFuseTime_ms;
+            bool flowFusionTimeout = (flowUnfused_ms - MIN(flowWithheld_ms, flowUnfused_ms)) > 5000;
 #if EK3_FEATURE_OPTFLOW_AGL_KF
             flowFusionTimeout |= flowVelResetUnhealthy;
 #endif
@@ -522,6 +524,7 @@ void NavEKF3_core::setAidingMode()
                 // Reset time stamps
                 flowValidMeaTime_ms = imuSampleTime_ms;
                 prevFlowFuseTime_ms = imuSampleTime_ms;
+                flowWithheld_ms = 0;
 #if EK3_FEATURE_OPTFLOW_AGL_KF
                 flowFuseTimeAxis_ms[0] = flowFuseTimeAxis_ms[1] = imuSampleTime_ms;
                 memset(flowVelResetTimes_ms, 0, sizeof(flowVelResetTimes_ms));

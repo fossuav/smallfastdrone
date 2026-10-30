@@ -223,6 +223,8 @@ void NavEKF3_core::InitialiseVariables()
     flowFocusRestRng = 0;
     flowMeaTime_ms = 0;
     prevFlowFuseTime_ms = 0;
+    flowWithheld_ms = 0;
+    flowSampleTime_ms = 0;
 #if EK3_FEATURE_OPTFLOW_AGL_KF
     flowFuseTimeAxis_ms[0] = flowFuseTimeAxis_ms[1] = 0;
     flowVelResetCount = 0;

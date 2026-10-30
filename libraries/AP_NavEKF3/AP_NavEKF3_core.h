@@ -1441,6 +1441,8 @@ private:
     ftype hgtMea;                   // height measurement derived from either baro, gps or range finder data (m)
     bool inhibitGndState;           // true when the terrain position state is to remain constant
     uint32_t prevFlowFuseTime_ms;   // time both flow measurement components passed their innovation consistency checks
+    uint32_t flowWithheld_ms;       // time since the last flow fusion that the tilt check withheld samples for
+    uint32_t flowSampleTime_ms;     // time of the last flow sample, used or not
 #if EK3_FEATURE_OPTFLOW_AGL_KF
     uint32_t flowFuseTimeAxis_ms[2];// per-axis time the flow innovation test last passed, used to detect a single-axis lockout
     uint8_t flowVelResetCount;      // count of horizontal velocity resets triggered by optical flow recovery
