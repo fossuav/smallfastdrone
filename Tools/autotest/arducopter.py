@@ -24293,6 +24293,9 @@ RTL_ALT_M 111
             "OSD1_EKF1_EN": 1,
             "OSD1_EKF1_X": 1,
             "OSD1_EKF1_Y": 10,
+            # with a terrain tile cached, SITL's range finder reads 0.55 m at rest
+            # here, and the lane then reports REL for only 1 s once its flow stops
+            "SIM_TERRAIN": 0,
         })
         self.set_analog_rangefinder_parameters()
         port = self.spare_network_port()
