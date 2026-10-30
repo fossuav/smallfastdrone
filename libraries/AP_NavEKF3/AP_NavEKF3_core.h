@@ -1523,6 +1523,8 @@ private:
     bool aglKfRestartRequested;     // restart the AGL KF from the next new range reading
 #endif
     uint32_t flowPassTimeAxis_ms[2]; // time each flow axis last passed its innovation consistency check, written nowhere else
+    uint32_t flowWithheld_ms;       // time since the last flow fusion that the tilt check withheld samples for
+    uint32_t flowSampleTime_ms;     // time of the last flow sample, used or not
     Vector2 flowTestRatio;          // square of optical flow innovations divided by fail threshold used by main filter where >1.0 is a fail
     Vector2F auxFlowTestRatio;      // sum of squares of optical flow innovation divided by fail threshold used by 1-state terrain offset estimator
     ftype R_LOS;                    // variance of optical flow rate measurements (rad/sec)^2
