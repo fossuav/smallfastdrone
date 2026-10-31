@@ -1068,6 +1068,9 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @User: Standard
     AP_GROUPINFO("TKOFF_RPM_MAX", 7, ParametersG2, takeoff_rpm_max, 0),
 
+    // 30 was VALT_POS_EXPO on the June 4.7.0 builds and TKOFF_CPU_AVG on the betas of 2026-10-31
+    // 31 was TKOFF_CPU_PEAK on the betas of 2026-10-31
+
 #if AP_CPU_IDLE_STATS_ENABLED
     // @Param: TKOFF_CPU_AVG
     // @DisplayName: Takeoff Check average CPU load maximum
@@ -1075,7 +1078,7 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Units: %
     // @Range: 0 99.9
     // @User: Advanced
-    AP_GROUPINFO("TKOFF_CPU_AVG", 30, ParametersG2, takeoff_cpu_avg_max, 95.0),
+    AP_GROUPINFO("TKOFF_CPU_AVG", 41, ParametersG2, takeoff_cpu_avg_max, 95.0),
 
     // @Param: TKOFF_CPU_PEAK
     // @DisplayName: Takeoff Check peak CPU load maximum
@@ -1083,7 +1086,7 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Units: %
     // @Range: 0 99.9
     // @User: Advanced
-    AP_GROUPINFO("TKOFF_CPU_PEAK", 31, ParametersG2, takeoff_cpu_peak_max, 99.5),
+    AP_GROUPINFO("TKOFF_CPU_PEAK", 42, ParametersG2, takeoff_cpu_peak_max, 99.5),
 #endif
 #endif
 
