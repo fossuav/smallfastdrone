@@ -444,7 +444,10 @@ After:
     into an option, a default flipped, a setting renamed - put the value that
     keeps today's behaviour in `hwdef/include/sfd_defaults.parm` (or, for a
     define, the SFD hwdefs), in the base. Users must not see a refresh.
-17. `refresh.sh lock`, `refresh.sh rerere-save`, commit both.
+17. `refresh.sh lock` (with `SFD_BASE` set, see the refresh12 traps), then
+    the rerere archive as the last committed one plus the entries this
+    refresh used, not `refresh.sh rerere-save` in a clone other sessions
+    share (see the refresh12 traps); commit both.
 18. `refresh.sh promote SmallFastDrone-4.7.1-beta`. The push is a force push
     and needs `/prepare-for-push`.
 
@@ -1210,6 +1213,15 @@ one because it is master's and costs nothing.
   (or clear them in both) before comparing, and check their sizes: a tile
   file can be a 0-byte placeholder that loads nothing (TERR Status 1), as
   #34543's worktree had.
+- **`refresh.sh rerere-save` archives the whole shared cache.** rerere
+  keeps one cache per clone, so it holds every worktree's resolutions, PR
+  rebases included: on 2026-10-31 it had 338 resolved entries (a 38 MB
+  archive) against the committed archive's 226 (21 MB). The save also
+  deletes every unresolved entry, which another session may be in the
+  middle of. refresh12 built its archive from refresh11's plus the entries
+  its run used; do the same. topup3 ran the save by mistake: the archive
+  was restored from git, and the 20 unresolved entries it deleted that the
+  2026-10-30 backup held were put back (no worktree had a conflict open).
 - **rerere replays a bad resolution as readily as a good one.** refresh11's
   #33507 resolution that dropped EK3_AGL_ABIAS_P was in the cache, and
   refresh12's run replayed it without stopping. Its postimage
