@@ -64,6 +64,14 @@ No sweep. The day's changes, all on Andy's PRs:
     quick re-arm, #34210's saturation feedback. Most other rows are
     description items the unposted 10-30 drafts cover. Records:
     `../ardupilot-pr-analysis/<PR>/README.md`, "2026-10-31".
+- Posted the same evening, at Andy's word: descriptions on #29000, #31274,
+  #34210, #34456, #34630, #32475 and #34251 (retitled), the 10-30 drafts brought
+  up to date with the day's flights and fixes; replies on #29000 (the why),
+  #31274 and #32475 (the blocker fixes), #32471 (the quick re-arm, and the
+  flights), #34210 (rmackay9's question, and the saturation feedback) and
+  #34456 (peterbarker's retry question). Not posted: #32232 and #32238
+  (rishabsingh3003's PRs) and #34543's reworded commit messages, which belong
+  to its squash.
 - #32473's CI: one sitltest-quadplane-tests1c job failed after 53 min with no
   failed step and no log; looks like a runner timeout, rerun needed.
 - Found on the way, master's and not filed: the static yaw reference is
