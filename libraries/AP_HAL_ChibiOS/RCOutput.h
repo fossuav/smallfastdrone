@@ -72,13 +72,15 @@ public:
 #ifdef HAL_WITH_BIDIR_DSHOT
     uint16_t get_erpm(uint8_t chan) const override { return _bdshot.erpm[chan]; }
     float get_erpm_error_rate(uint8_t chan) const override {
-      // a window that has just restarted has too few frames to give a rate, so report the last
-      // full one, or 100% before there is one
       const uint32_t frames = _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan];
-      if (frames < BDSHOT_ERROR_RATE_MIN_FRAMES) {
-        return (_bdshot.erpm_window_mask & (1U << chan)) ? _bdshot.erpm_window_error_rate[chan] : 100.0f;
+      const float rate = frames == 0 ? 0.0f : 100.0f * float(_bdshot.erpm_errors[chan]) / frames;
+      if (frames >= BDSHOT_ERROR_RATE_MIN_FRAMES) {
+        return rate;
       }
-      return 100.0f * float(_bdshot.erpm_errors[chan]) / (1 + frames);
+      // a window that has just restarted is too short to stand alone: report no less than the
+      // last full window, or 100% before there is one, while still showing new errors
+      const float last = (_bdshot.erpm_window_mask & (1U << chan)) ? _bdshot.erpm_window_error_rate[chan] : 100.0f;
+      return rate > last ? rate : last;
     }
     /*
       allow all erpm values to be read and for new updates to be detected - primarily for IOMCU
