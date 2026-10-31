@@ -77,11 +77,11 @@ bool NavEKF3_core::measuredVertVelAgrees(void) const
   in an aided mode, or a body frame velocity on all three axes, since a tilted
   vehicle puts the vertical on any of them. The latest sample tested must have
   passed its gate, so a rejected one drops out at once whatever the source's rate,
-  and one must have been fused in the last second.
+  and one must have been fused in the last 2 s.
 */
 bool NavEKF3_core::measuredVertVelFused(void) const
 {
-    const uint32_t fusedRecently_ms = 1000;
+    const uint32_t fusedRecently_ms = 2000;
     const bool navVelFused = ((imuSampleTime_ms - lastVelDFuseTime_ms) < fusedRecently_ms) && (velTestRatio < 1.0f);
     const bool bodyVelFused = ((imuSampleTime_ms - prevBodyVelFuseTime_ms) < fusedRecently_ms) &&
                               (bodyVelTestRatio[0] < 1.0f) && (bodyVelTestRatio[1] < 1.0f) && (bodyVelTestRatio[2] < 1.0f);
