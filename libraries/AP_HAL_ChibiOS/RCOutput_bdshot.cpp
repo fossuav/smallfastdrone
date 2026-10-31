@@ -281,10 +281,14 @@ void RCOutput::bdshot_prepare_for_next_pulse(pwm_group& group)
             _bdshot.erpm_errors[chan]++;
         }
         // reset statistics periodically, keeping the finished window's rate to report
-        // while the new one is too short to give its own
+        // while the new one is too short to give its own. A window with too few frames,
+        // such as the first reply after telemetry starts or resumes, gives no rate
         if (now - _bdshot.erpm_last_stats_ms[chan] > 5000) {
-            _bdshot.erpm_window_error_rate[chan] = 100.0f * float(_bdshot.erpm_errors[chan]) /
-                (1 + _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan]);
+            const uint32_t frames = _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan];
+            if (frames >= BDSHOT_ERROR_RATE_MIN_FRAMES) {
+                _bdshot.erpm_window_error_rate[chan] = 100.0f * float(_bdshot.erpm_errors[chan]) / (1 + frames);
+                _bdshot.erpm_window_mask |= 1U << chan;
+            }
             _bdshot.erpm_clean_frames[chan] = 0;
             _bdshot.erpm_errors[chan] = 0;
             _bdshot.erpm_last_stats_ms[chan] = now;

@@ -76,7 +76,7 @@ public:
       // full one, or 100% before there is one
       const uint32_t frames = _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan];
       if (frames < BDSHOT_ERROR_RATE_MIN_FRAMES) {
-        return _bdshot.erpm_last_stats_ms[chan] == 0 ? 100.0f : _bdshot.erpm_window_error_rate[chan];
+        return (_bdshot.erpm_window_mask & (1U << chan)) ? _bdshot.erpm_window_error_rate[chan] : 100.0f;
       }
       return 100.0f * float(_bdshot.erpm_errors[chan]) / (1 + frames);
     }
@@ -597,6 +597,7 @@ private:
         uint16_t erpm_clean_frames[max_channels];
         uint32_t erpm_last_stats_ms[max_channels];
         float erpm_window_error_rate[max_channels]; // error rate of the last full stats window, percent
+        uint32_t erpm_window_mask; // channels that have had a full stats window
         uint8_t motor_poles;
 #endif
     } _bdshot;
