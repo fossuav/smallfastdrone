@@ -242,6 +242,20 @@ void RCOutput::bdshot_ic_dma_deallocate(Shared_DMA *ctx)
     }
 }
 
+// the error rate of a channel's replies, percent. A window that has just restarted is too short
+// to stand alone, so it reports no less than the last full window, or 100% before there is one,
+// while still showing errors it has already counted
+float RCOutput::bdshot_error_rate(uint8_t chan) const
+{
+    const uint32_t frames = _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan];
+    const float rate = frames == 0 ? 0.0f : 100.0f * float(_bdshot.erpm_errors[chan]) / frames;
+    if (frames >= BDSHOT_ERROR_RATE_MIN_FRAMES) {
+        return rate;
+    }
+    const float last = (_bdshot.erpm_window_mask & (1U << chan)) ? _bdshot.erpm_window_error_rate[chan] : 100.0f;
+    return rate > last ? rate : last;
+}
+
 // setup bdshot for sending and receiving the next pulse
 void RCOutput::bdshot_prepare_for_next_pulse(pwm_group& group)
 {
@@ -293,6 +307,8 @@ void RCOutput::bdshot_prepare_for_next_pulse(pwm_group& group)
             _bdshot.erpm_errors[chan] = 0;
             _bdshot.erpm_last_stats_ms[chan] = now;
         }
+        // publish a single value, which a reader on another thread cannot see torn by a restart
+        _bdshot.erpm_error_rate[chan] = bdshot_error_rate(chan);
     }
 
     if (group.bdshot.enabled) {

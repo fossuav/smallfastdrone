@@ -71,17 +71,7 @@ public:
     // surface dshot telemetry for use by the harmonic notch and status information
 #ifdef HAL_WITH_BIDIR_DSHOT
     uint16_t get_erpm(uint8_t chan) const override { return _bdshot.erpm[chan]; }
-    float get_erpm_error_rate(uint8_t chan) const override {
-      const uint32_t frames = _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan];
-      const float rate = frames == 0 ? 0.0f : 100.0f * float(_bdshot.erpm_errors[chan]) / frames;
-      if (frames >= BDSHOT_ERROR_RATE_MIN_FRAMES) {
-        return rate;
-      }
-      // a window that has just restarted is too short to stand alone: report no less than the
-      // last full window, or 100% before there is one, while still showing new errors
-      const float last = (_bdshot.erpm_window_mask & (1U << chan)) ? _bdshot.erpm_window_error_rate[chan] : 100.0f;
-      return rate > last ? rate : last;
-    }
+    float get_erpm_error_rate(uint8_t chan) const override { return _bdshot.erpm_error_rate[chan]; }
     /*
       allow all erpm values to be read and for new updates to be detected - primarily for IOMCU
      */
@@ -600,6 +590,7 @@ private:
         uint32_t erpm_last_stats_ms[max_channels];
         float erpm_window_error_rate[max_channels]; // error rate of the last full stats window, percent
         uint32_t erpm_window_mask; // channels that have had a full stats window
+        float erpm_error_rate[max_channels]; // the rate to report, percent, written only by the RCOutput thread
         uint8_t motor_poles;
 #endif
     } _bdshot;
@@ -760,6 +751,8 @@ private:
     static uint32_t bdshot_decode_telemetry_packet_f1(dmar_uint_t* buffer, uint32_t count, bool reversed);
     bool bdshot_decode_telemetry_from_erpm(uint16_t erpm, uint8_t chan);
     bool bdshot_decode_dshot_telemetry(pwm_group& group, uint8_t chan);
+    // the error rate of a channel's replies from its counts, percent
+    float bdshot_error_rate(uint8_t chan) const;
     static uint8_t bdshot_find_next_ic_channel(const pwm_group& group);
     static void bdshot_dma_ic_irq_callback(void *p, uint32_t flags);
     static void bdshot_finish_dshot_gcr_transaction(virtual_timer_t* vt, void *p);
