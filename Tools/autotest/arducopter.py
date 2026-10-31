@@ -19759,6 +19759,54 @@ return update, 100
         self.zero_throttle()
         self.reboot_sitl()
 
+    def ThrowStayHoldsRestoredPosition(self):
+        '''Staying in throw holds the position the restored source set brings back'''
+        # THROW_SRC_INI takes the horizontal source away for the drop, so the
+        # height is reached with no position and throw holds level only.  With
+        # THROW_NEXTMODE left at THROW nothing hands over, so once the
+        # restored set gives a position back throw has to hold it, or the
+        # vehicle drifts with the wind for as long as it stays in throw
+        self.set_parameters({
+            "SIM_SHOVE_Z": -10.5,
+            "SIM_WIND_SPD": 5,
+            "SIM_WIND_DIR": 90,
+            "THROW_TYPE": 1,           # drop
+            "THROW_NEXTMODE": 18,      # stay in THROW
+            "THROW_SRC_INI": 2,        # no horizontal aiding for the tumble
+            "THROW_SRC_SET": 0,        # put the pre-throw set back on completion
+            "EK3_SRC2_POSXY": 0,
+            "EK3_SRC2_VELXY": 0,
+            "MOT_SPOOL_TIME": 0.5,
+        })
+        self.wait_ready_to_arm()       # EKF healthy on SRC1 before THROW moves it
+        self.change_mode('THROW')
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True, timeout=30)
+        self.wait_statustext("Throw: restored EKF Source Set 1", check_context=True, timeout=30)
+        self.delay_sim_time(10, reason="the EKF takes up the restored set's position")
+        self.assert_mode('THROW')
+        start = self.mav.location()
+        self.delay_sim_time(20, reason="watch the hold in the wind")
+        self.assert_mode('THROW')
+        drift = self.get_distance(start, self.mav.location())
+        self.progress("Drift over 20 s staying in throw: %.1f m" % drift)
+        if drift > 5:
+            raise NotAchievedException("Drifted %.1f m staying in throw with a position" % drift)
+
+        self.change_mode('LAND')
+        self.wait_disarmed(timeout=120)
+        self.zero_throttle()
+        self.reboot_sitl()
+
     def ThrowDropArrestedShort(self):
         '''A drop that stops short of THROW_ALT_DCSND must not stay at zero collective'''
         # A short toss lands before it has fallen THROW_ALT_DCSND below the
@@ -22484,6 +22532,7 @@ return update, 100
              self.ThrowDropLongFall,
              self.ThrowSrcInitRestoredOnCompletion,
              self.ThrowUpwardNoPositionNextMode,
+             self.ThrowStayHoldsRestoredPosition,
              self.ThrowDropArrestedShort,
              self.ThrowDropHeldSpinNoPosition,
              self.ThrowDropEKFFailsafePosHold,
