@@ -72,7 +72,13 @@ public:
 #ifdef HAL_WITH_BIDIR_DSHOT
     uint16_t get_erpm(uint8_t chan) const override { return _bdshot.erpm[chan]; }
     float get_erpm_error_rate(uint8_t chan) const override {
-      return 100.0f * float(_bdshot.erpm_errors[chan]) / (1 + _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan]);
+      // a window that has just restarted has too few frames to give a rate, so report the last
+      // full one, or 100% before there is one
+      const uint32_t frames = _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan];
+      if (frames < BDSHOT_ERROR_RATE_MIN_FRAMES) {
+        return _bdshot.erpm_last_stats_ms[chan] == 0 ? 100.0f : _bdshot.erpm_window_error_rate[chan];
+      }
+      return 100.0f * float(_bdshot.erpm_errors[chan]) / (1 + frames);
     }
     /*
       allow all erpm values to be read and for new updates to be detected - primarily for IOMCU
@@ -576,6 +582,11 @@ private:
     uint16_t period_corked[max_channels];
 
     // handling of bi-directional dshot
+#ifdef HAL_WITH_BIDIR_DSHOT
+    // frames a stats window counts before its own error rate is reported: with fewer, a run of
+    // good frames makes an ESC failing 5% of its replies read under 1%
+    static constexpr uint16_t BDSHOT_ERROR_RATE_MIN_FRAMES = 250;
+#endif
     struct {
         uint32_t mask;
         uint32_t disabled_mask; // record of channels that were tried, but failed
@@ -585,6 +596,7 @@ private:
         uint16_t erpm_errors[max_channels];
         uint16_t erpm_clean_frames[max_channels];
         uint32_t erpm_last_stats_ms[max_channels];
+        float erpm_window_error_rate[max_channels]; // error rate of the last full stats window, percent
         uint8_t motor_poles;
 #endif
     } _bdshot;
