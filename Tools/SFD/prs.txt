@@ -30,7 +30,7 @@
 32972   # Protect height fusion from baro ground effect at takeoff
 34362   # AP_GroundEffect: stop touchdown_expected latching in cruise (follow-up to merged #32472)
 32514   # Reset EKF failsafe gate on source set change
-33366   # robertlong13: true CPU load measured from boot, per-reader windows, TKOFF_CPU_AVG/PEAK (SFD-O4 log64 could not take off). Its two parameters take var_info2 60/61, which #32475 already uses for THROW_SRC_SET/THROW_DROP_CNF: renumber the pair here (30/31 are free on both), never #32475's
+33366   # robertlong13: true CPU load measured from boot, per-reader windows, TKOFF_CPU_AVG/PEAK (SFD-O4 log64 could not take off). Its two parameters take var_info2 60/61, which #32475 already uses for THROW_SRC_SET/THROW_DROP_CNF: renumber the pair here to 41/42 (never used on any branch; 30/31 are retired, see REFRESH_NOTES "Parameter indices"), never #32475's
 
 # --- Submitted, limited review ---
 27893   # Fast rates (1/3) [merged to master 2026-09, not in 4.7]
@@ -41,7 +41,7 @@
 31770   # DFU mode via system bootloader
 32401   # Pending arm on switch
 32473   # Acro bias inhibit
-32270   # VALT velocity alt-hold mode (VALT_POS_EXPO at index 29 to match the branch)
+32270   # VALT velocity alt-hold mode (VALT_POS_EXPO at index 30, its index on the June 4.7.0 builds; 29 is retired)
 34696   # EKF failsafe returns to Loiter or PosHold once it clears (FS_OPTIONS bit 6); after #32514 and #32270, which edit the same ekf_check.cpp
 33318   # AC_Loiter brake/drag feed-forward fix
 33359   # AGL KF rangefinder height switch + fuse aglKfH as the height observation

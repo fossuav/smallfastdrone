@@ -1,5 +1,18 @@
 # SFD flight card: refresh12, the beta after topup3
 
+SFD-O4 flew this card on 2026-10-31 (logs 66-71, `FLIGHT_VALIDATION.md`).
+Before flashing `95ad9b9c` or later (SmallFastDronev1 md5 `f1c7c139`), which
+puts VALT_POS_EXPO back on its June index and moves TKOFF_CPU_AVG/PEAK:
+
+- After the flash, set `VALT_POS_EXPO` 0. It reads the 95 stored as
+  `TKOFF_CPU_AVG` on 2026-10-31. TKOFF_CPU_AVG/PEAK return to 95/99.5.
+- `ACC_ZBIAS_LEARN` is 15 with log71's bit 2 values saved. For 11, set
+  `INS_ACC_VRFB_Z` 0.0301 and `INS_ACC2_VRFB_Z` 0.0244 (log69's).
+- `EK3_FLOW_QMIN` is still 60 from bench check 0d.
+
+Still to fly from this card: 0b and 0d, item 1's second takeoff in one boot,
+item 5's re-arm after a landing, item 7's restarted log, and the T25.
+
 Firmware: refresh12 topup3 at `f93bd10a` or later, the code to be promoted as the
 beta ("SmallFastDrone V4.7.2"). SmallFastDronev1 `arducopter.apj` for SFD-O4, md5
 `7558599a` as built from `f93bd10a`; MicoAir743v2 built from the same commit for

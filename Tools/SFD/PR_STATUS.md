@@ -111,7 +111,7 @@ Open after the round:
   87% average with the rate thread. #33366's TKOFF_CPU_AVG/PEAK and
   #32475's THROW_SRC_SET/THROW_DROP_CNF both take var_info2 60/61 against
   master, so whichever merges second renumbers; SFD moves #33366's to
-  30/31 (REFRESH_NOTES.md, "Parameter indices").
+  41/42, on 30/31 until 2026-10-31 (REFRESH_NOTES.md, "Parameter indices").
 - Later still: #34543 pushed `af50a66828` -> `351aea9eaa`, test only:
   `SIM_TERRAIN 0` in OSDEKFLanes, whose no-flow-data leg missed its flash
   whenever SITL had the CMAC terrain tile cached (quick review, COMMENT

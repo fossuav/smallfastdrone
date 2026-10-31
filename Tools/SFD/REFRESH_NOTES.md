@@ -1137,11 +1137,18 @@ moves, and move the newcomer:
 |---|---|---|
 | ACC_ZBIAS_LEARN | 23 | #32471 on master uses 25 (master has 21-23 taken) |
 | THROW_DROP_AG | 21 | #32475 takes 25 |
-| VALT_POS_EXPO | 29 | #32270 takes 25 |
+| VALT_POS_EXPO | 30 | #32270 takes 25. 30 is its index on the June 4.7.0 builds; it sat on 29 from 4.7.1 until 2026-10-31 |
 | GNDEFF_ subgroup | 24 | from merged #32472, untouched |
 | FLOW_HGT_MIN (AP_OpticalFlow) | 9 | #34292 takes 8, which shipped betas gave to FLOW_HF_RATEF (#33497, dropped in refresh10); keep 8 empty so a saved FLOW_HF_RATEF never loads as FLOW_HGT_MIN |
 | SIM_SONAR_OFFSET (SITL var_info3) | 57 | local backport; master has it in its own group |
-| TKOFF_CPU_AVG, TKOFF_CPU_PEAK | 30, 31 | #33366 takes 60/61, which #32475's THROW_SRC_SET/THROW_DROP_CNF hold on the shipped betas (and on master, so upstream one of the two renumbers) |
+| TKOFF_CPU_AVG, TKOFF_CPU_PEAK | 41, 42 | #33366 takes 60/61, which #32475's THROW_SRC_SET/THROW_DROP_CNF hold on the shipped betas (and on master, so upstream one of the two renumbers). On 30/31 for the betas of 2026-10-31, where 30 read a June board's VALT_POS_EXPO (SFD-O4 log66) |
+
+Retired in var_info2, never to be reused: 29 (THROW_YAW_DEG on the June
+4.7.0 builds, VALT_POS_EXPO from 4.7.1 to 2026-10-31) and 31 (TKOFF_CPU_PEAK
+on the betas of 2026-10-31), each marked "N was" in the table. AP_Param loads
+a stored value by index and type, not name, so pick a new index against every
+shipped beta's table, not today's source (ARCH-22): 41-46 and 48-58 have never
+held anything on any branch.
 
 Check with `check_param_tables.py`, never by eye. A duplicate index builds
 clean and panics every SITL boot (`PANIC: Bad parameter table`, so every test
