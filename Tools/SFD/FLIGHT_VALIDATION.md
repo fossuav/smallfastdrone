@@ -8,6 +8,36 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-10-31: squash audit of logs 66-71 and the T25 on 0cb49e7d
+
+Which commits on top of Andy's PRs these flights ran, and so may fold into
+the commit they fix. Evidence is a message, event or log field only that
+path produces, or Replay with the change removed against the as-flown build
+(refresh12 `f93bd10a6f`; for the T25, Replay rebuilt at `0cb49e7dfb`). Full
+tables in `../ardupilot-pr-analysis/squash-audit-2026-10-31/`. Nothing
+squashed yet.
+
+| PR | May fold now | Stays on top, and why |
+|---|---|---|
+| #34942 | `2a52c965e2` into G `21a8e3a683` (neither ran) | static yaw fix `dc76e048a6`: commit 5 flew (core 1 yaw moves 0.14-0.29 deg at every boot without it), the fix needs a flight with no yaw source |
+| #32471 | `a7fdc4d09b`, `7e0882eb10` into `f1b61c9cf8` (flown with apply, log63 and 67-71); two runs of tests | `01227784b6`, `19206748ae`, `3973add04c` never ran; v3 flew but cannot move below `01227784b6` |
+| #32473 | nothing; bit 3 and `968ea7d7e5` flew (variance at its floor at every armed acro exit) | still stacked on #32471 from before v3: restack, one rerere'd conflict |
+| #29000 | `fcc3339b2b` into `4cc85b68cf` (fix flown: one "rate set" at boot, two without; base needs tcal) | |
+| #31274 | ESC_Telem fixes into `cb66e83fde`, motor test fixes into `a9ae4cdc82`, docs, tests | the four DShot commits until the bot's blocker is fixed; SIM_ESC_ERR_RATE and the AP_Motors helper stay separate |
+| #34210 | all: nothing in it has flown (`LAND_FS_OPTIONS` 0 everywhere) | |
+| #33484 | `fab41a7cf9` acted once (T25 ft3 130.22 s, a later sample), not shown better: Andy's call | `e0e4a38f57`: no PX4Flow airframe flies |
+| #34380 | `4c3f1a7724` flew and held core 1's HAGL on the range at 17 m in log69 (0.05 m without); its lines are #33585's | target is #33585's `0b7027979e`, or it stays its own commit |
+| #34543 | `78aa029352` into `cbda421ea8` (every OSD frame, no stall); test fixups | DCM fix `a2f1de5edd` never ran |
+| #34630 | its 10-30 fixes fold freely (no display commit confirmed) | `17ead03a5e` if bench check 0d showed the floor only at 94 |
+| #34292 | Rover pair `244d608769`+`b43ace7296`, Rover test fixup | rest-reading clear `19b9e2bd9a` never acted |
+| #34696, #32514, #33359, #32475, #32270 | test fixups only (#32475's 25 test commits among themselves) | restore never fired (T25 pitch rests 25 us off trim, outside `RC2_DZ`); spool-down count never ran; odometry half unflown; no Throw since the 10-30 fixes; `ee9dc05040` half flown |
+
+Nothing on top, or nothing flown to fold: #34941, #34456, #34457, #33507,
+#33478, #33585, #33568, #34851, #34933 and the rest. Corrections: the
+range-reads-too-low hold of #34457 never engaged in 12 logs, so log65's
+landed floor was held by its other commits; `bf1ea90b4e`'s message needs
+the boot yaw shift added.
+
 ## 2026-10-31: SFD-O4 logs 66-71, the refresh12 card
 
 Firmware `ea8cef60` (the card commit, same code as `f93bd10a`), one flight
@@ -21,7 +51,11 @@ Bench. 0a (#29000): "rate set to 2007Hz" once at boot in every log, RTDT
 logs. Armed, ESC.Err stayed at or below 0.9% on every motor except log70's
 hard acro (1.85, 1.54 and 1.82% on motors 1, 3 and 4 at 340-370 s). At
 boot all four read 75-99% from 4.9 to 5.6 s, alike on every motor and log;
-log65 read 97-99% for 3 s. The takeoff gate reads it only armed. 0c
+log65 read 97-99% for 3 s. The takeoff gate reads it only armed.
+(Corrected the same day: that contrast says nothing about #31274. log65's
+build carries the same #31274 code, builds without its DShot fixes (log57,
+log59) show the same 0.7 s, and log65's 3 s comes from its ESC telemetry
+starting 2 s later.) 0c
 (#32238, `ESC_CALIBRATION 9`): every log starts at 3.07 s against 5.10 s in
 logs 63 and 65, 2.0 s sooner; passed. 0d (#34630): not in the logs;
 `EK3_FLOW_QMIN` is still 60.
@@ -84,7 +118,9 @@ it stayed within 1-3 m/s of GPS. Above the range finder it read up to 14
 m/s high (log69 129-136 s, 13-35 m), which is flow scale error. Passed.
 log70 also flew #34630's stale-range deferral: "flow recovery deferred,
 range stale" at 228.24 s, with core 1 6-7 m/s high and no range. Once the
-range returned at 230 s it converged within 2 s without a reset.
+range returned at 230 s it converged within 2 s without a reset. Core 1
+also took three lockout resets, unannounced as `EK3_OPTIONS` bit 6 quiets
+them: XKF7.FVC at log68 77.57 s, log69 181.27 s and log70 287.57 s.
 
 Item 5 (#34942): 8 arms, with no "height error" refusal and no reset at
 rest after any of the six landings. VD at arm read 0.00-0.01 m/s. Every
@@ -97,7 +133,7 @@ not flown. REV3 16 at boot and 17 at arming, AZ 0.00 at arming, Replay
 matches, and no height error. It saved -0.042/-0.039, the whole hover bias,
 so a return to 11 needs log69's 0.030/0.024 put back.
 
-Arm pending, log67: 5 s after the switch (`ARMING_PEND_TIM 5`), still with
+Arm pending (#32401), log67: 5 s after the switch (`ARMING_PEND_TIM 5`), still with
 no position, it reset both EKF cores at 29.87 s ("Arm pending: EKF bootstrap
 reset"). The GPS checks were already passing (XKF4.GPS 0). The EKF first
 uses GPS about 30 s after it initialises (34.4-35.9 s on the other boots),
