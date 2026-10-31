@@ -1593,6 +1593,7 @@ void NavEKF3_core::updateMovementCheck(void)
             accel_diff_ratio < frontend->_ognmTestScaleFactor * hysteresis_ratio)
     {
         onGroundNotMoving = true;
+        restStartTime_ms = imuSampleTime_ms;
         logStatusChange = true;
     }
 
