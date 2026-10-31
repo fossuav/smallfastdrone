@@ -66,6 +66,7 @@
 34380   # EKF3: lift the flow height limit where flow nav carries on above it (#33568 relies on it for its fall back)
 33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H
 34941   # EKF3: flow withheld by the tilt check no longer times a flow lane out (SFD-O4 log61's Loiter that did not stop; the zeroed velocities on log65)
+34942   # EKF3: the on-ground height check works again and applies in aided modes, and a vertical velocity left by a clipped impact is reset once the vehicle is still (the T25 drops that re-armed and climbed in VALT). Reworked head 3da7a8cf2e, on by default
 34251   # Persist the fixed notch conversion to INS_HNTC2 (Copter + Plane)
 33879   # FFT notch tune: persist the tracking mode and name the notch used
 34209   # EKF3: do not learn XY accel bias in unaided flight
