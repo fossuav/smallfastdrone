@@ -72,6 +72,10 @@ No sweep. The day's changes, all on Andy's PRs:
   #34456 (peterbarker's retry question). Not posted: #32232 and #32238
   (rishabsingh3003's PRs) and #34543's reworded commit messages, which belong
   to its squash.
+- Andy's decisions the same evening: #31274 keeps its 5 s error-rate window
+  (late-starting failures dilute; listed as a known limit), and #32475 keeps
+  THROW_ALT_DCSND's new release-relative meaning, now stated in its
+  description with a reply to the bot's should-fix.
 - #32473's CI: one sitltest-quadplane-tests1c job failed after 53 min with no
   failed step and no log; looks like a runner timeout, rerun needed.
 - Found on the way, master's and not filed: the static yaw reference is
