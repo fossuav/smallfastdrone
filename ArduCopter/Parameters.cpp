@@ -1069,6 +1069,8 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @User: Standard
     AP_GROUPINFO("TKOFF_RPM_MAX", 7, ParametersG2, takeoff_rpm_max, 0),
 
+    // 31 was TKOFF_CPU_PEAK on the betas of 2026-10-31
+
 #if AP_CPU_IDLE_STATS_ENABLED
     // @Param: TKOFF_CPU_AVG
     // @DisplayName: Takeoff Check average CPU load maximum
@@ -1205,8 +1207,10 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Range: 0 8
     // @Increment: 0.5
     // @User: Advanced
-    AP_GROUPINFO("VALT_POS_EXPO", 29, ParametersG2, valt_pos_expo, 0),
+    AP_GROUPINFO("VALT_POS_EXPO", 30, ParametersG2, valt_pos_expo, 0),
 #endif
+
+    // 29 was THROW_YAW_DEG on the June 4.7.0 builds and VALT_POS_EXPO from 4.7.1 to 2026-10-31
 
 #if MODE_THROW_ENABLED
     // @Param: THROW_DROP_AG
