@@ -412,7 +412,7 @@ void ModeThrow::run()
         // restored source set's, is held: staying in throw, or after a refused
         // handoff, nothing else would stop the vehicle drifting
         if (!xy_controller_active && copter.position_ok() && nextmode_requires_position()) {
-            gcs().send_text(MAV_SEVERITY_INFO, "Throw position regained");
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Throw position regained");
             pos_control->NE_init_controller();
             xy_controller_active = true;
         }
