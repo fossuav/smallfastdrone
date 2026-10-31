@@ -1,67 +1,163 @@
-# SFD flight card: 2026-10-30 review-fix top-up
+# SFD flight card: refresh12, the beta after topup3
 
-Firmware: beta `0cb49e7dfb` (SmallFastDronev1 `arducopter.apj`, md5
-`fb6e5ec3`). Standing settings as before: `LOG_REPLAY 1`, `LOG_DISARMED 2`,
-`EK3_OPTIONS 94`, STABILIZE on a switch. Each check says what log evidence
-shows the changed code ran; a change with no check here gets no flight
+Firmware: refresh12 topup3 at `f93bd10a` or later, the code to be promoted as the
+beta ("SmallFastDrone V4.7.2"). SmallFastDronev1 `arducopter.apj` for SFD-O4, md5
+`7558599a` as built from `f93bd10a`; MicoAir743v2 built from the same commit for
+the T25. Standing settings as before: `LOG_REPLAY 1`, `LOG_DISARMED 2`,
+STABILIZE on a switch, and on SFD-O4 `EK3_OPTIONS 94`. Each check says what in
+the log shows the changed code ran; a change with no check here gets no flight
 evidence from this card.
 
-## Bench, props off
+New since the last flights (SFD-O4 `52b1d36f`, T25 `0cb49e7dfb`): the
+2026-10-30 review fixes, which SFD-O4 has not flown; #33366 (CPU load
+measurement); #34941 (a banked flow lane no longer times out); #32471 v3 (the
+hover bias saved as the change since arming); and #34942 (the on-ground height
+check, and the vertical velocity reset at rest).
+
+## Before the first flight, both airframes
+
+- Set `INS_ACC_VRFB_Z` and `INS_ACC2_VRFB_Z` to 0. SFD-O4 holds -0.044 and
+  -0.049, and the T25 holds 0.042, saved by the old learner as totals. v3
+  would apply them as the change since arming and count the ground bias twice.
+- Do not set `ACC_ZBIAS_LEARN` bit 2 (value 4) for ordinary flying. Bit 2
+  stops the EKF learning its static accel bias on the ground, and #34942 then
+  refuses to arm on "EKF3[n] height error" once that bias has built a
+  vertical velocity at rest. Only item 7 uses it.
+- After a drop or a hard landing, leave the vehicle still on the ground for at
+  least a second before re-arming (#34942).
+
+## SFD-O4: bench, props off
 
 ### 0a. #29000: fast-rate start-up
 
-Boot with the usual `FSTRATE_ENABLE 1`. Pass: "Rate CPU ..., rate set to
-N Hz" appears once during boot (it was twice), and RTDT shows the usual
-loop rate once flying.
+Boot with the usual `FSTRATE_ENABLE`. Pass: "Rate CPU ..., rate set to N Hz"
+appears once during boot (it was twice), and RTDT shows the usual loop rate
+once flying.
 
 ### 0b. #31274: bidirectional DShot error rate, motor test
 
-Motor test each motor in turn at 5-10 % for 3 s. Pass: no "Motor Test:
-motor N errors X% at Y rpm"; if one appears, N must be the output that
-spun. In the log ESC.Err stays at or below 1 for every motor, including
-just after boot when the reversal commands (`SERVO_BLH_RVMASK 14`) go
-out: their missing replies no longer count. Failed replies are now
-charged to the motor that missed them, so a motor whose Err stands out
-from the others is real.
+Motor test each motor in turn at 5-10 % for 3 s. Pass: no "Motor Test: motor N
+errors X% at Y rpm"; if one appears, N must be the output that spun. ESC.Err
+stays at or below 1 for every motor, including just after boot when the
+reversal commands (`SERVO_BLH_RVMASK`) go out. Failed replies are charged to
+the motor that missed them, so a motor whose Err stands out is real.
 
 ### 0c. #32238, optional: ESC_CALIBRATION 9 skips the radio wait
 
-`ESC_CALIBRATION 9`, power on with the transmitter off. Pass: the boot
-log starts about 2 s sooner than with 0. Restore afterwards if 9 is not
-wanted.
+`ESC_CALIBRATION 9`, power on with the transmitter off. Pass: the boot log
+starts about 2 s sooner than with 0. Restore afterwards if 9 is not wanted.
 
-## Flights
+### 0d. #34630: OSD flow quality floor (disarmed)
 
-### 1. #31274: takeoff RPM and error check
+`EK3_FLOW_QMIN 60` with `EK3_OPTIONS 94` (bit 3 on). Cover the flow sensor:
+the lane strength reads below 50 and flashes. Then `EK3_OPTIONS 86` (bit 3
+off): the same cover shows the strength with no floor and no flashing. Restore
+94 and `EK3_FLOW_QMIN 0`.
 
-Read the idle RPM from ESC.RPM in the bench log and set `TKOFF_RPM_MIN` to
-about 70 % of it (`TKOFF_RPM_MAX 0`). Take off in ALT_HOLD or LOITER and
-fly a normal sortie. Pass: takeoff is not held with "ESC RPM or errors
-out of range", and ESC.Err stays below 1 on all four motors through the
-flight. If takeoff is held, the ESC.Err values at that moment are what we
-need. This is the first hardware run of the three DShot statistics fixes.
+## SFD-O4: flights, in order
 
-### 2. #34630: OSD flow quality floor (ground, disarmed)
+### 1. #33366 and #31274: two takeoffs in one boot
 
-`EK3_FLOW_QMIN 60` (if it is 0) with `EK3_OPTIONS 94` (bit 3 on). Cover
-the flow sensor: the lane strength reads below 50 and flashes. Then
-`EK3_OPTIONS 86` (bit 3 off): the same cover shows the strength with no
-floor and no flashing. Restore 94.
+`BRD_IDLE_STATS 3` (bit 0 the threads.txt reader as before, bit 1 the new PM2
+log message). Keep `TKOFF_RPM_MIN` at about 70 % of the idle RPM from the bench
+log (1000 now), `TKOFF_RPM_MAX 0`. Take off in LOITER, land and disarm, then
+take off again without rebooting.
 
-### 3. #32471, optional: inhibit re-logged in a restarted log
+Pass:
+- Neither takeoff is held with "Takeoff blocked: CPU overload" or "ESC RPM or
+  errors out of range".
+- The `@SYS/threads.txt` copies after each arming show LOAD and PEAK changing
+  between armings. log64 read 0.0 % at the first arming of every boot, then
+  froze at 87.4 %.
+- ESC.Err stays below 1 on all four motors.
 
-`ACC_ZBIAS_LEARN 12` (bit 2 plus the acro bit). Powered and disarmed,
-erase the logs from the GCS so a new log starts, then fly a short ACRO
-segment and land. Pass: the new log has a REV3 accel bias inhibit event
-near its start, and Replay of it matches the flight (XKF2.AZ).
+PM2.Peak against the 99.5 % default, at an 87 % average with the rate thread,
+is the margin question left open on #33366. If takeoff is held, the PM2 and
+ESC.Err values at that moment are what we need.
 
-### 4. #32475, only if Throw is flown
+### 2. #32471 v3, pack 1: the hover bias as the change since arming
 
-`THROW_NEXTMODE` ALT_HOLD or LOITER (not AUTO), `THROW_SRC_SET 0`, and
-switch out of THROW and back between throws. Upward toss to 2-3 m. Pass:
-"Throw:" messages show detection, uprighting and the hand-off within
-about 3 s, and no "Internal Error". Two review findings are still open
-(AUTO as next mode, the source-set hand-off); these settings avoid both.
+`ACC_ZBIAS_LEARN 9` (learn, plus the acro bit), with the saved values zeroed
+as above. Hover steadily in LOITER at 2-5 m for at least 60 s, land and
+disarm. Pass: each saved value is about XKF2.AZ at the end of the hover minus
+XKF2.AZ at arming for that IMU's core. log62's would have been about +0.03,
+where the old learner saved -0.03.
+
+### 3. #32471 v3, pack 2: apply it
+
+`ACC_ZBIAS_LEARN 11` (learn and apply), same takeoff and hover. Pass: XKF2.AZ
+moves less after takeoff than in pack 1, and the EKF height against the range
+finder over the first 20 s after liftoff is closer than log63 flight 1 (0.14 m
+core 0, 1.10 m core 1, rms). Replay of log63 with the value this design would
+have saved gave 0.11 and 0.54 m. Keep 11 for the rest of the card.
+
+### 4. #34941: a flow lane held past 45 deg does not time out
+
+GPS lane primary with flow on core 1, as log65. Inside the range finder's
+reach, an acro segment holding more than 45 deg of tilt for more than 5 s.
+Pass: no "EKF3 IMU1 stopped aiding" / "started relative aiding" pair while
+tilted, and core 1's speed stays near GPS through and after the tilt. log65 had
+six such pairs, each zeroing it.
+
+### 5. #34942, every flight: no false refusals, no stray resets
+
+Nothing to set. After each landing and re-arm, note any "EKF3[n] height error"
+refusal and any "EKF3 IMUn vertical velocity reset at rest". With GPS vertical
+velocity agreeing, SFD-O4 should see neither: Replay of SFD-O4 logs 54-65
+refused none of 20 arms. If one appears, the XKF1.VD and XKF3.IPD at that moment
+are what we need.
+
+### 6. #32475, only if Throw is flown
+
+`THROW_NEXTMODE` ALT_HOLD or LOITER (not AUTO), `THROW_SRC_SET 0`, and switch
+out of THROW and back between throws. Upward toss to 2-3 m. Pass: "Throw:"
+messages show detection, uprighting and the hand-off within about 3 s, and no
+"Internal Error". The hand-off to a source set with no horizontal source is
+still open on the PR; these settings avoid it.
+
+### 7. #32471, optional: the inhibit logged again in a restarted log
+
+`ACC_ZBIAS_LEARN 12` (bit 2 plus the acro bit). Powered and disarmed, erase the
+logs from the GCS so a new log starts, then fly a short ACRO segment and land.
+Pass: the new log has a REV3 accel bias inhibit event near its start, and
+Replay of it matches the flight (XKF2.AZ). With bit 2 the EKF cannot learn its
+static bias on the ground, so #34942 may refuse the arm on "height error". If
+it does, note XKF1.VD at rest and skip the item: that is bit 2's trade, not a
+fault. Restore `ACC_ZBIAS_LEARN 11` afterwards.
+
+## T25
+
+Flow only, no compass and no yaw source, so #34942 and its static yaw fix act
+on every flight. `ACC_ZBIAS_LEARN 10` can stay once `INS_ACC_VRFB_Z` is 0.
+
+### T1. #34942 and the static yaw fix, every flight
+
+- Boot: with the vehicle left still after power-on, XKF1.Yaw and XKF1.GZ stay
+  steady on the ground until the first movement. Before the fix, the PR's
+  stillness cap could fuse a yaw reference that was never taken.
+- After each landing: note any "EKF3[1] height error" refusal and any
+  "EKF3 IMU0 vertical velocity reset at rest". Replay of the MicoAir logs
+  refused 7 ordinary re-arms, 1.1 to 3.9 s after a disarm, and 2 first arms.
+  Each one seen in flight, with how long after the disarm, tells us whether
+  that cost is acceptable.
+- If the pilot repeats the drop test, as Flight test 3: a switch disarm at
+  about 1 m over soft ground, still for 2 s, re-arm in VALT and take off, stick
+  at minimum after the takeoff. Pass: the reset message after the drop
+  whenever XKF1.VD read over 0.5 m/s at rest, and the re-arm either refused on
+  "height error" or going up without climbing at minimum stick. Flight test 3
+  climbed 2 m.
+
+### T2. #34941: a banked flow lane does not time out
+
+Inside the range finder's reach, an ACRO segment holding more than 45 deg of
+tilt for more than 5 s. Pass: no "EKF3 IMU0 stopped aiding" / "started
+relative aiding" pair while tilted, and the velocity is not zeroed coming out
+of it.
+
+### T3. #33366, optional: the CPU load check
+
+`BRD_IDLE_STATS` is 0 on the T25, which turns the takeoff load check off. To
+exercise it, set 3 and take off twice in one boot. Pass as item 1.
 
 ## Not exercised by this card
 
@@ -69,58 +165,15 @@ about 3 s, and no "Internal Error". Two review findings are still open
 - #34210: the cap wind-down runs only after a climb-away latches the cap.
 - #34543: Copter never falls back to DCM.
 - #29000's temperature-calibration park: bench calibration only.
+- #34942's skip of the height check while falling: it needs a re-arm during a
+  fall after a disarm in the air. SITL covers it; do not provoke it.
 
 ## Afterwards
 
-Restore `TKOFF_RPM_MIN` (or keep it), `ACC_ZBIAS_LEARN 8`, `EK3_FLOW_QMIN`
-and `EK3_OPTIONS 94`.
-
-## Additions for refresh12 (fly once it is promoted)
-
-Not on the beta yet: these PRs reach the aircraft with refresh12. Fold
-them into the card written at promotion.
-
-### A. #33366: takeoff not held by a stale CPU load figure
-
-`BRD_IDLE_STATS 3`: bit 0 is the threads.txt reader as before, bit 1 the
-new PM2 log message (average and peak over each 10 s PM interval, which
-bound the 2 s windows the takeoff check reads). Arm and take off twice in
-one boot. Pass: neither takeoff is held with "Takeoff blocked: CPU
-overload", and the `@SYS/threads.txt` copies the logger writes after each
-arming show LOAD and PEAK changing between armings (log64 read 0.0% at
-the first arming of every boot, then froze at 87.4%). PM2.Peak against
-the 99.5% default at an 87% average with the rate thread is the margin
-question left open on the PR. SITL cannot show any of this.
-
-### B. #34941: a flow lane held past 45 deg does not time out
-
-GPS lane primary with flow on core 1, as log65. Inside the range finder's
-reach, an acro segment holding more than 45 deg of tilt for more than 5 s.
-Pass: no "EKF3 IMU1 stopped aiding" / "started relative aiding" pair
-while tilted, and core 1's speed stays near GPS through and after the
-tilt (log65 had six such pairs, each zeroing it).
-
-### C. #32471 v3: the hover bias learned as the change since arming
-
-With bit 2 clear, v3 saves the hover bias less the bias the EKF held at
-arming, where the beta saves the whole bias (log63's double count). For
-refresh12 firmware this replaces the earlier card's #32471 item: pack 3 at
-15 is no longer needed. First set `INS_ACC_VRFB_Z` and `INS_ACC2_VRFB_Z`
-to 0. The values saved so far are totals, and v3 would apply them as the
-change since arming, counting the ground bias twice once more.
-
-Pack 1, `ACC_ZBIAS_LEARN 9` (learn, plus the acro bit): hover steadily in
-LOITER at 2-5 m for at least 60 s, land and disarm. Pass: each saved value
-is about XKF2.AZ at the end of the hover minus XKF2.AZ at arming for that
-IMU's core (log62's would have been about +0.03, where the beta saved
--0.03).
-
-Pack 2, `ACC_ZBIAS_LEARN 11` (learn and apply), same takeoff and hover.
-Pass: XKF2.AZ moves less after takeoff than in pack 1, and the EKF height
-against the range finder over the first 20 s after liftoff is closer than
-log63 flight 1 (0.14 m core 0, 1.10 m core 1, rms). Replay of log63 with
-the value this design would have saved gave 0.11 and 0.54 m. Restore
-`ACC_ZBIAS_LEARN 8` afterwards unless keeping 11.
+Restore `TKOFF_RPM_MIN` (or keep it), `ACC_ZBIAS_LEARN` (11 on SFD-O4 if
+keeping v3's apply, otherwise 8), `EK3_FLOW_QMIN`, `EK3_OPTIONS 94`, and
+`BRD_IDLE_STATS` as wanted. Put each log's results in `FLIGHT_VALIDATION.md`
+with the item numbers above.
 
 ---
 
