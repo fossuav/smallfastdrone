@@ -32,6 +32,15 @@ squashed yet.
 | #34292 | Rover pair `244d608769`+`b43ace7296`, Rover test fixup | rest-reading clear `19b9e2bd9a` never acted |
 | #34696, #32514, #33359, #32475, #32270 | test fixups only (#32475's 25 test commits among themselves) | restore never fired (T25 pitch rests 25 us off trim, outside `RC2_DZ`); spool-down count never ran; odometry half unflown; no Throw since the 10-30 fixes; `ee9dc05040` half flown |
 
+Squashed and pushed the same evening (`applied.lock` at `1626f01266`): #34942
+10 to 9, #32471 50 to 44, #32473 restacked 50 to 48, #34543 14 to 12, #34630
+37 to 33, #34292 27 to 25, #29000 3 to 2, #34210 6 to 3, #31274 30 to 13 and
+#32475 54 to 28, every tree unchanged but #32473's restack. #32471's two apply
+fixes folded into the flown commits that introduce what they call, not into
+`f1b61c9cf8`, whose early successors would not build. The your-call items
+(#33484's gate, #34380's target, splitting #32270's commit, #34630's
+`17ead03a5e`) were left on top.
+
 Nothing on top, or nothing flown to fold: #34941, #34456, #34457, #33507,
 #33478, #33585, #33568, #34851, #34933 and the rest. Corrections: the
 range-reads-too-low hold of #34457 never engaged in 12 logs, so log65's
