@@ -8,6 +8,104 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-10-31: SFD-O4 logs 66-71, the refresh12 card
+
+Firmware `ea8cef60` (the card commit, same code as `f93bd10a`), one flight
+per boot (STAT_BOOTCNT 651-658; 652 and 657 have no log, LOG_DISARMED 2 on
+USB, probably the bench). The beta's Replay follows logs 66 and 68-71 on
+both cores to 1e-7. log67 diverges at 29.87 s, yaw 1.7 deg and VD 0.08 m/s:
+see the bootstrap reset below.
+
+Bench. 0a (#29000): "rate set to 2007Hz" once at boot in every log, RTDT
+1973 Hz armed as in logs 63-65; passed. 0b (#31274): no motor test in these
+logs. Armed, ESC.Err stayed at or below 0.9% on every motor except log70's
+hard acro (1.85, 1.54 and 1.82% on motors 1, 3 and 4 at 340-370 s). At
+boot all four read 75-99% from 4.9 to 5.6 s, alike on every motor and log;
+log65 read 97-99% for 3 s. The takeoff gate reads it only armed. 0c
+(#32238, `ESC_CALIBRATION 9`): every log starts at 3.07 s against 5.10 s in
+logs 63 and 65, 2.0 s sooner; passed. 0d (#34630): not in the logs;
+`EK3_FLOW_QMIN` is still 60.
+
+Item 1 (#33366), log66: the first two armings (36-256 s) were held, "Takeoff
+blocked: CPU overload" every 2 s, until `TKOFF_CPU_AVG` was raised by hand
+from 3 to 80, 90 and 95. Nobody set 3: the boot dump reads 3 against a
+default of 95. `ParametersG2::var_info2` index 30 held `VALT_POS_EXPO`
+(also a float) on the June builds, 4.7-beta, 4.7-beta6 and 4.7.0, until
+the 4.7.1 rebase moved it to 29 with no "30 was" marker. This board still
+held that value, and `40c9fdd94b` (2026-10-30) put `TKOFF_CPU_AVG` on 30 as
+free. Upstream builds are not affected. At 95 the third arming took off;
+armed load read 92.3-93.9% average, 1-3% under the limit, and 85-89%
+disarmed. The warning also runs while disarmed, as upstream's does. Only
+one takeoff per boot, so the two-takeoff check was not flown;
+`BRD_IDLE_STATS` was 1, so no PM2. The "peak" is the highest of a smoothed
+load and can read 0.1% under the window average (92.6/92.5%).
+
+The same scan of shipped tables finds one older float-on-float reuse, live
+since 4.7.1: var_info2 29 was `THROW_YAW_DEG` on those June builds and is
+`VALT_POS_EXPO` now (this board reads 0). Indices 41-46 and 48-58 have
+held nothing on any branch.
+
+Item 2 (#32471 v3), log66 (`ACC_ZBIAS_LEARN 9`, 68 s hover): saved
+-0.0053/-0.0076. XKF2.AZ read -0.030 at arming and -0.039/-0.034 over the
+last 3 s of hover, so it saved end minus arming, as v3 intends (AZ logs at
+0.01). Passed. The next three flights saved +0.020 to +0.030 instead.
+log66 armed with the least negative ground AZ of the six (-0.03, against
+-0.04 to -0.07), and the delta takes up the ground bias's spread from boot
+to boot. That is a hypothesis from one airframe.
+
+Item 3, log67 (11) applied pack 1's -0.005/-0.008, so its flight hardly
+tests the apply. The height against the range finder is the rms over 2-20 s
+after liftoff, cores 0/1. This measure reads log63 flight 1 as 0.15/0.83 m,
+not the 0.14/1.10 recorded above, which took core 1 differently. log66 (no
+apply) read 0.18/0.73, log67 0.11/0.43 and log68 (applying 0.025/0.022)
+0.17/0.42. The AZ swing within 20 s read 0.02/0.03, 0.04/0.05 and
+0.03/0.03, so pack 2 swung more than pack 1 and failed that check. Replay
+with RISK.VRFBZ patched, same sensor data:
+
+| Flight, correction | Core 0 | Core 1 | AZ swing |
+|---|---|---|---|
+| log68, as flown (0.025/0.022) | 0.17 m | 0.42 m | 0.03/0.03 |
+| log68, none | 0.18 m | 0.59 m | 0.05/0.05 |
+| log67, as flown (-0.005/-0.008) | 0.11 m | 0.43 m | 0.04/0.05 |
+| log67, log68's value (0.025/0.022) | 0.08 m | 0.30 m | 0.01/0.03 |
+| log71 (bit 2), as flown (0.030/0.024) | 0.18 m | 0.44 m | 0.08/0.12 |
+| log71 (bit 2), none | 0.19 m | 0.47 m | 0.06/0.10 |
+
+v3's learned value takes 0.13-0.17 m off core 1 and halves the swing. Core 0
+barely moves. With bit 2 the swing comes from the release at arming, as the
+log63 replay at 15 showed, and the correction makes little difference.
+
+Item 4 (#34941), logs 69 and 70, flow on core 1 (log69 GPS-primary, log70
+flow-primary): 18 stretches over 45 deg lasting more than 5 s, up to 31 s,
+at 10-25 m/s. Neither log has a "stopped aiding" or "started relative
+aiding" in flight (log65 had six pairs), and core 1's speed was never
+zeroed. Where the range was good (log70 162-167 s and 217-222 s, 9.5-14 m)
+it stayed within 1-3 m/s of GPS. Above the range finder it read up to 14
+m/s high (log69 129-136 s, 13-35 m), which is flow scale error. Passed.
+log70 also flew #34630's stale-range deferral: "flow recovery deferred,
+range stale" at 228.24 s, with core 1 6-7 m/s high and no range. Once the
+range returned at 230 s it converged within 2 s without a reset.
+
+Item 5 (#34942): 8 arms, with no "height error" refusal and no reset at
+rest after any of the six landings. VD at arm read 0.00-0.01 m/s. Every
+flight ended in a power cycle, so no re-arm after a landing was flown.
+Item 6: no Throw.
+
+Item 7, log71, flown at 15 (learn and apply as well as bit 2, not the
+card's 12) and on a boot log, not a restarted one, so the restart case was
+not flown. REV3 16 at boot and 17 at arming, AZ 0.00 at arming, Replay
+matches, and no height error. It saved -0.042/-0.039, the whole hover bias,
+so a return to 11 needs log69's 0.030/0.024 put back.
+
+Arm pending, log67: 5 s after the switch (`ARMING_PEND_TIM 5`), still with
+no position, it reset both EKF cores at 29.87 s ("Arm pending: EKF bootstrap
+reset"). The GPS checks were already passing (XKF4.GPS 0). The EKF first
+uses GPS about 30 s after it initialises (34.4-35.9 s on the other boots),
+and the reset restarted that wait: GPS at 59.56 s, 24 s late. The reset is
+not a DAL event, so Replay cannot follow it. Upstream's
+`InitialiseFilterBootstrap()` (41744c884d) has the same gap, but compiles it
+out by default.
+
 ## 2026-10-30: SFD-O4 logs 64-65, takeoff blocked, lockouts and landed hold
 
 Firmware `52b1d36f`, `ACC_ZBIAS_LEARN 11` still.
