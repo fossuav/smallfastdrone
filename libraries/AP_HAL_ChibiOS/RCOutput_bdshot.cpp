@@ -287,16 +287,10 @@ void RCOutput::bdshot_prepare_for_next_pulse(pwm_group& group)
         // the DMA callback has already moved curr_telem_chan on to the next slot
         uint8_t chan = group.chan[group.bdshot.prev_telem_chan];
         uint32_t now = AP_HAL::millis();
-        if (group.dshot_state == DshotState::RECV_COMPLETE
-            && bdshot_decode_dshot_telemetry(group, group.bdshot.prev_telem_chan)) {
-            _bdshot.erpm_clean_frames[chan]++;
-            _active_escs_mask |= (1<<chan); // we know the ESC is functional at this point
-        } else {
-            _bdshot.erpm_errors[chan]++;
-        }
-        // reset statistics periodically, keeping the finished window's rate as the floor
-        // while the new one is too short to stand alone. A window with too few frames,
-        // such as the first reply after telemetry starts or resumes, gives no rate
+        // reset statistics periodically, before counting this reply so that a failure it shows
+        // lands in the new window. The finished window's rate is kept as the floor while the new
+        // one is too short to stand alone; a window with too few frames, such as one cut short
+        // by a pause in telemetry, gives no rate
         if (now - _bdshot.erpm_last_stats_ms[chan] > 5000) {
             const uint32_t frames = _bdshot.erpm_errors[chan] + _bdshot.erpm_clean_frames[chan];
             if (frames >= BDSHOT_ERROR_RATE_MIN_FRAMES) {
@@ -306,6 +300,13 @@ void RCOutput::bdshot_prepare_for_next_pulse(pwm_group& group)
             _bdshot.erpm_clean_frames[chan] = 0;
             _bdshot.erpm_errors[chan] = 0;
             _bdshot.erpm_last_stats_ms[chan] = now;
+        }
+        if (group.dshot_state == DshotState::RECV_COMPLETE
+            && bdshot_decode_dshot_telemetry(group, group.bdshot.prev_telem_chan)) {
+            _bdshot.erpm_clean_frames[chan]++;
+            _active_escs_mask |= (1<<chan); // we know the ESC is functional at this point
+        } else {
+            _bdshot.erpm_errors[chan]++;
         }
         // publish a single value, which a reader on another thread cannot see torn by a restart
         _bdshot.erpm_error_rate[chan] = bdshot_error_rate(chan);

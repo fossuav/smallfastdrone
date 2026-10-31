@@ -590,7 +590,7 @@ private:
         uint32_t erpm_last_stats_ms[max_channels];
         float erpm_window_error_rate[max_channels]; // error rate of the last full stats window, percent
         uint32_t erpm_window_mask; // channels that have had a full stats window
-        float erpm_error_rate[max_channels]; // the rate to report, percent, written only by the RCOutput thread
+        volatile float erpm_error_rate[max_channels]; // the rate to report, percent, written only by the RCOutput thread
         uint8_t motor_poles;
 #endif
     } _bdshot;
