@@ -25,6 +25,35 @@ the round was never triaged.
 
 ---
 
+## 2026-10-31
+
+No sweep. The day's changes, all on Andy's PRs:
+
+- #34942 added to prs.txt and taken by refresh12 topup3. Its CI failure,
+  MAV_CMD_SET_EKF_SOURCE_SET in sitltest-copter-tests1e at `3da7a8cf2e`,
+  was commit 5's stillness cap leaving the static yaw reference unset.
+  Fixed and pushed, `3da7a8cf2e` -> `dc76e048a6`.
+  - Quick review: COMMENT. Codex's one finding is master behaviour the fix
+    restores: 60 s still on a set with no yaw source pulls the yaw 97 deg,
+    the same with and without the PR.
+  - PR body updated: the T25 row now reads 9 refused, 7 of them re-arms.
+  - CI passes at `dc76e048a6` (110 of 110), sitltest-copter-tests1e
+    included. No AI review yet.
+  - Later the same day, `dc76e048a6` -> `2a52c965e2`: the reset at rest
+    waits while a measured vertical velocity is being fused. An SFD ship
+    test had a deck bump reset a GPS-fused velocity mid bias-learning.
+    Codex's three findings on the first version (latching, slow sources,
+    body velocity per axis) are closed by the audit. Quick review APPROVE.
+    The PR body does not mention it yet; a draft is waiting for Andy.
+- #32471 pushed `04e501e13d` -> `54d41e98c1` -> `5afa8d69fb`, and #32473
+  `3ca94847db` -> `f945737262`: test changes only. The bit 2 tests now arm
+  where the EKF is right on the ground, with or without #34942. Quick
+  reviews APPROVE. Andy keeps bit 2 as it is. CI on both new heads was
+  still running at the time of writing.
+- Found on the way, master's and not filed: the static yaw reference is
+  taken before the initial yaw alignment and not refreshed by a yaw reset
+  while the vehicle stays still.
+
 ## 2026-10-30
 
 The AI review bot re-reviewed 18 PRs at the heads pushed on 10-29. Andy

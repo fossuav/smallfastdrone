@@ -96,6 +96,74 @@ reply exists") before acting on it.
   ("INS_ACC2_VRFB_Z=0.430590 is not the motors-on offset 0.150000"). SFD
   set 115 of 115, with the CMAC terrain tile still cached (OSDEKFLanes
   included).
+- refresh12 topup3 (2026-10-31), on the tip: #34942, Andy's, opened on
+  10-30, for the T25 drops that re-armed with the EKF still descending and
+  climbed in VALT.
+  - What it does, on by default: the on-ground height check, whose filter
+    had not moved since 4.1, applies in aided modes unless a measured
+    vertical velocity agrees, and a vertical velocity over 0.5 m/s is reset
+    once the vehicle is still.
+  - Taken at the reworked head `3da7a8cf2e` (`e78e5ccda2`..`992bb00935`, test
+    `1806c9af22`), then moved to `dc76e048a6` with its static yaw fix
+    (`3429fc6dfd`), and to `2a52c965e2` with the rest reset fix
+    (`467782a96c`, `f93bd10a6f`).
+  - The EKF3 commits applied clean, byte-identical to the PR's replayed
+    stages on topup2's tip. The test needed its registration and 4.7's
+    `takeoff()` keyword (recipe below).
+  - SFD's AGL KF velD (#33478, `EK3_OPTIONS` bit 4, on in SFD's 92) never
+    counts as agreement: the PR stamps `lastVelDFuseTime_ms` only in
+    `FuseVelPosNED()`'s `fuseVelData` branch. Replay of three T25 logs never
+    set it.
+  - EK3HardLandingRearm passes. With the seven EKF3 commits reverted, the
+    flow quick re-arm (the T25 case) arms at 5.19 m/s with no reset and
+    climbs 0.76 m with the throttle at minimum; with them, 0.07 m.
+  - The first full runs broke five tests, each passing with #34942's EKF3
+    reverted:
+    - MAV_CMD_SET_EKF_SOURCE_SET, also the PR's own CI failure. Commit 5's
+      stillness cap made a vehicle booting still read still from its first
+      sample, so the static yaw reference was never taken. On a source set
+      with no yaw source it was then fused as yaw 0 with zero noise, and the
+      Z gyro bias ran to -28 deg/s. Fixed in the PR (`dc76e048a6`, here
+      `3429fc6dfd`). The T25, with no compass and no yaw source, runs that
+      path on every still boot. Replay with the fix is bit-identical on 13
+      of 15 logs and tracks the flight closer on the other two.
+    - AccelBiasMovingPlatform, Copter.Replay's accel bias inhibit leg and
+      VibrationRectificationBiasLearning's bit 2 leg. `ACC_ZBIAS_LEARN` bit 2
+      stops the EKF learning on the ground, so a simulated platform's
+      acceleration, or a static IMU bias, left it reading 1.25 to 6 m/s at
+      rest, and #34942 refused those arms. Bit 2 stays as designed (Andy: it
+      is meant to stop all learning).
+    - The tests changed instead: they step off the platform before arming
+      (`405dc4d041`) and boot each bit 2 flight with bit 2 clear
+      (`0d1d920c32`, `b0718dc190`). Pushed to #32471 (`54d41e98c1`,
+      `5afa8d69fb`) and #32473 (`f945737262`). Each still fails with what it
+      guards broken.
+    - EK3_ZeroVelFusionNotUsedWithGPS, in the full set only: it passes
+      alone and failed identically in two full runs. On the ship, a SITL
+      deck bump started a new rest while GPS velD was fused but 0.5 m/s off,
+      as the EKF learned the injected bias. The reset stopped the bias
+      settling, at 0.65 against 0.7. Fixed in the PR: the check waits while
+      a measured vertical velocity is being fused (the latest sample passed
+      its gate, one was fused in the last 2 s, all three axes for body
+      velocity). Here that is `467782a96c` and `f93bd10a6f`; on the PR it
+      is one commit, `2a52c965e2`. EK3HardLandingRearm's GPS leg still
+      resets, because GPS is past its gate after the impact, and rises 0.05
+      to 0.08 m. Replay cannot change: SFD-O4 logs 54-65 had 40 rest checks
+      and no resets, and the T25 fuses no measured vertical velocity.
+  - Copter.Parachute fails on 4.7 with or without the PR: 4.7 prints
+    "BANG!  Parachute deployed" with two spaces, and master's test waits for
+    one.
+  - The rerere archive is unchanged (see the refresh12 trap on
+    `rerere-save`).
+  - All five builds; copter for SmallFastDronev1 with 44,820 bytes free,
+    1,016 fewer than topup2.
+  - SFD set 124 of 124 on the final code (`f93bd10a6f`): the set's 116,
+    plus MAV_CMD_SET_EKF_SOURCE_SET, Copter ThrowMode, ShipTakeoff,
+    ArmFeatures and RudderDisarmMidair, and Plane Parachute,
+    ParachuteSinkRate and DeadreckoningNoAirSpeed, with the CMAC terrain
+    tile cached. The ship test passes where it had failed twice: the deck
+    bump still happens, and no reset follows.
+  - The flight card is rewritten for refresh12 (`FIELD_PLAN.md`).
 - Previously built: `SmallFastDrone-4.7.2-refresh11` (worktree `../sfd-refresh11`),
   2026-10-22, on the 4.7.2 base (`b74b576dc9`). 348 planned commits, 271 on the
   branch with the fixups, local work and tests. Firmware "SmallFastDrone
@@ -453,9 +521,10 @@ After:
 
 ### Owed, not tied to one refresh
 
-- Flight evidence for refresh12's top-ups once it is promoted:
-  `FIELD_PLAN.md`, "Additions for refresh12" (#33366, #34941, #32471 v3,
-  which starts by zeroing the saved totals).
+- Flight evidence for refresh12 and its top-ups: `FIELD_PLAN.md`'s
+  refresh12 card (the 2026-10-30 review fixes SFD-O4 has not flown, #33366,
+  #34941, #32471 v3, which starts by zeroing the saved totals, and #34942,
+  with T25 items for the flow-only, no-compass case).
 
 - topup12 (2026-10-08) carries #33478's step hold from `fix/33478`
   (`e0d009ff31`, `6185109557`) ahead of the PR, for the flight that repeats
@@ -1413,6 +1482,15 @@ OptFlowFusion, core.cpp, core.h): every hunk is additive. Keep both, with
 `prevFlowFuseTime_ms` and the stack's `flowVelResetUnhealthy` clause after
 the new timeout line. The diff against HEAD should then be the PR's diff
 exactly. rerere has it from topup1.
+
+**#34942's EK3HardLandingRearm** (arducopter.py): the cherry-pick stops on
+the method and its registration, both additive, without diff3 markers, so
+`resolve_additive.py` cannot take them. Keep HEAD's file, run
+`refold_methods.py Tools/autotest/arducopter.py <test sha>
+EK3HardLandingRearm`, register it after `EK3_AccelBiasZeroVelOptFlow`
+(tests1c here, tests1e on master), then `fix_takeoff_kwargs.py` for its two
+`altitude_min=` calls. The added lines then match the PR's apart from those
+keywords. The EKF3 commits apply clean.
 
 **Targeted top-up** (one or two PRs moved, branch otherwise current): land the
 old-head-to-new-head delta on the tip via a `git commit-tree` of the new tree

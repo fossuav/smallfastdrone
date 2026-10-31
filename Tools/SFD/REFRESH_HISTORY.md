@@ -7,6 +7,32 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-31 - refresh12 topup3, #34942
+
+#34942, the on-ground height check and the vertical velocity reset at rest
+for the T25 drops that re-armed and climbed, went onto refresh12 clean. It
+was byte-identical to the code its Replay evidence had been measured on.
+With its EKF3 reverted, the flow quick re-arm climbs 0.76 m; with it, 0.07 m.
+
+The first full runs broke five tests:
+
+- One was the PR's own CI failure. Its stillness cap stopped a vehicle that
+  boots still from ever taking the static yaw reference, which a source set
+  with no yaw source then fused as yaw 0 with zero noise. Fixed in the PR.
+  The T25, with no yaw source, would have met it on every still boot.
+- Three were bit 2 tests arming an EKF that bit 2 leaves wrong on the
+  ground. Bit 2 stays as it is; the tests changed, in #32471 and #32473.
+- The last, a GPS copter on a ship, passed alone and failed only in the
+  set. There the reset at rest fired while GPS velD was still being fused
+  and corrected the state, and stopped a bias settling. Fixed in the PR:
+  the check waits while a measurement is being fused. It was first taken
+  for chance; failing identically twice in the set showed otherwise.
+
+One slip on the way: `refresh.sh rerere-save` swept the shared cache, and its
+unresolved entries were put back from a backup (a trap now).
+
+SFD set 124 of 124 on the final code.
+
 ## 2026-10-30 - refresh12 topup2, #32471 v3
 
 #32471's v3, pushed after topup1's lock, saves the hover bias less the
