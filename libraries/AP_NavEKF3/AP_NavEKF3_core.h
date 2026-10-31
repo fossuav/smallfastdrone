@@ -1766,6 +1766,9 @@ private:
     // true when a recently fused measured velocity agrees with the state in the vertical
     bool measuredVertVelAgrees(void) const;
 
+    // true when a measured velocity observing the vertical is being fused
+    bool measuredVertVelFused(void) const;
+
     // vehicle specific initial gyro bias uncertainty
     ftype InitialGyroBiasUncertainty(void) const;
 
