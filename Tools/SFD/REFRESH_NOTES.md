@@ -17,21 +17,25 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup3, promoted
-  2026-10-31 with this record (a force push over `4db887869b`).
-  - `4db887869b` was refresh12 after topup2 plus its own promotion record.
-    It was promoted 2026-10-30 and pushed 2026-10-31, and is kept locally as
-    `SmallFastDrone-4.7.2.6-beta`.
-  - The beta before it, refresh11 topup5, is kept locally as
-    `SmallFastDrone-4.7.2.5-beta` (`541cb6d5d9`).
-  - `audit_dropped.py` against `4db887869b` before the promote found nothing
-    lost. The one ABSENT row, #32475's `ebec91436d`, is in both histories,
-    rewritten later in the same series, and refresh12 changes no Copter code
-    against it. The only commit dropped is `4db887869b`'s promotion record,
-    which this replaces.
-  - The flight card for this firmware is the refresh12 card in
-    `FIELD_PLAN.md`. SmallFastDronev1 from `f93bd10a6f`, the same code, has
-    md5 `7558599a`.
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup4, promoted
+  2026-10-31 with this record, a fast-forward of the beta pushed earlier that
+  day (refresh12 topup3 and its promotion record, `a82986c8bd`, kept locally as
+  `SmallFastDrone-4.7.2.7-beta`).
+  - topup4 over topup3: VALT_POS_EXPO back on var_info2 30 and TKOFF_CPU_AVG/
+    PEAK on 41/42 (`8e2a1e6ce6`, `95ad9b9c37`); #32475's position hold when a
+    position comes back (`b12501f5af`, `b1bfb811be`, `a05ce46d5b`); #31274's
+    error rate across a restart (`213ce15bb2` and its follow-ups to
+    `f3a0539315`); the flight, audit and decision records; the manifest at
+    the squashed heads (`1626f01266`).
+  - Tested since topup3's full SFD set (124 of 124): ModeVAltHold, all 20
+    Throw tests, SITL builds, the parameter store carried across builds, and
+    CubeOrange-bdshot, CubeOrange and the iomcu-dshot firmware. The full set
+    was not rerun.
+  - SmallFastDronev1 from `f3a0539315`, the same code, has md5 `e1c564d2`
+    (44,564 bytes free). After flashing SFD-O4, set VALT_POS_EXPO 0: it reads
+    the 95 stored as TKOFF_CPU_AVG (`FIELD_PLAN.md`).
+  - Older betas: `4db887869b` is `SmallFastDrone-4.7.2.6-beta`, refresh11
+    topup5 is `SmallFastDrone-4.7.2.5-beta` (`541cb6d5d9`).
 - Built: `SmallFastDrone-4.7.2-refresh12` (worktree `../sfd-refresh12`),
   2026-10-30, on the unchanged 4.7.2 base (`b74b576dc9`; run with
   `SFD_BASE` set to it, see the refresh12 traps). 431 planned commits, 296

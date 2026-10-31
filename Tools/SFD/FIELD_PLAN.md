@@ -1,8 +1,9 @@
 # SFD flight card: refresh12, the beta after topup3
 
 SFD-O4 flew this card on 2026-10-31 (logs 66-71, `FLIGHT_VALIDATION.md`).
-Before flashing `95ad9b9c` or later (SmallFastDronev1 md5 `f1c7c139`), which
-puts VALT_POS_EXPO back on its June index and moves TKOFF_CPU_AVG/PEAK:
+Before flashing the beta from `f3a0539315` on (SmallFastDronev1 md5 `e1c564d2`),
+which puts VALT_POS_EXPO back on its June index and moves TKOFF_CPU_AVG/PEAK,
+and also carries #32475's and #31274's blocker fixes (neither flown yet):
 
 - After the flash, set `VALT_POS_EXPO` 0. It reads the 95 stored as
   `TKOFF_CPU_AVG` on 2026-10-31. TKOFF_CPU_AVG/PEAK return to 95/99.5.

@@ -7,6 +7,26 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-10-31 - refresh12 topup4, after the flights
+
+SFD-O4 flew topup3 the same afternoon (logs 66-71, `FLIGHT_VALIDATION.md`).
+Every takeoff was held as CPU overload: `40c9fdd94b` had put #33366's
+TKOFF_CPU_AVG on var_info2 30, where the June builds kept VALT_POS_EXPO, and
+the board read its stored 3 against a default of 95. VALT_POS_EXPO went back
+to 30, its June index, and the CPU pair to 41/42, which no branch has used;
+29 and 31 are retired. That led to ARCH-22 in aap: an index a released build
+used is never given to another parameter.
+
+AP-Review's rounds at the 10-30 heads had two blockers, both real and fixed
+here first, then pushed. #32475: throw now holds a position that comes back
+while it holds on (SITL drift 120.5 m to 0.0 m). #31274: the DShot error rate
+keeps a full window's rate across its 5 s restart; five review rounds found
+three faults in earlier versions of that fix, each reproduced before it was
+fixed.
+
+The flights also settled which held-back commits had flown, and ten PRs were
+squashed on that basis; the manifest points at the squashed heads.
+
 ## 2026-10-31 - refresh12 topup3, #34942
 
 #34942, the on-ground height check and the vertical velocity reset at rest
