@@ -1316,6 +1316,9 @@ void NavEKF3_core::FuseVelPosNED()
             if (fuseVelVertData || fusingStationaryZeroVel) {
                 fuseData[2] = true;
             }
+            if (fuseVelVertData && !fusingStationaryZeroVel && (PV_AidingMode != AID_NONE)) {
+                lastVelDFuseTime_ms = imuSampleTime_ms;
+            }
         }
 #if EK3_FEATURE_OPTFLOW_AGL_KF
         // AGL KF supplies a vertical-velocity-only observation (no horizontal
