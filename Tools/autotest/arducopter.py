@@ -21302,19 +21302,31 @@ return update, 100
         self.assert_ekfs_match_sim_state(ekf_message_types=['XKF1'], max_pos_d_err_m=0.35)
 
         self.start_subtest("With bit 2 every flight in a boot learns the whole bias")
-        # the EKF holds the last flight's bias through a disarm instead of learning one on
-        # the ground, so each flight must learn the whole bias, not what the last applied
+        # with bit 2 the learner does not trust the bias the EKF holds at arming, so each
+        # flight must save the whole bias, not its change since arming. Bit 2 also stops the
+        # EKF learning the static 0.3 on the ground, and an EKF that has not learnt it reads a
+        # vertical velocity at rest, so bit 2 is off on the ground between flights while the
+        # EKF learns it, and set again just before arming, where the learner reads it
         self.set_parameters({
             "INS_ACC_VRFB_Z": 0,
             "INS_ACC2_VRFB_Z": 0,
-            "ACC_ZBIAS_LEARN": 7,
+            "ACC_ZBIAS_LEARN": 3,
         })
         self.reboot_sitl()
         for flight in range(3):
+            self.set_parameter("ACC_ZBIAS_LEARN", 3)
+            self.delay_sim_time(30, "EKF learns the static bias on the ground")
             self.wait_ready_to_arm()
+            self.set_parameter("ACC_ZBIAS_LEARN", 7)
+            arm_us = int(self.get_sim_time() * 1e6)
             self.takeoff(10, mode='LOITER')
             self.delay_sim_time(30, "hover so the Z bias converges")
             self.land_and_disarm()
+            # the whole bias differs from the change since arming only if the EKF held one
+            az = self.get_accel_bias_z_at_arm_from_current_onboard_log(time_us=arm_us)
+            if abs(az - 0.3) > 0.06:
+                raise NotAchievedException(
+                    "flight %u armed with the EKF holding %f, not the static 0.3" % (flight, az))
             learned = self.get_parameter("INS_ACC_VRFB_Z")
             self.progress("flight %u saved INS_ACC_VRFB_Z=%f" % (flight, learned))
             if abs(learned - (0.3 + vrf)) > 0.06:
