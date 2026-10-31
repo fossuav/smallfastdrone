@@ -17,6 +17,21 @@ reply exists") before acting on it.
 
 ## Current state
 
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup3, promoted
+  2026-10-31 with this record (a force push over `4db887869b`).
+  - `4db887869b` was refresh12 after topup2 plus its own promotion record.
+    It was promoted 2026-10-30 and pushed 2026-10-31, and is kept locally as
+    `SmallFastDrone-4.7.2.6-beta`.
+  - The beta before it, refresh11 topup5, is kept locally as
+    `SmallFastDrone-4.7.2.5-beta` (`541cb6d5d9`).
+  - `audit_dropped.py` against `4db887869b` before the promote found nothing
+    lost. The one ABSENT row, #32475's `ebec91436d`, is in both histories,
+    rewritten later in the same series, and refresh12 changes no Copter code
+    against it. The only commit dropped is `4db887869b`'s promotion record,
+    which this replaces.
+  - The flight card for this firmware is the refresh12 card in
+    `FIELD_PLAN.md`. SmallFastDronev1 from `f93bd10a6f`, the same code, has
+    md5 `7558599a`.
 - Built: `SmallFastDrone-4.7.2-refresh12` (worktree `../sfd-refresh12`),
   2026-10-30, on the unchanged 4.7.2 base (`b74b576dc9`; run with
   `SFD_BASE` set to it, see the refresh12 traps). 431 planned commits, 296
