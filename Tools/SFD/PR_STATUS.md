@@ -50,6 +50,22 @@ No sweep. The day's changes, all on Andy's PRs:
   where the EKF is right on the ground, with or without #34942. Quick
   reviews APPROVE. Andy keeps bit 2 as it is. CI on both new heads was
   still running at the time of writing.
+- AP-Review's rounds at the 10-30 and 10-31 heads (17 PRs, `ai_review_status.py
+  --sweep`). Blockers on #31274 and #32475, both confirmed in the code and fixed
+  on refresh12, then ported (not pushed):
+  - #32475: throw starts horizontal control when a position returns while it
+    holds on (`b12501f5af`, test `b1bfb811be`); SITL drift 120.5 m to 0.0 m in
+    20 s, all 20 Throw tests pass on the stack and on the PR alone.
+    `r1031/32475c`.
+  - #31274: the DShot error rate keeps a full window's rate across a restart
+    (`213ce15bb2` and five follow-ups from Codex's cold reads); probe, no
+    failing ESC reads under 1% in any case tried. `r1031/31274g`.
+  - Should-fix items left as measured and decided, needing replies: #32471's
+    quick re-arm, #34210's saturation feedback. Most other rows are
+    description items the unposted 10-30 drafts cover. Records:
+    `../ardupilot-pr-analysis/<PR>/README.md`, "2026-10-31".
+- #32473's CI: one sitltest-quadplane-tests1c job failed after 53 min with no
+  failed step and no log; looks like a runner timeout, rerun needed.
 - Found on the way, master's and not filed: the static yaw reference is
   taken before the initial yaw alignment and not refreshed by a yaw reset
   while the vehicle stays still.
