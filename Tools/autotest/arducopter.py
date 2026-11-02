@@ -16686,6 +16686,70 @@ return update, 100
 
         self.do_RTL()
 
+    def EKFBootstrapResetStaticYaw(self):
+        '''check a still vehicle with no yaw source retakes its static yaw reference after an EKF reset'''
+        # start well away from the 0 deg yaw a core with no yaw source is reset to
+        home = self.sitl_start_location()
+        self.customise_SITL_commandline(["--home", "%s,%s,%s,%s" % (home.lat, home.lng, home.alt, 90)])
+        self.set_parameters({
+            "RC8_OPTION": 187,  # EKF_RESET
+            # source set 2: GPS position and velocity, no yaw source
+            "EK3_SRC2_POSXY": 3,
+            "EK3_SRC2_VELXY": 3,
+            "EK3_SRC2_POSZ": 1,
+            "EK3_SRC2_VELZ": 3,
+            "EK3_SRC2_YAW": 0,
+        })
+        self.reboot_sitl()
+
+        # fly, so the static yaw reference is the yaw the vehicle landed at
+        self.takeoff(3, mode='LOITER')
+        self.land_and_disarm()
+        self.delay_sim_time(5, "vehicle to come to rest")
+        self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 2)
+        self.delay_sim_time(2, "source set to take effect")
+
+        self.context_push()
+        self.context_collect('STATUSTEXT')
+        reset_us = int(self.get_sim_time() * 1e6)
+        self.set_rc(8, 2000)
+        self.wait_statustext("EKF bootstrap reset performed", check_context=True, timeout=10)
+        self.set_rc(8, 1000)
+        self.context_pop()
+        self.delay_sim_time(15, "static yaw fusion after the reset")
+
+        # a reference left at the landing yaw is fused against the reset yaw of 0
+        # and the difference runs up the Z gyro bias
+        dfreader = self.dfreader_for_path(self.current_onboard_log_filepath())
+        yaw_before = None
+        max_yaw_change = None
+        max_gz = 0.0
+        while True:
+            try:
+                m = dfreader.recv_match(type="XKF1")
+            except (OSError, ValueError, struct.error):
+                break
+            if m is None:
+                break
+            if m.C != 0:
+                continue
+            if m.TimeUS < reset_us:
+                yaw_before = m.Yaw
+                continue
+            if yaw_before is None:
+                continue
+            change = abs(mavextra.wrap_180(m.Yaw - yaw_before))
+            max_yaw_change = change if max_yaw_change is None else max(max_yaw_change, change)
+            max_gz = max(max_gz, abs(m.GZ))
+        self.progress("EKF yaw %s deg before the reset, moved up to %s deg after; max |GZ| %.2f deg/s" %
+                      (yaw_before, max_yaw_change, max_gz))
+        if max_yaw_change is None:
+            raise NotAchievedException("no XKF1 records either side of the reset")
+        if max_yaw_change < 45:
+            raise NotAchievedException("the reset did not move the yaw away from the landing yaw")
+        if max_gz > 0.5:
+            raise NotAchievedException("Z gyro bias ran up to %.2f deg/s after the reset" % max_gz)
+
     def EK3_NoGPSLeakWhenNotSource(self):
         '''verify EKF does not leak GPS position when GPS is not the configured source'''
         # With EKF configured to use optical flow (POSXY source is
@@ -25983,6 +26047,7 @@ return update, 1000
             self.ScriptingOSDDrawScreen,
             self.ScriptingOSDDisplayPortReplies,
             self.EKFBootstrapReset,
+            self.EKFBootstrapResetStaticYaw,
             self.MotorVibration,
             Test(self.DynamicNotches, attempts=4),
             self.PositionWhenGPSIsZero,
