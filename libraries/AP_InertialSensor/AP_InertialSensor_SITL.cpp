@@ -448,7 +448,12 @@ void AP_InertialSensor_SITL::start()
     // backend rate, which follows INS_GYRO_RATE as in the Invensense FIFO driver
     gyro_nsamples = 1;
     if (enable_fast_sampling(gyro_instance)) {
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
         const uint8_t mult = constrain_int16(get_fast_sampling_rate(), 1, 8);
+#else
+        // INS_GYRO_RATE defaults to 1 on the H7 and F7 boards Sim on Hardware runs on; keep the base rate there
+        const uint8_t mult = 1;
+#endif
         gyro_sample_hz *= mult;
         gyro_nsamples = 8 / mult;
         gyro_catch_up = mult > 1;
