@@ -49,6 +49,36 @@ const AP_Param::GroupInfo AP_MSP::var_info[] = {
     // @User: Standard
     AP_GROUPINFO("_OPTIONS", 2, AP_MSP, _options, 0),
 
+#if AP_MSP_DISPLAYPORT_RC_SLOTS_ENABLED
+    // @Param: _RC_SLOT1
+    // @DisplayName: DisplayPort RC slot 1 channel
+    // @Description: RC channel sent as the first DisplayPort RC-slot row. The four slots are sent as one group; if any slot is 0 the group is not sent.
+    // @Range: 0 16
+    // @User: Advanced
+    AP_GROUPINFO("_RC_SLOT1", 3, AP_MSP, _rc_slot_channel[0], 0),
+
+    // @Param: _RC_SLOT2
+    // @DisplayName: DisplayPort RC slot 2 channel
+    // @Description: RC channel sent as the second DisplayPort RC-slot row. The four slots are sent as one group; if any slot is 0 the group is not sent.
+    // @Range: 0 16
+    // @User: Advanced
+    AP_GROUPINFO("_RC_SLOT2", 4, AP_MSP, _rc_slot_channel[1], 0),
+
+    // @Param: _RC_SLOT3
+    // @DisplayName: DisplayPort RC slot 3 channel
+    // @Description: RC channel sent as the third DisplayPort RC-slot row. The four slots are sent as one group; if any slot is 0 the group is not sent.
+    // @Range: 0 16
+    // @User: Advanced
+    AP_GROUPINFO("_RC_SLOT3", 5, AP_MSP, _rc_slot_channel[2], 0),
+
+    // @Param: _RC_SLOT4
+    // @DisplayName: DisplayPort RC slot 4 channel
+    // @Description: RC channel sent as the fourth DisplayPort RC-slot row. The four slots are sent as one group; if any slot is 0 the group is not sent.
+    // @Range: 0 16
+    // @User: Advanced
+    AP_GROUPINFO("_RC_SLOT4", 6, AP_MSP, _rc_slot_channel[3], 0),
+#endif
+
     AP_GROUPEND
 };
 
