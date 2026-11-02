@@ -791,14 +791,19 @@ void NavEKF3_core::UpdateFilter(bool predict)
       ground and getting over-confident of the state. The symptoms
       would be "gyros still settling" when the user tries to arm. In
       that state the EKF can't recover, so we do a hard reset and let
-      it try again.
+      it try again. A core held back only by the ground height check
+      waits longer: arming is refused meanwhile, and the height converges
+      as it is fused, but an accel bias held wrong can keep it from
+      converging, so the core is still reset in the end.
      */
     if (filterStatus.value != 0) {
         last_filter_ok_ms = dal.millis();
     }
+    const bool heldByGndHgt = (filterStatus.value == 0) && onGroundHgtError() && healthyApartFromGndHgt() &&
+                              alignedForStatus() && !stateStruct.quat.is_nan();
     if (filterStatus.value == 0 &&
         last_filter_ok_ms != 0 &&
-        dal.millis() - last_filter_ok_ms > 5000 &&
+        dal.millis() - last_filter_ok_ms > (heldByGndHgt ? GND_HGT_ERR_RESET_MS : 5000U) &&
         !dal.get_armed()) {
         // we've been unhealthy for 5 seconds after being healthy, reset the filter
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF3 IMU%u forced reset",(unsigned)imu_index);

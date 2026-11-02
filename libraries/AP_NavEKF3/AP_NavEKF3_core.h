@@ -134,6 +134,9 @@
 // filtered height innovation on the ground (m) above which onGroundHgtError() reports a height error
 #define GND_HGT_ERR_LIMIT 1.0f
 
+// time a disarmed core held back only by the ground height check waits before the forced reset (msec)
+#define GND_HGT_ERR_RESET_MS 30000U
+
 class NavEKF3_core : public NavEKF_core_common
 {
 public:
