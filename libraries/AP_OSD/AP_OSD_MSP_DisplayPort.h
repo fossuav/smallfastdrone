@@ -3,6 +3,13 @@
 
 #if HAL_WITH_MSP_DISPLAYPORT
 
+// experimental: mirror four raw RC inputs as a fixed group of DisplayPort
+// write-string rows for devices that consume Betaflight osd_rcchannels-style
+// sideband text; enable via hwdef
+#ifndef AP_OSD_MSP_DISPLAYPORT_RC_SLOTS_ENABLED
+#define AP_OSD_MSP_DISPLAYPORT_RC_SLOTS_ENABLED 0
+#endif
+
 #define DISPLAYPORT_WRITE_BUFFER_MAX_LEN 30
 
 class AP_OSD_MSP_DisplayPort : public AP_OSD_Backend
@@ -61,6 +68,9 @@ protected:
 
 private:
     void setup_defaults(void);
+#if AP_OSD_MSP_DISPLAYPORT_RC_SLOTS_ENABLED
+    void update_rc_slots(void);
+#endif
     char displayport_write_buffer[DISPLAYPORT_WRITE_BUFFER_MAX_LEN]; // terminator
 
     AP_MSP_Telem_Backend* _displayport;

@@ -24,6 +24,13 @@
 
 #include <GCS_MAVLink/GCS.h>
 
+#if AP_OSD_MSP_DISPLAYPORT_RC_SLOTS_ENABLED
+#include <RC_Channel/RC_Channel.h>
+#if !AP_RC_CHANNEL_ENABLED
+#error "AP_OSD_MSP_DISPLAYPORT_RC_SLOTS_ENABLED requires AP_RC_CHANNEL_ENABLED"
+#endif
+#endif
+
 static const struct AP_Param::defaults_table_struct defaults_table[] = {
     /*
     { "PARAM_NAME",       value_float }
@@ -140,8 +147,47 @@ uint8_t AP_OSD_MSP_DisplayPort::format_string_for_osd(char* buff, uint8_t size, 
     return AP_OSD_Backend::format_string_for_osd(buff, size, pack, fmt, ap);
 }
 
+#if AP_OSD_MSP_DISPLAYPORT_RC_SLOTS_ENABLED
+// send four selected raw RC inputs as one group of write-string messages,
+// scaled to -1000..1000 and formatted as five characters, on consecutive
+// rows of a fixed column. Runs once per OSD refresh (10Hz OSD thread).
+// The group is all-or-nothing: any missing or invalid source suppresses it.
+void AP_OSD_MSP_DisplayPort::update_rc_slots(void)
+{
+    // 1-based RC input channels feeding slots 0..3
+    static const uint8_t slot_rc_channel[] = { 7, 9, 10, 11 };
+    static const uint8_t slot_column = 6;
+    static const uint8_t slot_first_row = 10;
+
+    if (!rc().has_valid_input()) {
+        return;
+    }
+    int16_t values[ARRAY_SIZE(slot_rc_channel)];
+    for (uint8_t i = 0; i < ARRAY_SIZE(slot_rc_channel); i++) {
+        const RC_Channel *c = rc().channel(slot_rc_channel[i] - 1);
+        if (c == nullptr) {
+            return;
+        }
+        const int16_t pwm = c->get_radio_in();
+        if (pwm == 0) {
+            // channel never received from the receiver
+            return;
+        }
+        values[i] = constrain_value((pwm - 1500) * 2, -1000, 1000);
+    }
+    for (uint8_t i = 0; i < ARRAY_SIZE(slot_rc_channel); i++) {
+        char text[6];
+        hal.util->snprintf(text, sizeof(text), "%5d", values[i]);
+        _displayport->msp_displayport_write_string(slot_column, slot_first_row + i, false, text, 0);
+    }
+}
+#endif  // AP_OSD_MSP_DISPLAYPORT_RC_SLOTS_ENABLED
+
 void AP_OSD_MSP_DisplayPort::flush(void)
 {
+#if AP_OSD_MSP_DISPLAYPORT_RC_SLOTS_ENABLED
+    update_rc_slots();
+#endif
     // grab the screen and force a redraw
     _displayport->msp_displayport_grab();
     _displayport->msp_displayport_draw_screen();
