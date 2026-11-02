@@ -25,6 +25,34 @@ the round was never triaged.
 
 ---
 
+## 2026-11-02 (evening): T25 garage logs, #34942 static yaw, two squashes
+
+Two T25 garage loiter logs on c46a09ec (flow only, baro height, no yaw
+source; record in ../ardupilot-pr-analysis/34942/README.md). A landing
+with the EKF 2.2 m above the baro let #34942's ground height check hold
+the status at zero, and upstream's disarmed forced reset fired after 5 s.
+The static yaw reference survived that bootstrap, so the old yaw was fused
+against the new one: a 2.9 deg/s Z gyro bias, and the vehicle turned
+about 2.5 deg/s in the next Loiter flight with the stick centred.
+- #34942: the static yaw reference is stored through one function and
+  retaken after every bootstrap and yaw reset (`ba9712dbdb`,
+  `c06189bb8d`), with EKFBootstrapResetStaticYaw and
+  StaticYawKeepsCompassYaw (`826c2dfd73`, `55d75d80a4`). A 30 s hold on
+  the forced reset for a height error alone was tried and dropped
+  (`a8ed785070`, removed by `b5121d648a`): the 5 s reset was written for
+  that height test, and with the static fix the replayed status recovers
+  7.5 s after the disarm, sooner than with the hold.
+- Squash audit against the T25 logs
+  (../ardupilot-pr-analysis/squash-audit-2026-10-31/T25-2026-11-02.md):
+  two on-top commits flew and are folded: #31274's full-window error rate
+  into "report the bdshot error rate as a percentage" (ESC.Err 100% until
+  the first window filled, then at most 1%), and #34942's static yaw
+  reference at boot into "keep a shock from holding off the on-ground
+  stillness check" (yaw held within 0.03 deg from power-on). Everything
+  else stays on top.
+- Mode 29 on SFD is VALT, not RATE_ACRO as the log tools name it.
+- Open: INS_ACC_VRFB_Z on the T25 is still 0.0417 (the card asks for 0).
+
 ## 2026-11-02 (later)
 
 Second AP-Review sweep after the morning pushes: #32471, #32473, #34678,
