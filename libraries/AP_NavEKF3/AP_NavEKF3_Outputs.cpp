@@ -8,12 +8,6 @@
 // Check basic filter health metrics and return a consolidated health status
 bool NavEKF3_core::healthy(void) const
 {
-    return healthyApartFromGndHgt() && !onGroundHgtError();
-}
-
-// the health checks other than the ground height check
-bool NavEKF3_core::healthyApartFromGndHgt(void) const
-{
     uint16_t faultInt;
     getFilterFaults(faultInt);
     if (faultInt > 0) {
@@ -31,6 +25,9 @@ bool NavEKF3_core::healthyApartFromGndHgt(void) const
     // position and height innovations must be within limits when on-ground and in a static mode of operation
     float horizErrSq = sq(innovVelPos[3]) + sq(innovVelPos[4]);
     if (onGround && (PV_AidingMode == AID_NONE) && (horizErrSq > 1.0f)) {
+        return false;
+    }
+    if (onGroundHgtError()) {
         return false;
     }
 
@@ -120,12 +117,6 @@ bool NavEKF3_core::pre_arm_check(bool requires_position, char *failure_msg, uint
 
     // all OK
     return true;
-}
-
-// true when the attitude is aligned well enough for the filter status to report the estimates
-bool NavEKF3_core::alignedForStatus(void) const
-{
-    return tiltAlignComplete && (yawAlignComplete || (!use_compass() && (PV_AidingMode != AID_ABSOLUTE)));
 }
 
 // Return a consolidated error score where higher numbers represent larger errors
