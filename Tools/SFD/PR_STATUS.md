@@ -25,6 +25,43 @@ the round was never triaged.
 
 ---
 
+## 2026-11-02 (later)
+
+Second AP-Review sweep after the morning pushes: #32471, #32473, #34678,
+#34941 and #33879 ACCEPT (the last three newly labelled); COMMENT on
+#31274, #32475, #34543, #34630, #33543, #34584, #34642 and #34942. Fixed on
+refresh12, then ported (not pushed); cold reads by Claude, Codex being out
+until 11-04:
+- #31274: the stored DShot percentage latches stale in update(), so the
+  32-bit micros() wrap cannot revive it (`aa789238ce`; host probe 84 of
+  1.8M checks passing at the wrap before, none after). Port `05edaf83de`.
+- #32475: leaving throw, or completing with THROW_SRC_SET 0, restores the
+  pre-throw source set only while THROW_SRC_INI's set is still active, and
+  says "keeping" when a picked set wins (`0aa542c7ef`, test `69ee81e93b`).
+  Port `9149e72d4f`.
+- #34584: ATSC.AngPSc logged from the recorded copy (`d7a07b2217`). Port
+  `474a5f073b`.
+- #34642: Sim on Hardware keeps its base gyro rate (`c6c03d649e`). Port
+  `d464e2156a`.
+- #34543/#34630: the EKF lane OSD items behind AP_OSD_EKF_LANES_ENABLED,
+  off on boards and on in SITL, one-line EKFn_EN descriptions, build option
+  OSD_EKF_LANES (`9b0cd90701`, `d071c1ebdd`, `1351f2a70c`); on for the ten
+  SFD boards (`670b9812e4`). 1036/1132 bytes on JHEM_JHEF405. Ports
+  `871498e4aa`, `0b2644e19d`.
+- #34942: the reset at rest waits for the fusion horizon, and the rejected
+  ground height clip is no tighter than 2 m (`4795b33bc8`, `742952b71f`,
+  test `fe3b070713`). Port `b39c0e9485`.
+- #33543 rebased onto master for a re-review, description to match (`9f1b08db4e`).
+- Refresh-only: AHRS reports no primary core (-1) while DCM, SIM or External
+  fly, as #34543 does on master (`5b816923f3`). Rover OSDEKFLanesDCMFallback
+  had failed on refresh12 since the fallback leg arrived, the OSD marking
+  lane 0 as flying during a DCM fallback; Copter no longer treats a DCM
+  fallback as the primary changing to 0 (inertial frame reset, "EKF primary
+  changed:0"). Unflown.
+
+Combined refresh12: SmallFastDronev1 copter builds clean, and the changed
+tests pass, Rover OSDEKFLanesDCMFallback included.
+
 ## 2026-11-02
 
 AP-Review sweep over every open SFD PR: nine new rounds since 10-31, all at
