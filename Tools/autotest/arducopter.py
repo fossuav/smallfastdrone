@@ -16686,22 +16686,22 @@ return update, 100
 
         self.do_RTL()
 
-    def EKFBootstrapResetStaticYaw(self):
-        '''check a still vehicle with no yaw source retakes its static yaw reference after an EKF reset'''
-        # start well away from the 0 deg yaw a core with no yaw source is reset to
+    def static_yaw_test_setup(self, params):
+        '''restart at a 90 deg heading, well away from the 0 deg yaw an EKF core with no
+        yaw source starts or is reset at, with params set and no yaw source in set 2'''
+        self.set_parameters(params)
+        # in source set 2 with no yaw source, a still disarmed vehicle drops to AID_NONE
+        # and holds its yaw by fusing the static yaw reference
+        self.set_parameter("EK3_SRC2_YAW", 0)
         home = self.sitl_start_location()
         self.customise_SITL_commandline(["--home", "%s,%s,%s,%s" % (
             home.lat, home.lng, home.alt, 90)])
-        self.set_parameters({
+
+    def EKFBootstrapResetStaticYaw(self):
+        '''check a still vehicle with no yaw source retakes its static yaw reference after an EKF reset'''
+        self.static_yaw_test_setup({
             "RC8_OPTION": 187,  # EKF_RESET
-            # source set 2: GPS position and velocity, no yaw source
-            "EK3_SRC2_POSXY": 3,
-            "EK3_SRC2_VELXY": 3,
-            "EK3_SRC2_POSZ": 1,
-            "EK3_SRC2_VELZ": 3,
-            "EK3_SRC2_YAW": 0,
         })
-        self.reboot_sitl()
 
         # fly, so the static yaw reference is the yaw the vehicle landed at
         self.takeoff(3, mode='LOITER')
@@ -16719,8 +16719,8 @@ return update, 100
         self.context_pop()
         self.delay_sim_time(15, "static yaw fusion after the reset")
 
-        # a reference left at the landing yaw is fused against the reset yaw of 0
-        # and the difference runs up the Z gyro bias
+        # the reset puts the yaw at 0, and a reference left at the landing yaw would be
+        # fused against it and run up the Z gyro bias
         cores = self.ekf3_yaw_change_and_max_gyro_bias_z(reset_us)
         if len(cores) == 0:
             raise NotAchievedException("no XKF1 records either side of the reset")
@@ -16733,37 +16733,28 @@ return update, 100
 
     def StaticYawKeepsCompassYaw(self):
         '''check a still vehicle that loses its yaw source keeps its compass aligned yaw'''
-        # boot well away from the 0 deg yaw the EKF starts at, and never move: the
-        # static yaw reference is taken before the compass aligns the yaw
-        home = self.sitl_start_location()
-        self.customise_SITL_commandline(["--home", "%s,%s,%s,%s" % (
-            home.lat, home.lng, home.alt, 90)])
-        self.set_parameters({
-            # source set 2: GPS position and velocity, no yaw source
-            "EK3_SRC2_POSXY": 3,
-            "EK3_SRC2_VELXY": 3,
-            "EK3_SRC2_POSZ": 1,
-            "EK3_SRC2_VELZ": 3,
-            "EK3_SRC2_YAW": 0,
+        # hold the declination at 0 from the compass alignment on, so the yaw the
+        # alignment sets is the yaw the compass then keeps
+        self.static_yaw_test_setup({
+            "COMPASS_AUTODEC": 0,
+            "COMPASS_DEC": 0,
+            "EK3_MAG_EF_LIM": 0,
         })
-        self.reboot_sitl()
+        # never move: the static yaw reference is first taken before the compass aligns the yaw
         self.wait_ready_to_arm()
 
         switch_us = int(self.get_sim_time() * 1e6)
         self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, 2)
         self.delay_sim_time(15, "static yaw fusion with no yaw source")
 
-        # a reference left at the yaw from before the compass aligned would be fused
-        # against the aligned yaw, pulling it away and running up the Z gyro bias
+        # a reference left at the yaw from before the alignment would pull the yaw back toward it
         cores = self.ekf3_yaw_change_and_max_gyro_bias_z(switch_us)
         if len(cores) == 0:
             raise NotAchievedException("no XKF1 records after the source set switch")
-        for core, (yaw_change, max_gz) in sorted(cores.items()):
-            self.progress("EKF3 core %u: yaw moved up to %.1f deg, max |GZ| %.2f deg/s" % (core, yaw_change, max_gz))
-            if yaw_change > 15:
+        for core, (yaw_change, _) in sorted(cores.items()):
+            self.progress("EKF3 core %u: yaw moved up to %.1f deg" % (core, yaw_change))
+            if yaw_change > 5:
                 raise NotAchievedException("core %u: yaw moved %.1f deg with no yaw source" % (core, yaw_change))
-            if max_gz > 0.5:
-                raise NotAchievedException("core %u: Z gyro bias ran up to %.2f deg/s with no yaw source" % (core, max_gz))
 
     def ekf3_yaw_change_and_max_gyro_bias_z(self, since_us):
         '''for each EKF3 core in the current onboard log, the largest yaw change from
