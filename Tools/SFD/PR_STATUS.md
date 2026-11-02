@@ -25,6 +25,25 @@ the round was never triaged.
 
 ---
 
+## 2026-11-02 (night): third AP-Review sweep
+
+ACCEPT: #31274 and #34942 (both at the heads before the evening squash),
+#32475, #33543. COMMENT, all small:
+- #34630: the EKFn_EN one-liners now say the strength floor needs
+  EK3_OPTIONS bit 3 (`38acc82154`). Port `355d45685c`.
+- #34642: the Sim on Hardware fix folded into "let the SITL gyro rate
+  follow INS_GYRO_RATE" (SITL-only code, cannot fly). `49312747a0`.
+- #31216: bootloader LED on PE3, the status LED, rather than PA8, the LED
+  strip pad; bootloader rebuilt. `ba01eac9ac`. Refresh12 brought up to
+  the released-board version (`de64bcd386`, `9e4067f7e0`), which it had
+  not carried.
+- #34584: description only (three new commits, five vectors).
+- #34543: only the test-gap minor (DRK, QUAL, REJ, tilt arrows) left.
+- T25: two more logs on c46a09ec after TD's VRFB learning (0.0131 saved).
+  Loiter holds a baro height the prop wash biases 1.6 m high (SURFTRAK_MODE
+  0, EK3_RNG_USE_HGT -1, BARO1_THST_SCALE -150); another forced reset after
+  a landing. Record in ../ardupilot-pr-analysis/34942/README.md.
+
 ## 2026-11-02 (evening): T25 garage logs, #34942 static yaw, two squashes
 
 Two T25 garage loiter logs on c46a09ec (flow only, baro height, no yaw
