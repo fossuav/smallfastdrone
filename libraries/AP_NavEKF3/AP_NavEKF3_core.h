@@ -1770,6 +1770,12 @@ private:
     // true when on the ground and not falling with a height error, unless aided with a measured vertical velocity agreeing
     bool onGroundHgtError(void) const;
 
+    // health checks other than the ground height check
+    bool healthyApartFromGndHgt(void) const;
+
+    // true when aligned well enough for the filter status to report the estimates
+    bool alignedForStatus(void) const;
+
     // true when a recently fused measured velocity agrees with the state in the vertical
     bool measuredVertVelAgrees(void) const;
 

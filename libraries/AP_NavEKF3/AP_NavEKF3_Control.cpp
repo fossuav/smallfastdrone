@@ -1066,7 +1066,8 @@ void  NavEKF3_core::updateFilterStatus(void)
     bool doingNormalGpsNav = !posTimeout && (PV_AidingMode == AID_ABSOLUTE);
     bool someVertRefData = (!velTimeout && (useGpsVertVel || useExtNavVel)) || !hgtTimeout;
     bool someHorizRefData = !(velTimeout && posTimeout && tasTimeout && dragTimeout) || doingFlowNav || doingBodyVelNav;
-    bool filterHealthy = healthy() && tiltAlignComplete && (yawAlignComplete || (!use_compass() && (PV_AidingMode != AID_ABSOLUTE)));
+    const bool isHealthy = healthy();
+    bool filterHealthy = isHealthy && alignedForStatus();
 
     // If GPS height usage is specified, height is considered to be inaccurate until the GPS passes all checks
     bool hgtNotAccurate = (frontend->sources.getPosZSource(core_index) == AP_NavEKF_Source::SourceZ::GPS) && !validOrigin;
@@ -1100,7 +1101,7 @@ void  NavEKF3_core::updateFilterStatus(void)
     status.flags.rejecting_airspeed = lastTasFailTime_ms != 0 &&
                                             (imuSampleTime_ms - lastTasFailTime_ms) < 1000 &&
                                             (imuSampleTime_ms - lastTasPassTime_ms) > 3000;
-    status.flags.initalized = status.flags.initalized || healthy();
+    status.flags.initalized = status.flags.initalized || isHealthy;
     status.flags.dead_reckoning = (PV_AidingMode != AID_NONE) && doingWindRelNav && !((doingFlowNav && optflow_gnd_offset) || doingNormalGpsNav || doingBodyVelNav);
 
     filterStatus.value = status.value;
