@@ -25,6 +25,39 @@ the round was never triaged.
 
 ---
 
+## 2026-11-02
+
+AP-Review sweep over every open SFD PR: nine new rounds since 10-31, all at
+the squashed heads. #29000, #34210 and #34292 ACCEPT; #31274, #32471, #32473,
+#32475 and #34543 COMMENT; #34630 REQUEST CHANGES. Fixed on refresh12, then
+ported (not pushed):
+- #31274: a short DShot window divides its errors by at least 250 frames
+  (`35c5b6ae2d`), so one miss after a restart reads 0.4% rather than 100% for
+  half a second; a dead ESC now shows after 3 replies rather than 1. Port
+  `eea919627c`.
+- #32471: `_rsem` on the two accel bias wrappers a Lua or DDS arm reaches
+  (`915f070c11`), what bit 2 costs on the ground in ACC_ZBIAS_LEARN
+  (`2e7a5f895c`), the AccelBiasMovingPlatform docstring (`7094e5ccd6`). The
+  PR alone also gets the 1 Hz loop driving the inhibit both ways
+  (`0581269c93`), which #32473, and so refresh12, already does. #32473
+  restacked on it, `863cc99654`.
+- #32475: throw stops writing THPH and sending "Throw position regained" once
+  the next mode runs (`e48795b46f`; the bot's `return` would raise an internal
+  error in the next mode's controller), the hold drift read from SIMSTATE
+  (`b5de7f578a`, the location ratchet), the SIM_IMU_POS comments
+  (`4aa7810362`), a handoff test (`ccd6da4d3d`). Port `df174b0731`.
+- #34543 and #34630 rebased onto master 1d44127b86, keeping master's
+  ScriptingOSDDrawScreen. #34630's OSDEKFLanes flake fixed with SIM_TERRAIN 0,
+  as #34543 already has (5 of 6 to 10 of 10 with CI's tile). No refresh12
+  change.
+- #33543's commit message reworded as hardening (same tree); #32398 retitled.
+- Open: on #31274 a channel getting under about 50 replies/s never fills a
+  250-frame window, so it reads 100% (from 988f8abb9e; read from the code,
+  not seen on hardware). Codex is out until 11-04; the cold reads were by
+  Claude.
+
+Records: `../ardupilot-pr-analysis/<PR>/README.md`, "2026-11-02".
+
 ## 2026-10-31
 
 No sweep. The day's changes, all on Andy's PRs:
