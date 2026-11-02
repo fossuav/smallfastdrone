@@ -7,6 +7,22 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-02 - refresh12 topup5, the 11-02 review rounds
+
+Three AP-Review sweeps over the SFD PRs after the 10-31 squashes. Each fix
+went onto refresh12 first and was then ported and pushed; what is left open
+is #34543's test gaps and the Borg H7's current scale, which needs a board.
+
+One fix came from a flight. Two T25 garage logs on `c46a09ec` showed #34942's
+ground height check holding the status at zero after a landing, upstream's
+disarmed forced reset firing 5 s later, and the static yaw reference
+surviving that bootstrap, so the old yaw was fused against the new one: a
+2.9 deg/s Z gyro bias, and a turn in the next Loiter with the stick
+centred. The reference is now retaken after every bootstrap and yaw reset.
+A 30 s hold on the forced reset was tried and dropped. The same logs showed
+two on-top commits running (#31274's full-window rate, #34942's static yaw
+at boot), and those were squashed. The rest of topup5 has not flown.
+
 ## 2026-10-31 - refresh12 topup4, after the flights
 
 SFD-O4 flew topup3 the same afternoon (logs 66-71, `FLIGHT_VALIDATION.md`).

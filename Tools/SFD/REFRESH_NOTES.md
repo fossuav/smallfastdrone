@@ -17,10 +17,34 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup4, promoted
-  2026-10-31 with this record, a fast-forward of the beta pushed earlier that
-  day (refresh12 topup3 and its promotion record, `a82986c8bd`, kept locally as
-  `SmallFastDrone-4.7.2.7-beta`).
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup5, promoted
+  2026-11-02 with this record, a fast-forward of 40 commits over topup4
+  (`c46a09ec56`, kept locally as `SmallFastDrone-4.7.2.8-beta`). None of
+  topup5 has flown.
+  - topup5 over topup4, the three 11-02 AP-Review rounds: #34942's static yaw
+    reference retaken after every bootstrap and yaw reset (`ba9712dbdb`,
+    `c06189bb8d`), its reset at rest waiting for the fusion horizon and its
+    rejected ground height clip no tighter than 2 m (`4795b33bc8`,
+    `742952b71f`); #31274's 250-frame floor and stale latch (`35c5b6ae2d`,
+    `aa789238ce`); #32475's throw stopping once the next mode runs and
+    keeping a source set picked in throw (`e48795b46f`, `0aa542c7ef`);
+    #32471's locked accel bias wrappers (`915f070c11`); #34584's ATSC.AngPSc
+    from the recorded copy (`d7a07b2217`); the OSD lane items behind
+    AP_OSD_EKF_LANES_ENABLED, on for the ten SFD boards (`9b0cd90701` to
+    `670b9812e4`, `38acc82154`); no AHRS primary core while DCM, SIM or
+    External fly (`5b816923f3`, refresh-only); the Borg H7 at the released
+    board (`de64bcd386`, `9e4067f7e0`); the records, and the lock at the
+    pushed heads (`93198464f9`).
+  - Tested at `93198464f9`: the full SFD set, 119 of 119, and Rover
+    OSDEKFLanesDCMFallback, with each SITL vehicle built on its own (a
+    combined build had left copter without its rate thread; see the
+    refresh12 traps). This record changes no code.
+  - SmallFastDronev1 md5 `f0d3afad` (44,196 bytes free), MicoAir743v2 md5
+    `619c9ce5` (236,640 bytes free). The only parameter-side change since
+    topup4 is AP_OSD_EKF_LANES_ENABLED, which every SFD board keeps on.
+- Previous beta: refresh12 after topup4, promoted 2026-10-31, a fast-forward
+  of the beta pushed earlier that day (refresh12 topup3 and its promotion
+  record, `a82986c8bd`, kept locally as `SmallFastDrone-4.7.2.7-beta`).
   - topup4 over topup3: VALT_POS_EXPO back on var_info2 30 and TKOFF_CPU_AVG/
     PEAK on 41/42 (`8e2a1e6ce6`, `95ad9b9c37`); #32475's position hold when a
     position comes back (`b12501f5af`, `b1bfb811be`, `a05ce46d5b`); #31274's
@@ -1297,6 +1321,15 @@ one because it is master's and costs nothing.
 
 ### Traps found in refresh12
 
+- **Build the SITL vehicles one at a time.** `./waf copter plane heli sub
+  rover` in one call on 2026-11-02 linked plane against copter's objects
+  (undefined `get_fwd_pitch_is_limited()` and AP_Winch bindings) and left
+  copter with no rate thread: FSTRATE_ENABLE missing, so five rate thread
+  tests failed on "Failed to set parameters" and the other 115 passes
+  were on a binary that is not the beta's. Separate `./waf copter`, then
+  each vehicle, recompiles the vehicle-dependent libraries for each one.
+  Before a test run, check the copter binary has the rate thread:
+  `strings build/sitl/bin/arducopter | grep FSTRATE_ENABLE`.
 - **A worktree's `terrain/` is state.** SITL caches SRTM tiles there from
   any test that uses terrain, and with the CMAC tile present the simulated
   range finder measures to SRTM ground 0.55 m below the resting vehicle.

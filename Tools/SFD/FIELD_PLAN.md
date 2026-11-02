@@ -11,6 +11,12 @@ and also carries #32475's and #31274's blocker fixes (neither flown yet):
   `INS_ACC_VRFB_Z` 0.0301 and `INS_ACC2_VRFB_Z` 0.0244 (log69's).
 - `EK3_FLOW_QMIN` is still 60 from bench check 0d.
 
+The beta after topup5 (`93198464f9`, SmallFastDronev1 md5 `f0d3afad`,
+MicoAir743v2 md5 `619c9ce5`) adds the 11-02 review fixes, none flown and no
+parameter changes: #34942's static yaw retaken after a reset (T1), #31274's
+250-frame floor (0b, item 1), #32475's throw hand-off (item 6), and smaller
+ones this card does not exercise.
+
 Still to fly from this card: 0b and 0d, item 1's second takeoff in one boot,
 item 5's re-arm after a landing, item 7's restarted log, and the T25.
 
@@ -154,6 +160,10 @@ on every flight. `ACC_ZBIAS_LEARN 10` can stay once `INS_ACC_VRFB_Z` is 0.
   refused 7 ordinary re-arms, 1.1 to 3.9 s after a disarm, and 2 first arms.
   Each one seen in flight, with how long after the disarm, tells us whether
   that cost is acceptable.
+- After any "EKF3 IMU0 forced reset" or "vertical velocity reset at rest" on
+  the ground (topup5): XKF1.Yaw does not step and XKF1.GZ stays near its
+  value before the reset. The 11-02 garage log reached a 2.9 deg/s Z gyro
+  bias and turned in the next Loiter with the stick centred.
 - If the pilot repeats the drop test, as Flight test 3: a switch disarm at
   about 1 m over soft ground, still for 2 s, re-arm in VALT and take off, stick
   at minimum after the takeoff. Pass: the reset message after the drop
