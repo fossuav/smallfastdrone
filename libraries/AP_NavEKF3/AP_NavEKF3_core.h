@@ -131,6 +131,9 @@
 // after every optical flow or body odometry axis last passed its innovation check together (msec)
 #define ALL_AXES_FUSED_HOLD_MS 500
 
+// filtered height innovation on the ground (m) above which onGroundHgtError() reports a height error
+#define GND_HGT_ERR_LIMIT 1.0f
+
 class NavEKF3_core : public NavEKF_core_common
 {
 public:
