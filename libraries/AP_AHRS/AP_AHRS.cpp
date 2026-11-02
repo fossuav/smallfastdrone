@@ -3440,18 +3440,18 @@ int8_t AP_AHRS::_get_primary_core_index() const
     switch (active_EKF_type()) {
 #if AP_AHRS_DCM_ENABLED
     case EKFType::DCM:
-        // we have only one core
-        return 0;
+        // runs no cores
+        return -1;
 #endif
 #if AP_AHRS_SIM_ENABLED
     case EKFType::SIM:
-        // we have only one core
-        return 0;
+        // runs no cores
+        return -1;
 #endif
 #if AP_AHRS_EXTERNAL_ENABLED
     case EKFType::EXTERNAL:
-        // we have only one core
-        return 0;
+        // runs no cores
+        return -1;
 #endif
 
 #if HAL_NAVEKF2_AVAILABLE

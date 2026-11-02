@@ -1059,7 +1059,7 @@ private:
         uint8_t primary_IMU;
         uint8_t primary_gyro;
         uint8_t primary_accel;
-        uint8_t primary_core;
+        int8_t primary_core;
         Vector3f gyro_estimate;
         Matrix3f dcm_matrix;
         Vector3f gyro_drift;
