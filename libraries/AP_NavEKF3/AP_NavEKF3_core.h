@@ -1598,7 +1598,7 @@ private:
     EKF_obs_buffer_t<yaw_elements> storedYawAng;    // GPS yaw angle buffer
     yaw_elements yawAngDataNew;         // GPS yaw angle at the current time horizon
     yaw_elements yawAngDataDelayed;     // GPS yaw angle at the fusion time horizon
-    yaw_elements yawAngDataStatic;      // yaw angle (regardless of yaw source) when the vehicle was last on ground and not moving
+    yaw_elements yawAngDataStatic;      // yaw angle (regardless of yaw source) fused as a reference while on ground and not moving, once no yaw sensor has been fused for 5 s
 
     // Range Beacon Sensor Fusion
 #if EK3_FEATURE_BEACON_FUSION
