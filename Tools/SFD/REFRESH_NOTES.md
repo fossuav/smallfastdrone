@@ -55,6 +55,16 @@ reply exists") before acting on it.
     2026-10-31 (topup4), so a value set on a 4.7.1 or 4.7.2 beta before then
     reads 0 on topup4 or later, or a saved TKOFF_CPU_AVG (95) on boards that
     flew the 10-30/31 betas. Ask users with poor VALT for their PARM value.
+  - Known, not fixed (2026-11-03): a low VALT hover over a baro that reads
+    high near the floor is pulled onto it. JK's 4C GOM hit the floor 9.3
+    times a minute below 0.6 m against 2.0 on 4.7.0. AP_GroundEffect has
+    no low-hover re-latch, so VALT's ground effect clamp and the EKF's
+    baro deweighting are off there; 4.7.0's re-latch was switched by the
+    range finder, and baro-only the builds do not differ in SITL. Advice,
+    SITL only: EK3_OPTIONS bit 4 with EK3_AGL_ABIAS_P 0.3 steadies it
+    (not reliably a hold), or ALT_HOLD, whose surface tracking VALT skips.
+    Record: `../analysis/topics/valt_low_hover_baro_wash.md`; SITL test
+    VALTLowHoverGroundEffect, not committed.
 - Older beta: refresh12 after topup5, promoted 2026-11-02, a fast-forward
   of 40 commits over topup4 (`c46a09ec56`, kept locally as
   `SmallFastDrone-4.7.2.8-beta`).
