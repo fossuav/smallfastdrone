@@ -248,9 +248,8 @@ void NavEKF3_core::SelectMagFusion()
 
     // Store yaw angle when moving for use as a static reference when not moving, and once at the
     // start, as a vehicle still from its first sample would otherwise fuse an unset reference.
-    // Store it while the compass is in use too: a declination that arrives after the compass
-    // alignment turns the yaw with no reset.
-    if (!onGroundNotMoving || (yawAngDataStatic.time_ms == 0) || use_compass()) {
+    // Store it while a yaw sensor is fused too, which can turn the yaw with no reset.
+    if (!onGroundNotMoving || (yawAngDataStatic.time_ms == 0) || recentYawFusion()) {
         storeStaticYaw();
     }
 
