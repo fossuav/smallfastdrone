@@ -16824,13 +16824,9 @@ return update, 100
 
     def StaticYawKeepsCompassYaw(self):
         '''check a still vehicle that loses its yaw source keeps its compass aligned yaw'''
-        # hold the declination at 0 from the compass alignment on, so the yaw the
-        # alignment sets is the yaw the compass then keeps
-        self.static_yaw_test_setup({
-            "COMPASS_AUTODEC": 0,
-            "COMPASS_DEC": 0,
-            "EK3_MAG_EF_LIM": 0,
-        })
+        # with the default COMPASS_AUTODEC the declination arrives from the GPS after the
+        # compass alignment and turns the yaw with no reset
+        self.static_yaw_test_setup({})
         # never move: the static yaw reference is first taken before the compass aligns the yaw
         self.wait_ready_to_arm()
 
