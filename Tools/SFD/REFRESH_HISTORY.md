@@ -7,6 +7,17 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-03 (afternoon) - refresh12 topup7, the EKF step average
+
+AP-Review's fourth round on #34942: the gyro bias states the EKF's own
+reset now keeps are delta angles per EKF step, and the reset restarted
+the step average at 12 ms, so on a 50 Hz loop a kept 0.64 deg/s acted as
+up to 1.04 deg/s for a few seconds, and at the T25's 200 Hz as about 0.83
+of it. Scaling the kept states was right only at the reset (0.41 deg/s as
+the average recovered); the average is kept instead, but only for a core
+that has run, as before the first initialisation it is driven by the
+start-up window and keeping it changed a first boot (the cold read).
+
 ## 2026-11-03 - refresh12 topup6, the gyro bias and the static yaw reference
 
 Users reported yaw jitter without a compass and poor VALT on the new

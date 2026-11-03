@@ -17,10 +17,25 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup6, promoted
-  2026-11-03 with this record, a fast-forward of 14 commits over topup5
-  (`df9604a31f`, kept locally as `SmallFastDrone-4.7.2.9-beta`). None of
-  topup6 has flown.
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup7, promoted
+  2026-11-03 (afternoon) with this record, a fast-forward of 6 commits over
+  topup6 (`f9fb97e8eb`, kept locally as `SmallFastDrone-4.7.2.10-beta`). None
+  of topup6 or topup7 has flown.
+  - topup7 over topup6, AP-Review round 4 on #34942: the EKF step average is
+    kept across a bootstrap of a core that has run, so a kept gyro bias acts
+    at its learned rate on loops where the EKF does not step at 12 ms
+    (`77c33e88d4`, `dd4191b19d`; EKFResetGyroBias at 400 and 50 Hz); the
+    lock at #34942's pushed `2804706ae0`.
+  - Tested at `ee1c86671d`: the full SFD set, 120 of 121, and Rover
+    OSDEKFLanesDCMFallback, each SITL vehicle built on its own. Copter.Replay
+    failed in the set on "Did not get new position like old position" and
+    passed twice alone (the known suite-load stall). This record changes no
+    code.
+  - SmallFastDronev1 md5 `77c50c62` (43,948 bytes free), MicoAir743v2 md5
+    `9c5a3f4c` (236,392 bytes free). No parameter-side changes since topup6.
+- Previous beta: refresh12 after topup6, promoted 2026-11-03, a fast-forward
+  of 14 commits over topup5 (`df9604a31f`, kept locally as
+  `SmallFastDrone-4.7.2.9-beta`).
   - topup6 over topup5, the 11-03 #34942 work after users reported yaw
     jitter without a compass and poor VALT: the EKF's own reset keeps the
     learned gyro biases, and EKF_RESET (and the arm-pending reset) zeroes
@@ -40,7 +55,7 @@ reply exists") before acting on it.
     2026-10-31 (topup4), so a value set on a 4.7.1 or 4.7.2 beta before then
     reads 0 on topup4 or later, or a saved TKOFF_CPU_AVG (95) on boards that
     flew the 10-30/31 betas. Ask users with poor VALT for their PARM value.
-- Previous beta: refresh12 after topup5, promoted 2026-11-02, a fast-forward
+- Older beta: refresh12 after topup5, promoted 2026-11-02, a fast-forward
   of 40 commits over topup4 (`c46a09ec56`, kept locally as
   `SmallFastDrone-4.7.2.8-beta`).
   - topup5 over topup4, the three 11-02 AP-Review rounds: #34942's static yaw
