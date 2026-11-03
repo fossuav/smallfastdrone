@@ -568,6 +568,11 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
     // is false and the restore below is a no-op.
     const bool hadValidOrigin = validOrigin;
     const Location savedEKFOrigin = EKF_origin;
+    // preserve the gyro bias across re-initialisation, which with no yaw reference is learned only at rest
+    Vector3F savedGyroBias = stateStruct.gyro_bias;
+    if (savedGyroBias.is_nan() || savedGyroBias.is_inf()) {
+        savedGyroBias.zero();
+    }
 
     // set re-used variables to zero
     InitialiseVariables();
@@ -606,7 +611,7 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
     stateStruct.position.zero();
 
     // initialise static process model states
-    stateStruct.gyro_bias.zero();
+    stateStruct.gyro_bias = savedGyroBias;
     stateStruct.accel_bias.zero();
     accelBiasResetCount[accel_index_active]++;
     stateStruct.wind_vel.zero();
@@ -634,9 +639,11 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
     // set to true now that states have be initialised
     statesInitialised = true;
 
-    // reset inactive biases
+    // reset inactive biases, keeping the gyro biases as for the active IMU
     for (uint8_t i=0; i<INS_MAX_INSTANCES; i++) {
-        inactiveBias[i].gyro_bias.zero();
+        if (inactiveBias[i].gyro_bias.is_nan() || inactiveBias[i].gyro_bias.is_inf()) {
+            inactiveBias[i].gyro_bias.zero();
+        }
         inactiveBias[i].accel_bias.zero();
         accelBiasZeroTime_ms[i] = imuSampleTime_ms;
     }
