@@ -2380,7 +2380,7 @@ bool NavEKF3::InitialiseFilterBootstrap()
     for (uint8_t i=0; i<num_cores; i++) {
         // clear the statesInitialised status to allow a bootstrap alignment
         core[i].clearStatesInitialised();
-        // a commanded reset relearns the gyro biases, where the EKF's own reset keeps them
+        // a commanded reset relearns the gyro biases, where the EKF's own reset keeps Z
         core[i].zeroGyroBiases();
         // perform a bootstrap alignment
         core[i].InitialiseFilterBootstrap();
