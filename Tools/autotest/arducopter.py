@@ -16761,7 +16761,7 @@ return update, 100
         return {core: (before[core],) + after[core] for core in after}
 
     def EKFResetGyroBias(self):
-        '''check the EKF's own reset keeps the learned Z gyro bias and zeroes X, and a commanded reset zeroes both'''
+        '''check the EKF's own reset keeps the Z gyro bias and relearns X and Y, and EKF_RESET zeroes all three'''
         # with no yaw reference the Z gyro bias is learned only at rest, and a flight holds it,
         # so a reset that dropped it would leave a flight armed soon after with the part not
         # yet relearned. X and Y are relearned from gravity at rest, and ones learned while the
@@ -16793,8 +16793,8 @@ return update, 100
             "INS_GYR_CAL": 0,
         }
         for n in (1, 2):
-            params["SIM_GYR%u_BIAS_X" % n] = math.radians(bias_dps)
-            params["SIM_GYR%u_BIAS_Z" % n] = math.radians(bias_dps)
+            for axis in "XYZ":
+                params["SIM_GYR%u_BIAS_%s" % (n, axis)] = math.radians(bias_dps)
             for axis in "XYZ":
                 params["INS_GYR%sOFFS_%s" % ("" if n == 1 else str(n), axis)] = 0
         self.set_parameters(params)
@@ -16811,7 +16811,7 @@ return update, 100
         self.delay_sim_time(30, "static yaw fusion to learn the gyro bias")
         reset_us = self.ekf_reset_by_switch()
         self.delay_sim_time(3, "the first seconds after the commanded reset")
-        for axis in "XZ":
+        for axis in "XYZ":
             for core, (before, lowest, highest) in sorted(self.ekf3_gyro_bias_around(
                     reset_us, reset_us + 2000000, axis).items()):
                 self.progress("EKF3 core %u: G%s %.2f deg/s before the commanded reset, %.2f to %.2f after" % (
@@ -16833,16 +16833,21 @@ return update, 100
         reset_us = int(self.get_sim_time() * 1e6)
         self.delay_sim_time(3, "the first seconds after the EKF's own reset")
         self.context_pop()
-        for axis in "XZ":
+        for axis in "XYZ":
+            relearned = self.ekf3_gyro_bias_around(reset_us + 1500000, reset_us + 2000000, axis)
             for core, (before, lowest, highest) in sorted(self.ekf3_gyro_bias_around(
                     glitch_us, reset_us + 2000000, axis).items()):
                 self.progress("EKF3 core %u: G%s %.2f deg/s before the baro step, %.2f to %.2f until 2 s after the reset" % (
                     core, axis, before, lowest, highest))
                 check_learned(core, axis, "EKF's own reset", before)
-                if axis == "X":
+                if axis != "Z":
                     if lowest > tolerance_dps:
-                        raise NotAchievedException("core %u: the EKF's own reset kept a %.2f deg/s X gyro bias" % (
-                            core, lowest))
+                        raise NotAchievedException("core %u: the EKF's own reset kept a %.2f deg/s %s gyro bias" % (
+                            core, lowest, axis))
+                    # zeroed rather than kept is safe only because gravity relearns it at rest
+                    if relearned[core][1] < before - tolerance_dps:
+                        raise NotAchievedException("core %u: %s gyro bias %.2f deg/s 1.5 s after the reset, not %.2f" % (
+                            core, axis, relearned[core][1], before))
                 elif lowest < before - tolerance_dps or highest > before + tolerance_dps:
                     raise NotAchievedException(
                         "core %u: the EKF's own reset moved the Z gyro bias from %.2f to %.2f-%.2f deg/s" % (
