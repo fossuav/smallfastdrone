@@ -248,7 +248,7 @@ void NavEKF3_core::SelectMagFusion()
 
     // Store yaw angle when moving for use as a static reference when not moving, and once at the
     // start, as a vehicle still from its first sample would otherwise fuse an unset reference.
-    // Store it while a yaw sensor is fused too, which can turn the yaw with no reset.
+    // Store it within 5 s of a yaw sensor fusion too, as that can turn the yaw with no reset.
     if (!onGroundNotMoving || (yawAngDataStatic.time_ms == 0) || recentYawFusion()) {
         storeStaticYaw();
     }
