@@ -16763,10 +16763,22 @@ return update, 100
         '''check the EKF's own reset keeps the learned gyro bias and a commanded reset zeroes it'''
         # with no yaw reference the Z gyro bias is learned only at rest, and a flight holds it,
         # so a reset that dropped it would leave a flight armed soon after with the part not
-        # yet relearned. The EKF_RESET aux function is a full reset and relearns it.
+        # yet relearned. The EKF_RESET aux function is a full reset and relearns it. The bias
+        # state is a delta angle per EKF step, and a reset restarts the step average at 12 ms,
+        # so a 50 Hz loop, the Plane and Rover default, checks it is kept as a rate
+        for loop_rate in (400, 50):
+            self.start_subtest("SCHED_LOOP_RATE %u" % loop_rate)
+            self.context_push()
+            self.ekf_reset_gyro_bias_at(loop_rate)
+            self.context_pop()
+        self.reboot_sitl()
+
+    def ekf_reset_gyro_bias_at(self, loop_rate):
+        '''EKFResetGyroBias at one loop rate'''
         bias_dps = 0.6
         tolerance_dps = 0.15
         params = {
+            "SCHED_LOOP_RATE": loop_rate,
             "RC8_OPTION": 187,  # EKF_RESET
             "SIM_FLOW_ENABLE": 1,
             "FLOW_TYPE": 10,
