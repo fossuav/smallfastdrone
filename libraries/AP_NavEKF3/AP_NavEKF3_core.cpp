@@ -578,6 +578,14 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
     const bool hadValidOrigin = validOrigin;
     const Location savedEKFOrigin = EKF_origin;
 
+    // preserve the gyro bias too: with no yaw reference the Z bias is learned only at rest,
+    // so a flight soon after a reset would otherwise hold what had been relearned from zero.
+    // On first boot the states are still zero.
+    Vector3F savedGyroBias = stateStruct.gyro_bias;
+    if (savedGyroBias.is_nan() || savedGyroBias.is_inf()) {
+        savedGyroBias.zero();
+    }
+
     // set re-used variables to zero
     InitialiseVariables();
 
@@ -614,8 +622,8 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
     stateStruct.velocity.zero();
     stateStruct.position.zero();
 
-    // initialise static process model states
-    stateStruct.gyro_bias.zero();
+    // initialise static process model states, keeping the gyro bias learned before a reset
+    stateStruct.gyro_bias = savedGyroBias;
     stateStruct.accel_bias.zero();
     stateStruct.wind_vel.zero();
     stateStruct.earth_magfield.zero();
@@ -642,9 +650,11 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
     // set to true now that states have be initialised
     statesInitialised = true;
 
-    // reset inactive biases
+    // reset inactive biases, keeping the gyro biases as for the active one
     for (uint8_t i=0; i<INS_MAX_INSTANCES; i++) {
-        inactiveBias[i].gyro_bias.zero();
+        if (inactiveBias[i].gyro_bias.is_nan() || inactiveBias[i].gyro_bias.is_inf()) {
+            inactiveBias[i].gyro_bias.zero();
+        }
         inactiveBias[i].accel_bias.zero();
     }
 
