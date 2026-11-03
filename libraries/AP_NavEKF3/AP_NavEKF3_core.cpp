@@ -583,9 +583,14 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
     if (savedGyroBias.is_nan() || savedGyroBias.is_inf()) {
         savedGyroBias.zero();
     }
+    // and the EKF step average, as the bias states are delta angles per step
+    const ftype savedDtEkfAvg = dtEkfAvg;
 
     // set re-used variables to zero
     InitialiseVariables();
+    if (is_positive(savedDtEkfAvg)) {
+        dtEkfAvg = savedDtEkfAvg;
+    }
 
     // restore origin so per-core EKF_origin stays consistent with the
     // shared frontend public_origin
