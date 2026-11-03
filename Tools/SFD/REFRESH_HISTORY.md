@@ -7,6 +7,29 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-03 - refresh12 topup6, the gyro bias and the static yaw reference
+
+Users reported yaw jitter without a compass and poor VALT on the new
+betas. One cause found: with no yaw reference #33498 holds the Z gyro
+bias in flight at what was learned at rest, and every bootstrap zeroed
+it, so a quick re-arm after the forced reset #34942 makes routine after
+landings flew with what had been relearned from zero (SITL 0.6 deg/s,
+armed 6.8 s after: 15.1 deg of drift in a 60 s hover, 2.8 deg kept).
+Andy's call: the EKF's own reset keeps the biases, EKF_RESET zeroes them.
+Seeding from INS_GYROFFS was rejected, as the INS already takes the
+stored offsets off. The first attempt changed nothing: InitialiseVariables()
+zeroes the whole state vector before the line it had changed.
+
+AP-Review's third round on #34942 asked for the static yaw reference to
+follow the compass yaw, as the default declination arrives after the
+alignment and turns the yaw with no reset. Its suggested use_compass()
+would have stopped a still vehicle waiting for GPS yaw with compass
+fallback learning its bias (0.00 against 0.63 deg/s); the reference is
+stored within 5 s of a fused yaw instead (recentYawFusion()).
+
+Also found, not fixed: VALT_POS_EXPO's move from index 29 back to 30 on
+10-31 loses a value set on the 4.7.1 and 4.7.2 betas before then.
+
 ## 2026-11-02 - refresh12 topup5, the 11-02 review rounds
 
 Three AP-Review sweeps over the SFD PRs after the 10-31 squashes. Each fix

@@ -17,6 +17,13 @@ parameter changes: #34942's static yaw retaken after a reset (T1), #31274's
 250-frame floor (0b, item 1), #32475's throw hand-off (item 6), and smaller
 ones this card does not exercise.
 
+The beta after topup6 (`d55b7d25e3`, SmallFastDronev1 md5 `b1d6a9c1`,
+MicoAir743v2 md5 `97602903`) adds, none flown and no parameter changes:
+#34942's gyro bias kept through the EKF's own reset (T1) and its static yaw
+reference stored within 5 s of a fused yaw. If a pilot reports poor VALT,
+check `VALT_POS_EXPO` in the log against what they set: a value set on a
+4.7.1 or 4.7.2 beta before 2026-10-31 reads 0 or a stray 95 since then.
+
 Still to fly from this card: 0b and 0d, item 1's second takeoff in one boot,
 item 5's re-arm after a landing, item 7's restarted log, and the T25.
 
@@ -163,7 +170,10 @@ on every flight. `ACC_ZBIAS_LEARN 10` can stay once `INS_ACC_VRFB_Z` is 0.
 - After any "EKF3 IMU0 forced reset" or "vertical velocity reset at rest" on
   the ground (topup5): XKF1.Yaw does not step and XKF1.GZ stays near its
   value before the reset. The 11-02 garage log reached a 2.9 deg/s Z gyro
-  bias and turned in the next Loiter with the stick centred.
+  bias and turned in the next Loiter with the stick centred. From topup6
+  XKF1.GZ keeps its value through the forced reset itself; an EKF_RESET
+  switch reset starts it from 0, so a flight right after one may wander in
+  yaw until the bias is relearned at rest (about 10 s).
 - If the pilot repeats the drop test, as Flight test 3: a switch disarm at
   about 1 m over soft ground, still for 2 s, re-arm in VALT and take off, stick
   at minimum after the takeoff. Pass: the reset message after the drop

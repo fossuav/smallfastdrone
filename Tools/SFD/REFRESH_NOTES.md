@@ -17,10 +17,32 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup5, promoted
-  2026-11-02 with this record, a fast-forward of 40 commits over topup4
-  (`c46a09ec56`, kept locally as `SmallFastDrone-4.7.2.8-beta`). None of
-  topup5 has flown.
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup6, promoted
+  2026-11-03 with this record, a fast-forward of 14 commits over topup5
+  (`df9604a31f`, kept locally as `SmallFastDrone-4.7.2.9-beta`). None of
+  topup6 has flown.
+  - topup6 over topup5, the 11-03 #34942 work after users reported yaw
+    jitter without a compass and poor VALT: the EKF's own reset keeps the
+    learned gyro biases, and EKF_RESET (and the arm-pending reset) zeroes
+    them (`dfd8194b85`, `19e5ca3831`, test EKFResetGyroBias); the static
+    yaw reference is stored within 5 s of a GPS, compass or external nav
+    yaw fusion, so a declination arriving after the compass alignment no
+    longer leaves it behind (`e84029d45f` reworked by `e95d72c3a9`,
+    `5a328d4364`; tests StaticYawKeepsCompassYaw on the default
+    declination and StaticYawLearnsBiasAwaitingGPSYaw); the records, and
+    the lock at #34942's pushed `d742c388ee`.
+  - Tested at `d55b7d25e3`: the full SFD set, 121 of 121, and Rover
+    OSDEKFLanesDCMFallback, each SITL vehicle built on its own (copter's
+    rate thread checked). This record changes no code.
+  - SmallFastDronev1 md5 `b1d6a9c1` (43,972 bytes free), MicoAir743v2 md5
+    `97602903` (236,416 bytes free). No parameter-side changes since topup5.
+  - Known, not fixed: VALT_POS_EXPO moved from var_info2 29 to 30 on
+    2026-10-31 (topup4), so a value set on a 4.7.1 or 4.7.2 beta before then
+    reads 0 on topup4 or later, or a saved TKOFF_CPU_AVG (95) on boards that
+    flew the 10-30/31 betas. Ask users with poor VALT for their PARM value.
+- Previous beta: refresh12 after topup5, promoted 2026-11-02, a fast-forward
+  of 40 commits over topup4 (`c46a09ec56`, kept locally as
+  `SmallFastDrone-4.7.2.8-beta`).
   - topup5 over topup4, the three 11-02 AP-Review rounds: #34942's static yaw
     reference retaken after every bootstrap and yaw reset (`ba9712dbdb`,
     `c06189bb8d`), its reset at rest waiting for the fusion horizon and its
@@ -42,7 +64,7 @@ reply exists") before acting on it.
   - SmallFastDronev1 md5 `f0d3afad` (44,196 bytes free), MicoAir743v2 md5
     `619c9ce5` (236,640 bytes free). The only parameter-side change since
     topup4 is AP_OSD_EKF_LANES_ENABLED, which every SFD board keeps on.
-- Previous beta: refresh12 after topup4, promoted 2026-10-31, a fast-forward
+- Older beta: refresh12 after topup4, promoted 2026-10-31, a fast-forward
   of the beta pushed earlier that day (refresh12 topup3 and its promotion
   record, `a82986c8bd`, kept locally as `SmallFastDrone-4.7.2.7-beta`).
   - topup4 over topup3: VALT_POS_EXPO back on var_info2 30 and TKOFF_CPU_AVG/
