@@ -25,6 +25,21 @@ the round was never triaged.
 
 ---
 
+## 2026-11-03: the gyro bias across an EKF reset (#34942)
+
+Users report yaw jitter without a compass and poor VALT on the new betas.
+One cause found so far: every bootstrap zeroed the gyro biases, and with no
+yaw reference #33498 holds the Z bias in flight at what was learned at
+rest, so a quick re-arm after the forced reset this PR makes routine flew
+with what had been relearned from zero (SITL 0.6 deg/s, armed 6.8 s after:
+15.1 deg of drift in a 60 s hover, 2.8 deg kept). Andy's call: the EKF's
+own reset keeps the biases, the EKF_RESET switch zeroes them. Refresh12
+`dfd8194b85`, `80cbb8106b`, `19e5ca3831`, `76a16f3278` (EKFResetGyroBias);
+port `sq/34942-1103b` (`c83b148144`, `713ca4946f`). Unflown. Also found:
+VALT_POS_EXPO moved from var_info2 29 to 30 on 10-31, so a value set on a
+4.7.1 or 4.7.2 beta before then reads 0, or a saved TKOFF_CPU_AVG; fix
+not decided. Record in ../ardupilot-pr-analysis/34942/README.md.
+
 ## 2026-11-02 (night): third AP-Review sweep
 
 ACCEPT: #31274 and #34942 (both at the heads before the evening squash),
