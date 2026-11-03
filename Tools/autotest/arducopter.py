@@ -16865,6 +16865,18 @@ return update, 100
         self.reboot_sitl()
         self.delay_sim_time(40, "static yaw fusion while waiting for GPS yaw")
         end_us = int(self.get_sim_time() * 1e6)
+        # a yaw sensor that aligned the yaw would learn the bias itself, and the static yaw
+        # reference would not be under test
+        dfreader = self.dfreader_for_path(self.current_onboard_log_filepath())
+        while True:
+            try:
+                m = dfreader.recv_match(type="MSG")
+            except (OSError, ValueError, struct.error):
+                break
+            if m is None:
+                break
+            if "yaw align" in m.Message:
+                raise NotAchievedException("the yaw was aligned while waiting for GPS yaw: %s" % m.Message)
         for core, (_, lowest, highest) in sorted(self.ekf3_gyro_bias_z_around(end_us - 2000000, end_us).items()):
             self.progress("EKF3 core %u: GZ %.2f to %.2f deg/s after 40 s waiting for GPS yaw" % (core, lowest, highest))
             if lowest < bias_dps - tolerance_dps or highest > bias_dps + tolerance_dps:
