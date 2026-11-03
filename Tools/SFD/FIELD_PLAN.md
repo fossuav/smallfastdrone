@@ -17,6 +17,11 @@ parameter changes: #34942's static yaw retaken after a reset (T1), #31274's
 250-frame floor (0b, item 1), #32475's throw hand-off (item 6), and smaller
 ones this card does not exercise.
 
+The beta after topup8 (`902d52b738`, SmallFastDronev1 md5 `d7fd65bd`,
+MicoAir743v2 md5 `4223ca14`) starts the X and Y gyro biases from zero on
+the EKF's own reset and keeps Z, so ones learned while the vehicle is
+carried powered do not survive it. No parameter changes, not flown.
+
 The beta after topup7 (`ee1c86671d`, SmallFastDronev1 md5 `77c50c62`,
 MicoAir743v2 md5 `9c5a3f4c`) keeps the EKF step average across the EKF's
 own reset, so the T25 (SCHED_LOOP_RATE 200) keeps its gyro bias at the

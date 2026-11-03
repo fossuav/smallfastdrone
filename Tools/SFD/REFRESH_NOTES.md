@@ -17,18 +17,28 @@ reply exists") before acting on it.
 
 ## Current state
 
-- On refresh12, not promoted, not yet on #34942's branch: the EKF's own
-  reset starts the X and Y gyro biases from zero and keeps Z (`f297033f6e`,
-  EKFResetGyroBias extended in `fb0e459bba`). Prompted by JK's log 69,
-  armed with a 0.38 deg/s roll bias after the vehicle was carried powered.
-  Replay of the T25's 11 4.7.2 logs: no change but boot 165, carried
-  powered, where it helps. A stillness gate on #34292's zero flow at rest
-  was tried for the same log and dropped: the harm it removed was
-  Replay-only, and it regresses T25 boot 45's spool-up.
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup7, promoted
-  2026-11-03 (afternoon) with this record, a fast-forward of 6 commits over
-  topup6 (`f9fb97e8eb`, kept locally as `SmallFastDrone-4.7.2.10-beta`). None
-  of topup6 or topup7 has flown.
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup8, promoted
+  2026-11-03 (evening) with this record, a fast-forward of 5 commits over
+  topup7 (`4885313c95`, kept locally as `SmallFastDrone-4.7.2.11-beta`). None
+  of topup6, topup7 or topup8 has flown.
+  - topup8 over topup7, from JK's log 69 (armed with a 0.38 deg/s roll bias
+    after the vehicle was carried powered): the EKF's own reset starts the X
+    and Y gyro biases from zero and keeps Z (`f297033f6e`; EKFResetGyroBias
+    checks X and Y are zeroed and relearned within 2 s, `fb0e459bba`,
+    `902d52b738`). Replay of the T25's 11 4.7.2 logs: no change but boot
+    165, carried powered, where it helps. Ported to #34942 as `4ac4f4b1f8`
+    and `3879fc6a6e` on `sq/34942-1103j`, not yet pushed, so the lock stays
+    at `2804706ae0`. A stillness gate on #34292's zero flow at rest was
+    tried for the same log and dropped: the harm it removed was Replay-only,
+    and it regresses T25 boot 45's spool-up.
+  - Tested at `902d52b738`: the full SFD set, 121 of 121, and Rover
+    OSDEKFLanesDCMFallback, each SITL vehicle built on its own. This record
+    changes no code.
+  - SmallFastDronev1 md5 `d7fd65bd` (43,948 bytes free), MicoAir743v2 md5
+    `4223ca14` (236,384 bytes free). No parameter-side changes since topup7.
+- Previous beta: refresh12 after topup7, promoted 2026-11-03 (afternoon), a
+  fast-forward of 6 commits over topup6 (`f9fb97e8eb`, kept locally as
+  `SmallFastDrone-4.7.2.10-beta`).
   - topup7 over topup6, AP-Review round 4 on #34942: the EKF step average is
     kept across a bootstrap of a core that has run, so a kept gyro bias acts
     at its learned rate on loops where the EKF does not step at 12 ms
@@ -41,7 +51,7 @@ reply exists") before acting on it.
     code.
   - SmallFastDronev1 md5 `77c50c62` (43,948 bytes free), MicoAir743v2 md5
     `9c5a3f4c` (236,392 bytes free). No parameter-side changes since topup6.
-- Previous beta: refresh12 after topup6, promoted 2026-11-03, a fast-forward
+- Older beta: refresh12 after topup6, promoted 2026-11-03, a fast-forward
   of 14 commits over topup5 (`df9604a31f`, kept locally as
   `SmallFastDrone-4.7.2.9-beta`).
   - topup6 over topup5, the 11-03 #34942 work after users reported yaw

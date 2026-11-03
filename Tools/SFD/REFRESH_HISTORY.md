@@ -7,6 +7,25 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-03 (evening) - refresh12 topup8, X and Y gyro bias on the EKF's own reset
+
+JK's 4C GOM log 69 (an ACRO "runaway") armed with a 0.38 deg/s roll gyro
+bias after the vehicle was carried powered. Since topup6 the EKF's own
+reset keeps the gyro biases, so ones learned while carried survive it. It
+now keeps Z, which with no yaw reference is learned only at rest, and
+starts X and Y from zero; gravity relearns them within 2 s at rest.
+
+A stillness gate on #34292's zero flow at rest was tried first and
+dropped. It removed a -1.99 deg/s pitch bias jump in log 69's Replay, but
+the jump is Replay-only: the log starts at arming, so the replayed EKF
+was 3 s old on the floor, and the flown EKF's biases did not move there.
+On the T25 the same zero on the floor at spool-up corrected a bad state
+at arming (boot 45, where Replay matches the flown EKF), and with the gate
+it would have lifted off with a 2.3 deg/s pitch bias. A cold review then
+asked for a Y bias and a relearn check in the test, and noted that body Z
+stands in for the vertical only on a vehicle at rest near level (open, a
+tailsitter on its tail).
+
 ## 2026-11-03 (afternoon) - refresh12 topup7, the EKF step average
 
 AP-Review's fourth round on #34942: the gyro bias states the EKF's own
