@@ -17,6 +17,14 @@ reply exists") before acting on it.
 
 ## Current state
 
+- On refresh12, not promoted, not yet on #34942's branch: the EKF's own
+  reset starts the X and Y gyro biases from zero and keeps Z (`f297033f6e`,
+  EKFResetGyroBias extended in `fb0e459bba`). Prompted by JK's log 69,
+  armed with a 0.38 deg/s roll bias after the vehicle was carried powered.
+  Replay of the T25's 11 4.7.2 logs: no change but boot 165, carried
+  powered, where it helps. A stillness gate on #34292's zero flow at rest
+  was tried for the same log and dropped: the harm it removed was
+  Replay-only, and it regresses T25 boot 45's spool-up.
 - Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup7, promoted
   2026-11-03 (afternoon) with this record, a fast-forward of 6 commits over
   topup6 (`f9fb97e8eb`, kept locally as `SmallFastDrone-4.7.2.10-beta`). None
