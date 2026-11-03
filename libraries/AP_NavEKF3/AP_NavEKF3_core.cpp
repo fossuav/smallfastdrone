@@ -573,9 +573,17 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
     if (savedGyroBias.is_nan() || savedGyroBias.is_inf()) {
         savedGyroBias.zero();
     }
+    // and, for a core that has run, its EKF step average, as the bias states are delta angles
+    // per step; before the first initialisation the average holds the accumulation window's
+    // unpredicted frames, not EKF steps
+    const bool hasRun = ekfStartTime_ms != 0;
+    const ftype savedDtEkfAvg = dtEkfAvg;
 
     // set re-used variables to zero
     InitialiseVariables();
+    if (hasRun) {
+        dtEkfAvg = savedDtEkfAvg;
+    }
 
     // restore origin so per-core EKF_origin stays consistent with the
     // shared frontend public_origin
