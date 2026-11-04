@@ -107,7 +107,7 @@ bool NavEKF3_core::getHeightControlLimit(float &height) const
         }
         // compensate for the difference between terrain and EKF origin, with the range finder as the
         // height reference too, as a fall back to another source and back moves the terrain state
-        height -= terrainState;
+        height -= flowTerrainState();
         return true;
     } else {
         return false;
@@ -411,7 +411,7 @@ void NavEKF3_core::getEkfControlLimits(float &ekfGndSpdLimit, float &ekfNavVelGa
         // height above ground that scales both limits; prefer the IMU-aided AGL KF
         // when enabled and valid so the cap matches the height used for flow velocity
         // scaling (see FuseOptFlow) instead of the drift-prone terrainState
-        ftype heightAboveGndEst = terrainState - stateStruct.position[2];
+        ftype heightAboveGndEst = flowTerrainState() - stateStruct.position[2];
 #if EK3_FEATURE_OPTFLOW_AGL_KF
         if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKf.valid) {
             heightAboveGndEst = aglKf.hgt;
