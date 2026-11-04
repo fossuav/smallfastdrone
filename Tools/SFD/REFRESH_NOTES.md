@@ -17,10 +17,34 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup9, promoted
-  2026-11-04 with this record, a fast-forward of 5 commits over topup8
-  (`722d77b5de`, kept locally as `SmallFastDrone-4.7.2.12-beta`). None of
-  topup6 to topup9 has flown.
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup10, promoted
+  2026-11-04 (night) with this record, a fast-forward of 3 commits over
+  topup9 (`a8487f02aa`, kept locally as `SmallFastDrone-4.7.2.13-beta`).
+  None of topup6 to topup10 has flown.
+  - topup10 over topup9, from TD's T25 log 08 (boot 142): EKF3 no longer
+    resets the height to the delayed baro on entering AID_NONE while takeoff
+    or touchdown is expected, the same test the height source switch uses
+    for a baro in ground effect (`dfd7a7feba`; test
+    EK3TouchdownHeightNotSnapped, `93875c9cbf`). The T25's flow lane stopped
+    aiding at 0.11 m on a landing with touchdown expected, the reset put the
+    prop wash into the height (+0.28 to +1.55 m on the floor), the arm-time
+    datum reset keeps the reported height with a recorded origin and no GPS,
+    and a re-arm 2.4 s later flew two flights 1.1 to 1.3 m high. Replay,
+    EKF minus range finder 5-10 s after the next takeoff: log 08 +1.27/+1.10
+    to +0.23/+0.04 m, log 05 -2.79/-5.40 to +0.30/+0.49 m; log 06 +0.00 to
+    +0.98 m, the known cost (its height was already off at the landing and
+    the reset's larger error had tripped the forced reset that cleaned it);
+    log 01 (no baro thrust compensation) moves both ways. Disarmed, and in
+    flight away from the ground, the reset still runs. On no PR yet (see
+    "Local work not in prs.txt"); master has the same reset.
+  - Tested at `93875c9cbf`: the full SFD set, 123 of 123, and Rover
+    OSDEKFLanesDCMFallback, each SITL vehicle built on its own (copter's
+    rate thread checked). This record changes no code.
+  - SmallFastDronev1 md5 `91fbaeac` (43,124 bytes free), MicoAir743v2 md5
+    `0e3e9933` (235,680 bytes free). No parameter-side changes since topup9.
+- Previous beta: refresh12 after topup9, promoted 2026-11-04, a fast-forward
+  of 5 commits over topup8 (`722d77b5de`, kept locally as
+  `SmallFastDrone-4.7.2.12-beta`).
   - topup9 over topup8, from TD's VALT regression (T25 boots 110 and 111):
     the #32471 hover Z-bias learner stops learning an IMU once the EKF has
     restarted its accel bias estimate for it since arming, and that flight
@@ -50,7 +74,7 @@ reply exists") before acting on it.
     md5 `c00ca28a` (235,712 bytes free). Parameter-side: the
     ACC_ZBIAS_LEARN description gains the no-save sentence; FIELD_PLAN asks
     TD and JK for EK3_ABIAS_P_NSE 0.015.
-- Previous beta: refresh12 after topup8, promoted 2026-11-03 (evening), a
+- Older beta: refresh12 after topup8, promoted 2026-11-03 (evening), a
   fast-forward of 5 commits over topup7 (`4885313c95`, kept locally as
   `SmallFastDrone-4.7.2.11-beta`).
   - topup8 over topup7, from JK's log 69 (armed with a 0.38 deg/s roll bias
@@ -59,8 +83,9 @@ reply exists") before acting on it.
     checks X and Y are zeroed and relearned within 2 s, `fb0e459bba`,
     `902d52b738`). Replay of the T25's 11 4.7.2 logs: no change but boot
     165, carried powered, where it helps. Ported to #34942 as `4ac4f4b1f8`
-    and `3879fc6a6e` on `sq/34942-1103j`, not yet pushed, so the lock stays
-    at `2804706ae0`. A stillness gate on #34292's zero flow at rest was
+    and `3879fc6a6e`, pushed 2026-11-03 and rebased onto master as
+    `94f24cdd9c`; the lock stays at `2804706ae0` until the next refresh. A
+    stillness gate on #34292's zero flow at rest was
     tried for the same log and dropped: the harm it removed was Replay-only,
     and it regresses T25 boot 45's spool-up.
   - Tested at `902d52b738`: the full SFD set, 121 of 121, and Rover
@@ -1347,6 +1372,12 @@ FLOW_OPTIONS's docs).
 - `Copter: describe FS_OPTIONS bit 6 with VALT's failsafe action` ("2 or 4"):
   belongs to whichever of #34696 and #32270 lands second.
 - `Copter: let throw mode hand off to VALT` (topup17), on no PR yet.
+- `AP_NavEKF3: skip the AID_NONE height reset in ground effect` and its test
+  `autotest: check the height is not reset to a baro in ground effect`
+  (refresh12 topup10, 2026-11-04), on no PR yet. Master has the same reset
+  (`AP_NavEKF3_Control.cpp` AID_NONE case) and the same ground-effect test,
+  so it is a candidate standalone PR cross-referencing #34942 and #32768;
+  re-pick both commits on every refresh until a PR carries them.
 - `hwdef: SFD boards keep the EKF reset auxiliary function` (refresh11
   topup3, 2026-10-29): owed to the base's SFD hwdefs, where a define that
   keeps an SFD board as it was belongs (step 16); carried on the branch

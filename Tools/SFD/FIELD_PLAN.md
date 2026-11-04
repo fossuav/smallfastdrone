@@ -17,6 +17,14 @@ parameter changes: #34942's static yaw retaken after a reset (T1), #31274's
 250-frame floor (0b, item 1), #32475's throw hand-off (item 6), and smaller
 ones this card does not exercise.
 
+The beta after topup10 (`93875c9cbf`, SmallFastDronev1 md5 `91fbaeac`,
+MicoAir743v2 md5 `0e3e9933`) no longer resets the height to the baro when
+flow aiding drops out at a touchdown, so the height does not jump by the
+prop wash error on landing and a quick re-arm flies from the right height.
+Nothing to change. Not flown. Keep EK3_OPTIONS 92 (bit 4, range finder
+velD): without it the T25's height followed a drifting baro and VALT flew
+into the floor.
+
 The beta after topup9 (`75771ce09b`, SmallFastDronev1 md5 `bf1f14ed`,
 MicoAir743v2 md5 `c00ca28a`) does not save the hover Z-bias from a flight in
 which the EKF restarted its accel bias estimate, and says "Hover Z-bias not

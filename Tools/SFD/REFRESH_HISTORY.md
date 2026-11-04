@@ -7,6 +7,32 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-04 (night) - refresh12 topup10, no height reset to a prop-washed baro at touchdown
+
+TD's T25 relearned the hover Z-bias in ALT_HOLD on topup9 (boot 137:
++0.062 from the first flight after a rest, +0.01 to +0.03 left to the EKF
+with it applied) and then flew VALT with the baro thrust scale restored
+and EK3_OPTIONS 92. Boot 142 flew four flights without a failsafe, but
+flights 3 and 4 held the EKF 1.1 to 1.3 m above the range finder. On
+flight 2's landing the flow lane stopped aiding at 0.11 m, and entering
+AID_NONE reset the height to the delayed baro, which was in touchdown
+prop wash: +0.28 to +1.55 m with the vehicle on the floor. The re-arm
+2.4 s later ran the arm-time datum reset, but with a recorded origin and
+no GPS that keeps the reported height, and the on-ground check and the
+5 s forced reset had not had time to fire. Seven landings across the
+evening's logs entered AID_NONE near the ground with touchdown expected
+and stepped the height by 1.3 to 7 m.
+
+The reset is now skipped while takeoff or touchdown is expected, as the
+height source switch already does for a baro in ground effect. Replay
+fixes logs 08 and 05 and makes log 06 worse (+0.98 m from +0.00), whose
+height was already off at its landing and whose larger snapped error had
+tripped the forced reset; Andy chose the gate alone over adding a range
+finder ground check, the range finder being no reliable sign of being on
+the ground. The evening also showed the T25 without AGL KF velD (bit 4
+cleared on boot 140): the EKF followed a baro that drifted 2 m against
+the range finder and VALT flew into the floor. Bit 4 stays on.
+
 ## 2026-11-04 - refresh12 topup9, the hover Z-bias learner and EKF accel bias resets
 
 TD's T25 flew VALT badly on topup8 after relearning the hover Z-bias:
