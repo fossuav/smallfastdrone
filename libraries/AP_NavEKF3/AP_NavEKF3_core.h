@@ -434,6 +434,9 @@ public:
     // returns the time of the last reset or 0 if no reset has ever occurred
     uint32_t getLastPosDownReset(float &posD) const;
 
+    // return the number of times this core has restarted its bias estimate for an accel
+    uint16_t getAccelBiasResetCount(uint8_t accel_index) const { return accelBiasResetCount[accel_index]; }
+
     // return the amount of NE velocity change due to the last velocity reset in metres/sec
     // returns the time of the last reset or 0 if no reset has ever occurred
     uint32_t getLastVelNorthEastReset(Vector2f &vel) const;
@@ -1318,6 +1321,7 @@ private:
     uint32_t lastVelReset_ms;       // System time at which the last velocity reset occurred. Returned by getLastVelNorthEastReset
     ftype posResetD;                // Change in Down position due to last in-flight reset in metres. Returned by getLastPosDowntReset
     uint32_t lastPosResetD_ms;      // System time at which the last position reset occurred. Returned by getLastPosDownReset
+    uint16_t accelBiasResetCount[INS_MAX_INSTANCES]; // times the bias estimate for each accel was restarted, kept across a restart of the core. Returned by getAccelBiasResetCount
     ftype yawTestRatio;             // square of magnetometer yaw angle innovation divided by fail threshold
     QuaternionF prevQuatMagReset;    // Quaternion from the last time the magnetic field state reset condition test was performed
     ftype hgtInnovFiltState;        // state used for fitering of the height innovations used for pre-flight checks
