@@ -107,7 +107,7 @@ bool NavEKF3_core::getHeightControlLimit(float &height) const
         }
         // compensate for the difference between terrain and EKF origin, with the range finder as the
         // height reference too, as a fall back to another source and back moves the terrain state
-        height -= terrainState;
+        height -= flowTerrainState();
         return true;
     } else {
         return false;
