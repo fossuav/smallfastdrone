@@ -1632,6 +1632,14 @@ void NavEKF3_core::selectHeightForFusion()
                 activeHgtSource = AP_NavEKF_Source::SourceZ::GPS;
             }
         } else if (belowLowerSwHgt && trustTerrain && aglSettled && (prevTnb.c.z >= 0.7f)) {
+#if EK3_FEATURE_OPTFLOW_SRTM
+            // the AGL KF can switch in while the terrain estimator is stale and the anchor still in use, so
+            // the anchor ends here, putting the anchored ground in the terrain state before the check below
+            if (terrainAnchorInUse && (activeHgtSource != AP_NavEKF_Source::SourceZ::RANGEFINDER)) {
+                terrainState = anchoredTerrainState();
+                terrainAnchorInUse = false;
+            }
+#endif
 #if EK3_FEATURE_OPTFLOW_AGL_KF
             // Switching in freezes the terrain offset, which after a step up can still be the lower ground's.
             // Take it from the range when they disagree by more than baro drift did at a switch in flight
@@ -1725,6 +1733,15 @@ void NavEKF3_core::selectHeightForFusion()
         // out of ground effect, so the next episode starts a fresh window
         gndEffectHgtResetSuppressStart_ms = 0;
     }
+
+#if EK3_FEATURE_OPTFLOW_SRTM
+    // the range finder taking the height ends the anchor, and its height is formed against the
+    // terrain state below, so the anchored ground has to be there first rather than one step later
+    if (terrainAnchorInUse && (activeHgtSource == AP_NavEKF_Source::SourceZ::RANGEFINDER)) {
+        terrainState = anchoredTerrainState();
+        terrainAnchorInUse = false;
+    }
+#endif
 
     // Select the height measurement source
 #if EK3_FEATURE_EXTERNAL_NAV
