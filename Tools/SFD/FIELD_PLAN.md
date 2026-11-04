@@ -255,11 +255,12 @@ on the ground shows whether the main filter thought it was climbing.
 
 ### 2. #32471: hover Z-bias learning, two packs
 
-Flown 2026-10-30, logs 62-63, but pack 2 was the wrong setting: 11 leaves
-bit 2 clear, which double-counts the ground bias as #32471's record says
-it will. Still owed: pack 3 at `ACC_ZBIAS_LEARN 15`, same takeoff and
-hover. Replay of log63 as 15 was worse than no correction on core 0 (see
-`FLIGHT_VALIDATION.md`).
+Flown 2026-10-30, logs 62-63, on `52b1d36f`, whose learner saved the
+total hover bias: with bit 2 clear that counted the ground bias twice, and
+pack 2 at 11 failed. The learner since saves the change since arming
+(`a825555a04`), which leaves the ground bias out, and flew both packs on
+2026-10-31 (logs 66-68, see `FLIGHT_VALIDATION.md`). 11 is the setting; no
+pack at 15 is owed, as with bit 2 the release at arming adds its own swing.
 
 Pack 1, `ACC_ZBIAS_LEARN 9` (bit 0 plus the acro bit): hover steadily in
 LOITER at 2-5 m for at least 60 s, land and disarm. On disarm
