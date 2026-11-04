@@ -17,6 +17,15 @@ parameter changes: #34942's static yaw retaken after a reset (T1), #31274's
 250-frame floor (0b, item 1), #32475's throw hand-off (item 6), and smaller
 ones this card does not exercise.
 
+The beta after topup9 (`75771ce09b`, SmallFastDronev1 md5 `bf1f14ed`,
+MicoAir743v2 md5 `c00ca28a`) does not save the hover Z-bias from a flight in
+which the EKF restarted its accel bias estimate, and says "Hover Z-bias not
+saved: EKF accel bias reset". Not flown. On a vehicle running
+`EK3_ABIAS_P_NSE` below 0.015 (TD's T25 and JK's 4C have 0.005), set 0.015:
+at 0.005 the EKF zeroes its accel biases every 27 to 48 s in flight. On the
+T25 also set `INS_ACC_VRFB_Z` back to 0.013, its value before the 11-03
+relearn, or relearn it at 0.015.
+
 The beta after topup8 (`902d52b738`, SmallFastDronev1 md5 `d7fd65bd`,
 MicoAir743v2 md5 `4223ca14`) starts the X and Y gyro biases from zero on
 the EKF's own reset and keeps Z, so ones learned while the vehicle is

@@ -7,6 +7,35 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-04 - refresh12 topup9, the hover Z-bias learner and EKF accel bias resets
+
+TD's T25 flew VALT badly on topup8 after relearning the hover Z-bias:
+the relearn saved INS_ACC_VRFB_Z -0.059 against a real bias of about
++0.10, and VALT climbed and sank after each EKF accel bias reset. Replay
+through either build reproduced the flown EKF, so the cause was the saved
+value, not the code. TD runs EK3_ABIAS_P_NSE 0.005: the Z accel bias
+variance collapses to its 5e-9 floor and the backstop #23807 added zeroes
+all three biases and restarts them, every 27 s on the T25. The learner
+took the relearning that follows for the vehicle's bias, and a landing
+just after a reset saved it.
+
+JK's 4C, also at 0.005, has the same reset every 35 to 48 s in flight,
+and after each his bias swings 0.13 to 0.79 m/s/s and is up to 0.12 out
+at 10 s, where the T25's is back within 0.03. No hold after a reset fits
+both, so the learner now stops for an IMU whose bias estimate the EKF has
+restarted since arming, and that flight is not saved. A step detection
+and then a 10 s hold went before it and were dropped; a cold review found
+the step detection read drift between hover samples as a step.
+
+A low P_NSE does not keep the bias from learning in acro, which is what
+0.005 was set for. Between resets it is a little stiffer, but every 30 to
+40 s the backstop restarts the bias wide open: over five replayed flights
+the bias travelled 3 to 9 times further at 0.005 than at 0.02, and on
+JK's log 63 a reset mid-acro doubled it. ACC_ZBIAS_LEARN bit 3 holds the
+bias in acro at any P_NSE. Swept over 31 flights, 0.015 is the lowest
+value with no reset (8% above the floor on the T25) and buys little over
+0.02.
+
 ## 2026-11-03 (evening) - refresh12 topup8, X and Y gyro bias on the EKF's own reset
 
 JK's 4C GOM log 69 (an ACRO "runaway") armed with a 0.38 deg/s roll gyro

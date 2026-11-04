@@ -17,10 +17,42 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup8, promoted
-  2026-11-03 (evening) with this record, a fast-forward of 5 commits over
-  topup7 (`4885313c95`, kept locally as `SmallFastDrone-4.7.2.11-beta`). None
-  of topup6, topup7 or topup8 has flown.
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup9, promoted
+  2026-11-04 with this record, a fast-forward of 5 commits over topup8
+  (`722d77b5de`, kept locally as `SmallFastDrone-4.7.2.12-beta`). None of
+  topup6 to topup9 has flown.
+  - topup9 over topup8, from TD's VALT regression (T25 boots 110 and 111):
+    the #32471 hover Z-bias learner stops learning an IMU once the EKF has
+    restarted its accel bias estimate for it since arming, and that flight
+    is not saved, with a warning. EKF3 counts the restarts per accel (a
+    reset at start or at the variance floor, or a core switching onto or
+    off the accel), AHRS passes on the per-IMU sum, and Copter checks it at
+    each hover sample (`769d5721ce`, `de2e98681d`, `73e8c23001`; test
+    HoverBiasNotSavedAfterEKFReset, `75771ce09b`). Squashed from 23
+    commits, in which a step detection and then a 10 s hold were tried and
+    dropped as no hold length fits both TD's T25 and JK's 4C; the
+    unsquashed series is kept locally as `r12-topup9-unsquashed`. The same
+    code as #32471 `1ff6d62b40` and #32473 `30343c7ae7`, both pushed
+    2026-11-04; the lock still names the pre-rebase heads until the next
+    refresh.
+  - The regression itself is EK3_ABIAS_P_NSE 0.005, which TD and JK both
+    set (the build default is 0.02): the bias variance collapses to its
+    floor and #23807's backstop zeroes the biases every 27 to 48 s in
+    flight, and a relearn landing just after one saved INS_ACC_VRFB_Z
+    -0.059 against about +0.10. Replay of 31 flights from three airframes:
+    no reset at 0.015 or above; the T25 bottoms at 1.08x the floor at
+    0.015, 1.46x at 0.02. Replay of TD's two 722d77b VALT logs through the
+    new EKF is identical to the flown cores.
+  - Tested at `75771ce09b`: the full SFD set, 122 of 122, and Rover
+    OSDEKFLanesDCMFallback, each SITL vehicle built on its own. This record
+    changes no code.
+  - SmallFastDronev1 md5 `bf1f14ed` (43,156 bytes free), MicoAir743v2
+    md5 `c00ca28a` (235,712 bytes free). Parameter-side: the
+    ACC_ZBIAS_LEARN description gains the no-save sentence; FIELD_PLAN asks
+    TD and JK for EK3_ABIAS_P_NSE 0.015.
+- Previous beta: refresh12 after topup8, promoted 2026-11-03 (evening), a
+  fast-forward of 5 commits over topup7 (`4885313c95`, kept locally as
+  `SmallFastDrone-4.7.2.11-beta`).
   - topup8 over topup7, from JK's log 69 (armed with a 0.38 deg/s roll bias
     after the vehicle was carried powered): the EKF's own reset starts the X
     and Y gyro biases from zero and keeps Z (`f297033f6e`; EKFResetGyroBias
@@ -36,7 +68,7 @@ reply exists") before acting on it.
     changes no code.
   - SmallFastDronev1 md5 `d7fd65bd` (43,948 bytes free), MicoAir743v2 md5
     `4223ca14` (236,384 bytes free). No parameter-side changes since topup7.
-- Previous beta: refresh12 after topup7, promoted 2026-11-03 (afternoon), a
+- Older beta: refresh12 after topup7, promoted 2026-11-03 (afternoon), a
   fast-forward of 6 commits over topup6 (`f9fb97e8eb`, kept locally as
   `SmallFastDrone-4.7.2.10-beta`).
   - topup7 over topup6, AP-Review round 4 on #34942: the EKF step average is
