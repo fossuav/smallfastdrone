@@ -417,7 +417,7 @@ void NavEKF3_core::getEkfControlLimits(float &ekfGndSpdLimit, float &ekfNavVelGa
     if (PV_AidingMode == AID_RELATIVE && relyingOnFlowData) {
         // height above ground that scales both limits; prefer the IMU-aided AGL KF
         // when enabled and valid so the cap matches the height used for flow velocity
-        // scaling (see EstimateOptFlowDataFrame) instead of the drift-prone terrainState
+        // scaling (see FuseOptFlow) instead of the drift-prone terrainState
         ftype heightAboveGndEst = MAX((terrainState - stateStruct.position[2]), rngOnGnd);
 #if EK3_FEATURE_OPTFLOW_AGL_KF
         if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKf.valid) {
