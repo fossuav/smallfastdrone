@@ -21761,7 +21761,7 @@ return update, 100
             self.context_clear_collection('STATUSTEXT')
             # forced, as some legs arm before the EKF has settled after a reset
             self.arm_vehicle(force=True)
-            self.takeoff(altitude_min=3, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1800)
+            self.takeoff(alt_min=3, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1800)
             self.set_rc(3, hover_throttle)
             self.delay_sim_time(15, "hover")
             if during_hover is not None:
