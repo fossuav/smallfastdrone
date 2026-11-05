@@ -668,6 +668,7 @@ bool NavEKF3_core::InitialiseFilterBootstrap(void)
         inactiveBias[i].gyro_bias.x = 0;
         inactiveBias[i].gyro_bias.y = 0;
         inactiveBias[i].accel_bias.zero();
+        accelBiasZeroTime_ms[i] = imuSampleTime_ms;
     }
 
     GCS_SEND_TEXT(MAV_SEVERITY_INFO, "EKF3 IMU%u initialised",(unsigned)imu_index);
@@ -2095,6 +2096,7 @@ void NavEKF3_core::ConstrainVariances()
             P[15][15] = P[13][13];
             stateStruct.accel_bias.zero();
             accelBiasResetCount[accel_index_active]++;
+            accelBiasZeroTime_ms[accel_index_active] = imuSampleTime_ms;
         }
 
     } else {
