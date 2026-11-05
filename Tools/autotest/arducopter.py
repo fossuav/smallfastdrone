@@ -6443,15 +6443,12 @@ return update, 100
         self.reboot_sitl(force=True)
 
     def LoiterFlowBrakeOvershoot(self):
-        '''Forward-jab overshoot in optical-flow Loiter at low height'''
-        # Optical flow, no GPS, low height: the EKF flow speed limit is small,
-        # so AC_Loiter's drag term (which shapes the desired velocity) is large.
-        # The drag is removed from the desired velocity but NOT from the
-        # acceleration feed-forward passed to the position controller, so a
-        # forward stick drives the vehicle past its desired-velocity trajectory;
-        # position overshoots the target and the loop yanks it back (backward
-        # pitch on release). High LOIT_ANG_MAX inflates the mismatch. This test
-        # flies a deterministic forward jab + release for log comparison.
+        '''Forward-jab overshoot in optical-flow Loiter at low height, with LOIT_OPTIONS bit 6 off and on'''
+        # Loiter models drag as holding LOIT_SPEED_MS at LOIT_ANG_MAX. With LOIT_SPEED_MS 5 at 30
+        # degrees the model asks for far more drag than the SITL airframe has, so with the drag left
+        # in the feed-forward a forward jab drives the vehicle past its desired velocity and it is
+        # pulled back on release. The beta takes it out (#33318); LOIT_OPTIONS bit 6, an SFD
+        # temporary for a flight A/B, puts it back as 4.7 has it.
         self.set_parameters({
             "AHRS_EKF_TYPE": 3,
             "EK3_ENABLE": 1,
@@ -6466,21 +6463,66 @@ return update, 100
         })
         self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
         self.set_analog_rangefinder_parameters()
-        self.reboot_sitl()
 
-        self.wait_ready_to_arm(require_absolute=False, timeout=120)
-        # flow is not healthy stationary, so climb in ALT_HOLD to a low hover
-        self.takeoff(alt_min=2, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
-        self.change_mode('LOITER')
-        self.delay_sim_time(5, "let altitude settle")
+        def fly(options):
+            self.set_parameter("LOIT_OPTIONS", options)
+            self.reboot_sitl()
+            self.wait_ready_to_arm(require_absolute=False, timeout=120)
+            # flow is not healthy stationary, so climb in ALT_HOLD to a low hover
+            self.takeoff(alt_min=2, mode='ALT_HOLD', require_absolute=False, takeoff_throttle=1700)
+            self.change_mode('LOITER')
+            self.delay_sim_time(5, "let altitude settle")
+            times = self.loiter_jab(3)
+            self.disarm_vehicle(force=True)
+            return self.loiter_jab_measure(*times)
 
-        # deterministic forward jab then release (the RCIN.C2 dip marks it in the log)
+        removed = fly(0)
+        kept = fly(64)
+        self.progress("drag out of the feed-forward: over-drive %.2fx, backward %.2f m/s after release" % removed)
+        self.progress("LOIT_OPTIONS bit 6: over-drive %.2fx, backward %.2f m/s after release" % kept)
+        # measured on #33318: -0.06 m/s with the drag out, -0.37 to -0.39 m/s with it in
+        if removed[1] < -0.15:
+            raise NotAchievedException("loiter pulled back %.2f m/s with the drag out" % removed[1])
+        if kept[1] > -0.25:
+            raise NotAchievedException("LOIT_OPTIONS bit 6 did not put the drag back (%.2f m/s)" % kept[1])
+
+    def loiter_jab(self, jab_s):
+        '''fly a forward jab at full stick in Loiter and release it; returns the start, release
+        and end times in microseconds'''
+        self.delay_sim_time(5, "settle in Loiter")
+        start_us = self.get_sim_time() * 1e6
         self.set_rc(2, 1100)
-        self.delay_sim_time(3, "let log data accumulate")
+        self.delay_sim_time(jab_s, "forward stick")
+        release_us = self.get_sim_time() * 1e6
         self.set_rc(2, 1500)
-        self.delay_sim_time(8, "let vehicle settle and log data accumulate")
+        self.delay_sim_time(8, "settle after release")
+        return start_us, release_us, self.get_sim_time() * 1e6
 
-        self.disarm_vehicle(force=True)
+    def loiter_jab_measure(self, start_us, release_us, end_us):
+        '''returns the peak speed over the peak desired speed along the jab, and the most
+        backward speed along it after release'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        north = {}
+        rows = []
+        while True:
+            m = dfreader.recv_match(type=['PSCN', 'PSCE'])
+            if m is None:
+                break
+            if not (start_us <= m.TimeUS <= end_us):
+                continue
+            if m.get_type() == 'PSCN':
+                north[m.TimeUS] = (m.DVN, m.VN)
+            elif m.TimeUS in north:
+                rows.append((m.TimeUS, north[m.TimeUS][0], m.DVE, north[m.TimeUS][1], m.VE))
+        jab = [r for r in rows if r[0] <= release_us]
+        if len(jab) < 10:
+            raise NotAchievedException("too few PSCN/PSCE samples in the jab")
+        peak = max(jab, key=lambda r: math.hypot(r[1], r[2]))
+        speed = math.hypot(peak[1], peak[2])
+        un, ue = peak[1] / speed, peak[2] / speed
+        overdrive = max(r[3] * un + r[4] * ue for r in jab) / max(r[1] * un + r[2] * ue for r in jab)
+        backward = min(r[3] * un + r[4] * ue for r in rows if r[0] > release_us)
+        return overdrive, backward
 
     def EK3_FlowAxisLockoutRecovery(self):
         '''Recover horizontal velocity from a single-axis optical-flow innovation lockout'''
