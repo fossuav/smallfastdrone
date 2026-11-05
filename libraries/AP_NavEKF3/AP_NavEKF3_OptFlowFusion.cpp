@@ -1342,22 +1342,37 @@ void NavEKF3_core::UpdateAglKf()
         aglKfStepTime_ms = imuSampleTime_ms;
     }
 
-    // Kalman gain:  K = P*H' / innovVar = [P[0][0], P[1][0], P[2][0]]' / innovVar
-    // (H = [1, 0, 0], so P*H' is the first column of P)
-    const ftype Kh = aglKfP[0][0] / innovVar;
-    const ftype Kv = aglKfP[1][0] / innovVar;
     // A measurement at the on-ground floor carries nothing about the bias; fusing it would only
     // shrink the bias variance and lock in whatever the start-up transient left there. The reading
     // is tested before the position offset correction, which can move it off the floor, and the
     // corrected height as well, which a tilted reading reaches only after the tilt correction
     const bool onFloor = rangeDataDelayed.onFloor || ((aglKfH <= rngOnGnd) && (hgtMeas <= rngOnGnd));
-    const ftype Kb = onFloor ? 0.0f : aglKfP[2][0] / innovVar;
+    FuseAglKfHeight(hgtInnov, measNoiseVar, !onFloor);
+    aglKfH  = MAX(aglKfH, rngOnGnd);  // enforce physical constraint after update
+
+    lastAglRngFuseTime_ms = imuSampleTime_ms;
+    aglKfLastHgtInnov = hgtInnov;
+    aglKfLastRngHgt = hgtMeas;
+    aglKfValid = true;
+}
+
+// FuseAglKfHeight - fuse one height observation into the AGL KF, given its innovation (observed
+// height less the estimate, m) and its noise variance (m^2). With learnBias false the bias takes
+// no part, for an observation that carries nothing about it
+void NavEKF3_core::FuseAglKfHeight(ftype hgtInnov, ftype measNoiseVar, bool learnBias)
+{
+    const ftype innovVar = aglKfP[0][0] + measNoiseVar;
+
+    // Kalman gain:  K = P*H' / innovVar = [P[0][0], P[1][0], P[2][0]]' / innovVar
+    // (H = [1, 0, 0], so P*H' is the first column of P)
+    const ftype Kh = aglKfP[0][0] / innovVar;
+    const ftype Kv = aglKfP[1][0] / innovVar;
+    const ftype Kb = learnBias ? aglKfP[2][0] / innovVar : 0.0f;
 
     // State update:  x += K * hgtInnov
     aglKfH += Kh * hgtInnov;
     aglKfV += Kv * hgtInnov;
     aglKfB += Kb * hgtInnov;
-    aglKfH  = MAX(aglKfH, rngOnGnd);  // enforce physical constraint after update
     // the bias is an accelerometer error like the main filter's, so it gets the same limit
     // (in m/s/s here, so without the dtEkfAvg the delta-velocity states need)
     aglKfB  = constrain_ftype(aglKfB, -frontend->_accBiasLim, frontend->_accBiasLim);
@@ -1385,11 +1400,6 @@ void NavEKF3_core::UpdateAglKf()
     aglKfP[1][1] = MAX(Pvv - 2.0f * Kv * Phv + sq(Kv) * innovVar, 0.0f);
     aglKfP[1][2] = aglKfP[2][1] = Pvb - Kb * Phv - Kv * Phb + Kv * Kb * innovVar;
     aglKfP[2][2] = MAX(Pbb - 2.0f * Kb * Phb + sq(Kb) * innovVar, 0.0f);
-
-    lastAglRngFuseTime_ms = imuSampleTime_ms;
-    aglKfLastHgtInnov = hgtInnov;
-    aglKfLastRngHgt = hgtMeas;
-    aglKfValid = true;
 }
 
 #endif  // EK3_FEATURE_OPTFLOW_AGL_KF

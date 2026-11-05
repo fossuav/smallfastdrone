@@ -995,6 +995,8 @@ private:
 #if EK3_FEATURE_OPTFLOW_AGL_KF
     // Update the IMU-aided AGL Kalman filter (height, vertical velocity, accel-Z bias)
     void UpdateAglKf();
+    // fuse one height observation into the AGL Kalman filter
+    void FuseAglKfHeight(ftype hgtInnov, ftype measNoiseVar, bool learnBias);
 
     // Reset horizontal velocity to the optical-flow-derived ground velocity. Used to recover from a
     // single-axis flow innovation lockout. Returns false if the tilt makes the solve ill conditioned.
