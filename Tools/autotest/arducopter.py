@@ -4249,6 +4249,71 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         if err > -10:
             raise NotAchievedException("in flight, the height was not reset to the baro (%.2f m)" % err)
 
+    def EK3_TerrainStateFollowsSourceChangeAboveRange(self):
+        """A height source change above the range carries ground measured earlier in the flight"""
+        # Above the range the terrain state is frozen and stops being valid after 5 s, but
+        # the ground was measured this flight, so a source change that moves the datum has to
+        # move it too. A GPS altitude step too large for the GPS height reference filter to
+        # take leaves the GPS and baro heights that far apart when the source changes.
+        self.set_parameters({
+            "EK3_IMU_MASK": 1,      # single core, so there is one XKF5 stream to read
+            "EK3_SRC2_POSXY": 3,
+            "EK3_SRC2_VELXY": 3,
+            "EK3_SRC2_POSZ": 3,     # GPS height
+            "EK3_SRC2_VELZ": 3,
+            "EK3_SRC2_YAW": 1,
+            "SIM_GPS1_GLTCH_Z": 0,
+        })
+        self.set_analog_rangefinder_parameters()
+        self.set_parameter("RNGFND1_MAX", 8)
+        self.reboot_sitl()
+
+        self.takeoff(4, mode="ALT_HOLD", max_err=2)
+        self.delay_sim_time(5, reason="measure the ground with the range finder")
+        self.set_rc(3, 1800)
+        self.wait_altitude(18, 200, relative=True, timeout=60)
+        self.set_rc(3, 1500)
+        # the ground is no longer valid, so only having been measured can carry it
+        self.wait_ekf_flags(0, mavutil.mavlink.EKF_POS_VERT_AGL, timeout=30, minimum_duration=2)
+        mark = self.get_sim_time()
+        self.set_parameter("SIM_GPS1_GLTCH_Z", 10)
+        self.delay_sim_time(1, reason="let the GPS altitude step arrive")
+        self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, p1=2)
+        self.delay_sim_time(5, reason="let the height source change to GPS")
+        mark_end = self.get_sim_time()
+        self.disarm_vehicle(force=True)
+
+        # XKF5 carries terrainState as TOfs and terrainState-position.z as HAGL
+        dfreader = self.dfreader_for_current_onboard_log()
+        prev = None
+        resets = []
+        while True:
+            m = dfreader.recv_match(type="XKF5")
+            if m is None:
+                break
+            if m.C != 0:
+                continue
+            t = m.TimeUS * 1.0e-6
+            posd = m.TOfs - m.HAGL
+            if mark < t < mark_end and prev is not None and abs(posd - prev[0]) > 1:
+                resets.append((t, posd - prev[0], m.HAGL - prev[1]))
+            prev = (posd, m.HAGL)
+
+        # a run that never changed height source would also pass the check below
+        if not resets:
+            raise NotAchievedException(
+                "no vertical datum reset happened, so the carry was never exercised")
+        for (t, moved, hagl_moved) in resets:
+            self.progress("datum reset at %.1fs moved %.2fm, height above ground %+.2fm"
+                          % (t, moved, hagl_moved))
+            if abs(hagl_moved) > 0.5:
+                raise NotAchievedException(
+                    "the datum moved %.2fm at %.1fs and took the height above ground "
+                    "%.2fm with it; the terrain state did not follow"
+                    % (moved, t, hagl_moved))
+
+        self.reboot_sitl()
+
     def EK3_ZeroVelFusionNotUsedWithGPS(self):
         '''Test EKF3 zero velocity changes do not affect GPS-enabled setups'''
         # Addresses review concern: does zero velocity fusion interfere
@@ -23360,6 +23425,7 @@ return update, 100
             self.EK3_TerrainStateFollowsHeightReset,
             self.EK3_TerrainStateFollowsDatumReset,
             self.EK3_TerrainStateHeldOnDriftReset,
+            self.EK3_TerrainStateFollowsSourceChangeAboveRange,
         ])
         return ret
 
