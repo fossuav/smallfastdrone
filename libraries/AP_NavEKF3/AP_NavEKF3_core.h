@@ -992,6 +992,8 @@ private:
     // Reset horizontal velocity to the optical-flow-derived ground velocity. Used to recover from a
     // single-axis flow innovation lockout. Returns false if the tilt makes the solve ill conditioned.
     bool ResetVelocityToFlow(const of_elements &ofDataDelayed, ftype range, const Vector3F &posOffsetBody);
+    // fuse one height observation into the AGL Kalman filter
+    void FuseAglKfHeight(ftype hgtInnov, ftype measNoiseVar);
 #endif
 
 #if EK3_FEATURE_OPTFLOW_FUSION
