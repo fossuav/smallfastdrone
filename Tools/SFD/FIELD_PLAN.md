@@ -48,6 +48,61 @@ MicoAir743v2 md5 `9490ae65`) adds, none flown:
 
 Parameter-side: only the new LOIT_OPTIONS bit, default clear.
 
+## SFD-O4 indoors on topup11: the #33318 A/B, landings and the learner
+
+One or two packs, flow only. Andy flies this first; the items further down
+still stand where it does not cover them.
+
+Before the first flight:
+
+- Flash SmallFastDronev1 `arducopter.apj` md5 `304d464b`.
+- Check `LOIT_OPTIONS 1`, `LOG_REPLAY 1`, `LOG_DISARMED 2`, `EK3_OPTIONS 94`.
+  Keep the usual indoor `LOIT_SPEED_MS` and `LOIT_ANG_MAX` and do not change
+  them between runs.
+- If `ACC_ZBIAS_LEARN` is still 15, set 11 (bit 2 off, so the first-flight
+  rule applies), with `INS_ACC_VRFB_Z 0.0301` and `INS_ACC2_VRFB_Z 0.0244`
+  (log69's) to start from; flight 1 relearns them.
+- After power-on, leave it still for at least 15 s before the first arm: the
+  learner only saves a flight armed at least 10 s after the EKF starts.
+
+Pack 1, the #33318 A/B, alternating so pack sag does not favour one side:
+
+1. Flight 1, `LOIT_OPTIONS 1` (#33318 on). Take off in ALT_HOLD, Loiter at
+   about 1.5 m (below about 2.3 m, where the flow speed limit binds). Hover
+   steadily, hands off, for 45 s (the learner's sample). Then three jabs:
+   full forward stick, release, hands off for 8 s, then the same backwards
+   to come home. Pick a jab length the room allows (about 1.5-2 s in a 10 m
+   room) and keep it for the whole session. Land firmly, disarm. Pass:
+   INS_ACC_VRFB_Z changes and no "Hover Z-bias not saved" message.
+2. Flight 2, `LOIT_OPTIONS 65` (#33318 off): after at least 1 s still, same
+   height and jabs, land, disarm. Pass: "Hover Z-bias not saved: not first
+   flight".
+3. Flight 3 at 1 and flight 4 at 65 if the pack allows, the same way.
+
+What decides it: whether the O4 moves backwards after the release, and how
+far it overshoots the desired speed during the jab (PSCN/PSCE DVN/VN against
+VN/VE). SITL: 1.08x and -0.08 m/s at 1, 1.44x and -0.40 m/s at 65. If 65
+does not pull back on the O4, #33318 is not needed now that #33639 is in.
+
+Pack 2, landings for the AGL KF fused floor:
+
+- Four or five short hops: take off to about 2 m in ALT_HOLD, throttle to
+  minimum so it descends at the full rate to the floor (only if that is a
+  touchdown you are comfortable with), disarm, at least 1 s still, repeat.
+  Pass: XKFA.HAgl stays on the range finder after each touchdown (SITL
+  0.1-0.2 m with the fix, 2.5 m before it).
+- This also covers item 1's two takeoffs in one boot: no "Takeoff blocked:
+  CPU overload" or "ESC RPM or errors out of range".
+
+Every flight: note any arm refused on "EKF3[n] height error" and any
+"vertical velocity reset at rest" or "forced reset", with the time since the
+disarm (#34942), and any "Hover Z-bias not saved: ..." message, especially
+the new "armed <10s after EKF reset" and "accel switched on ground".
+
+Send back the logs, which flights were at 1 and which at 65, the pilot's
+feel of overshoot or pull-back on the release, and the room size and jab
+length. Afterwards leave `LOIT_OPTIONS 1` unless the flights say otherwise.
+
 The beta after topup10 (`93875c9cbf`, SmallFastDronev1 md5 `91fbaeac`,
 MicoAir743v2 md5 `0e3e9933`) no longer resets the height to the baro when
 flow aiding drops out at a touchdown, so the height does not jump by the
