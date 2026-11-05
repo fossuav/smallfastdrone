@@ -124,6 +124,7 @@ protected:
     // Bitfields of LOITER_OPTIONS
     enum class LoiterOption {
         COORDINATED_TURN_ENABLED    = (1U << 0),    // Enable Coordinated Turn
+        KEEP_DRAG_IN_FF             = (1U << 6),    // SFD temporary: leave the modelled drag in the feed-forward, as 4.7
     };
     bool loiter_option_is_set(LoiterOption option) const;
 

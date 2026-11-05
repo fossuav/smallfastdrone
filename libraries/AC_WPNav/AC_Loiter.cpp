@@ -53,7 +53,7 @@ const AP_Param::GroupInfo AC_Loiter::var_info[] = {
     // @Param: OPTIONS
     // @DisplayName: Loiter mode options
     // @Description: Enables optional Loiter mode behaviors
-    // @Bitmask: 0: Enable Coordinated turns
+    // @Bitmask: 0: Enable Coordinated turns, 6: Keep the modelled drag in the feed-forward (SFD temporary flight A/B of #33318: set for 4.7's feed-forward)
     // @User: Standard
     AP_GROUPINFO("OPTIONS", 7, AC_Loiter, _options, LOITER_DEFAULT_OPTIONS),
 
@@ -364,7 +364,9 @@ void AC_Loiter::calc_desired_velocity(bool avoidance_on)
         // must be removed from the feed-forward acceleration to keep it equal to
         // d(desired_vel)/dt; leaving drag in over-drives the vehicle past the
         // speed-limited desired velocity and builds a position error
-        loiter_accel_decel_mss = desired_vel_norm * (_brake_accel_mss + drag_decel_mss);
+        // LOIT_OPTIONS bit 6, an SFD temporary for a flight A/B, leaves the drag in, as 4.7 does
+        const float ff_drag_mss = loiter_option_is_set(LoiterOption::KEEP_DRAG_IN_FF) ? 0.0f : drag_decel_mss;
+        loiter_accel_decel_mss = desired_vel_norm * (_brake_accel_mss + ff_drag_mss);
 
         // Update desired speed based on braking and drag
         desired_speed_ms = MAX(desired_speed_ms - (drag_decel_mss + _brake_accel_mss) * dt_s, 0.0f);
