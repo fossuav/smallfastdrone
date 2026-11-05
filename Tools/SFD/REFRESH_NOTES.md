@@ -17,10 +17,48 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup10, promoted
-  2026-11-04 (night) with this record, a fast-forward of 3 commits over
-  topup9 (`a8487f02aa`, kept locally as `SmallFastDrone-4.7.2.13-beta`).
-  None of topup6 to topup10 has flown.
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup11, promoted
+  2026-11-05 with this record, a fast-forward of 33 commits over topup10
+  (`1bb9af74de`, kept locally as `SmallFastDrone-4.7.2.14-beta`). None of
+  topup6 to topup11 has flown. topup11 brings in the 11-04 and 11-05 PR
+  work the beta lacked, for Andy to fly:
+  - #32471 (and #32473 on it): the hover Z-bias learner saves only from the
+    first flight after the EKF zeroes the accel bias at rest, armed 10 s
+    after it, and not after an accel switch on the ground; EKF3 reports the
+    zero time and each accel's bias from the core set up on it. The PR's
+    commits from `793dc2fb26` to `0c4475f079` (pushed to `3e76fb4246`, the
+    last three local); the learner matches #32473's restack `782e58d3ac`
+    function for function.
+  - #34457 and #33507: the AGL KF floor fused as a measurement with no bias
+    gain, the height update in FuseAglKfHeight(), the named limits. Replay
+    of six SFD-O4 flights is identical to the `softfloor-beta.diff`
+    prototype behind #34457's 34-flight sweep. The beta has no on-ground
+    range after 200 ms without a sample in readRangeFinder(), so that hunk
+    is not taken.
+  - #35014 / #33585: the flow height limit takes the terrain state off with
+    range finder height too (`0b2bbcffb8`), and their tests. #33585's
+    `2f02cfd690` (the anchored flow height chosen in FuseOptFlow()) is not
+    taken: on the beta it changes nothing (the beta already writes the
+    anchored ground into the terrain state each step; both anchor tests give
+    the same figures either way), and the next refresh brings it.
+  - #32972: the AID_NONE height reset in ground effect is skipped only while
+    armed, and its test matches the PR.
+  - SFD only: LOIT_OPTIONS bit 6, a temporary switch that puts the loiter
+    drag back in the feed-forward for a flight A/B of #33318 (SITL flow jab:
+    1.08x and -0.08 m/s with the drag out, 1.44x and -0.40 m/s with bit 6).
+  - Tested at `92f659a501`: the full SFD set, 127 of 129. The two failures
+    were test-only and are fixed: HoverBiasSavedFirstFlightAfterRest's accel
+    switch now comes before its flight at twice the offset (after that
+    landing #34942's on-ground height check forces a reset, which master
+    does not have), and OpticalFlowAGLKfTouchdown flies over flat ground
+    (the CMAC tile puts the range finder at 0.55 m on the ground; also fixed
+    on #34457 as `717595bef8`, not pushed). Both pass at `1a7ec50d81`.
+  - SmallFastDronev1 md5 `304d464b` (42,132 bytes free), MicoAir743v2 md5
+    `9490ae65` (234,592 bytes free), built from `6df2392ac4` (the code is
+    unchanged since). Parameter-side: LOIT_OPTIONS bit 6, default clear.
+- Previous beta: refresh12 after topup10, promoted 2026-11-04 (night), a
+  fast-forward of 3 commits over topup9 (`a8487f02aa`, kept locally as
+  `SmallFastDrone-4.7.2.13-beta`).
   - topup10 over topup9, from TD's T25 log 08 (boot 142): EKF3 no longer
     resets the height to the delayed baro on entering AID_NONE while takeoff
     or touchdown is expected, the same test the height source switch uses
@@ -42,7 +80,7 @@ reply exists") before acting on it.
     rate thread checked). This record changes no code.
   - SmallFastDronev1 md5 `91fbaeac` (43,124 bytes free), MicoAir743v2 md5
     `0e3e9933` (235,680 bytes free). No parameter-side changes since topup9.
-- Previous beta: refresh12 after topup9, promoted 2026-11-04, a fast-forward
+- Older beta: refresh12 after topup9, promoted 2026-11-04, a fast-forward
   of 5 commits over topup8 (`722d77b5de`, kept locally as
   `SmallFastDrone-4.7.2.12-beta`).
   - topup9 over topup8, from TD's VALT regression (T25 boots 110 and 111):
@@ -1373,11 +1411,16 @@ FLOW_OPTIONS's docs).
   belongs to whichever of #34696 and #32270 lands second.
 - `Copter: let throw mode hand off to VALT` (topup17), on no PR yet.
 - `AP_NavEKF3: skip the AID_NONE height reset in ground effect` and its test
-  `autotest: check the height is not reset to a baro in ground effect`
-  (refresh12 topup10, 2026-11-04), on no PR yet. Master has the same reset
-  (`AP_NavEKF3_Control.cpp` AID_NONE case) and the same ground-effect test,
-  so it is a candidate standalone PR cross-referencing #34942 and #32768;
-  re-pick both commits on every refresh until a PR carries them.
+  (refresh12 topup10, 2026-11-04) are now on #32972 (`13fe97b7ea`, test at
+  `5bf36c15d4`), with topup11's armed check; the next refresh takes them
+  from #32972, so drop the local commits then.
+- `AC_WPNav: add a temporary LOIT_OPTIONS bit to fly #33318 on and off` and
+  its test (topup11, 2026-11-05): SFD only, never a PR. Drop both once
+  the O4's flights decide whether it needs #33318.
+- `autotest: switch the accel before the doubled-offset flight on the beta`
+  (topup11): the beta's order for #32471's HoverBiasSavedFirstFlightAfterRest
+  while #34942's on-ground height check is carried; re-apply on every
+  refresh until #32471's own test is changed or #34942 lands upstream.
 - `hwdef: SFD boards keep the EKF reset auxiliary function` (refresh11
   topup3, 2026-10-29): owed to the base's SFD hwdefs, where a define that
   keeps an SFD board as it was belongs (step 16); carried on the branch

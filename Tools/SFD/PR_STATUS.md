@@ -25,6 +25,47 @@ the round was never triaged.
 
 ---
 
+## 2026-11-05: AI-review pass over the REQUEST CHANGES and COMMENT rounds
+
+25 open PRs had a current AP-Review round that was not ACCEPT; three were
+new since the morning sweep (#32471, #32972, #34380).
+
+VALT (#32270) and Throw (#32475) are active SFD work, not parked: keep their
+branches, tests and descriptions current, but do not promote them upstream
+(no replies pressing for review or re-opening the design question with
+lthall) unless Andy asks. #32270's open items: the companion mavlink PR for
+mode 29 (COPTER_MODE_VALT) is not opened, Andy to decide.
+
+Fixed locally, not pushed:
+- #32471: an accel switch on the ground since the EKF last zeroed the bias
+  now refuses the first-flight save ("accel switched on ground"); EKF
+  reports each accel's bias from the core set up on it. `r1105/32471-switch2`
+  (`cab832f2f7`, `c7fcf29ee3`, `0c4475f079`); #32473 restacked as
+  `r1105/32473-switch`. In the beta from topup11.
+- #34877: the example keeps a timed wait (UINT32_MAX in SITL, 1 s on
+  hardware) so it still tests the SITL semaphore fix. `r1105/34877-fix3`.
+- #33318: Andy rejected the LOIT_OPTIONS opt-in (again). Reworked as
+  `r1105/33318-srcset` (`ff59584ac8`): the drag subtraction applies only
+  while the primary core's source set takes velocity from optical flow;
+  GPS is as master. A source-set switch at 3.8 m/s steps the feed-forward
+  by the whole drag (4.3 m/s/s, speed swings to 1.3 m/s); a 1 s ramp only
+  trims it. With EK3_SRC_OPTIONS 8 the beta's primary-lane switches would
+  flip it the same way (not measured). The beta flies the subtraction on
+  every source set today. Andy: fly it on and off first; topup11 carries
+  a temporary LOIT_OPTIONS bit 6 for that.
+- #34457: OpticalFlowAGLKfTouchdown waits for a zero range on the ground,
+  which the CMAC terrain tile in CI puts at 0.55 m; fixed with SIM_TERRAIN 0
+  as `717595bef8` on `r1105/34457-sf`, #33507 restacked on it as
+  `r1105/33507-flat`. Not pushed.
+
+Drafted, not posted: replies on #32471, #34941 (correction to the reply to
+tridge on short tilts), #33568, #34584, #34251, #32398, #33478, #34583,
+#34877; description edits for #33478, #33568, #34583. #32972's should-fix
+belongs to #32768 (hands off). Old blockers on #30841, #31005, #32391,
+#32401, #34443, #34871 and #32270's mode number are still open; #34871's
+param_parse failure comes from `@Vehicles` on parameters, which is only
+valid on log messages (`@Param{Copter}:` is the parameter form).
+
 ## 2026-11-03: the gyro bias across an EKF reset (#34942)
 
 Users report yaw jitter without a compass and poor VALT on the new betas.

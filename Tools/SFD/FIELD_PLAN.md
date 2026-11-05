@@ -17,6 +17,37 @@ parameter changes: #34942's static yaw retaken after a reset (T1), #31274's
 250-frame floor (0b, item 1), #32475's throw hand-off (item 6), and smaller
 ones this card does not exercise.
 
+The beta after topup11 (`1a7ec50d81`, SmallFastDronev1 md5 `304d464b`,
+MicoAir743v2 md5 `9490ae65`) adds, none flown:
+
+- A temporary switch for #33318: `LOIT_OPTIONS` bit 6 (64) puts the
+  modelled drag back in the Loiter feed-forward, as 4.7 has it; clear, as
+  by default, the beta behaves as before (drag out). SFD-O4 flies
+  `LOIT_OPTIONS` 1, so 1 is #33318 on and 65 is #33318 off. The flight
+  that decides whether the O4 still needs #33318 now that #33639 no longer
+  inflates the drag: Loiter on flow below about 2.3 m, where the flow speed
+  limit binds, full forward stick for 3 s, release and hold hands-off for
+  8 s; three times at 1 and three at 65, same height and pack. Look for the
+  speed reversing after the release (pull-back) and the overshoot past the
+  desired speed (PSCN/PSCE DVN/VN). SITL: 1.08x and -0.08 m/s with the drag
+  out, 1.44x and -0.40 m/s with bit 6.
+- The AGL KF fuses its floor as a measurement instead of clearing the
+  velocity on it (#34457, #33507 restacked): after a hard touchdown the AGL
+  height no longer lifts off the ground (SITL 2.5 m -> 0.1-0.2 m). Watch
+  XKFA.HAgl after landings. Nothing to set.
+- The hover Z-bias learner (#32471) now saves only from the first flight
+  after the EKF zeroes the accel bias at rest (a boot or a reset), armed at
+  least 10 s after it, and not after an accel switch on the ground; it says
+  why when it does not save ("not first flight", "armed <10s after EKF
+  reset", "accel switched on ground"). To relearn: reboot, wait 10 s or
+  more disarmed, hover steadily, land.
+- The AID_NONE height reset in ground effect (topup10) is skipped only
+  while armed, as on #32972. #35014: with the range finder as the height
+  source after a fall back, the flow height limit now subtracts the
+  terrain offset (no effect on SFD-O4's usual source sets).
+
+Parameter-side: only the new LOIT_OPTIONS bit, default clear.
+
 The beta after topup10 (`93875c9cbf`, SmallFastDronev1 md5 `91fbaeac`,
 MicoAir743v2 md5 `0e3e9933`) no longer resets the height to the baro when
 flow aiding drops out at a touchdown, so the height does not jump by the

@@ -7,6 +7,33 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-05 - refresh12 topup11, the 11-05 review fixes for a flight
+
+Andy asked for a beta with the day's PR fixes to fly. The beta lacked
+#32471's first-flight rule (11-04) and its 11-05 fixes, #34457's fused
+floor and #33507's restack on it, #35014's flow height limit fix, and
+#32972's armed check on topup10's touchdown gate. Two ports ran in
+parallel and were integrated on the beta head.
+
+Andy rejected #33318's LOIT_OPTIONS opt-in again and asked whether the
+source set could decide; switching source set at speed stepped the
+feed-forward by the whole drag (4.3 m/s/s at 3.8 m/s). The O4's own logs
+match the linear drag model, and #33639 removed the flow cap's drag
+inflation that caused its June pull-back, so the question is whether the
+O4 needs #33318 at all. The beta carries a temporary LOIT_OPTIONS bit 6
+to fly it on and off.
+
+The full set found two test-only problems. A switch of the accel in use
+at rest made the beta's EKF unhealthy and forced a reset where master
+did not; the switch was not the cause. After the test's flight at twice
+the motors-on offset the EKF's hover bias drifts the height at rest (PD
++0.46 to -2.17 m in 8 s), and #34942's on-ground height check, which
+master applies only without aiding, makes the filter unhealthy until the
+5 s forced reset. That reset zeroes the bias, so the learner rightly
+reopens a first flight. And #34457's touchdown test waited for a zero
+range on the ground, which the CMAC terrain tile, present in CI, puts at
+0.55 m; it failed with the tile and passes over flat ground.
+
 ## 2026-11-04 (night) - refresh12 topup10, no height reset to a prop-washed baro at touchdown
 
 TD's T25 relearned the hover Z-bias in ALT_HOLD on topup9 (boot 137:
