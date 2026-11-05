@@ -1614,7 +1614,8 @@ void NavEKF3_core::selectHeightForFusion()
 #if EK3_FEATURE_OPTFLOW_AGL_KF
         if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKfValid &&
             (prevTnb.c.z >= frontend->DCM33FlowMin) && (imuSampleTime_ms - lastAglRngFuseTime_ms < 200)) {
-            heightAboveGnd = aglKfH;
+            // the state can sit just below its floor, which is fused rather than clamped
+            heightAboveGnd = MAX(aglKfH, rngOnGnd);
             hgtValidTime_ms = lastAglRngFuseTime_ms;
         } else
 #endif
@@ -1652,7 +1653,7 @@ void NavEKF3_core::selectHeightForFusion()
         const bool aglOnlyStable = terrainStable && !terrainHgtStable;
         if (aglOnlyStable) {
             aglSettled = rangeDataToFuse && (imuSampleTime_ms - lastAglRngFuseTime_ms < 200) &&
-                         (fabsF(aglKfH - rngHgt) < 0.15f);
+                         (fabsF(MAX(aglKfH, rngOnGnd) - rngHgt) < 0.15f);
         }
 #endif
 

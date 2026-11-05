@@ -967,7 +967,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
         // height difference taken along the sensor axis as range is, may be no more than the flow noise
         // term the reset already allows for
         const ftype rngHgt = MAX(rangeDataDelayed.rng * prevTnb.c.z, rngOnGnd);
-        const ftype stepSpdErr = ofDataDelayed.flowRadXYcomp.length() * fabsF(aglKfH - rngHgt) / prevTnb.c.z;
+        const ftype stepSpdErr = ofDataDelayed.flowRadXYcomp.length() * fabsF(MAX(aglKfH, rngOnGnd) - rngHgt) / prevTnb.c.z;
         const bool rangeSettled = stepSpdErr < MAX(frontend->_flowNoise, 0.05f) * range;
         // a fast rotation can corrupt both axes at once, so reset only on a sample the other axis passed
         const bool otherAxisPassed = MIN(stale0, stale1) == 0;
@@ -1178,12 +1178,10 @@ void NavEKF3_core::UpdateAglKf()
         aglKfV *= expf(-imuDt / tauV);
     }
 
-    // AGL cannot go below the on-ground sensor reading, and resting on that floor holds
-    // the height innovation at zero, so a downward velocity there has nothing to correct it.
-    // Written so a NaN height is pulled back to the floor too
-    if (!(aglKfH >= rngOnGnd)) {
+    // the floor below is fused as a measurement rather than clamped, so a NaN restarts from it here
+    if (isnan(aglKfH) || isnan(aglKfV)) {
         aglKfH = rngOnGnd;
-        aglKfV = MAX(aglKfV, 0.0f);
+        aglKfV = 0.0f;
     }
 
 #if EK3_FEATURE_RANGEFINDER_MEASUREMENTS
@@ -1270,6 +1268,16 @@ void NavEKF3_core::UpdateAglKf()
     aglKfCapVariance(aglKfP, 1, 100.0f);  // 10 m/s std-dev cap
     aglKfCapVariance(aglKfP, 2, 25.0f);   // 5 m/s/s std-dev cap on bias
 
+    // AGL cannot go below the on-ground sensor reading. Fuse that floor as a reading with the range
+    // finder's noise, so a downward velocity resting on it is corrected through the covariance.
+    // Overwriting the height and clearing the velocity instead counted a touchdown twice: once at the
+    // clear, and again as the impact decelerated the vehicle, which lifted the height off the ground.
+    // Not on a step with a fresh range sample, which is floored already, and not into the bias, as
+    // for any reading at the floor
+    if ((aglKfH < rngOnGnd) && (!rangeDataToFuse || posVelFusionDelayed)) {
+        FuseAglKfHeight(rngOnGnd - aglKfH, sq(frontend->_rngNoise), false);
+    }
+
     // mark invalid if RF has been absent too long. On a step SelectVelPosFusion() delayed for
     // magnetometer fusion, rangeDataToFuse still holds the previous step's sample, already used
     if (!rangeDataToFuse || posVelFusionDelayed) {
@@ -1348,7 +1356,6 @@ void NavEKF3_core::UpdateAglKf()
     // corrected height as well, which a tilted reading reaches only after the tilt correction
     const bool onFloor = rangeDataDelayed.onFloor || ((aglKfH <= rngOnGnd) && (hgtMeas <= rngOnGnd));
     FuseAglKfHeight(hgtInnov, measNoiseVar, !onFloor);
-    aglKfH  = MAX(aglKfH, rngOnGnd);  // enforce physical constraint after update
 
     lastAglRngFuseTime_ms = imuSampleTime_ms;
     aglKfLastHgtInnov = hgtInnov;
