@@ -4075,13 +4075,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
     def EK3TouchdownHeightNotSnapped(self):
         '''the height is not reset to a baro in ground effect when optical flow aiding stops on the ground'''
         # When all aiding stops the EKF resets its height to the baro. Armed on the ground
-        # that baro is in prop wash, and with a recorded origin and no GPS the arm-time datum
-        # reset keeps the reported height, so a quick re-arm flies the next flight with the
-        # error. A baro glitch stands in for the prop wash, applied just before the flow
-        # timeout ends aiding. On the ground it reads low, as ground effect does, so the
-        # flooring of a baro in ground effect keeps it out of the height; elsewhere it is
-        # too large for the innovation gate. Either way only a reset to the baro moves the
-        # height by it.
+        # that baro is in prop wash, so the reset puts the prop wash error into the height
+        # with the vehicle on the ground, and with a recorded origin and no GPS the arm-time
+        # datum reset keeps the reported height, so a quick re-arm flies with it. A baro
+        # glitch stands in for the prop wash, applied just before the flow timeout ends
+        # aiding. On the ground it reads low, as ground effect does, so the dead zone slows
+        # its pull on the height to a creep; elsewhere it is too large for the innovation
+        # gate. Over the second measured, only a reset to the baro moves the height by it.
         # Heights come from XKF1 and RFND in the onboard log, as without aiding there is no
         # LOCAL_POSITION_NED to read.
         def log_hgt(t0, t1):
@@ -4142,12 +4142,12 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             "FLOW_TYPE": 10,
             "SIM_GPS1_ENABLE": 0,
             "SIM_TERRAIN": 0,       # flat ground, so the range finder is the height above it
-            "AHRS_OPTIONS": 16,     # a recorded origin without GPS, as the vehicle that found this
+            "AHRS_OPTIONS": 16,     # a recorded origin without GPS, as on the vehicle that found this
             "AHRS_ORIGIN_LAT": -35.363261,
             "AHRS_ORIGIN_LON": 149.165230,
             "AHRS_ORIGIN_ALT": 584,
             "DISARM_DELAY": 0,      # stays armed on the ground after landing
-            "EK3_IMU_MASK": 1,      # one core, as the vehicle that found this
+            "EK3_IMU_MASK": 1,      # one core, so the reset is the one the vehicle flies on
             "ARMING_SKIPCHK": (1 << 3) | (1 << 12),
         })
         self.configure_EKFs_to_use_optical_flow_instead_of_GPS()
@@ -4178,9 +4178,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         baro_glitch(0)
         self.disarm_vehicle(force=True)
         self.set_parameter("SIM_FLOW_ENABLE", 1)
-        # re-armed a second or two after the disarm, before the on-ground height check or the
-        # forced reset would act. The arm check is not what is tested: it is forced, as on the
-        # vehicle that found this the error passed it
+        # re-armed a second after the disarm; forced, as the arm checks are not what is tested
         self.arm_vehicle(force=True)
         climb_to(1.5)
         self.delay_sim_time(5, "the first seconds of the hover")
@@ -4193,7 +4191,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         self.disarm_vehicle(force=True)
         if abs(err_ground) > 1.0:
             raise NotAchievedException("landed, the height was reset to the baro (%.2f m)" % err_ground)
-        if abs(err_hover) > 1.0:
+        if abs(err_hover) > 0.6:
             raise NotAchievedException("the next flight carried a %.2f m height error" % err_hover)
 
         self.start_subtest("in flight away from the ground: the height is still reset to the baro")
