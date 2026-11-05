@@ -504,7 +504,7 @@ void NavEKF3_core::setAidingMode()
             meaHgtAtTakeOff = baroDataDelayed.hgt - baroHgtOffset;
             // reset the vertical position state to faster recover from baro errors experienced during touchdown,
             // but not to a baro in ground effect, which would put its prop wash error into the height
-            if (!((dal.get_takeoff_expected() || dal.get_touchdown_expected()) && !assume_zero_sideslip())) {
+            if (!(motorsArmed && (dal.get_takeoff_expected() || dal.get_touchdown_expected()) && !assume_zero_sideslip())) {
                 flowFocusRngPosD += -meaHgtAtTakeOff - stateStruct.position.z;
                 stateStruct.position.z = -meaHgtAtTakeOff;
             }
