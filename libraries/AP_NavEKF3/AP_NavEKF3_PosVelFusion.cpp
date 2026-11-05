@@ -1584,7 +1584,7 @@ void NavEKF3_core::selectHeightForFusion()
     readBaroData();
     baroDataToFuse = storedBaro.recall(baroDataDelayed, imuDataDelayed.time_ms);
 
-    bool rangeFinderDataIsFresh = (imuSampleTime_ms - rngValidMeaTime_ms < 500);
+    bool rangeFinderDataIsFresh = (imuSampleTime_ms - rngValidMeaTime_ms < rngFreshTime_ms);
 #if EK3_FEATURE_EXTERNAL_NAV
     const bool extNavDataIsFresh = (imuSampleTime_ms - extNavMeasTime_ms < 500);
 #endif
