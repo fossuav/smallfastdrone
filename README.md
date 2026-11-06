@@ -84,7 +84,7 @@ under review upstream, or work local to this repo with no PR yet.
 - Fast Rates (https://github.com/ArduPilot/ardupilot/pull/27893 - **merged**, https://github.com/ArduPilot/ardupilot/pull/29000, https://github.com/ArduPilot/ardupilot/pull/30980 - **merged**)
 [![Fast rates](https://img.youtube.com/vi/B8Dp2jwDamU/0.jpg)](https://www.youtube.com/playlist?list=PL_O9QDs-WAVyBpf7URQQgCmNQwv_aTcMf)
 - Loiter Control Feel When the EKF Limits Ground Speed (https://github.com/ArduPilot/ardupilot/pull/33639) - **merged**
-- AC_Loiter Brake/Drag Feed-forward Fix (https://github.com/ArduPilot/ardupilot/pull/33318)
+- Loiter Drag Feed-forward, LOIT_DRAG_COEF (https://github.com/ArduPilot/ardupilot/pull/33318)
 - Rate Target Interpolation in the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34208)
 - Throttle-Gain Boost and Throttle Mix with the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34583)
 - Per-Loop Rate Modifiers for the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34584)
@@ -179,10 +179,10 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 2. #33543 AP_Param: publish actual loaded defaults count, not the pre-count - 1 file - AI: comment (09-30)
 3. #34642 AP_InertialSensor: let the SITL gyro rate follow INS_GYRO_RATE - 3 files, SITL only - no AI review yet
 4. #32514 Copter: expect a position in the EKF failsafe only where the mode or source set needs one - 6 files, changes requested by peterbarker (structure; rename done, estimates-object question answered) - AI: accept (10-06)
-5. #33318 AC_Loiter: remove drag from feed-forward accel to fix loiter overshoot - 2 files - AI: request changes (10-03)
+5. #33318 AC_WPNav: feed the vehicle's own drag forward in Loiter (LOIT_DRAG_COEF) - 5 files - AI: request changes (10-03)
 6. #31005 Copter: don't fall out of the sky at zero throttle on min alt fences - 2 files - AI: request changes (09-30)
 7. #34363 AP_NavEKF3: log XKF5 and XKFA for every core - 4 files, changes requested by peterbarker - AI: request changes (10-03)
-8. #30841 Control ESC Logging - 5 files - AI: request changes (09-30)
+8. #30841 Control ESC Logging - 2 files - AI: request changes (09-30)
 9. #32398 Copter: make ARM_DELAY customizable via hwdef and avoid race in ARMING_DELAY_MSEC - 6 files, changes requested by peterbarker - AI: comment (09-30)
 10. #32238 Add FAST_BOOT bitmask parameter - 4 files - **conflicts** - AI: request changes (09-30)
 11. #31274 Motortest error rate - 5 files - **conflicts**, largely superseded upstream - AI: request changes (09-30)
@@ -233,7 +233,7 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 
 Bigger diffs and new parameters; these want the small fixes out of the way first.
 
-1. #32401 Copter: add pending arm on switch for in-air arming - 7 files, changes requested by peterbarker - AI: request changes (09-30)
+1. #32401 Copter: add pending arm on switch for in-air arming - 9 files, changes requested by peterbarker - AI: request changes (09-30)
 2. #34210 Copter: add advanced land failsafe (LAND_FS_OPTIONS bit 0) - 10 files - AI: request changes (10-03)
 3. #32475 Copter: throw mode improvements - 7 files - AI: request changes (10-03)
 4. #32270 Copter: add VALT velocity alt-hold flight mode - 17 files - AI: request changes (10-03)
