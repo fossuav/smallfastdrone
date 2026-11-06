@@ -93,6 +93,15 @@ const AP_Param::GroupInfo AC_Loiter::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("BRK_JRK_M", 11, AC_Loiter, _brake_jerk_max_msss, LOITER_BRAKE_JERK_DEFAULT_MSSS),
 
+    // @Param: DRAG_COEF
+    // @DisplayName: Loiter vehicle drag coefficient
+    // @Description: The vehicle's own horizontal drag deceleration per m/s of speed, which Loiter feeds forward so the velocity controller does not have to hold that lean itself. 0 uses Loiter's drag model instead (LOIT_SPEED_MS reached at LOIT_ANG_MAX), which is right only when those two describe the airframe; where they do not, the velocity controller's integrator carries the difference through every stop and the vehicle stops short and rolls back, or runs past its stop point and slides back. Measure it in calm air on a GPS flight as body X specific force divided by ground speed (the quantity EK3_DRAG_MCOEF describes for rotor drag).
+    // @Units: 1/s
+    // @Range: 0 1
+    // @Increment: 0.01
+    // @User: Advanced
+    AP_GROUPINFO("DRAG_COEF", 12, AC_Loiter, _airframe_drag_coef, 0.0f),
+
     AP_GROUPEND
 };
 
@@ -343,7 +352,7 @@ void AC_Loiter::calc_desired_velocity(bool avoidance_on)
     // update the desired velocity using our predicted acceleration
     desired_vel_ne_ms += _predicted_accel_ne_mss * dt_s;
 
-    Vector2f loiter_accel_brake_mss;
+    Vector2f loiter_accel_decel_mss;
     float desired_speed_ms = desired_vel_ne_ms.length();
     if (!is_zero(desired_speed_ms)) {
         Vector2f desired_vel_norm = desired_vel_ne_ms / desired_speed_ms;
@@ -360,15 +369,18 @@ void AC_Loiter::calc_desired_velocity(bool avoidance_on)
 
         // Integrate jerk-limited brake acceleration
         _brake_accel_mss += constrain_float(loiter_brake_accel_mss - _brake_accel_mss, -_brake_jerk_max_msss * dt_s, _brake_jerk_max_msss * dt_s);
-        loiter_accel_brake_mss = desired_vel_norm * _brake_accel_mss;
+        // the modelled drag decays the desired velocity below; the feed-forward holds the lean the
+        // vehicle's own drag needs at that velocity, for which the modelled drag stands by default
+        const float airframe_drag_mss = is_positive(_airframe_drag_coef) ? MIN(_airframe_drag_coef.get(), 1.0f) * desired_speed_ms : drag_decel_mss;
+        loiter_accel_decel_mss = desired_vel_norm * (_brake_accel_mss + (drag_decel_mss - airframe_drag_mss));
 
         // Update desired speed based on braking and drag
         desired_speed_ms = MAX(desired_speed_ms - (drag_decel_mss + _brake_accel_mss) * dt_s, 0.0f);
         desired_vel_ne_ms = desired_vel_norm * desired_speed_ms;
     }
 
-    // Apply braking acceleration to overall feed-forward acceleration
-    _desired_accel_ne_mss -= loiter_accel_brake_mss;
+    // Apply braking, and any modelled drag the vehicle's own does not cover, to the feed-forward acceleration
+    _desired_accel_ne_mss -= loiter_accel_decel_mss;
 
     // Apply final velocity magnitude constraint
     float desired_vel_ms = desired_vel_ne_ms.length();
