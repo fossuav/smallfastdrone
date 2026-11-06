@@ -843,7 +843,7 @@ void NavEKF3_core::SelectVelPosFusion()
     // Fuse the range finder aided AGL KF vertical velocity as a velD observation to
     // anchor the vertical velocity without making the range finder a height source.
     // A velZ source that is actually delivering data is always preferred, so the test
-    // is on when that data last arrived: useGpsVertVel and extNav.useVel latch on once
+    // is on when that data last arrived: useGpsVertVel and useExtNavVel latch on once
     // a source has been seen, and velTimeout runs off a 7 to 10 second aiding retry,
     // so neither tracks availability. fuseVelVertData covers the case where another
     // source has already claimed velPosObs[2] this step. Arriving is not enough on
@@ -863,12 +863,12 @@ void NavEKF3_core::SelectVelPosFusion()
                              ((dal.millis() - gpsRetrieveTime_ms) < velZAidTimeout_ms);
 #if EK3_FEATURE_EXTERNAL_NAV
     const bool haveExtNavVelZ = frontend->sources.useVelZSource(AP_NavEKF_Source::SourceZ::EXTNAV, core_index) &&
-                                ((imuSampleTime_ms - extNav.velMeasTime_ms) < velZAidTimeout_ms);
+                                ((imuSampleTime_ms - extNavVelMeasTime_ms) < velZAidTimeout_ms);
 #else
     const bool haveExtNavVelZ = false;
 #endif
     // body frame odometry fuses all three body axes, so it constrains velD as well
-    const bool haveBodyVelZ = (imuSampleTime_ms - bodyOdm.prevFuseTime_ms) < velZAidTimeout_ms;
+    const bool haveBodyVelZ = (imuSampleTime_ms - prevBodyVelFuseTime_ms) < velZAidTimeout_ms;
     // the AGL KF velocity decays toward zero once the range finder stops arriving
     const bool aglKfRngCurrent = (imuSampleTime_ms - aglKf.lastRngFuseTime_ms) < aglKfRngGapMax_ms;
     // a reset after a range gap starts the velocity at zero with 1 m/s of uncertainty,

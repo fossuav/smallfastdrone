@@ -66,8 +66,8 @@ bool NavEKF3_core::measuredVertVelAgrees(void) const
 {
     const bool navVelAgrees = ((imuSampleTime_ms - lastVelDFuseTime_ms) < 2000) && (fabsF(innovVelPos[2]) < 0.5f) &&
                               (velTestRatio < 1.0f);
-    const bool bodyVelAgrees = ((imuSampleTime_ms - bodyOdm.prevFuseTime_ms) < 2000) &&
-                               (norm(bodyOdm.innov[0], bodyOdm.innov[1], bodyOdm.innov[2]) < 0.5f);
+    const bool bodyVelAgrees = ((imuSampleTime_ms - prevBodyVelFuseTime_ms) < 2000) &&
+                               (norm(innovBodyVel[0], innovBodyVel[1], innovBodyVel[2]) < 0.5f);
     return navVelAgrees || bodyVelAgrees;
 }
 
@@ -83,8 +83,8 @@ bool NavEKF3_core::measuredVertVelFused(void) const
 {
     const uint32_t fusedRecently_ms = 2000;
     const bool navVelFused = ((imuSampleTime_ms - lastVelDFuseTime_ms) < fusedRecently_ms) && (velTestRatio < 1.0f);
-    const bool bodyVelFused = ((imuSampleTime_ms - bodyOdm.prevFuseTime_ms) < fusedRecently_ms) &&
-                              (bodyOdm.testRatio[0] < 1.0f) && (bodyOdm.testRatio[1] < 1.0f) && (bodyOdm.testRatio[2] < 1.0f);
+    const bool bodyVelFused = ((imuSampleTime_ms - prevBodyVelFuseTime_ms) < fusedRecently_ms) &&
+                              (bodyVelTestRatio[0] < 1.0f) && (bodyVelTestRatio[1] < 1.0f) && (bodyVelTestRatio[2] < 1.0f);
     return navVelFused || bodyVelFused;
 }
 
