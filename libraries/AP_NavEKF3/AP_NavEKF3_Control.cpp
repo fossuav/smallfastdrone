@@ -461,7 +461,7 @@ void NavEKF3_core::setAidingMode()
                 bool extNavDelivering = false;
 #if EK3_FEATURE_EXTERNAL_NAV
                 // a sample stamped on receipt can be a little newer than imuSampleTime_ms here
-                const int32_t extNavAge_ms = int32_t(imuSampleTime_ms - extNav.measTime_ms);
+                const int32_t extNavAge_ms = int32_t(imuSampleTime_ms - extNavMeasTime_ms);
                 extNavDelivering = (posXYSource == AP_NavEKF_Source::SourceXY::EXTNAV) &&
                                    (extNavAge_ms > -100) && (extNavAge_ms < int32_t(frontend->gpsNoFixTimeout_ms));
 #endif
