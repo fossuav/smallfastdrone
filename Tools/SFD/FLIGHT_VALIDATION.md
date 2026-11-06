@@ -10,6 +10,65 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-06: T25 on topup11 (52ec3c7), two ceiling strikes on IMU1
+
+TD flew five logs on topup11 with the EKF moved to IMU1 for the first time
+(01-02: INS_USE 0 with EK3_IMU_MASK 1, which runs core 0 on IMU1's accel
+and gyro; 03-04: INS_USE 1, EK3_IMU_MASK 2; 05: mask 3, core 0 primary
+throughout) and INS_FAST_SAMPLE changed from 1 to 2. Every earlier T25 log
+ran the EKF on IMU0. 02 and 04 climbed into the garage ceiling; 03's
+ALT_HOLD wandered; 05 flew normally.
+
+Cause: IMU1 is a BMI270 (IMU0 a BMI088), and its accel reads the Z
+specific force low by an amount set by motor RPM: about 0 below 24k, 0.3
+to 1.0 m/s/s at 26k, 3 to 7 at 28k, 8 to 11 at 30-34k, paired sample by
+sample against IMU0, which agrees with the range finder. On the ground
+they agree within 0.03. The curve is the same in the 11-03 (722d77b) and
+topup9 logs, where nothing flew on IMU1, so it is the sensor, not this
+week's firmware; its logged VibeZ stays at 2-3 while IMU0 reads 20-28,
+so the vibration figure does not show it. Hover sits at the knee (24-26k),
+so any climb makes IMU1 read less lift, the EKF sees sinking and the
+height controller adds throttle: positive feedback. 02 (VALT, 35.5 s):
+throttle 0.64, IMU0 -16.3, IMU1 -8.9 m/s/s, into the ceiling. 04: an ACRO
+punch at 62 s gave the IMU1 EKF a 5.5 m/s false descent, it rejected its
+height measurements and believed itself 36 m below the floor for 8 s,
+and ALT_HOLD at 71.4 s climbed on that. The learner's IMU1 values (0.010,
+0.176, 0.120, 0.199) are this curve sampled at each flight's hover RPM;
+IMU0's (0.066, against 0.062 and 0.056 on topup9) are consistent.
+
+Firmware ruled out by Replay (topup9 `a8487f0` and topup11 builds):
+
+- topup11 reproduces the flights exactly; topup9 on the same IMU1 data is
+  as wrong (height against the range finder 4.69/1.69/8.98 m rms on
+  02/03/04, against 4.58/1.69/8.90). On 02 the two IMU1 EKFs take
+  opposite wrong paths from the failed first takeoff (baro thrust swing
+  of +-4 m on the floor), so topup11 fuses the AGL velD at 28.5 s (test
+  ratio 0.35) where topup9 rejects it (1.3-1.8). Not a new failure.
+- On IMU0 (EK3_IMU_MASK 1 forced) the same flights hold: 03 0.22 m rms,
+  04 1.27 m, identical on both builds.
+- 01-02 logged no IMU0 Replay data (INS_USE 0), so their IMU0 feed was
+  rebuilt from the 200 Hz IMU messages (filtered accel and gyro, a log
+  rewriter), which on 03/04 follows the real
+  IMU0 Replay to 0.07 m
+  rms. On IMU0, 01 holds 0.21 m against 0.45 as flown, and 02 0.28 m
+  against 1.28 from the second takeoff to the strike (24-37 s): IMU0 sees
+  the climb into the ceiling (VD -4.6 m/s at 36.75 s) where IMU1 read a
+  descent (+1.1). 02's failed first takeoff reads 1.8-2.4 m on the floor
+  on IMU0 as well: that one is the baro, not the accel.
+- TD's topup9 IMU0 flights 02-08 through topup11: same or better (05
+  worst -5.1 to +0.9 m, 06 -3.3 to -1.1 m, the topup10 touchdown fix).
+
+Open, not new: on 04's IMU0 Replay, after the drop at 62 s the AGL step
+hold (#33478, since 10-08) kept velD out for 7 s with baro (2 m noise)
+alone, and a 1 m/s velocity error grew a 3 m height error. Only reached
+here because IMU1 had already thrown the vehicle about.
+
+Back to the T25's working setup: INS_USE 1, EK3_IMU_MASK 1,
+INS_FAST_SAMPLE 1, INS_ACC2_VRFB_Z 0, INS_ACC_VRFB_Z 0.066 kept,
+ACC_ZBIAS_LEARN 10. Plots, tables and the IMU0 rebuild are in the
+private analysis repo.
+
+
 ## 2026-10-31: squash audit of logs 66-71 and the T25 on 0cb49e7d
 
 Which commits on top of Andy's PRs these flights ran, and so may fold into
