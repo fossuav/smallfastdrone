@@ -7,6 +7,25 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-06 - refresh13, the day's review fixes and #33318's own LOIT_DRAG_COEF
+
+Andy asked for a refresh after ten PRs were pushed with the 11-06 review
+fixes, with the TBS_LUCID_H7 baro fix in the base. The base took that fix
+alone rather than moving to 4.7.3-beta1. The first run mixed the moved
+heads' `aglKf.*` names with 4.7's AGL KF members, so the base took master's
+AGL KF struct move too, and the run was repeated on it. 21 PRs had moved,
+and the plan ran 492 commits.
+
+#33318's new head makes LOIT_DRAG_COEF the PR's own parameter at AC_Loiter
+index 12, with 0 meaning master's feed-forward. The local LOIT_DRAG_COEF
+(index 20, retired) and topup11's LOIT_OPTIONS bit 6 went, and the SFD
+boards default to 0.01, which keeps the modelled drag out as the betas
+did. #30841 moved ESC logging into AP_ESC_Telem at 100 Hz, and the boards
+keep 25 Hz. All 133 tests pass. The T25's first flights on a second
+MicoAir743v2 (topup11) were replayed through this build: EK3_RNG_USE_HGT 6
+takes 06's takeoff height error from 1.52 to 0.09 m rms, against the range
+finder.
+
 ## 2026-11-06 - refresh12 topup13, the AGL step hold counted only from a settled innovation
 
 The T25's flight 04, replayed on IMU0, showed #33478's step hold doing

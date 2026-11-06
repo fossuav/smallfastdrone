@@ -17,9 +17,36 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh12 after topup13,
-  promoted 2026-11-06 as a fast-forward over topup12 (`a179bc5d00` on
-  GitHub). topup12 was rebased onto `909cde934e` (the T25's topup11
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh13, promoted 2026-11-06
+  over refresh12 topup13 (a force push). The plan ran 492 commits for the
+  21 PRs that moved, among them the ten pushed with the 11-06 review fixes
+  and #33318's LOIT_DRAG_COEF head.
+  - Base `258e843e68`: refresh12's `b74b576dc9`, the TBS_LUCID_H7 baro fix
+    (`89982e63a9`, 4.7's `7551eb32f7`: every variant can carry a DPS368 or
+    a BMP390) and master's AGL KF struct move (`0ecbe153e2`), which the
+    moved AGL KF heads are written against. 4.7.3-beta1 was not taken.
+  - Out of the box the SFD boards behave as before through
+    `sfd_defaults.parm`: ESC_TLM_LOG_RATE 25, since #30841 logs ESC from
+    AP_ESC_Telem at 100 Hz by default, and LOIT_DRAG_COEF 0.01. For #33318,
+    0 means master's feed-forward and any positive value takes the modelled
+    drag out, as the betas did unconditionally. LOIT_DRAG_COEF moved from
+    AC_Loiter index 20 to the PR's 12, so a value saved on topup12 or
+    topup13 does not carry over. The SFD-O4 needs 0.3 set again. LOIT_OPTIONS
+    bit 6 is gone.
+  - Not taken: #35003 (the 4.7 bootloader ECC rebuild).
+  - All 133 tests pass: the derived SFD set and the moved PRs' tests.
+    LoiterAirframeDragFeedForward passed only after a reconfigure (traps).
+    SITL copter, plane, heli, sub and rover build, and
+    `check_param_tables.py` is clean.
+  - SmallFastDronev1 md5 `2efce0f0` (41,388 bytes free), MicoAir743v2
+    md5 `eb30f0d8` (233,856 bytes free), both `.apj`, built from
+    `6aea2dde6c`. The commits after it are records only.
+  - Flown so far: none on this build. The T25's flights 05-07 on a second
+    MicoAir743v2 (topup11) were replayed through it with EK3_RNG_USE_HGT 6
+    (`FLIGHT_VALIDATION.md`, 2026-11-06 evening).
+- Previous beta: refresh12 after topup13 (`85a872ee6f`, kept locally as
+  `SmallFastDrone-4.7.2.15-beta`), promoted 2026-11-06 as a fast-forward
+  over topup12 (`a179bc5d00`). topup12 was rebased onto `909cde934e` (the T25's topup11
   flights, `ANALYSIS_REPOS.md`, `CLAUDE_local.md`) and pushed, so its
   commits from topup11's records on have new hashes. topup12 and topup13
   are the only code over topup11.
@@ -1142,6 +1169,14 @@ added 2026-09-18:
   kind is one line in that file. Unknown names in defaults are ignored, so a
   default for a parameter only a stacked PR defines is harmless on the base.
 
+refresh13 (2026-11-06) added two commits on `b74b576dc9`, a fast-forward:
+the TBS_LUCID_H7 baro fix (`89982e63a9`, 4.7's `7551eb32f7`) and master's
+`0ecbe153e2`, which moves the AGL KF variables into a structure
+(`258e843e68`, picked with `-x`). Its feature.h conflict kept 4.7's
+defines and added master's `#error` for the AGL KF without flow fusion.
+The base is `258e843e68`. Backups: `.5` is the stale local `ec107ee728`
+and `.6` is `89982e63a9`.
+
 Rebuilt 2026-10-22 on `upstream/ArduPilot-4.7` `fbd0a3160c`: 4.7.2, plus
 three ChibiOS fixes (atomic runtime pin mode changes and toggles, the same for
 the debug pins, and the nested locking in soft-serial read cleanup from #34597)
@@ -1150,7 +1185,7 @@ with one conflict: 4.7 moved AEDROXH7's MSP DisplayPort default from SERIAL6 to
 SERIAL8, and `AP_MSP_VIDEOTX_ENABLED 1` now follows it. The base's own changes
 match the old base's file for file apart from that one, no prs.txt PR is in the
 new 4.7 (patch-id check against `refs/sfdpr/*`), and SmallFastDronev1 and SITL
-Copter build. It is `b74b576dc9`.
+Copter build. It was `b74b576dc9`.
 
 Backups: `SmallFastDrone-4.7-base.3` is the 4.7.2-beta1 base (`ec107ee728`) and
 `.2` the 4.7.1 lineage (`1bf6b3ddc0`), both local; `origin/SmallFastDrone-4.7-base.1`
@@ -1369,11 +1404,12 @@ moves, and move the newcomer:
 | FLOW_HGT_MIN (AP_OpticalFlow) | 9 | #34292 takes 8, which shipped betas gave to FLOW_HF_RATEF (#33497, dropped in refresh10); keep 8 empty so a saved FLOW_HF_RATEF never loads as FLOW_HGT_MIN |
 | SIM_SONAR_OFFSET (SITL var_info3) | 57 | local backport; master has it in its own group |
 | TKOFF_CPU_AVG, TKOFF_CPU_PEAK | 41, 42 | #33366 takes 60/61, which #32475's THROW_SRC_SET/THROW_DROP_CNF hold on the shipped betas (and on master, so upstream one of the two renumbers). On 30/31 for the betas of 2026-10-31, where 30 read a June board's VALT_POS_EXPO (SFD-O4 log66) |
-| LOIT_DRAG_COEF (AC_Loiter) | 20 | SFD only (topup12). Upstream's AC_Loiter uses 1 and 6-11; #33318 takes 12. Once a refresh moves it to 12, 20 is retired and never reused |
+| LOIT_DRAG_COEF (AC_Loiter) | 12 | #33318's own index since refresh13. topup12 and topup13 had it at 20, now retired with a marker |
 
 Retired in var_info2, never to be reused: 29 (THROW_YAW_DEG on the June
 4.7.0 builds, VALT_POS_EXPO from 4.7.1 to 2026-10-31) and 31 (TKOFF_CPU_PEAK
-on the betas of 2026-10-31), each marked "N was" in the table. AP_Param loads
+on the betas of 2026-10-31), each marked "N was" in the table. In AC_Loiter,
+20 (LOIT_DRAG_COEF on topup12 and topup13) is retired the same way. AP_Param loads
 a stored value by index and type, not name, so pick a new index against every
 shipped beta's table, not today's source (ARCH-22): 41-46 and 48-58 have never
 held anything on any branch.
@@ -1454,20 +1490,19 @@ FLOW_OPTIONS's docs).
   (refresh12 topup10, 2026-11-04) are now on #32972 (`13fe97b7ea`, test at
   `5bf36c15d4`), with topup11's armed check; the next refresh takes them
   from #32972, so drop the local commits then.
-- `AC_WPNav: add a temporary LOIT_OPTIONS bit to fly #33318 on and off` and
-  its test (topup11, 2026-11-05): SFD only, never a PR. Kept for the
-  outdoor at-speed A/B (logs 79-80 settled only room speeds); drop both
-  after it.
-- `AC_WPNav: feed the vehicle's own drag forward in Loiter, as
-  LOIT_DRAG_COEF` and its test (topup12, 2026-11-06): SFD only until a
-  refresh takes #33318, reworked the same day to carry the same
-  feed-forward (local `r1106/33318-v2`, to be pushed) with two
-  differences: there the parameter is AC_Loiter index 12, and its 0 means
-  master's feed-forward, not the drag out. When a refresh takes #33318,
-  drop this commit, its test and LOIT_OPTIONS bit 6, retire index 20, and
-  set LOIT_DRAG_COEF on any vehicle that relied on the drag being out (the
-  O4: 0.3); a value saved at 20 does not carry over. EK3_DRAG_MCOEF holds
-  the same figure but turns on the EKF's drag fusion, so it is not used.
+- `hwdef: SFD boards keep 25 Hz ESC logging and the Loiter drag out of the
+  feed-forward` (refresh13): ESC_TLM_LOG_RATE 25 and LOIT_DRAG_COEF 0.01
+  in `sfd_defaults.parm`. It names parameters only stacked PRs define,
+  which a defaults file ignores where they are absent, so it can move into
+  the base at the next base rebuild.
+- `AC_WPNav: mark Loiter index 20, DRAG_COEF on the SFD topup12 and topup13
+  betas` (refresh13): the retired index's marker. It stays SFD-local after
+  #33318 lands.
+- refresh13 dropped topup11's LOIT_OPTIONS bit 6, topup12's local
+  LOIT_DRAG_COEF and their tests for #33318's head. The PR's
+  LoiterAirframeDragFeedForward, loiter_jab_backward and
+  LoiterFlowBrakeOvershoot replace them. EK3_DRAG_MCOEF holds the same
+  figure, but it also turns on the EKF's drag fusion, so it is not used.
 - `autotest: switch the accel before the doubled-offset flight on the beta`
   (topup11): the beta's order for #32471's HoverBiasSavedFirstFlightAfterRest
   while #34942's on-ground height check is carried; re-apply on every
@@ -1540,6 +1575,40 @@ an FMT record and passes the retry, as the shipping beta does. Both picks are
 carried (Local work) until 4.7 has #30956: the logger one because the stack
 logs more message types than 4.7 and the startup drops are real, the harness
 one because it is master's and costs nothing.
+
+### Traps found in refresh13
+
+- **Master's EKF3 state structures.** Master moved EKF3 state into
+  structures (`aglKf.*`, and the airspeed, external nav, body odometry,
+  GPS yaw and drag state), and PR heads rebased since then carry the new
+  names, often in hunks that merge clean. The first run (parked as
+  `SmallFastDrone-4.7.2-refresh13-try1`) mixed `aglKf.hgt` with 4.7's AGL
+  KF names. Master's AGL KF move (`0ecbe153e2`) went into the base instead,
+  because the moved AGL KF heads are written against it. The rest are
+  mapped back to 4.7's members (`AP_NavEKF3: use 4.7's body odometry and
+  external nav names`). Before `run`, grep the plan's added lines for
+  `tas\.`, `extNav\.` and `bodyOdm\.`.
+- **A clamp the beta made can live in a PR only one head carries.** #34457
+  fuses the AGL KF floor rather than clamping to it, so its state can sit
+  just below the floor. #33484's step speed error and #33359's range
+  height switch read that height too. Neither head has #34457 under it, so
+  neither carries the beta's clamp (`AP_NavEKF3: clamp the AGL KF height to
+  its floor where the stack reads it`).
+- **SITL builds its `@ROMFS` models at configure time.** A frame model the
+  tests pass brings in (#33318's `quad-linear-drag.json`) is not in a
+  binary configured before it arrived, and the test fails at SITL startup.
+  Run `./waf configure --board sitl` after the tests pass, then rebuild copter.
+- **A fixup cherry-picked from the beta can undo a later one.** The beta's
+  index fixups put the "30 was" marker back after VALT_POS_EXPO had
+  returned to 30, and `check_param_tables.py` does not flag a marker beside
+  a live index. Read the table after the pins.
+- **A merged PR test can read a field the stack leaves out.** #33478's
+  runaway leg reads the hold time from XKFA.VHold, which the stack leaves
+  out (Standing divergences). There it checks only the velD error.
+- **git strips a message body line that starts with `#`** when the message
+  comes from a file. `55b28b627b`'s body lost its first line ("#32232
+  renamed ...") and reads only "written before that.". Start the line with a
+  word, or commit with `--cleanup=verbatim`.
 
 ### Traps found in refresh12
 

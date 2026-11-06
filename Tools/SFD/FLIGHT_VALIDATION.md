@@ -10,6 +10,49 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-06 (evening): T25 on a new flight controller, topup11 (52ec3c7)
+
+TD moved the T25 to a second MicoAir743v2, freshly calibrated with
+temperature calibration, and flew three logs on topup11 with the EKF on
+IMU0 alone (`EK3_IMU_MASK` 1, `EK3_OPTIONS` 92): 05 a hover Z-bias learn
+(ACC_ZBIAS_LEARN 3, STABILIZE then ALT_HOLD), 06 VALT for 74 s then Loiter
+for 61 s, 07 five switches between Loiter and VALT. TD's report was very
+positive.
+
+- Vibration on IMU0 is a quarter of the old board's (VibeZ median 4-7
+  against 21), and 05 learned and saved 0.023 m/s/s on its first flight
+  against 0.056-0.066 on the old board: less vibration, less rectification.
+  06 and 07 flew on it.
+- No clipping in flight: 06's 10 clips and 07's 12 came at the touchdowns,
+  each followed by one flow velocity reset on the ground. Flow quality
+  never fell under 40 (medians 110-129). Loiter held within 0.30-0.32 m
+  (95th percentile) with the sticks centred; the AGL KF height followed
+  the range finder to 0.14-0.21 m rms.
+- VALT's takeoff is faster than on the old board (stick up to 0.3 m:
+  2.4 s on 06, 1.6 s on 07, against 4.1 s) but the cause is the same: in
+  spool-up the thrust-compensated baro swings -3.4 m then +4.7 m with the
+  quad on the floor, so on 06 (BARO1_THST_SCALE -175) the EKF climbed to
+  2.2 m with the range at 0.29 m and VALT read a 1 m/s climb that was
+  0.4 m/s. 07 (-205) lifted within a second. EK3_RNG_USE_HGT 6, which
+  Replay showed fixing the old board's flight 06 takeoff, is not yet set.
+- Replay with EK3_RNG_USE_HGT 6 (tier 1b; topup11 and refresh13 Replay
+  agree, and both reproduce the flown core exactly without it). With
+  RNGFND1_MAX 8 the range is the height source below 0.34-0.48 m, so only
+  around takeoff and landing. EKF height minus range over the takeoff:
+  1.52 -> 0.09 m rms on 06, 0.49 -> 0.02 on 05, 0.38 -> 0.21 on 07. The
+  climb rate VALT reads at 06's liftoff drops from 0.6-0.9 m/s to
+  0.24-0.31, against the range finder's 0.17-0.29. On 07 the switch back
+  to baro at 0.48 m left the height 0.25 m low, from the baro offset
+  learned during the spool-up swing; it then drifted with the baro.
+  The landings showed no step. The hover stays on baro, so the creep and
+  the thrust compensation offset remain (median height minus range in
+  flight +0.63 -> +0.58 m on 06, +0.55 -> +0.21 on 07).
+- Baro height creep in ALT_HOLD and Loiter, about 0.28 m in 20-24 s
+  (range finder falling at constant EKF height); the baro calibration was
+  learning (TCAL_ENABLED 2), and the new board's BARO1_THST_SCALE has not
+  been calibrated.
+
+
 ## 2026-11-06: SFD-O4 logs 81-83, an ALT_HOLD creep and LOIT_DRAG_COEF indoors
 
 ### log81: the vehicle climbed 0.6 m while the flow core's height stood still
