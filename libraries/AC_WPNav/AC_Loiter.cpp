@@ -352,7 +352,8 @@ void AC_Loiter::calc_desired_velocity(bool avoidance_on)
     // update the desired velocity using our predicted acceleration
     desired_vel_ne_ms += _predicted_accel_ne_mss * dt_s;
 
-    Vector2f loiter_accel_decel_mss;
+    Vector2f loiter_accel_brake_mss;
+    Vector2f loiter_accel_drag_mss;
     float desired_speed_ms = desired_vel_ne_ms.length();
     if (!is_zero(desired_speed_ms)) {
         Vector2f desired_vel_norm = desired_vel_ne_ms / desired_speed_ms;
@@ -372,15 +373,16 @@ void AC_Loiter::calc_desired_velocity(bool avoidance_on)
         // the modelled drag decays the desired velocity below; the feed-forward holds the lean the
         // vehicle's own drag needs at that velocity, for which the modelled drag stands by default
         const float airframe_drag_mss = is_positive(_airframe_drag_coef) ? MIN(_airframe_drag_coef.get(), 1.0f) * desired_speed_ms : drag_decel_mss;
-        loiter_accel_decel_mss = desired_vel_norm * (_brake_accel_mss + (drag_decel_mss - airframe_drag_mss));
+        loiter_accel_brake_mss = desired_vel_norm * _brake_accel_mss;
+        loiter_accel_drag_mss = desired_vel_norm * (drag_decel_mss - airframe_drag_mss);
 
         // Update desired speed based on braking and drag
         desired_speed_ms = MAX(desired_speed_ms - (drag_decel_mss + _brake_accel_mss) * dt_s, 0.0f);
         desired_vel_ne_ms = desired_vel_norm * desired_speed_ms;
     }
 
-    // Apply braking, and any modelled drag the vehicle's own does not cover, to the feed-forward acceleration
-    _desired_accel_ne_mss -= loiter_accel_decel_mss;
+    // Apply braking acceleration to overall feed-forward acceleration
+    _desired_accel_ne_mss -= loiter_accel_brake_mss;
 
     // Apply final velocity magnitude constraint
     float desired_vel_ms = desired_vel_ne_ms.length();
@@ -408,5 +410,6 @@ void AC_Loiter::calc_desired_velocity(bool avoidance_on)
     desired_pos_ned_m += (desired_vel_ne_ms * dt_s).topostype();
 
     // Send updated position, velocity, and acceleration to the position controller
-    _pos_control.set_pos_vel_accel_NE_m(desired_pos_ned_m, desired_vel_ne_ms, _desired_accel_ne_mss);
+    // the drag term stays out of _desired_accel_ne_mss, which Sub's terrain recovery would accumulate
+    _pos_control.set_pos_vel_accel_NE_m(desired_pos_ned_m, desired_vel_ne_ms, _desired_accel_ne_mss - loiter_accel_drag_mss);
 }
