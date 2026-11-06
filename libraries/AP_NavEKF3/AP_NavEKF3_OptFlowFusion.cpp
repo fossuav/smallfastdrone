@@ -975,7 +975,7 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
         // height difference taken along the sensor axis as range is, may be no more than the flow noise
         // term the reset already allows for
         const ftype rngHgt = MAX(rangeDataDelayed.rng * prevTnb.c.z, rngOnGnd);
-        const ftype stepSpdErr = ofDataDelayed.flowRadXYcomp.length() * fabsF(aglKf.hgt - rngHgt) / prevTnb.c.z;
+        const ftype stepSpdErr = ofDataDelayed.flowRadXYcomp.length() * fabsF(MAX(aglKf.hgt, rngOnGnd) - rngHgt) / prevTnb.c.z;
         const bool rangeSettled = stepSpdErr < MAX(frontend->_flowNoise, 0.05f) * range;
         // a fast rotation can corrupt both axes at once, so reset only on a sample the other axis passed
         const bool otherAxisPassed = MIN(stale0, stale1) == 0;
