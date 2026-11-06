@@ -1166,7 +1166,8 @@ bool NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype 
 bool NavEKF3_core::flowResetHeight(FlowResetHeight &resetHgt) const
 {
     if (frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) && aglKf.valid) {
-        resetHgt.hgt = aglKf.hgt;
+        // the state can sit just below its floor, which is fused rather than clamped
+        resetHgt.hgt = MAX(aglKf.hgt, rngOnGnd);
         resetHgt.var = aglKf.cov[0][0];
         resetHgt.rngTime_ms = aglKf.lastRngFuseTime_ms;
         resetHgt.restartUnconfirmed = (aglKfRestartConfirm != 0);
