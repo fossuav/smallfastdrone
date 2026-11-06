@@ -77,6 +77,10 @@ private:
 
     AP_Int8 _options;
     AP_Int8 _cellcount;
+#if AP_MSP_DISPLAYPORT_RC_SLOTS_ENABLED
+    // 1-based RC channels feeding the DisplayPort RC slots, 0 disables the group
+    AP_Int8 _rc_slot_channel[4];
+#endif
 
     // these are the osd items we support for MSP OSD
     AP_OSD_Setting* _osd_item_settings[MSP::OSD_ITEM_COUNT];

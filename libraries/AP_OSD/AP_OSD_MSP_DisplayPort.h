@@ -61,6 +61,9 @@ protected:
 
 private:
     void setup_defaults(void);
+#if AP_MSP_DISPLAYPORT_RC_SLOTS_ENABLED
+    void update_rc_slots(void);
+#endif
     char displayport_write_buffer[DISPLAYPORT_WRITE_BUFFER_MAX_LEN]; // terminator
 
     AP_MSP_Telem_Backend* _displayport;

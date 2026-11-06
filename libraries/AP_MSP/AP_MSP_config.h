@@ -1,6 +1,7 @@
 #pragma once
 
 #include <AP_HAL/AP_HAL_Boards.h>
+#include <RC_Channel/RC_Channel_config.h>
 
 #ifndef HAL_MSP_ENABLED
 #define HAL_MSP_ENABLED 1
@@ -20,4 +21,11 @@
 // and off by default; boards with MSP and the video hardware opt in.
 #ifndef AP_MSP_VIDEOTX_ENABLED
 #define AP_MSP_VIDEOTX_ENABLED (HAL_PROGRAM_SIZE_LIMIT_KB > 2048)
+#endif
+
+// DisplayPort RC-slot producer (emitted by the AP_OSD DisplayPort
+// backend); compiled in where DisplayPort exists, inert until all four
+// MSP_RC_SLOTn parameters are set
+#ifndef AP_MSP_DISPLAYPORT_RC_SLOTS_ENABLED
+#define AP_MSP_DISPLAYPORT_RC_SLOTS_ENABLED (HAL_WITH_MSP_DISPLAYPORT && AP_RC_CHANNEL_ENABLED && HAL_PROGRAM_SIZE_LIMIT_KB > 1024)
 #endif
