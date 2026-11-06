@@ -102,6 +102,8 @@ const AP_Param::GroupInfo AC_Loiter::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("DRAG_COEF", 12, AC_Loiter, _airframe_drag_coef, 0.0f),
 
+    // 20 was DRAG_COEF on the SFD betas from 2026-11-06 (refresh12 topup12 and topup13)
+
     AP_GROUPEND
 };
 
