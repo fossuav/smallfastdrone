@@ -686,7 +686,7 @@ public:
 #endif
 
     // hover Z-axis accel bias learning mode
-    AP_UInt8 accel_zbias_learn;
+    AP_Int8 accel_zbias_learn;
 
     // EKF variance filter cutoff
     AP_Float fs_ekf_filt_hz;
