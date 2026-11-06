@@ -95,7 +95,7 @@ const AP_Param::GroupInfo AC_Loiter::var_info[] = {
 
     // @Param: DRAG_COEF
     // @DisplayName: Loiter vehicle drag coefficient
-    // @Description: The vehicle's own horizontal drag deceleration per m/s of speed, which Loiter feeds forward so the velocity controller does not have to hold that lean itself. 0 uses Loiter's drag model instead (LOIT_SPEED_MS reached at LOIT_ANG_MAX), which is right only when those two describe the airframe; where they do not, the velocity controller's integrator carries the difference through every stop and the vehicle stops short and rolls back, or runs past its stop point and slides back. Measure it in calm air on a GPS flight as body X specific force divided by ground speed (the quantity EK3_DRAG_MCOEF describes for rotor drag).
+    // @Description: The vehicle's own horizontal drag deceleration per m/s of speed, which Loiter feeds forward so the velocity controller does not have to hold that lean itself. 0 uses Loiter's drag model instead (LOIT_SPEED_MS reached at LOIT_ANG_MAX), which is right only when those two describe the airframe; where they do not, the velocity controller's integrator carries the difference through every stop and the vehicle stops short and rolls back, or runs past its stop point and slides back. Measure it in calm air on a GPS flight, in steady forward flight, as the magnitude of the body X specific force divided by ground speed (the quantity EK3_DRAG_MCOEF describes for rotor drag). Too high a value rolls the vehicle back after a stop.
     // @Units: 1/s
     // @Range: 0 1
     // @Increment: 0.01
