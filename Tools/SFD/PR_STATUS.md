@@ -25,6 +25,44 @@ the round was never triaged.
 
 ---
 
+## 2026-11-06: the AP-Review fix round on ten PRs, pushed and answered
+
+The fixes for each PR's current round were pushed to `andyp1per` with a
+lease, and each PR has a reply. Per-PR detail is in
+`../ardupilot-pr-analysis/<PR>/README.md`.
+
+- #33478 `d322e6c4d0`: the settled-start rule for the step hold.
+  Description updated.
+- #32401 `749911703c` (force, `c2a704089d` reworded): a GCS disarm cancels
+  a pending arm, there is no reset once armed, the reset happens only when
+  the AHRS pre-arm check fails, failure messages come every 3 s, and there
+  is a new PendingArmOnSwitch test. Kept Copter-only, with an answer to
+  peterbarker's request that it not be. Description updated.
+- #31005 `806fd8d2cf`: the fence floor's RTL now flies at zero throttle,
+  except with the interlock or e-stop off. New MinAltFenceZeroThrottle
+  test.
+- #32471 `279457aa35`: a zero time counts as a zeroing only while under
+  1 s old, with a new leg in HoverBiasSavedFirstFlightAfterRest. #32473
+  `16a9f14b47` restacked on it (force).
+- #34457 `d8da8db695`: the touchdown test needs 50 valid XKFA samples per
+  landing. #33507 `1ed5fa2dc4` restacked on it, with the floor bias std
+  bound at 0.95 (force). Description updated.
+- #30841 `9816840ba6` (force, squashed): ESC logging in AP_ESC_Telem at
+  ESC_TLM_LOG_RATE, default 100 Hz, as peterbarker asked. Description
+  rewritten.
+- #33484 `707e0e621f`: comment only. The bus-thread finding was answered
+  with no change. #34630 `b9e7518181` restacked (force), with the reset's
+  yaw covariance term measured and left out.
+- #33318 is now LOIT_DRAG_COEF (`079952af70` after its own AP-Review
+  fixes), pushed earlier the same day.
+
+The 11-05 list's #32471 accel switch fix, #34457 SIM_TERRAIN fix and
+#34877 example fix (`9377f42416`) were pushed before this round, and
+#33318's source-set rework was superseded. Still open: peterbarker's
+changes-requested on #32401, and #31005's ALT_MIN plus polygon recovery
+window, left for a separate PR. The bot's rounds at the new heads have not
+been read yet. refresh13 carries every head above.
+
 ## 2026-11-05: AI-review pass over the REQUEST CHANGES and COMMENT rounds
 
 25 open PRs had a current AP-Review round that was not ACCEPT; three were

@@ -58,6 +58,30 @@ Replay); the change shows only after a hard manoeuvre or an accel clip,
 where the AGL velocity now stays fused instead of being held out while
 the height drifts.
 
+The beta after refresh13 (`0080b3d569`, SmallFastDronev1 md5 `2efce0f0`,
+MicoAir743v2 md5 `eb30f0d8`) takes every PR at its 2026-11-06 head. Base
+`258e843e68` adds the TBS_LUCID_H7 baro fix. Nothing in it has flown. After
+the flash:
+
+- SFD-O4: set `LOIT_DRAG_COEF` 0.3 again. #33318 moved it from AC_Loiter
+  index 20 to 12, so the 0.3 saved on topup12/13 does not carry over, and
+  the board default is 0.01, which keeps the modelled drag out as before.
+  LOIT_OPTIONS bit 6 is gone; set `LOIT_OPTIONS` 1 if it reads 65.
+- ESC logging moved into AP_ESC_Telem at `ESC_TLM_LOG_RATE` (#30841),
+  25 Hz on the SFD boards as before. LOG_BITMASK no longer gates it.
+- Behaviour changes in the 11-06 review fixes:
+  - #31005: a fence floor breach at zero throttle now flies the RTL it
+    hands over to, instead of falling to the ground at idle. It does not
+    with the motor interlock or e-stop off.
+  - #32401: a GCS disarm cancels a pending arm on switch, there is no EKF
+    reset once armed, and its failure messages come every 3 s.
+  - #32471: an accel out of use when the EKF starts no longer passes for a
+    fresh zeroing, so the learner keeps the old value with "accel switched
+    on ground".
+  - The newer heads of #32768, #32972, #32514, #33359, #33585 (its
+    terrain-database anchor, outdoors with terrain data only), #34851,
+    #33568, #34380, #34941 and #34942.
+
 ## SFD-O4 indoors on topup12: LOIT_DRAG_COEF
 
 topup12 (on the beta since 2026-11-06, `dab9657a19`; logs 82-83 flew the
@@ -336,6 +360,19 @@ fault. Restore `ACC_ZBIAS_LEARN 11` afterwards.
 
 Flow only, no compass and no yaw source, so #34942 and its static yaw fix act
 on every flight. `ACC_ZBIAS_LEARN 10` can stay once `INS_ACC_VRFB_Z` is 0.
+
+On the second MicoAir743v2 (board `00360049`, from 2026-11-06 evening):
+
+- Set `EK3_RNG_USE_HGT` 6, so the range finder gives the height below about
+  0.48 m (`RNGFND1_MAX` 8). In Replay of flights 05-07 it took 06's VALT
+  takeoff error from 1.52 to 0.09 m rms against the range finder. That
+  hesitation came from the spool-up baro swing, which reads +4.7 m on the
+  floor.
+- Calibrate `BARO1_THST_SCALE` for this board. Clamp the quad or hold it
+  nose-down, then ramp the throttle in ACRO and run `baro_thst_cal.py` on
+  the log. Until then, -205 behaved better than -175.
+- The hover Z-bias saved on flight 05 (0.023) is this board's. Keep
+  `ACC_ZBIAS_LEARN` 10.
 
 ### T1. #34942 and the static yaw fix, every flight
 
