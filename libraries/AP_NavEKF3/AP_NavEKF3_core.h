@@ -1454,7 +1454,8 @@ private:
 #if AP_RANGEFINDER_ENABLED
     // a range sample older than this is stale, for the median of three and for range finder height
     static constexpr uint32_t rngFreshTime_ms = 500;
-    // with no range sample for this long on the ground, the on-ground range is used in its place
+    // with no range sample for this long on the ground, upstream's main filter uses the on-ground range in
+    // its place; this branch assumes the on-ground range until the vehicle moves instead
     static constexpr uint32_t rngOnGndNoDataTime_ms = 200;
 #endif
 #if EK3_FEATURE_OPTFLOW_AGL_KF && EK3_FEATURE_RANGEFINDER_MEASUREMENTS
