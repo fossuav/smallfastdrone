@@ -12,3 +12,14 @@ ACC_ZBIAS_LEARN 8
 # per-reset flow lockout messages are quiet in favour of the OSD (bit 6).
 # Manual lane switching (bit 1) is left to each vehicle; bit 5 is unused
 EK3_OPTIONS 92
+
+# #30841 moved ESC logging into AP_ESC_Telem at ESC_TLM_LOG_RATE, 100 Hz by
+# default; the branch logged ESC at 25 Hz before that
+ESC_TLM_LOG_RATE 25
+
+# #33318 made taking the modelled drag out of Loiter's feed-forward opt-in
+# through LOIT_DRAG_COEF; the branch applied it unconditionally before that.
+# Any positive value takes it out, and 0.01 adds back at most 0.15 m/s/s of
+# the vehicle's own drag at 15 m/s. Set the vehicle's measured drag in place
+# of it where known
+LOIT_DRAG_COEF 0.01
