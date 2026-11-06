@@ -22,10 +22,22 @@ bool ModeAcro_Heli::init(bool ignore_checks)
     return true;
 }
 
+const char *ModeAcro_Heli::name4() const
+{
+    if (motors->has_flybar()) {
+        return "ACRO";
+    }
+    return ModeAcro::name4();
+}
+
 // heli_acro_run - runs the acro controller
 // should be called at 100hz or more
 void ModeAcro_Heli::run()
 {
+    if (!motors->has_flybar()) {
+        notify_trainer_change();
+    }
+
     float target_roll_rads, target_pitch_rads, target_yaw_rads;
     float pilot_throttle_scaled;
 

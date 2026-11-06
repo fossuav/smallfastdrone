@@ -469,7 +469,11 @@ public:
 protected:
 
     const char *name() const override { return "Acro"; }
-    const char *name4() const override { return "ACRO"; }
+    // reads ANGL while the acro trainer is levelling the vehicle
+    const char *name4() const override;
+
+    // refresh the notify mode string when ACRO_TRAINER changes mid-flight
+    void notify_trainer_change();
 
     // get_pilot_desired_rates_rads - transform pilot's normalised roll pitch and yaw input into a desired lean angle rates
     // the function returns desired angle rates in radians-per-second
@@ -479,6 +483,7 @@ protected:
 
 private:
     bool disable_air_mode_reset;
+    int8_t trainer_notified;    // last ACRO_TRAINER value pushed to notify
 };
 #endif
 
@@ -494,6 +499,8 @@ public:
     void virtual_flybar( float &roll_out_rads, float &pitch_out_rads, float &yaw_out_rads, float pitch_leak, float roll_leak);
 
 protected:
+    // flybar helis bypass the trainer in acro, keep the ACRO label
+    const char *name4() const override;
 private:
 };
 #endif
