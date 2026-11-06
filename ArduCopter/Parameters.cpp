@@ -1068,7 +1068,6 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @User: Standard
     AP_GROUPINFO("TKOFF_RPM_MAX", 7, ParametersG2, takeoff_rpm_max, 0),
 
-    // 30 was VALT_POS_EXPO on the June 4.7.0 builds and TKOFF_CPU_AVG on the betas of 2026-10-31
     // 31 was TKOFF_CPU_PEAK on the betas of 2026-10-31
 
 #if AP_CPU_IDLE_STATS_ENABLED
