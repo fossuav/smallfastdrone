@@ -7,6 +7,8 @@ playbook because they depend on repos that sit beside this checkout on this
 machine only: the public analysis archive ../ardupilot-pr-analysis and the
 private flight-test analyses ../analysis and ../analysis-private. Resolve
 those paths from the primary checkout, not from a scratch worktree.
+`ANALYSIS_REPOS.md` says what each may hold and what may be cited from
+them; read it first.
 
 ## A refresh run starts with a sweep
 

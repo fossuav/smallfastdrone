@@ -176,7 +176,7 @@ reply exists") before acting on it.
     range finder, and baro-only the builds do not differ in SITL. Advice,
     SITL only: EK3_OPTIONS bit 4 with EK3_AGL_ABIAS_P 0.3 steadies it
     (not reliably a hold), or ALT_HOLD, whose surface tracking VALT skips.
-    Record: `../analysis/topics/valt_low_hover_baro_wash.md`; SITL test
+    Record: the private analysis repo; SITL test
     VALTLowHoverGroundEffect, not committed.
 - Older beta: refresh12 after topup5, promoted 2026-11-02, a fast-forward
   of 40 commits over topup4 (`c46a09ec56`, kept locally as
@@ -433,7 +433,7 @@ reply exists") before acting on it.
 - The SFD-O4 log22-30 field fixes (2026-10-02) are in their PR heads and come
   with the cherry-pick from refresh9 on; the beta's local copies (`caafe6151b`,
   `9cc29cd372`, `f547e6f7bd`, `82f7660a18`, `130891e901`, `c79168dc9b`,
-  `b433fdbf3d`) are not re-folded. Record: `../analysis/logs/log22-30_sfdo4.md`.
+  `b433fdbf3d`) are not re-folded. Record: the private analysis repo.
 
 ### Fixes made on refresh6, to port to their PRs
 
@@ -447,8 +447,8 @@ Both records now live under their PR numbers,
 `../ardupilot-pr-analysis/34457/` and `34456/`, each with its figures and a
 `plots/make_plots.py` that resolves the flights through `find_log.py` rather
 than carrying them, since that repo is public. The SFD-O4
-logs are fingerprinted in `../analysis/logs/REPLAY_INDEX.md` (`dd011a6`); bare
-names collide four ways for log9 alone.
+logs are fingerprinted in the private analysis repo; bare names collide four
+ways for log9 alone.
 Two rules the figures were built to, both of which a reviewer will notice if
 broken: no second y-axis, ever - split the panel instead; and one time origin per
 log, the first message of any type, because taking it per message type slid an
@@ -653,7 +653,9 @@ new base pushes fast-forward. Both need `/prepare-for-push`, remote `origin`.
 
 ### Every refresh
 
-Before:
+Before (refresh or topup alike): read `ANALYSIS_REPOS.md`, and once
+`changed` has said which PRs moved, their public archive entries and the
+private record of the flights behind them.
 
 1. `git fetch upstream ArduPilot-4.7 master`, `refresh.sh fetch`, `refresh.sh changed`.
 2. Check the base branch really is the locked base - `changed` reporting

@@ -8,6 +8,10 @@ This is run periodically: the PRs evolve in review, so re-stacking the current
 PR heads onto the latest 4.7 both produces an up-to-date branch and surfaces
 where our local copy has drifted from - or been superseded by - upstream.
 
+Before any refresh, topup or analysis work, read `ANALYSIS_REPOS.md`: the
+public PR archive and the private flight-test repos beside this checkout,
+what each may hold, and what must be read before proceeding.
+
 ## Process
 
 ```sh

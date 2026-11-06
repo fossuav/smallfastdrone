@@ -2,7 +2,9 @@
 
 What each flight showed for the PRs in the build, newest first. The flights
 still to fly are in `FIELD_PLAN.md`; this file is the history behind them.
-Per-PR detail lives in `../ardupilot-pr-analysis/<PR>/README.md`.
+Per-PR detail lives in `../ardupilot-pr-analysis/<PR>/README.md`. Read
+`ANALYSIS_REPOS.md` before analysing a flight: what to check first, and
+what may and may not be written here about the private flight record.
 
 Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.

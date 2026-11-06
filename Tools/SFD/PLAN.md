@@ -29,10 +29,7 @@ altitude ran away 5.6 m against a flat baro with `XKF3.IPD` pinned at exactly
 
 | | |
 |---|---|
-| `../analysis/logs/log7_sfdo4.md` | the full flight note, all numbers. **Private repo.** |
-| `../analysis/logs/log5_sfdo4.md` | the before case |
-| `../analysis/vehicles/SFD-O4.md` | airframe identity and configuration |
-| `../analysis/topics/optflow_horizontal_velocity_lockout.md` | the acro flight test of the lockout recovery |
+| the private analysis repo | the flight notes, all numbers (see `ANALYSIS_REPOS.md`) |
 | `../ardupilot-pr-analysis/new-groundeffect-touchdown-gate/` | fixes 1a, 1b, 2 - design, alternatives, validation |
 | `../ardupilot-pr-analysis/new-ekf3-hagl-terrain-alt/` | fix 3 |
 | `../ardupilot-pr-analysis/new-ekf3-percore-optflow-logging/` | fix 6 |
@@ -254,8 +251,7 @@ the gate in and read the excursion/reset table the same way.
 
 Consider pairing with a blended rather than stepped re-anchor. 12.5 m/s in one
 100 ms sample is not a correction a position controller can absorb, and the
-position-snap experiment in
-`../analysis/topics/optflow_horizontal_velocity_lockout.md` shows big
+position-snap experiment in the private analysis repo shows big
 instantaneous corrections on this path make hold quality worse.
 
 Commit: `AP_NavEKF3: require a current range before re-anchoring flow velocity`
