@@ -10,6 +10,92 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-07: SFD-O4 log88, an RTL on the flow lane flew away from home
+
+Firmware as log84, boot 701, `LOIT_DRAG_COEF` still 0. Source set 2 by
+switch at 135.7 s ("EKF3 lane switch 1") and never switched back, so core
+1 on flow flew the Loiter at 162.7 s, the ACRO to 298.5 s and the RTL by
+switch (RC8, mode reason 53) at 298.5 s. The battery failsafe at 300.5 s
+read 19.76 V after 1101 mAh (warning only).
+
+The RTL flew to core 1's home. At 298.5 s the vehicle was 63-67 m from
+home, home bearing 101-107 deg (GPS, core 0); core 1 put it 108-110 m
+away at 295-299 deg, its position 173 m off. RTL flew 290-294 deg at 30
+m/s (`RTL_SPEED_MS` 0, so `WP_SPD` 40), core 1 read itself home at 303 s
+with the vehicle 163 m from it, and it held there until the pilot took
+over at 308.2 s. Heading and velocity followed core 1's position as
+designed; the position was the error. Core 1's position error against
+core 0: 26 m at 130 s (before the switch), 49 m at 160 s, 77 m at 220 s,
+145 m at 265 s, 296 m at 280 s, 182 m at 295 s.
+
+Mechanism, from logs 84, 87 and 88 and Replay of 87 and 88 (each
+reproduces the flown cores exactly): EKF3 fuses no flow above 45 deg of
+tilt (`DCM33FlowMin`, `AP_NavEKF3_OptFlowFusion.cpp:99`), so through
+sustained ACRO the flow lane runs on the IMU alone, its innovations frozen
+for up to 16 s. Its velocity error against core 0 grows while tilted and
+shrinks while level:
+
+| | over 45 deg | growth tilted | shrink level | mean error tilted / level |
+|---|---|---|---|---|
+| log84, 211-422 s | 107 of 211 s | +0.12 m/s per s | -0.09 m/s per s | 1.3 / 1.2 m/s |
+| log87, 105-205 s | 68 of 100 s | +0.28 | -0.77 | 7.7 / 4.4 |
+| log88, 136-299 s | 98 of 163 s | +0.12 | -0.11 | 4.1 / 2.4 |
+
+The position integrates it. Ruled out by Replay, each moving core 1's
+median velocity error by 3 % or less: the terrain-database flow height (`EK3_OPTIONS` 90
+against 94), `EK3_FLOW_DELAY` 30, 50 and 70 against 10, and a throwaway
+probe holding the flow gyro bias at zero or learning it only below 0.5
+rad/s (the bias is learned against the delayed IMU rate, upstream too).
+Ruled out by the log: yaw (rotating core 1's velocity by the yaw
+difference leaves the error unchanged, correlation 0.11 and -0.29), and
+dead reckoning (core 1 never set XKF4.SS bit 18, so `FS_DR_ENABLE` 2 did
+not act; were it to on this lane, its RTL would go to the same wrong
+home).
+
+So an RTL, or any mode flying to home, on the flow lane after ACRO goes to
+wherever the lane has drifted. Switch to source set 1 before it.
+
+
+## 2026-11-07: SFD-O4 log87, ACRO with the flow lane primary
+
+Firmware as log84, boot 699, `LOIT_DRAG_COEF` still 0 from log86. Armed by
+switch at 92 s; ACRO, source set 2 by switch at 107.3 s ("EKF3 lane switch
+1", core 1 on flow primary) and back to set 1 at 203.7 s, a Loiter on core
+1 from 189.2 to 197.4 s, an RTL by switch (RC8, mode reason 53) from 253.2
+to 273.9 s on core 0, landed in Loiter and disarmed by switch at 291.9 s.
+Mostly 17-68 m up, above the 15 m range finder. The battery failsafe at
+272.3 s (22.11 V, 1100 mAh) was the warning only.
+
+- #34942: XKF1.VD -0.01/0.00 m/s at the arm, no refusal, no reset after
+  the landing. No re-arm.
+- #32471: no refusal messages; saved 0.090/0.076 (log86 saved 0.055/0.052,
+  log85 0.004/0.002). `ACC_ZBIAS_LEARN` 9 learns without applying.
+- #34457: XKFA.HAgl 0.05 m on both cores at the landing, disarmed at once.
+- #34941: six stretches over 45 deg for 6.8-18.2 s, all with the range
+  finder out of range. Core 1 stayed in relative aiding throughout, with no
+  lockout reset (XKF7.FVC 0). Above 5 m/s its speed was a median 2.6 m/s
+  from GPS (95th percentile 8.1, worst 10.7), mostly high, against 0.17 /
+  0.74 / 2.15 for core 0; log84, flown lower, read 0.8 / 2.3 / 4.1.
+- #34630: one "EKF3 IMU1 flow recovery deferred, range stale" at 290.9 s,
+  at the touchdown, with no reset.
+- Open: the Loiter on core 1 at 16-20 m did not hold. Entered from ACRO at
+  15.5 m/s with core 1 135 m east of core 0, it slowed in 3 s, then with
+  the sticks centred drifted west at about 1.5 m/s (GPS, core 0) for 5 s,
+  7 m, until the pilot took over. Core 1 read 1.1-1.3 m/s north against
+  0.2-0.4 from GPS, and its position moved south at 2 m/s against its own
+  velocity, taking Loiter's target with it. Mechanism not established; it
+  resembles log61's Loiter on the flow lane above the range finder
+  (`../ardupilot-pr-analysis/33585/`). Replay of this log can show which
+  fusion moved core 1's position.
+  (Replay, the same day, at the flown code, which it reproduces exactly:
+  the flow sensor measured the drift correctly, 0.5 s averages of raw
+  flow within about 0.4 m/s of GPS in the body frame. Core 1 had no
+  position fusion; its flow corrections moved its position, while its
+  velocity kept an error built up before the Loiter, falling from 1.8 m/s
+  at 191 s to 0.7 m/s at 197 s. That error came from the ACRO: see log88
+  below for the mechanism, measured on both logs.)
+
+
 ## 2026-11-07: SFD-O4 logs 85-86, LOIT_DRAG_COEF 0.3 against 0 outdoors
 
 Firmware as log84. Outdoors on GPS in Loiter, `LOIT_SPEED_MS` 15,
