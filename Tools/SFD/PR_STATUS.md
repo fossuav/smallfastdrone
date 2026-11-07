@@ -25,6 +25,33 @@ the round was never triaged.
 
 ---
 
+## 2026-11-07 (night): AP-Review at the squashed heads, rebases and docs fixed
+
+AP-Review re-read the squashed heads: ACCEPT on #32471, #32473, #34457,
+#34941, #32401, #33318 and #34630; COMMENT, nothing blocking, on #31005,
+#31274, #30841, #33478, #33507, #34942 and #32475. Every round confirms
+the squashes left the trees unchanged. The user asked for the rebases and
+the documentation-only points; pushed with a lease each, descriptions
+patched:
+
+- #31005 `a2dcc51bb7` and #30841 `c15a37c45d`: rebased onto master
+  `b7c08d4dbc` (force), the tests registered in master's new lists;
+  builds clean, MinAltFenceZeroThrottle and ESCTelemLogRate pass, both
+  mergeable again.
+- #31274 `c922349b3c` (ff): the ESC.Err field doc and the description
+  say bidirectional DShot now reads the 250-frame percentage, 100 until
+  250 replies are counted.
+- #33478 `d1bf6d5093` (force, tip rebuilt): the test comment, its commit
+  message and the description give the noisy-range leg's real catch rate
+  (3 of 3 runs here, 3 of 17 in the bot's).
+- #33507: the stacking sentence, already fixed.
+
+Open, code or test changes for a later round: #33478's leg should count
+hold onsets in its window; #34942's rest latch should clear in
+updateMovementCheck(); #32475's nextmode_requires_position() should
+answer true when nextmode() is null; #30841's test should guard against
+dropped log blocks. Each is in its PR's archive README.
+
 ## 2026-11-07 (evening): eleven PRs squashed after the flight audit, pushed
 
 The audit (`FLIGHT_VALIDATION.md`, 2026-11-07) found flown fixes to fold
