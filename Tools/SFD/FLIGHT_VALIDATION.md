@@ -69,12 +69,16 @@ The card's settings were in: `LOIT_DRAG_COEF` 0.3, `LOIT_OPTIONS` 1,
 - #32471: "Hover Z-bias not learned: no steady hover", as expected for an
   acro flight.
 - #34457: XKFA.HAgl held 0.05 m (core 0) and 0.1 m (core 1) on the ground
-  after the landing.
+  after the landing. (Corrected the same day: 0.05 m on core 1 as well;
+  the 0.1 was a once-a-second table's rounding.)
 - Flow lane (#34941, #34630): core 1 stayed in relative aiding the whole
   flight, mostly above the 15 m range finder, with no lockout resets
   (XKF7.FVC 0) and no "stopped aiding". Two "flow recovery deferred, range
   stale" (303.6 s, 324.3 s) passed without a reset, and core 1 read within
-  0-3 m/s of GPS at 10-27 m/s.
+  0-3 m/s of GPS at 10-27 m/s. (Corrected the same day: that was sampled
+  once a second. At every GPS sample above 5 m/s core 1 was a median 0.8
+  m/s from GPS, 95th percentile 2.3, worst 4.1, against 0.15 / 0.6 / 2.2
+  for core 0 on GPS, which is the timing between the two.)
 - The arm-time datum reset re-anchored to GPS: XKF1.PD went from 0.03 to
   -1.86 m, the GPS drift over 3 min on the ground (origin 119.64 m, GPS
   121.5 m at the arm), and the origin did not move. As designed (#32768).
