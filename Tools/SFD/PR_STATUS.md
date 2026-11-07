@@ -25,6 +25,31 @@ the round was never triaged.
 
 ---
 
+## 2026-11-07: the overnight AP-Review round, fixed
+
+AP-Review read the 11-06 heads: ACCEPT on #31005, #32473, #33478, #33484,
+#34457 and #34877, COMMENT on #30841, #32401, #32471, #33318, #33507 and
+#34630. The user asked for every point, should-fix, minor and optional,
+to be fixed. Local branches are `r1107/<PR>-*` (push plan in the session
+scratchpad):
+
+- #32401 rebased on master (force), plus three fixes: the buzzer and
+  logger refresh on quiet retries, and the duplicate pre-arm print.
+- #34630 restacked on #34543's `871498e4aa` (force), which fixes the
+  blank lane items in a DCM fallback.
+- #32471: a bounded lead on the seed's zero-time age (ff). #32473
+  restacked on it (force).
+- #30841: the rate text, and an ESCTelemLogRate test (ff).
+- #33318 squashed to one commit per subsystem (force, same tree).
+- #33478: the noisy-range span limit at 5.2 s (ff).
+- #34457: a finiteness check in the touchdown test (ff). #33507
+  restacked on it (force).
+
+Descriptions to patch: #33507 (the bound and the stack sentence), #30841
+(the rate sentence) and #34630 (the stack count and a stale paragraph).
+The rest of #32401's review is left for maintainers: the primed EKF
+reset, the Lua race, and the cross-vehicle and surprise-arming questions.
+
 ## 2026-11-06: the AP-Review fix round on ten PRs, pushed and answered
 
 The fixes for each PR's current round were pushed to `andyp1per` with a

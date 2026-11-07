@@ -7,6 +7,16 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-07 - refresh13 topup1, the overnight AP-Review round
+
+The bot reviewed the ten PRs pushed on 11-06 at their new heads: six
+ACCEPT and six COMMENT, none blocking. Every point was fixed. A cold read
+of the fixes changed two of them before they were pushed. #33478's span
+limit became 5.2 s instead of the 6 s the bot suggested, since 6 s lets
+a retriggered hold through. #32471's age clamp became a bounded lead,
+since a clamp reads a very old zero time as fresh in the switch hook.
+The four fixes that change the beta's code or tests are topup1.
+
 ## 2026-11-06 - refresh13, the day's review fixes and #33318's own LOIT_DRAG_COEF
 
 Andy asked for a refresh after ten PRs were pushed with the 11-06 review

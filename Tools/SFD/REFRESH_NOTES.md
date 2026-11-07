@@ -17,8 +17,30 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh13, promoted 2026-11-06
-  over refresh12 topup13 (a force push). The plan ran 492 commits for the
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh13 after topup1:
+  refresh13 was promoted 2026-11-06 over refresh12 topup13 (a force push),
+  and topup1 on 2026-11-07 as a fast-forward.
+  - topup1 (2026-11-07): the 11-07 AP-Review fixes that reach the beta,
+    none flown.
+    - #32401: a pending arm's quiet retries no longer sound the buzzer or
+      refresh the logger's arming-failure persistence (`ab91920d11`,
+      `7802cbd99d`). Its failure prints once (`beab832ffe`).
+    - #32471: the seed reads a zero time up to 1 s ahead of its clock as
+      age 0, which closes a Lua or DDS arm racing an EKF zeroing
+      (`896e11846d`).
+    - #30841: the ESC_TLM_LOG_RATE text says the main loop rate caps it
+      (`462868f3da`), plus its ESCTelemLogRate test (`029a366034`).
+    - #34457: the touchdown test rejects a non-finite VD (`71a1aa7623`).
+    - The PRs' other 11-07 pushes change nothing here: #34630's restack
+      on #34543, #33318's squash, #33478's span limit (on XKFA.VHold,
+      which the beta leaves out), and the #32473 and #33507 restacks.
+    - The lock stays at refresh13's heads until the next refresh.
+    - PendingArmOnSwitch, ArmSwitchAfterReboot, ArmFeatures,
+      ESCTelemLogRate, OpticalFlowAGLKfTouchdown and the seven learner
+      and acro tests pass.
+    - SmallFastDronev1 md5 `666ed4aa` (41,324 bytes free), MicoAir743v2
+      md5 `4d9d5598` (233,848 bytes free), built from `896e11846d`.
+      Nothing to set. The plan ran 492 commits for the
   21 PRs that moved, among them the ten pushed with the 11-06 review fixes
   and #33318's LOIT_DRAG_COEF head.
   - Base `258e843e68`: refresh12's `b74b576dc9`, the TBS_LUCID_H7 baro fix

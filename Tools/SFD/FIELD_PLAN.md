@@ -82,6 +82,18 @@ the flash:
     terrain-database anchor, outdoors with terrain data only), #34851,
     #33568, #34380, #34941 and #34942.
 
+The beta after refresh13 topup1 (built from `896e11846d`, SmallFastDronev1
+md5 `666ed4aa`, MicoAir743v2 md5 `4d9d5598`) adds, none flown and nothing
+to set:
+
+- With a pending arm on the switch, a failure that keeps it from arming
+  now beeps and is logged once every 3 s with its message, not 4 times a
+  second.
+- A pre-arm failure on the arm switch prints once.
+- The hover Z-bias learner refuses a save when an EKF zeroing lands
+  during the arm itself. That needs a Lua or DDS arm, so a switch arm
+  shows no difference.
+
 ## SFD-O4 indoors on topup12: LOIT_DRAG_COEF
 
 topup12 (on the beta since 2026-11-06, `dab9657a19`; logs 82-83 flew the
