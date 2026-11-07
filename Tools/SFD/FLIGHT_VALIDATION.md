@@ -10,6 +10,85 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-07: SFD-O4 logs 85-86, LOIT_DRAG_COEF 0.3 against 0 outdoors
+
+Firmware as log84. Outdoors on GPS in Loiter, `LOIT_SPEED_MS` 15,
+`LOIT_ANG_MAX` 45, `LOIT_BRK_DELAY` 0.3, one flight each: log85 at 0.3
+(pack at 24.1-23.9 V), log86 at 0 (the same pack after it, 23.7-23.2 V).
+Three hands-off releases from 10.7-12.6 m/s in each, nose first, two
+eastbound and one westbound in each log, 5.8-8.8 s hands off. Along the
+direction of motion, from PSCN/PSCE:
+
+| | log85, 0.3 | log86, 0 | SITL, 0.3 / 0 |
+|---|---|---|---|
+| ahead of the target at the release | -0.22 to -0.39 m | +0.80 to +0.83 m | |
+| most ahead of the target in the stop | 0.15-0.47 m | 1.25-1.65 m | |
+| most backward speed after the stop, EKF / GPS | -0.01 to -0.06 / 0.00 m/s | -0.32 to -0.83 / -0.34 to -0.80 m/s | -0.00 / -0.36 m/s |
+| back past the target | none | 0.56-0.79 m | |
+| creep forward afterwards | none | 0.14-0.23 m/s for 3-5 s | |
+| position at the end of the window | 0.08-0.15 m ahead | 0.23-0.41 m behind | |
+
+At 0.3 the vehicle followed Loiter's desired speed down, under 0.3 m/s
+2.4-3.3 s after the release, then settled onto the target over the next
+2-3 s. At 0 it flew 0.4-0.6 m/s above the desired speed in the push, so
+it was 0.8 m ahead of its target at the release; it stopped about 2 s
+after the release while the desired speed was still 1 m/s, rolled back
+past the target and crept forward again. That is the pattern SITL
+predicts for 0. The eastbound roll-backs (0.76, 0.83 m/s) were larger
+than the westbound (0.32); wind was not measured. Decision: keep 0.3.
+log84's 1.6 m run past at 0.3 came on an entry into Loiter from ACRO,
+not a release, and none of these releases repeats it.
+
+- #32401, log86: the switch up at 28.6 s with no position gave "Arm: Need
+  Position Estimate" once and "Arm pending"; the switch down at 29.7 s
+  gave "Arm pending cancelled"; the switch up at 33.1 s, 0.45 s after the
+  EKF started using GPS, armed at once. The 3 s repeat and the cancel by
+  a GCS disarm were not exercised.
+- #32471: saved 0.0038/0.0017 on log85 (armed 5.8 min after power-on)
+  and 0.055/0.052 on log86 (armed 33 s after), with no refusal messages.
+  `ACC_ZBIAS_LEARN` 9 learns without applying.
+- #34942: one arm per boot, no refusals or resets. The re-arm after a
+  landing is still owed.
+
+
+## 2026-11-07: SFD-O4 log84, refresh13 topup1, an outdoor acro sortie
+
+Firmware reporting `ea9c6ab5` (topup1's records commit, the same code as
+`896e11846d`). One flight outdoors, core 0 on GPS and primary throughout,
+core 1 on flow (`EK3_SRC_OPTIONS` 8): armed by switch in Loiter at 201 s,
+211 s of ACRO up to 50 m and 27 m/s, Loiter from 422 s, landed at 451 s.
+The card's settings were in: `LOIT_DRAG_COEF` 0.3, `LOIT_OPTIONS` 1,
+`EK3_OPTIONS` 94, `ESC_TLM_LOG_RATE` 25; `EK3_FLOW_QMIN` was 40 and
+`ACC_ZBIAS_LEARN` 9.
+
+- #30841: ESC logged at 25.0 Hz per motor armed and 24.9 Hz over the
+  whole log, disarmed included. Passed. ESC.Err in flight at most 0.24 %.
+- #34942: XKF1.VD 0.00 m/s on both cores at the arm, no "height error"
+  refusal and no reset at rest. One landing and no re-arm, so the re-arm
+  case is still owed.
+- #32471: "Hover Z-bias not learned: no steady hover", as expected for an
+  acro flight.
+- #34457: XKFA.HAgl held 0.05 m (core 0) and 0.1 m (core 1) on the ground
+  after the landing.
+- Flow lane (#34941, #34630): core 1 stayed in relative aiding the whole
+  flight, mostly above the 15 m range finder, with no lockout resets
+  (XKF7.FVC 0) and no "stopped aiding". Two "flow recovery deferred, range
+  stale" (303.6 s, 324.3 s) passed without a reset, and core 1 read within
+  0-3 m/s of GPS at 10-27 m/s.
+- The arm-time datum reset re-anchored to GPS: XKF1.PD went from 0.03 to
+  -1.86 m, the GPS drift over 3 min on the ground (origin 119.64 m, GPS
+  121.5 m at the arm), and the origin did not move. As designed (#32768).
+- #33585's terrain anchor cannot run here: `EK3_OPTIONS` bit 2 makes
+  `terrainAnchored()` false.
+- #33318: no A/B. One hands-off stop at 0.3: entering Loiter from ACRO at
+  7.7 m/s (422.1 s, sticks centred until 427.3 s), the vehicle ran 1.6 m
+  past the Loiter target, stopped at 425 s, then slid back towards it at
+  up to 0.37 m/s (EKF; GPS 0.2-0.26) until the pilot took over. SITL with
+  the O4's drag predicts no roll-back at 0.3. One stop, entered from ACRO
+  rather than released in Loiter, with no run at 0 to compare: it decides
+  nothing. The 11 m/s stop at 432 s had stick inputs through it.
+
+
 ## 2026-11-06 (evening): T25 on a new flight controller, topup11 (52ec3c7)
 
 TD moved the T25 to a second MicoAir743v2, freshly calibrated with

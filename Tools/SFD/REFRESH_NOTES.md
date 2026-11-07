@@ -812,10 +812,7 @@ After:
 
 ### Owed, not tied to one refresh
 
-- Flight evidence for refresh12 and its top-ups: `FIELD_PLAN.md`'s
-  refresh12 card (the 2026-10-30 review fixes SFD-O4 has not flown, #33366,
-  #34941, #32471 v3, which starts by zeroing the saved totals, and #34942,
-  with T25 items for the flow-only, no-compass case).
+- Flight evidence for refresh13 topup1: `FIELD_PLAN.md`.
 
 - topup12 (2026-10-08) carries #33478's step hold from `fix/33478`
   (`e0d009ff31`, `6185109557`) ahead of the PR, for the flight that repeats

@@ -1,525 +1,75 @@
-# SFD flight card: refresh12, the beta after topup3
-
-SFD-O4 flew this card on 2026-10-31 (logs 66-71, `FLIGHT_VALIDATION.md`).
-Before flashing the beta from `f3a0539315` on (SmallFastDronev1 md5 `e1c564d2`),
-which puts VALT_POS_EXPO back on its June index and moves TKOFF_CPU_AVG/PEAK,
-and also carries #32475's and #31274's blocker fixes (neither flown yet):
-
-- After the flash, set `VALT_POS_EXPO` 0. It reads the 95 stored as
-  `TKOFF_CPU_AVG` on 2026-10-31. TKOFF_CPU_AVG/PEAK return to 95/99.5.
-- `ACC_ZBIAS_LEARN` is 15 with log71's bit 2 values saved. For 11, set
-  `INS_ACC_VRFB_Z` 0.0301 and `INS_ACC2_VRFB_Z` 0.0244 (log69's).
-- `EK3_FLOW_QMIN` is still 60 from bench check 0d.
-
-The beta after topup5 (`93198464f9`, SmallFastDronev1 md5 `f0d3afad`,
-MicoAir743v2 md5 `619c9ce5`) adds the 11-02 review fixes, none flown and no
-parameter changes: #34942's static yaw retaken after a reset (T1), #31274's
-250-frame floor (0b, item 1), #32475's throw hand-off (item 6), and smaller
-ones this card does not exercise.
-
-The beta after topup11 (`1a7ec50d81`, SmallFastDronev1 md5 `304d464b`,
-MicoAir743v2 md5 `9490ae65`) adds, none flown:
-
-- A temporary switch for #33318: `LOIT_OPTIONS` bit 6 (64) puts the
-  modelled drag back in the Loiter feed-forward, as 4.7 has it; clear, as
-  by default, the beta behaves as before (drag out). SFD-O4 flies
-  `LOIT_OPTIONS` 1, so 1 is #33318 on and 65 is #33318 off. The flight
-  that decides whether the O4 still needs #33318 now that #33639 no longer
-  inflates the drag: Loiter on flow below about 2.3 m, where the flow speed
-  limit binds, full forward stick for 3 s, release and hold hands-off for
-  8 s; three times at 1 and three at 65, same height and pack. Look for the
-  speed reversing after the release (pull-back) and the overshoot past the
-  desired speed (PSCN/PSCE DVN/VN). SITL: 1.08x and -0.08 m/s with the drag
-  out, 1.44x and -0.40 m/s with bit 6.
-- The AGL KF fuses its floor as a measurement instead of clearing the
-  velocity on it (#34457, #33507 restacked): after a hard touchdown the AGL
-  height no longer lifts off the ground (SITL 2.5 m -> 0.1-0.2 m). Watch
-  XKFA.HAgl after landings. Nothing to set.
-- The hover Z-bias learner (#32471) now saves only from the first flight
-  after the EKF zeroes the accel bias at rest (a boot or a reset), armed at
-  least 10 s after it, and not after an accel switch on the ground; it says
-  why when it does not save ("not first flight", "armed <10s after EKF
-  reset", "accel switched on ground"). To relearn: reboot, wait 10 s or
-  more disarmed, hover steadily, land.
-- The AID_NONE height reset in ground effect (topup10) is skipped only
-  while armed, as on #32972. #35014: with the range finder as the height
-  source after a fall back, the flow height limit now subtracts the
-  terrain offset (no effect on SFD-O4's usual source sets).
-
-Parameter-side: only the new LOIT_OPTIONS bit, default clear.
-
-The beta after topup13 (`c21c1d917c`, SmallFastDronev1 md5 `0ec7413f`,
-MicoAir743v2 md5 `232e8223`) adds, not flown and nothing to set: the AGL
-KF step hold counts a range jump as a step in the ground only from a
-filter that agreed with the range (innovation under 0.25 m) or after a
-range gap. Expect no difference over a clean step such as a table edge or
-an object on the floor (the T25's flight 06 kept both its holds in
-Replay); the change shows only after a hard manoeuvre or an accel clip,
-where the AGL velocity now stays fused instead of being held out while
-the height drifts.
-
-The beta after refresh13 (`0080b3d569`, SmallFastDronev1 md5 `2efce0f0`,
-MicoAir743v2 md5 `eb30f0d8`) takes every PR at its 2026-11-06 head. Base
-`258e843e68` adds the TBS_LUCID_H7 baro fix. Nothing in it has flown. After
-the flash:
-
-- SFD-O4: set `LOIT_DRAG_COEF` 0.3 again. #33318 moved it from AC_Loiter
-  index 20 to 12, so the 0.3 saved on topup12/13 does not carry over, and
-  the board default is 0.01, which keeps the modelled drag out as before.
-  LOIT_OPTIONS bit 6 is gone; set `LOIT_OPTIONS` 1 if it reads 65.
-- ESC logging moved into AP_ESC_Telem at `ESC_TLM_LOG_RATE` (#30841),
-  25 Hz on the SFD boards as before. LOG_BITMASK no longer gates it.
-- Behaviour changes in the 11-06 review fixes:
-  - #31005: a fence floor breach at zero throttle now flies the RTL it
-    hands over to, instead of falling to the ground at idle. It does not
-    with the motor interlock or e-stop off.
-  - #32401: a GCS disarm cancels a pending arm on switch, there is no EKF
-    reset once armed, and its failure messages come every 3 s.
-  - #32471: an accel out of use when the EKF starts no longer passes for a
-    fresh zeroing, so the learner keeps the old value with "accel switched
-    on ground".
-  - The newer heads of #32768, #32972, #32514, #33359, #33585 (its
-    terrain-database anchor, outdoors with terrain data only), #34851,
-    #33568, #34380, #34941 and #34942.
-
-The beta after refresh13 topup1 (built from `896e11846d`, SmallFastDronev1
-md5 `666ed4aa`, MicoAir743v2 md5 `4d9d5598`) adds, none flown and nothing
-to set:
-
-- With a pending arm on the switch, a failure that keeps it from arming
-  now beeps and is logged once every 3 s with its message, not 4 times a
-  second.
-- A pre-arm failure on the arm switch prints once.
-- The hover Z-bias learner refuses a save when an EKF zeroing lands
-  during the arm itself. That needs a Lua or DDS arm, so a switch arm
-  shows no difference.
-
-## SFD-O4 indoors on topup12: LOIT_DRAG_COEF
-
-topup12 (on the beta since 2026-11-06, `dab9657a19`; logs 82-83 flew the
-same code as `9b6b564a`, before the branch was rebased) adds
-LOIT_DRAG_COEF, the O4's own drag (about 0.30 m/s/s per m/s from log63) fed
-forward in Loiter. In SITL at speed it stops the 0.5 m run
-past the stop point and slide back that #33318 leaves. At room speeds the
-drag lean is small (0.45 m/s/s, under 3 deg, at 1.5 m/s), so indoors expect
-a small change; this flight checks nothing gets worse before the outdoor
-test, where the effect is about six times larger.
-
-- Daylight or over the plain matte mat, as for logs 79-80. `LOIT_OPTIONS 1`,
-  and `LOIT_BRK_DELAY` at whatever you choose, the same for both flights.
-- Flight 1, `LOIT_DRAG_COEF 0`; flight 2, `LOIT_DRAG_COEF 0.3`. Loiter at
-  about 1 m. Five or six pushes each way: about half stick for 1 s, then
-  hands off for at least 5 s (log79-80's releases mostly had 2 s, too short
-  to see the stop finish).
-- Look for: after each release, whether it runs on past where it stops and
-  then drifts back (flight 1) or stops and stays (flight 2); any lean or
-  creep forward once stopped, which would mean the coefficient is too high.
-- Indoors the EKF reads the speed about 0.75 of the true speed, so the drag
-  per EKF m/s is nearer 0.4; 0.3 is inside the third either way SITL
-  tolerates, and keeps the value the outdoor test will use.
-
-*2026-11-06*: flown as log82 (0) and log83 (0.3): no difference at 0.5-2
-m/s and nothing worse, no creep forward once stopped (`FLIGHT_VALIDATION.md`).
-Again only one to three releases per flight had 3 s or more hands off. The
-outdoor test decides it. For a hover Z-bias learning flight, arm within a
-minute of power-on rather than after several minutes on the ground: log81's
-IMUs warmed about 6 degC powered on the ground and cooled 12 degC in the hover,
-and the bias moved with them.
-
-## SFD-O4 indoors on topup11: the #33318 A/B, landings and the learner
-
-One or two packs, flow only. Andy flies this first; the items further down
-still stand where it does not cover them.
-
-*2026-11-05*: pack 1 flight 1 flown as log73 at dusk; it drifted after the
-stick releases because the flow sensor cannot see this semi-glossy floor at
-night (about 0.1-0.3 of the motion at 0.8 m, 0.5 at 1.7 m; a plain cream rug
-read 0.77-0.96; `FLIGHT_VALIDATION.md`). Fly this card in daylight or over a
-plain matte mat, or the A/B measures the sensor rather than Loiter. The
-learner check passed. Pack 2 (the landing hops) flown as log78 and passed,
-which also covers item 1's second take-off in one boot and item 5's re-arm
-after a landing below. Still to fly: pack 1's #33318 A/B, in daylight.
-
-*2026-11-06*: pack 1 flown in daylight as log79 (1) and log80 (65): the
-flow read 0.72-0.85 of the speed against about 0.5 at dusk, and Loiter held.
-Short stick pulses to 1-1.7 m/s: with the drag back in (65) the O4 ran about
-0.1 m further ahead of its target as it stopped, no pull-back on either
-(`FLIGHT_VALIDATION.md`). Keep `LOIT_OPTIONS 1`. The A/B that decides
-#33318 for fast flying is outdoors on GPS: Loiter, full stick to 8-10 m/s,
-release, 8 s hands off, three times at 1 and three at 65 (`LOIT_OPTIONS`
-only, nothing else changed), with the pilot's feel of each stop.
-SITL on an airframe with the O4's drag (2026-11-06,
-`../ardupilot-pr-analysis/33318/README.md`) predicts, from 8-9 m/s at
-LOIT_SPEED_MS 15 / LOIT_ANG_MAX 45 / ATC_ANGLE_MAX 80: at 1, about 0.5 m
-past the stop point and a slow slide back (up to 0.13 m/s); at 65, an
-early stop, a roll-back at 0.3-0.4 m/s, then a 0.7 m creep forward. Keep
-LOIT_BRK_DELAY the same on both sides (a shorter delay makes 65's roll-back
-worse).
-
-Before the first flight:
-
-- Flash SmallFastDronev1 `arducopter.apj` md5 `304d464b`.
-- Check `LOIT_OPTIONS 1`, `LOG_REPLAY 1`, `LOG_DISARMED 2`, `EK3_OPTIONS 94`.
-  Keep the usual indoor `LOIT_SPEED_MS` and `LOIT_ANG_MAX` and do not change
-  them between runs.
-- If `ACC_ZBIAS_LEARN` is still 15, set 11 (bit 2 off, so the first-flight
-  rule applies), with `INS_ACC_VRFB_Z 0.0301` and `INS_ACC2_VRFB_Z 0.0244`
-  (log69's) to start from; flight 1 relearns them.
-- After power-on, leave it still for at least 15 s before the first arm: the
-  learner only saves a flight armed at least 10 s after the EKF starts.
-
-Pack 1, the #33318 A/B, alternating so pack sag does not favour one side:
-
-1. Flight 1, `LOIT_OPTIONS 1` (#33318 on). Take off in ALT_HOLD, Loiter at
-   about 1.5 m (below about 2.3 m, where the flow speed limit binds). Hover
-   steadily, hands off, for 45 s (the learner's sample). Then three jabs:
-   full forward stick, release, hands off for 8 s, then the same backwards
-   to come home. Pick a jab length the room allows (about 1.5-2 s in a 10 m
-   room) and keep it for the whole session. Land firmly, disarm. Pass:
-   INS_ACC_VRFB_Z changes and no "Hover Z-bias not saved" message.
-2. Flight 2, `LOIT_OPTIONS 65` (#33318 off): after at least 1 s still, same
-   height and jabs, land, disarm. Pass: "Hover Z-bias not saved: not first
-   flight".
-3. Flight 3 at 1 and flight 4 at 65 if the pack allows, the same way.
-
-What decides it: whether the O4 moves backwards after the release, and how
-far it overshoots the desired speed during the jab (PSCN/PSCE DVN/VN against
-VN/VE). SITL: 1.08x and -0.08 m/s at 1, 1.44x and -0.40 m/s at 65. If 65
-does not pull back on the O4, #33318 is not needed now that #33639 is in.
-
-Pack 2, landings for the AGL KF fused floor:
-
-- Four or five short hops: take off to about 2 m in ALT_HOLD, throttle to
-  minimum so it descends at the full rate to the floor (only if that is a
-  touchdown you are comfortable with), disarm, at least 1 s still, repeat.
-  Pass: XKFA.HAgl stays on the range finder after each touchdown (SITL
-  0.1-0.2 m with the fix, 2.5 m before it).
-- This also covers item 1's two takeoffs in one boot: no "Takeoff blocked:
-  CPU overload" or "ESC RPM or errors out of range".
-
-Every flight: note any arm refused on "EKF3[n] height error" and any
-"vertical velocity reset at rest" or "forced reset", with the time since the
-disarm (#34942), and any "Hover Z-bias not saved: ..." message, especially
-the new "armed <10s after EKF reset" and "accel switched on ground".
-
-Send back the logs, which flights were at 1 and which at 65, the pilot's
-feel of overshoot or pull-back on the release, and the room size and jab
-length. Afterwards leave `LOIT_OPTIONS 1` unless the flights say otherwise.
-
-The beta after topup10 (`93875c9cbf`, SmallFastDronev1 md5 `91fbaeac`,
-MicoAir743v2 md5 `0e3e9933`) no longer resets the height to the baro when
-flow aiding drops out at a touchdown, so the height does not jump by the
-prop wash error on landing and a quick re-arm flies from the right height.
-Nothing to change. Not flown. Keep EK3_OPTIONS 92 (bit 4, range finder
-velD): without it the T25's height followed a drifting baro and VALT flew
-into the floor.
-
-The beta after topup9 (`75771ce09b`, SmallFastDronev1 md5 `bf1f14ed`,
-MicoAir743v2 md5 `c00ca28a`) does not save the hover Z-bias from a flight in
-which the EKF restarted its accel bias estimate, and says "Hover Z-bias not
-saved: EKF accel bias reset". Not flown. On a vehicle running
-`EK3_ABIAS_P_NSE` below 0.015 (TD's T25 and JK's 4C have 0.005), set 0.015:
-at 0.005 the EKF zeroes its accel biases every 27 to 48 s in flight. On the
-T25 also set `INS_ACC_VRFB_Z` back to 0.013, its value before the 11-03
-relearn, or relearn it at 0.015.
-
-The beta after topup8 (`902d52b738`, SmallFastDronev1 md5 `d7fd65bd`,
-MicoAir743v2 md5 `4223ca14`) starts the X and Y gyro biases from zero on
-the EKF's own reset and keeps Z, so ones learned while the vehicle is
-carried powered do not survive it. No parameter changes, not flown.
-
-The beta after topup7 (`ee1c86671d`, SmallFastDronev1 md5 `77c50c62`,
-MicoAir743v2 md5 `9c5a3f4c`) keeps the EKF step average across the EKF's
-own reset, so the T25 (SCHED_LOOP_RATE 200) keeps its gyro bias at the
-learned rate through it. No parameter changes, not flown.
-
-The beta after topup6 (`d55b7d25e3`, SmallFastDronev1 md5 `b1d6a9c1`,
-MicoAir743v2 md5 `97602903`) adds, none flown and no parameter changes:
-#34942's gyro bias kept through the EKF's own reset (T1) and its static yaw
-reference stored within 5 s of a fused yaw. If a pilot reports poor VALT,
-check `VALT_POS_EXPO` in the log against what they set: a value set on a
-4.7.1 or 4.7.2 beta before 2026-10-31 reads 0 or a stray 95 since then.
-
-Still to fly from this card: 0b and 0d, item 1's second takeoff in one boot,
-item 5's re-arm after a landing, item 7's restarted log, and the T25.
-
-Firmware: refresh12 topup3 at `f93bd10a` or later, the code to be promoted as the
-beta ("SmallFastDrone V4.7.2"). SmallFastDronev1 `arducopter.apj` for SFD-O4, md5
-`7558599a` as built from `f93bd10a`; MicoAir743v2 built from the same commit for
-the T25. Standing settings as before: `LOG_REPLAY 1`, `LOG_DISARMED 2`,
-STABILIZE on a switch, and on SFD-O4 `EK3_OPTIONS 94`. Each check says what in
-the log shows the changed code ran; a change with no check here gets no flight
-evidence from this card.
-
-New since the last flights (SFD-O4 `52b1d36f`, T25 `0cb49e7dfb`): the
-2026-10-30 review fixes, which SFD-O4 has not flown; #33366 (CPU load
-measurement); #34941 (a banked flow lane no longer times out); #32471 v3 (the
-hover bias saved as the change since arming); and #34942 (the on-ground height
-check, and the vertical velocity reset at rest).
-
-## Before the first flight, both airframes
-
-- Set `INS_ACC_VRFB_Z` and `INS_ACC2_VRFB_Z` to 0. SFD-O4 holds -0.044 and
-  -0.049, and the T25 holds 0.042, saved by the old learner as totals. v3
-  would apply them as the change since arming and count the ground bias twice.
-- Do not set `ACC_ZBIAS_LEARN` bit 2 (value 4) for ordinary flying. Bit 2
-  stops the EKF learning its static accel bias on the ground, and #34942 then
-  refuses to arm on "EKF3[n] height error" once that bias has built a
-  vertical velocity at rest. Only item 7 uses it.
-- After a drop or a hard landing, leave the vehicle still on the ground for at
-  least a second before re-arming (#34942).
-
-## SFD-O4: bench, props off
-
-### 0a. #29000: fast-rate start-up
-
-Boot with the usual `FSTRATE_ENABLE`. Pass: "Rate CPU ..., rate set to N Hz"
-appears once during boot (it was twice), and RTDT shows the usual loop rate
-once flying.
-
-### 0b. #31274: bidirectional DShot error rate, motor test
-
-Motor test each motor in turn at 5-10 % for 3 s. Pass: no "Motor Test: motor N
-errors X% at Y rpm"; if one appears, N must be the output that spun. ESC.Err
-stays at or below 1 for every motor, including just after boot when the
-reversal commands (`SERVO_BLH_RVMASK`) go out. Failed replies are charged to
-the motor that missed them, so a motor whose Err stands out is real.
-
-### 0c. #32238, optional: ESC_CALIBRATION 9 skips the radio wait
-
-`ESC_CALIBRATION 9`, power on with the transmitter off. Pass: the boot log
-starts about 2 s sooner than with 0. Restore afterwards if 9 is not wanted.
-
-### 0d. #34630: OSD flow quality floor (disarmed)
-
-`EK3_FLOW_QMIN 60` with `EK3_OPTIONS 94` (bit 3 on). Cover the flow sensor:
-the lane strength reads below 50 and flashes. Then `EK3_OPTIONS 86` (bit 3
-off): the same cover shows the strength with no floor and no flashing. Restore
-94 and `EK3_FLOW_QMIN 0`.
-
-## SFD-O4: flights, in order
-
-### 1. #33366 and #31274: two takeoffs in one boot
-
-`BRD_IDLE_STATS 3` (bit 0 the threads.txt reader as before, bit 1 the new PM2
-log message). Keep `TKOFF_RPM_MIN` at about 70 % of the idle RPM from the bench
-log (1000 now), `TKOFF_RPM_MAX 0`. Take off in LOITER, land and disarm, then
-take off again without rebooting.
-
-Pass:
-- Neither takeoff is held with "Takeoff blocked: CPU overload" or "ESC RPM or
-  errors out of range".
-- The `@SYS/threads.txt` copies after each arming show LOAD and PEAK changing
-  between armings. log64 read 0.0 % at the first arming of every boot, then
-  froze at 87.4 %.
-- ESC.Err stays below 1 on all four motors.
-
-PM2.Peak against the 99.5 % default, at an 87 % average with the rate thread,
-is the margin question left open on #33366. If takeoff is held, the PM2 and
-ESC.Err values at that moment are what we need.
-
-### 2. #32471 v3, pack 1: the hover bias as the change since arming
-
-`ACC_ZBIAS_LEARN 9` (learn, plus the acro bit), with the saved values zeroed
-as above. Hover steadily in LOITER at 2-5 m for at least 60 s, land and
-disarm. Pass: each saved value is about XKF2.AZ at the end of the hover minus
-XKF2.AZ at arming for that IMU's core. log62's would have been about +0.03,
-where the old learner saved -0.03.
-
-### 3. #32471 v3, pack 2: apply it
-
-`ACC_ZBIAS_LEARN 11` (learn and apply), same takeoff and hover. Pass: XKF2.AZ
-moves less after takeoff than in pack 1, and the EKF height against the range
-finder over the first 20 s after liftoff is closer than log63 flight 1 (0.14 m
-core 0, 1.10 m core 1, rms). Replay of log63 with the value this design would
-have saved gave 0.11 and 0.54 m. Keep 11 for the rest of the card.
-
-### 4. #34941: a flow lane held past 45 deg does not time out
-
-GPS lane primary with flow on core 1, as log65. Inside the range finder's
-reach, an acro segment holding more than 45 deg of tilt for more than 5 s.
-Pass: no "EKF3 IMU1 stopped aiding" / "started relative aiding" pair while
-tilted, and core 1's speed stays near GPS through and after the tilt. log65 had
-six such pairs, each zeroing it.
-
-### 5. #34942, every flight: no false refusals, no stray resets
-
-Nothing to set. After each landing and re-arm, note any "EKF3[n] height error"
-refusal and any "EKF3 IMUn vertical velocity reset at rest". With GPS vertical
-velocity agreeing, SFD-O4 should see neither: Replay of SFD-O4 logs 54-65
-refused none of 20 arms. If one appears, the XKF1.VD and XKF3.IPD at that moment
-are what we need.
-
-### 6. #32475, only if Throw is flown
-
-`THROW_NEXTMODE` ALT_HOLD or LOITER (not AUTO), `THROW_SRC_SET 0`, and switch
-out of THROW and back between throws. Upward toss to 2-3 m. Pass: "Throw:"
-messages show detection, uprighting and the hand-off within about 3 s, and no
-"Internal Error". The hand-off to a source set with no horizontal source is
-still open on the PR; these settings avoid it.
-
-### 7. #32471, optional: the inhibit logged again in a restarted log
-
-`ACC_ZBIAS_LEARN 12` (bit 2 plus the acro bit). Powered and disarmed, erase the
-logs from the GCS so a new log starts, then fly a short ACRO segment and land.
-Pass: the new log has a REV3 accel bias inhibit event near its start, and
-Replay of it matches the flight (XKF2.AZ). With bit 2 the EKF cannot learn its
-static bias on the ground, so #34942 may refuse the arm on "height error". If
-it does, note XKF1.VD at rest and skip the item: that is bit 2's trade, not a
-fault. Restore `ACC_ZBIAS_LEARN 11` afterwards.
+# SFD flight card: refresh13 topup1
+
+The flights still to fly, in order. Results go in `FLIGHT_VALIDATION.md`;
+earlier cards are in git history.
+
+Firmware: refresh13 topup1, built from `896e11846d`. Nothing on it has
+flown.
+
+- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `666ed4aa`.
+- T25: MicoAir743v2 `arducopter.apj`, md5 `4d9d5598`.
+
+Fly every flight with `LOG_REPLAY 1` and `LOG_DISARMED 2`, and STABILIZE
+on a switch.
+
+## SFD-O4
+
+### Before the first flight
+
+- Set `LOIT_DRAG_COEF` 0.3. It moved to a new parameter index in
+  refresh13, so a value saved before it reads the board default, 0.01.
+- `LOIT_OPTIONS` 1. Bit 6 is gone; if it reads 65, set 1.
+- `EK3_OPTIONS` 94.
+
+### Bench, props off
+
+1. #32401: a pending arm on the switch. Flip the arm switch while a
+   pre-arm check still fails, such as before the EKF or GPS is ready.
+   Pass:
+   - the failure message and a beep come once every 3 s, not 4 times a
+     second, and the pre-arm failure prints once;
+   - "Arm pending: EKF bootstrap reset" appears only if the failing check
+     is the AHRS one;
+   - it arms by itself once the checks pass.
+
+   Then repeat, and disarm from the GCS while the arm is pending. Pass: it
+   does not arm by itself afterwards. The old code self-armed about 60 s
+   later in SITL, which is why the props are off.
+2. #31274: motor test each motor in turn at 5-10 % for 3 s. Pass: no
+   "Motor Test: motor N errors X% at Y rpm" for a motor that did not spin,
+   and ESC.Err at or below 1 on the motor under test.
+3. #34630: the OSD flow quality floor, disarmed. `EK3_FLOW_QMIN` 60 with
+   `EK3_OPTIONS` 94, then cover the flow sensor. Pass: the lane strength
+   reads below 50 and flashes. With `EK3_OPTIONS` 86 the same cover shows
+   the strength with no floor and no flashing. Restore `EK3_OPTIONS` 94
+   and `EK3_FLOW_QMIN` to its usual value (40).
+
+### Every flight
+
+- #34942: note any arm refused on "EKF3[n] height error", and any
+  "vertical velocity reset at rest" or "forced reset", with the time since
+  the disarm. After a hard landing, leave it still for at least 1 s before
+  re-arming. Still owed: a re-arm after a landing without a reboot.
+- #32471: note any "Hover Z-bias not saved: ..." message, especially
+  "accel switched on ground".
 
 ## T25
 
-Flow only, no compass and no yaw source, so #34942 and its static yaw fix act
-on every flight. `ACC_ZBIAS_LEARN 10` can stay once `INS_ACC_VRFB_Z` is 0.
+Flow only, no compass, on the second MicoAir743v2 (board `00360049`).
 
-On the second MicoAir743v2 (board `00360049`, from 2026-11-06 evening):
-
-- Set `EK3_RNG_USE_HGT` 6, so the range finder gives the height below about
-  0.48 m (`RNGFND1_MAX` 8). In Replay of flights 05-07 it took 06's VALT
-  takeoff error from 1.52 to 0.09 m rms against the range finder. That
-  hesitation came from the spool-up baro swing, which reads +4.7 m on the
-  floor.
-- Calibrate `BARO1_THST_SCALE` for this board. Clamp the quad or hold it
-  nose-down, then ramp the throttle in ACRO and run `baro_thst_cal.py` on
-  the log. Until then, -205 behaved better than -175.
-- The hover Z-bias saved on flight 05 (0.023) is this board's. Keep
-  `ACC_ZBIAS_LEARN` 10.
-
-### T1. #34942 and the static yaw fix, every flight
-
-- Boot: with the vehicle left still after power-on, XKF1.Yaw and XKF1.GZ stay
-  steady on the ground until the first movement. Before the fix, the PR's
-  stillness cap could fuse a yaw reference that was never taken.
-- After each landing: note any "EKF3[1] height error" refusal and any
-  "EKF3 IMU0 vertical velocity reset at rest". Replay of the MicoAir logs
-  refused 7 ordinary re-arms, 1.1 to 3.9 s after a disarm, and 2 first arms.
-  Each one seen in flight, with how long after the disarm, tells us whether
-  that cost is acceptable.
-- After any "EKF3 IMU0 forced reset" or "vertical velocity reset at rest" on
-  the ground (topup5): XKF1.Yaw does not step and XKF1.GZ stays near its
-  value before the reset. The 11-02 garage log reached a 2.9 deg/s Z gyro
-  bias and turned in the next Loiter with the stick centred. From topup6
-  XKF1.GZ keeps its value through the forced reset itself; an EKF_RESET
-  switch reset starts it from 0, so a flight right after one may wander in
-  yaw until the bias is relearned at rest (about 10 s).
-- If the pilot repeats the drop test, as Flight test 3: a switch disarm at
-  about 1 m over soft ground, still for 2 s, re-arm in VALT and take off, stick
-  at minimum after the takeoff. Pass: the reset message after the drop
-  whenever XKF1.VD read over 0.5 m/s at rest, and the re-arm either refused on
-  "height error" or going up without climbing at minimum stick. Flight test 3
-  climbed 2 m.
-
-### T2. #34941: a banked flow lane does not time out
-
-Inside the range finder's reach, an ACRO segment holding more than 45 deg of
-tilt for more than 5 s. Pass: no "EKF3 IMU0 stopped aiding" / "started
-relative aiding" pair while tilted, and the velocity is not zeroed coming out
-of it.
-
-### T3. #33366, optional: the CPU load check
-
-`BRD_IDLE_STATS` is 0 on the T25, which turns the takeoff load check off. To
-exercise it, set 3 and take off twice in one boot. Pass as item 1.
+- Set `EK3_RNG_USE_HGT` 6, so the range finder gives the height below
+  about 0.48 m (`RNGFND1_MAX` 8).
+- Calibrate `BARO1_THST_SCALE` for this board: clamp the quad or hold it
+  nose-down, ramp the throttle in ACRO, and run `baro_thst_cal.py` on the
+  log. Until then use -205.
+- Keep `ACC_ZBIAS_LEARN` 10; flight 05's saved 0.023 is this board's.
+- Every flight: the #34942 notes as for SFD-O4.
 
 ## Not exercised by this card
 
-- #32232: the substitution change needs two downward range finders.
-- #34210: the cap wind-down runs only after a climb-away latches the cap.
-- #34543: Copter never falls back to DCM.
-- #29000's temperature-calibration park: bench calibration only.
-- #34942's skip of the height check while falling: it needs a re-arm during a
-  fall after a disarm in the air. SITL covers it; do not provoke it.
-
-## Afterwards
-
-Restore `TKOFF_RPM_MIN` (or keep it), `ACC_ZBIAS_LEARN` (11 on SFD-O4 if
-keeping v3's apply, otherwise 8), `EK3_FLOW_QMIN`, `EK3_OPTIONS 94`, and
-`BRD_IDLE_STATS` as wanted. Put each log's results in `FLIGHT_VALIDATION.md`
-with the item numbers above.
-
----
-
-# Earlier card (topup13)
-
-Firmware: topup13 or later (carries #34457's floor hold for flight 1). Keep `EK3_OPTIONS 94`. Fly every flight with
-`LOG_REPLAY 1` and `LOG_DISARMED 2`. Keep STABILIZE on a switch. What
-earlier flights showed is in `FLIGHT_VALIDATION.md`; the log40/log44 step
-sortie is done.
-
-## Flights, in order
-
-### 1. #34457: land after hard flying and stay armed
-
-Done 2026-10-30, log65: passed (see `FLIGHT_VALIDATION.md`).
-
-The case log39 hit: after an acro sortie a lane's main filter thought it
-was climbing on the ground, and its AGL KF height coasted 1.5 m. Fly hard
-acro on the flow lane inside the range finder's reach (below about 12 m),
-then land in LOITER or ALT_HOLD and stay armed on the ground for 10 s
-before disarming.
-
-Pass: on both cores XKFA.HAgl stays within about 0.3 m of its floor for
-the whole time on the ground (log39 core 1: 0.28 -> 1.8 m), and XKF1.VD
-on the ground shows whether the main filter thought it was climbing.
-
-### 2. #32471: hover Z-bias learning, two packs
-
-Flown 2026-10-30, logs 62-63, but pack 2 was the wrong setting: 11 leaves
-bit 2 clear, which double-counts the ground bias as #32471's record says
-it will. Still owed: pack 3 at `ACC_ZBIAS_LEARN 15`, same takeoff and
-hover. Replay of log63 as 15 was worse than no correction on core 0 (see
-`FLIGHT_VALIDATION.md`).
-
-Pack 1, `ACC_ZBIAS_LEARN 9` (bit 0 plus the acro bit): hover steadily in
-LOITER at 2-5 m for at least 60 s, land and disarm. On disarm
-`INS_ACC_VRFB_Z` and the second IMU's value are saved; they roughly equal
-XKF2.AZ at the end of the hover minus its value at arming.
-
-Pack 2, `ACC_ZBIAS_LEARN 11` (bits 0 and 1 plus the acro bit), same
-takeoff and hover: XKF2.AZ starts close to its hover value and moves less
-after takeoff than in pack 1, and the EKF height against the range finder
-in the first 20 s after liftoff has a smaller error. Flight 1 can share a
-pack with either.
-
-### 3. #34630, if time allows: provoke a lockout
-
-Done 2026-10-30, log65: three resets, each repaired the lane.
-
-log43 never tripped one: flow quality stayed above 144 and no axis
-dropped out. Fly harder: full-rate roll and pitch flips in ACRO or
-STABILIZE at 3-8 m, inside the range finder's reach, on the flow lane.
-Watch the OSD lane item for an arrow going off for 250 ms. XKF7.FVC counts
-the resets.
-
-### 4. #33568, optional: the flow speed cap
-
-log42 and log63 never reached the flow speed limit. The cap is
-(`EK3_FLOW_MAX` - 1) x height, 6.4 x height at 7.4, so it binds only below
-`LOIT_SPEED_MS` / 6.4: 2.3 m at 15. On the flow lane in LOITER at about
-1.5 m, full stick in one direction for at least 3 s. Pass: ground speed is
-held near 6.4 x height (about 10 m/s at 1.5 m) rather than `LOIT_SPEED_MS`.
-
-### 5. #34678, optional ground check: righting a flipped copter
-
-On soft ground with the props clear, put the copter on its back, arm in
-STABILIZE and raise the throttle to roll it upright. Pass: no "Internal
-Error" message (flow_of_control) and it re-arms afterwards without a
-reboot.
-
-## Afterwards
-
-Restore `EK3_RNG_USE_HGT 6`, `EK3_SRC_OPTIONS 8`, `AVOID_ENABLE 0`, and
-`ACC_ZBIAS_LEARN` as wanted. Keep `EK3_OPTIONS 94`.
-
-## Notes
-
-- Baselines are Replays of the same logs with the PR's change removed.
-  For flight 1, the topup12 Replay binary (no floor hold) is the baseline.
-- The aiding mode change after a source set switch to flow takes the
-  designed 10 s (`posRetryTimeUseVel_ms`), not a few seconds.
-- Coming back into range finder reach after more than 5 s out of it, the
-  terrain offset snaps to the range in one sample (upstream EKF3). The
-  step is the height drift built up while out of reach (log41: 1.3 m on
-  both cores), so judge the return by HAGL agreeing with the range
-  afterwards, not by the absence of a step.
+- #31005: a fence floor breach at zero throttle now flies the RTL. Do not
+  provoke it.
+- #33585's terrain-database anchor: SFD-O4's `EK3_OPTIONS` 94 has bit 2,
+  which bypasses it.
+- #32471's refusal of a zeroing that lands during the arm needs a Lua or
+  DDS arm; a switch arm shows no difference.
