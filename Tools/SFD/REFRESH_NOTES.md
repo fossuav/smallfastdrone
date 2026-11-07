@@ -17,9 +17,35 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh13 after topup1:
-  refresh13 was promoted 2026-11-06 over refresh12 topup13 (a force push),
-  and topup1 on 2026-11-07 as a fast-forward.
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14, promoted
+  2026-11-07 (a force push): refresh13 topup1 restacked onto the PR heads
+  squashed that day. Same base (`258e843e68`) and the same tree as the
+  beta it replaces (`ffec441d1e`, kept locally as
+  `SmallFastDrone-4.7.2.17-beta`), so the code is topup1's (`896e11846d`)
+  and the flight card's firmware stands: nothing to reflash.
+  - The PR commits are the squashed heads (`FLIGHT_VALIDATION.md` and
+    `PR_STATUS.md`, 2026-11-07), with #32401, #33318 and #34630 at their
+    11-07 heads. topup1's PR fixes now arrive inside their PRs' commits.
+  - Plan 485, 17 skipped by list (#34630's 14 copies of #34543's commits,
+    both primary core index commits, #32238's FAST_BOOT type), 468 run.
+    Seven stops rerere did not cover, each resolved to the beta's text:
+    #32401's AP_Arming.h includes (rebased onto master), #33318's flow
+    control limits (theirs), #33478's EK3_OPTIONS description (both
+    sides), #33585's limits and #33569's gain height (ours, #33569's
+    parameter kept), #34457's decay gap (ours, then empty as before) and
+    #34942's bootstrap keep (both sides). #34456's DAL copy stopped and was
+    skipped as documented.
+  - Then refresh13's 39 adaptation commits unchanged, one new fixup
+    (`AP_NavEKF3: scale the flow control limits from the anchored flow
+    height`), the beta's tests whole, and README, Tools/SFD and
+    CLAUDE_local.md restored. Seven new rerere resolutions are added to
+    the archive (280 entries).
+  - Not rebuilt or retested: the tree equals the beta's, whose builds and
+    tests stand.
+- Previous beta: refresh13 after topup1 (`ffec441d1e`, kept locally as
+  `SmallFastDrone-4.7.2.17-beta`): refresh13 was promoted 2026-11-06 over
+  refresh12 topup13 (a force push), and topup1 on 2026-11-07 as a
+  fast-forward.
   - topup1 (2026-11-07): the 11-07 AP-Review fixes that reach the beta,
     none flown.
     - #32401: a pending arm's quiet retries no longer sound the buzzer or
@@ -67,7 +93,7 @@ reply exists") before acting on it.
     (2026-11-07). The T25's flights 05-07 on a second
     MicoAir743v2 (topup11) were replayed through it with EK3_RNG_USE_HGT 6
     (`FLIGHT_VALIDATION.md`, 2026-11-06 evening).
-- Previous beta: refresh12 after topup13 (`85a872ee6f`, kept locally as
+- Older beta: refresh12 after topup13 (`85a872ee6f`, kept locally as
   `SmallFastDrone-4.7.2.15-beta`), promoted 2026-11-06 as a fast-forward
   over topup12 (`a179bc5d00`). topup12 was rebased onto `909cde934e` (the T25's topup11
   flights, `ANALYSIS_REPOS.md`, `CLAUDE_local.md`) and pushed, so its
@@ -863,7 +889,8 @@ After:
   heads in `PR_STATUS.md`. The #34942 squash left one resolution in
   `.git/rr-cache` (its static-yaw test against the renamed gyro helper);
   it is a squash conflict, never a refresh one, and harmless if
-  `rerere-save` archives it.
+  `rerere-save` archives it. refresh14 took the squashed heads the same
+  day, with the same tree as the beta, and relocked.
 - topup13 (2026-10-08) carries #34457's floor hold (`29fef9c3a2`,
   `db4abcbff0`) for the card's flight 1; #33507's rebase onto it changes
   nothing here. The touchdown test assumed SITL reads about 0.1 m on the
@@ -1605,6 +1632,25 @@ an FMT record and passes the retry, as the shipping beta does. Both picks are
 carried (Local work) until 4.7 has #30956: the logger one because the stack
 logs more message types than 4.7 and the startup drops are real, the harness
 one because it is master's and costs nothing.
+
+### Traps found in refresh14
+
+- **A squash can move a conflict away from an edit made inside it.**
+  refresh13 swapped in #33585's `flowTerrainState()` on #33318's
+  control-limit height line while resolving #33585's commit. After
+  #33318's squash that line applies beside #33585's change without a
+  conflict, so rerere had nothing to replay and the line kept
+  `terrainState`; the diff against the beta found it. It is now a fixup
+  commit.
+- **A PR rebased onto master can use an upstream-merged PR the plan
+  applies after it.** #33318's control-limit commit uses
+  `_flowNavGainHgt`, which on 4.7 arrives only with #33569's commit later
+  in the plan. Take #33318's side; the stack builds again from #33569's
+  commit, which keeps its parameter and takes ours in the limits.
+- **#34630 stacked on #34543 lists #34543's commits again.** Skip them by
+  patch-id (14 since #34630's restack on `871498e4aa`, the DCM fallback
+  pair and the flash check included), and its "report the status of each
+  lane", which differs from #34543's only in context.
 
 ### Traps found in refresh13
 
