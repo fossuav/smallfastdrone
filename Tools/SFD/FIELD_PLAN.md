@@ -4,7 +4,9 @@ The flights still to fly, in order. Results go in `FLIGHT_VALIDATION.md`;
 earlier cards are in git history.
 
 Firmware: refresh13 topup1, built from `896e11846d`. SFD-O4 flew it on
-2026-11-07 (logs 84-88, `FLIGHT_VALIDATION.md`); the T25 has not.
+2026-11-07 (logs 84-88, `FLIGHT_VALIDATION.md`). The T25 flew the same
+code as `7b00f3b5` on 2026-11-08, on its first board and without the T25
+settings below.
 
 - SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `666ed4aa`.
 - T25: MicoAir743v2 `arducopter.apj`, md5 `4d9d5598`.
@@ -49,7 +51,8 @@ on a switch.
 - #34942: note any arm refused on "EKF3[n] height error", and any
   "vertical velocity reset at rest" or "forced reset", with the time since
   the disarm. After a hard landing, leave it still for at least 1 s before
-  re-arming. Still owed: a re-arm after a landing without a reboot.
+  re-arming. Still owed: a re-arm after a hard landing without a reboot
+  (the T25 re-armed after a soft one on 2026-11-08).
 - #32471: note any "Hover Z-bias not saved: ..." message, especially
   "accel switched on ground".
 

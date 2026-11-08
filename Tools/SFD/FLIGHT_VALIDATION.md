@@ -10,6 +10,46 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-08: the T25 on `7b00f3b5`, a flow quality latch indoors
+
+The T25's first flight on refresh13 code: `7b00f3b5` is the beta head,
+whose code is refresh13 topup1's (`896e11846d`). It flew on the T25's
+first board (`002F003C`), not the second the card named, with
+`EK3_RNG_USE_HGT` -1 and `BARO1_THST_SCALE` -207, indoors in dim light:
+VALT 9.5-41.7 s, then VALT and a Loiter 56.2-332.6 s. Replay follows the
+flown core to 0.000 throughout.
+
+- Loiter held: target minus estimate with the sticks centred, median
+  0.10 m, p95 0.36 m. VALT takeoffs 1.7-1.8 s. IMU0 VibeZ median 5.2
+  against 20.7 on this board's 11-06 flight 06, no clips.
+- `EK3_FLOW_QMIN` latch and EKF failsafe: flow quality 12-30 from 326 s,
+  with the sensor reporting zero flow while the vehicle moved; at 331.63 s
+  an axis lockout found quality 23, under `EK3_FLOW_QMIN` 60, aiding
+  stopped, and the failsafe went to VALT at 332.58 s. Loiter was refused
+  at 347.2 s and the vehicle landed at 353.7 s; the release, quality 66
+  for 2 s, never came in the air. Replayed with `EK3_FLOW_QMIN` 0 the
+  reset fires, the core keeps relative aiding, and its velocity is within
+  0.03 m/s of the latched core's from 333.3 s on, so the latch cost 21 s
+  of Loiter. Below quality 40 the flow did not follow the IMU (slope 0.19,
+  correlation 0.13), so the setting stays.
+- The flow measured poorly in this room at every quality: against the
+  IMU, correlation 0.43 at quality 70-99, where the 11-06 flights read
+  0.94-0.96. The light or the floor, not the code.
+- Baro creep: the EKF height fell 1.2-1.5 m behind the range finder over
+  the Loiter, at a steady 48 C and steady throttle, and the pilot lowered
+  the target by about 1 m to hold height. The AGL KF stayed on the range
+  (0.18 m rms).
+- Relative aiding began at 20.0 s, 8.9 s after the first liftoff: the
+  arm came 2.6 s after the EKF started, and of the flow start conditions
+  only the gyro bias variance test was still open (from the source, by
+  elimination). VALT needs no position.
+- #34942: a re-arm 2.8 s after a soft landing, without a reboot, was
+  accepted and flew. VD read -0.03 m/s at rest, so the reset at rest had
+  nothing to do; the re-arm after a hard landing is still owed.
+- #30841: ESC logged at 24.8 Hz armed, `ESC_TLM_LOG_RATE` 25. #31274:
+  ESC.Err read 100 until the window filled, 1 s after the first arm, and
+  at or below 1% after that.
+
 ## 2026-11-07: squash audit of SFD-O4 logs 73-88 and the T25 on topup9 and topup11
 
 Which commits on top of Andy's PRs these flights ran, and so may fold into
