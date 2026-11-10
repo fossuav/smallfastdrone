@@ -185,6 +185,9 @@ bool ModeThrow::nextmode_requires_position() const
     switch ((Mode::Number)g2.throw_nextmode.get()) {
     case Mode::Number::STABILIZE:
     case Mode::Number::ALT_HOLD:
+#if MODE_VALT_ENABLED
+    case Mode::Number::VALT:
+#endif
     case Mode::Number::ACRO:
     case Mode::Number::LAND:
         return false;
