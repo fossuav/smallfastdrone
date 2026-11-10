@@ -20450,6 +20450,48 @@ return update, 100
         self.change_mode('LAND')
         self.wait_disarmed(timeout=90)
 
+    def ThrowDropNoPositionNextModeVALT(self):
+        '''A drop with no position hands over to VALT, which flies without one'''
+        VALT = 29
+        self.set_parameters({
+            "GPS1_TYPE": 0,
+            "SIM_GPS1_ENABLE": 0,
+            "EK3_SRC1_POSXY": 0,
+            "EK3_SRC1_VELXY": 0,
+            "THROW_TYPE": 1,           # drop
+            "THROW_NEXTMODE": VALT,
+            "SIM_SHOVE_Z": -10.5,
+            "MOT_SPOOL_TIME": 0.5,
+        })
+        self.reboot_sitl()
+
+        self.change_mode('THROW')
+        self.wait_prearm_sys_status_healthy(timeout=120)
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 20000)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+
+        self.wait_altitude(30, 1000, timeout=60, relative=True)
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw height achieved", check_context=True)
+        # treated as needing a position, VALT waited 5 s for one and then
+        # left the vehicle in THROW
+        self.wait_mode(VALT, timeout=4)
+        for text in "lost position", "waiting for position", "staying in throw":
+            if self.statustext_in_collections(text):
+                raise NotAchievedException("throw into VALT waited for a position (%s)" % text)
+        self.set_rc(3, 1500)
+        self.delay_sim_time(5, "hold VALT at mid stick after the hand-off")
+        self.assert_mode(VALT)
+
+        self.set_rc(3, 1000)
+        self.wait_disarmed(timeout=90)
+        self.zero_throttle()
+
     def ThrowDropSourceSwitch(self):
         '''Test EKF source set switch on throw mode completion'''
         self.progress("Testing throw drop with EKF source set switch")
@@ -23969,6 +24011,7 @@ return update, 100
              self.ThrowDoubleDrop,
              self.ThrowModeNoGPS,
              self.ThrowDropNextModeVALT,
+             self.ThrowDropNoPositionNextModeVALT,
              self.ThrowDropSourceSwitch,
              self.ThrowAbortRestoresSourceSet,
              self.ThrowSpinDrop,
