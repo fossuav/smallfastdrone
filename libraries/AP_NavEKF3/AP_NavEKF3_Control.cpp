@@ -344,9 +344,12 @@ void NavEKF3_core::setAidingMode()
         }
         case AID_RELATIVE: {
             // Check if the fusion has timed out (flow measurements have been rejected for too long)
-            // time the tilt check withheld flow for was not spent rejecting it, so it does not count
+            // time the tilt check withheld flow for was not spent rejecting it, so it does not count while
+            // the vehicle flies. One that is not flying, such as a copter held tilted by hand before a
+            // throw, keeps the timeout: its restart at zero is nearer the truth than what the IMU carries
             const uint32_t flowUnfused_ms = imuSampleTime_ms - prevFlowFuseTime_ms;
-            bool flowFusionTimeout = (flowUnfused_ms - MIN(flowWithheld_ms, flowUnfused_ms)) > 5000;
+            const uint32_t flowWithheldCounted_ms = (dal.get_time_flying_ms() > 0) ? MIN(flowWithheld_ms, flowUnfused_ms) : 0;
+            bool flowFusionTimeout = (flowUnfused_ms - flowWithheldCounted_ms) > 5000;
 #if EK3_FEATURE_OPTFLOW_AGL_KF
             flowFusionTimeout |= flowVelResetUnhealthy;
 #endif
