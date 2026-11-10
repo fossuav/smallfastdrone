@@ -1,15 +1,16 @@
-# SFD flight card: refresh13 topup1
+# SFD flight card: refresh14 topup1
 
 The flights still to fly, in order. Results go in `FLIGHT_VALIDATION.md`;
 earlier cards are in git history.
 
-Firmware: refresh13 topup1, built from `896e11846d`. SFD-O4 flew it on
-2026-11-07 (logs 84-88, `FLIGHT_VALIDATION.md`). The T25 flew the same
-code as `7b00f3b5` on 2026-11-08, on its first board and without the T25
-settings below.
+Firmware: refresh14 topup1, built from `654ae03aa9`: refresh13 topup1's
+code (`896e11846d`, flown by SFD-O4 on 2026-11-07 and by the T25 as
+`7b00f3b5` on 2026-11-08) plus two fixes from a customer quad's flights,
+the throw into VALT without a position and #34941's timeout for a vehicle
+that is not flying (`REFRESH_NOTES.md`). Nothing to set.
 
-- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `666ed4aa`.
-- T25: MicoAir743v2 `arducopter.apj`, md5 `4d9d5598`.
+- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `8af6e456`.
+- T25: MicoAir743v2 `arducopter.apj`, md5 `d6c1920b`.
 
 Fly every flight with `LOG_REPLAY 1` and `LOG_DISARMED 2`, and STABILIZE
 on a switch.
@@ -76,3 +77,7 @@ Flow only, no compass, on the second MicoAir743v2 (board `00360049`).
   which bypasses it.
 - #32471's refusal of a zeroing that lands during the arm needs a Lua or
   DDS arm; a switch arm shows no difference.
+- topup1's two fixes: the throw into VALT acts only on a drop with no
+  position at its end, and #34941's timeout only on a vehicle held tilted
+  past the flow tilt limit for over 5 s while not flying (carried before a
+  throw).

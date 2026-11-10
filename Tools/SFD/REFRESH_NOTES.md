@@ -17,7 +17,27 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14, promoted
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup1
+  (2026-11-10, a fast-forward): two fixes from a customer quad's flights on
+  `7b00f3b5` (`FLIGHT_VALIDATION.md`, 2026-11-10), neither flown.
+  - The throw into VALT hands over without a position (`8449cb6dcc`,
+    test `ThrowDropNoPositionNextModeVALT` `cbb8e4c762`): VALT joins
+    ALT_HOLD in `nextmode_requires_position()`. Beta-local, like the
+    hand-off commit it fixes; fold the two together wherever they land.
+  - #34941's flow timeout kept for a vehicle that is not flying
+    (`7664ac2c91`, test `OpticalFlowTiltTimeoutNotFlying` `654ae03aa9`).
+    On the PR since 2026-11-10 (`9609f96a0d`, `1f53fe0477`), so the next
+    refresh takes it from the PR head and these copies drop out.
+  - The 21 throw tests and OpticalFlowTiltNoTimeout,
+    OpticalFlowTiltTurnRecovery and OpticalFlowTiltTimeoutNotFlying pass;
+    copter, plane and Replay build; `check_param_tables.py` is clean.
+    Replay through this build: the customer's log16 exact, log20's carry
+    at 0.26-1.03 m/s against 1.98-3.40 m/s as flown (103-108 s), as the
+    fix's own Replay.
+  - SmallFastDronev1 md5 `8af6e456` (41,300 bytes free), MicoAir743v2
+    md5 `d6c1920b` (233,832 bytes free), both `.apj`, built from
+    `654ae03aa9`. Nothing to set. The lock stays at refresh14's heads.
+- refresh14 itself: promoted
   2026-11-07 (a force push): refresh13 topup1 restacked onto the PR heads
   squashed that day. Same base (`258e843e68`) and the same tree as the
   beta it replaces (`ffec441d1e`, kept locally as
@@ -1544,9 +1564,10 @@ FLOW_OPTIONS's docs).
   belongs to whichever of #34696 and #32270 lands second.
 - `Copter: let throw mode hand off to VALT` (topup17), on no PR yet.
   Its fix, `Copter: let a throw hand over to VALT without a position`
-  (`42353f7c05`, test `ThrowDropNoPositionNextModeVALT` `9dc9ebc818`,
-  2026-11-10), is on local branch `fix1110/throw-valt`, not yet on the
-  beta: VALT flies without a position, so it goes in
+  (2026-11-10), is on the beta since refresh14 topup1 (`8449cb6dcc`, test
+  `ThrowDropNoPositionNextModeVALT` `cbb8e4c762`; `42353f7c05` and
+  `9dc9ebc818` on `fix1110/throw-valt`): VALT flies without a position, so
+  it goes in
   `nextmode_requires_position()`'s list with ALT_HOLD. Fold both with the
   hand-off commit wherever it lands.
 - `AP_NavEKF3: skip the AID_NONE height reset in ground effect` and its test

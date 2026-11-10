@@ -84,7 +84,8 @@ anyway; no compass motor compensation (a 23 deg yaw reset);
 `INS_HNTC2_REF` 1 moved the second notch off its 172 Hz line;
 ATTITUDE_FAST logging overruns the card.
 
-Fixes, 2026-11-10, none on the beta yet:
+Fixes, 2026-11-10, the first two on the beta as refresh14 topup1
+(`8449cb6dcc`..`654ae03aa9`, `REFRESH_NOTES.md`):
 - Throw into VALT: `nextmode_requires_position()` lists VALT with
   ALT_HOLD (local branch `fix1110/throw-valt`, `42353f7c05`, test
   `ThrowDropNoPositionNextModeVALT` `9dc9ebc818`). The test reproduces
