@@ -6843,6 +6843,117 @@ return update, 100
         if len(failures):
             raise NotAchievedException("; ".join(failures))
 
+    def OpticalFlowTiltTimeoutNotFlying(self):
+        '''flow withheld by the tilt check still times a flow lane out while the vehicle is not flying'''
+        # core 0 on GPS, core 1 on optical flow alone.  The IMUs are rolled 90 deg from boot, so the
+        # vehicle sits on the ground with the tilt check withholding every flow sample, as one held on
+        # its side by hand would.  It is not flying, so the lane times out 5 s after it starts relative
+        # aiding, as if the flow were rejected, where in flight the tilt would hold it in relative aiding.
+        # The lane starts at boot: with the IMUs rolled 90 deg its gyro bias takes over 30 s to settle for a
+        # later start, so the armed run arms just after it.  An arm before the timeout is what matters: a
+        # gate on the armed state would count every withheld second from the arm on and never time out
+        self.context_push()
+        try:
+            self.set_parameters({
+                "SIM_FLOW_ENABLE": 1,
+                "FLOW_TYPE": 10,
+                "EK3_SRC_OPTIONS": 8,
+                "EK3_SRC2_POSXY": 0,
+                "EK3_SRC2_VELXY": 5,
+                "EK3_SRC2_POSZ": 1,
+                "EK3_SRC2_VELZ": 0,
+                "EK3_SRC2_YAW": 1,
+                "SIM_IMU_ORIENT": 16,  # ROTATION_ROLL_90
+                "DISARM_DELAY": 0,
+            })
+            self.set_analog_rangefinder_parameters()
+            self.context_collect('STATUSTEXT')
+
+            def check_timeout(armed):
+                # cleared before the reboot: the boot's messages are kept, the last boot's are not
+                self.context_clear_collection('STATUSTEXT')
+                self.reboot_sitl()
+                self.wait_statustext("IMU1 started relative aiding", timeout=60, check_context=True)
+                try:
+                    if armed:
+                        # armed is not flying: at zero throttle the land detector holds the vehicle
+                        # landed, as THROW does until it detects the throw
+                        self.change_mode('STABILIZE')
+                        self.set_rc(3, 1000)
+                        self.arm_vehicle(force=True)
+                    self.wait_statustext("IMU1 stopped aiding", timeout=15, check_context=True)
+                    if armed:
+                        self.assert_armed()
+                finally:
+                    if armed and self.armed():
+                        self.disarm_vehicle(force=True)
+
+                # the timings come from the log, in the vehicle's own time
+                self.delay_sim_time(2, reason="flush the log")
+                dfreader = self.dfreader_for_current_onboard_log()
+                t_start = t_stop = t_arm = t_takeoff = None
+                rolls_deg = []
+                flow_times = []
+                dropped = 0
+                while True:
+                    m = dfreader.recv_match(type=['MSG', 'ARM', 'EV', 'XKF1', 'OF', 'DSF'])
+                    if m is None:
+                        break
+                    mtype = m.get_type()
+                    if mtype == 'DSF':
+                        dropped = max(dropped, m.Dp)
+                        continue
+                    t = m.TimeUS * 1e-6
+                    if mtype == 'MSG':
+                        # the harness echoes its own text into the log, so match the EKF message whole
+                        if t_start is None and m.Message == "EKF3 IMU1 started relative aiding":
+                            t_start = t
+                        elif t_start is not None and t_stop is None and m.Message == "EKF3 IMU1 stopped aiding":
+                            t_stop = t
+                    elif mtype == 'ARM' and m.ArmState == 1 and t_arm is None:
+                        t_arm = t
+                    elif t_start is None or t_stop is not None:
+                        continue
+                    elif mtype == 'EV' and m.Id == 28:  # NOT_LANDED
+                        t_takeoff = t
+                    elif mtype == 'XKF1' and m.C == 1:
+                        rolls_deg.append(abs(m.Roll))
+                    elif mtype == 'OF':
+                        flow_times.append(t)
+                if t_start is None or t_stop is None:
+                    raise NotAchievedException("relative aiding start and timeout not both in the log")
+                if dropped != 0:
+                    raise NotAchievedException("the log dropped %u blocks, so it cannot show the wait" % dropped)
+                if len(rolls_deg) < 10:
+                    raise NotAchievedException("only %u core 1 attitude records in the wait" % len(rolls_deg))
+                # core 1 was tilted past the flow limit and its flow kept arriving throughout, so the tilt
+                # check withheld it: no flow went missing and none was rejected
+                flow_gaps = [b - a for a, b in zip([t_start] + flow_times, flow_times + [t_stop])]
+                self.progress("flow lane timed out %.2f s after it started relative aiding%s; core 1 roll at least "
+                              "%.1f deg over %u records, longest flow gap %.2f s" %
+                              (t_stop - t_start,
+                               ", %.2f s after arming" % (t_stop - t_arm) if t_arm is not None else "",
+                               min(rolls_deg), len(rolls_deg), max(flow_gaps)))
+                if not 4.5 <= t_stop - t_start <= 6:
+                    raise NotAchievedException("flow lane timed out %.2f s after it started, not about 5 s" %
+                                               (t_stop - t_start))
+                if min(rolls_deg) < 60:
+                    raise NotAchievedException("core 1 roll fell to %.1f deg, inside the flow tilt limit" %
+                                               min(rolls_deg))
+                if max(flow_gaps) > 0.5:
+                    raise NotAchievedException("flow stopped arriving for %.2f s" % max(flow_gaps))
+                if t_takeoff is not None:
+                    raise NotAchievedException("the vehicle took off at %.2f s" % t_takeoff)
+                if armed and (t_arm is None or t_stop - t_arm < 1):
+                    raise NotAchievedException("not armed at least 1 s before the timeout")
+
+            self.start_subtest("Disarmed")
+            check_timeout(armed=False)
+            self.start_subtest("Armed on the ground at zero throttle")
+            check_timeout(armed=True)
+        finally:
+            self.context_pop()
+
     def OpticalFlowLimits(self):
         '''test EKF navigation limiting'''
         self.set_parameters({
@@ -24080,6 +24191,7 @@ return update, 100
              self.OpticalFlowLimits,
             self.OpticalFlowTiltNoTimeout,
             self.OpticalFlowTiltTurnRecovery,
+            self.OpticalFlowTiltTimeoutNotFlying,
              self.OpticalFlowGPSLossAiding,
              self.OpticalFlowFallbackHeightLimit,
              self.OpticalFlowFallbackKeepsAbsolute,
