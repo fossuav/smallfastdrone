@@ -1543,6 +1543,12 @@ FLOW_OPTIONS's docs).
 - `Copter: describe FS_OPTIONS bit 6 with VALT's failsafe action` ("2 or 4"):
   belongs to whichever of #34696 and #32270 lands second.
 - `Copter: let throw mode hand off to VALT` (topup17), on no PR yet.
+  Its fix, `Copter: let a throw hand over to VALT without a position`
+  (`42353f7c05`, test `ThrowDropNoPositionNextModeVALT` `9dc9ebc818`,
+  2026-11-10), is on local branch `fix1110/throw-valt`, not yet on the
+  beta: VALT flies without a position, so it goes in
+  `nextmode_requires_position()`'s list with ALT_HOLD. Fold both with the
+  hand-off commit wherever it lands.
 - `AP_NavEKF3: skip the AID_NONE height reset in ground effect` and its test
   (refresh12 topup10, 2026-11-04) are now on #32972 (`13fe97b7ea`, test at
   `5bf36c15d4`), with topup11's armed check; the next refresh takes them

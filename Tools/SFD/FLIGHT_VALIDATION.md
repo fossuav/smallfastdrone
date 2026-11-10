@@ -10,6 +10,102 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-10: a customer's flow quad on `7b00f3b5`, five flights
+
+A customer's SmallFastDronev1 quad: one IMU (so one EKF core), ARK Flow
+with its range finder on DroneCAN, compass yaw, no GPS. Five flights on
+the beta head `7b00f3b5`: logs 15 and 16 (ALT_HOLD, LOITER to 17.3 m,
+FLOWHOLD), and three drops in THROW into VALT or LOITER (logs 18, 20,
+22). The same airframe's stock 4.7.3-beta1 logs flew only STABILIZE and
+ALT_HOLD, so there is no stock Loiter to compare with. Settings changed
+between flights; `EK3_OPTIONS` 92, `EK3_RNG_USE_HGT` 10, `EK3_FLOW_GAIN_H`
+12, `EK3_FLOW_QMIN` 0, `THROW_NEXTMODE` VALT.
+
+Replay: log16 exact, log20 near-exact while armed (0.026 m/s). Logs 15,
+18 and 22 diverge before arming and give no A/B: the logger dropped
+80,000-166,000 messages while disarmed (ATTITUDE_FAST from log18, with SD
+write stalls), and log15 has logging holes (`LOG_DISARMED` 0). The
+flights themselves dropped nothing.
+
+Worked as designed:
+- #32475: drops detected 0.24-0.25 s after release; upright from up to
+  137 deg in under 0.95 s; no motor saturation.
+- #32270 VALT: climb rate 0.20 m/s rms against demand, height 0.08-0.12 m
+  rms against target.
+- #33359: range finder height below 1.5 m, handing back at 1.50-1.54 m
+  and taking over at 0.97-1.03 m, steps 0.05-0.15 m; within 0.10 m rms of
+  the range. Replay of log16 without it: takeoff height 0.92 m below the
+  range.
+- #33478: Replay with bit 4 off, climb-rate error against the range rate
+  +0.30 -> -0.03 m/s (log20 VALT hover), +0.11 -> +0.02 (log16 descent);
+  one window slightly worse (-0.01 -> -0.08).
+- #34457 (floor held 0.10-0.13 m at all four touchdowns), #32232,
+  #32768 (refused correctly at the hand-held throw arms), #32553, #34362,
+  #34942 (reset at rest; a height-error pre-arm refusal while carried was
+  right), #34057 (yaw within 0.5 deg of the compass on the ground).
+- Above the range finder (log16, out of range high 251.8-265.0 s):
+  #33585's flat-ground height tracked the range within 0.1-0.9 m and
+  aiding held; #34380 flew 86.6 s above master's 9.5 m cap; #33569 scaled
+  the gains exactly 12/h above 12 m.
+- #33318: this airframe's drag fits 0.15-0.21 per m/s, so the 0.2 flown
+  from log18 is right; the stops at 0.01 overran 0.15-0.40 m.
+- Fast rates at 2 kHz with no drops, rate targets interpolated; #33366,
+  #30841, #33990, #32238 as designed.
+
+Problems in the code:
+- #33484: on log22 the flow sensor stopped tracking in LOITER at 1.4 m
+  (its speed fell from 2.2-2.6 to 0.2-0.5 m/s in one step at quality
+  87-93, the lean unchanged) and five lockout resets in 2.4 s each set the
+  correct ~2.7 m/s to the sensor's ~0. Each was followed by a 43-55 deg
+  pitch, and the pilot disarmed in the air. The same on log20 (an
+  all-zero frame) and log15 (an oscillation sample). `EK3_FLOW_QMIN`
+  cannot catch a sensor that reports good quality.
+- The throw's hand-off counted VALT as needing a position (the beta's own
+  `Copter: let throw mode hand off to VALT`): with none after the drop on
+  log20, it held level with no horizontal control for 1.7 s at 0.1-0.3 m,
+  and would have stayed in THROW after 5 s.
+- #34941, a hypothesis: carried at about 58 deg for 12 s on log20, flow
+  was withheld without a timeout and the EKF dead-reckoned to 3.7 m/s;
+  master would have timed out and restarted at zero.
+- Smaller: a 5.39 m height drop onto a ground-effect baro in log20's
+  crash landing (range lost with `touchdown_expected` clear; Replay
+  reproduces it); log15's EKF following prop-wash baro to -8.4 m while on
+  the ground with the props spinning, cleaned up by #34942; #33478's
+  switch-on after a 1.4 s gap overshooting 0.47 m.
+
+Not exercised: #32401, #31005, #34210, #34696, #32972, #32471, #34292,
+#34120, #34251, #33879, #34456, #34543, #34363, #32514, #32397, #33568,
+#34209, #34678.
+
+Setup advice given: the flow sensor did not track in the later flights
+(light or surface first); ARK Flow node dropouts of about 1.1 s;
+`EK3_FLOW_MAX` 7.4 is above its range and the EKF caps flow at 4.2 rad/s
+anyway; no compass motor compensation (a 23 deg yaw reset);
+`INS_HNTC2_REF` 1 moved the second notch off its 172 Hz line;
+ATTITUDE_FAST logging overruns the card.
+
+Fixes, 2026-11-10, none on the beta yet:
+- Throw into VALT: `nextmode_requires_position()` lists VALT with
+  ALT_HOLD (local branch `fix1110/throw-valt`, `42353f7c05`, test
+  `ThrowDropNoPositionNextModeVALT` `9dc9ebc818`). The test reproduces
+  log20's "waiting for position" and "staying in throw" without it; all
+  21 throw tests pass with it.
+- #34941: the withheld time counts against the flow timeout only while
+  `get_time_flying_ms()` says the vehicle flies (`fix1110/34941-beta`
+  `9b76ccf4cb`, test `6feb2001ad`; on the PR as `fix1110/34941`
+  `9609f96a0d`, test `2e71d2c61b`, both with `amend!` commits to
+  autosquash). Replay of log20 confirms the carry: reverted, the lane
+  times out at 102.3 s and keeps relative position, against 4.0 m/s and
+  7 s without one as flown. It does not explain the "lost position":
+  neither build had a position at 111.6 s. Logs 16, 61, 63, 65, 84, 87
+  and 88 replay identically with the fix.
+- #33484: no candidate survived the Replay set (logs A, B, C, SFD-O4 7,
+  65 and 73, the T25's, logs 16 and 20 here). Deferring a reset while the
+  gap grows faster than the accel bias allows removes the bad resets but
+  lengthens the phantom logs' errors (log C: 1.5 to 8.0 s over 3 m/s).
+  Not fixed; the narrow null-frame guard (log20's 124.1 s reset) and
+  AC_PosControl absorbing velocity resets are the open options.
+
 ## 2026-11-08: the T25 on `7b00f3b5`, a flow quality latch indoors
 
 The T25's first flight on refresh13 code: `7b00f3b5` is the beta head,
