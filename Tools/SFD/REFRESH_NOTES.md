@@ -17,8 +17,43 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup5
-  (2026-11-11, a fast-forward over topup4): #35119, new to `prs.txt`,
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup6
+  (2026-11-11, a fast-forward over topup5), three answers to the review
+  bot's reviews of the same day:
+  - #33484: a restarted AGL KF is no longer confirmed by copies of one
+    reading. The confirmation counted the EKF's 50 ms polls, and
+    MAVLink, DroneCAN, MSP and Lua backends report a reading as Good for
+    500 ms, so one reading after an outage restarted the AGL KF and
+    confirmed it 320 ms later. Both vehicles' range finders are such
+    backends (SFD-O4 DroneCAN, the T25 MAVLink). The DAL now logs each
+    range finder's `last_reading_ms` in a new message, RRNJ
+    (`965211c6cc`, Replay `ed94ea5bc4`), and a sample whose median is a
+    reading one of its sensor's last two samples was does not count
+    towards the confirmation; any sample that disagrees still starts the
+    run again (`35b31b96a7`, test leg `9d56317c8d`). Each reading counts
+    at most once, and a steady range still confirms at its reading rate.
+    Unflown, and like topup2 it acts only after more than 5 s without a
+    range. On #33484 as `a657016f05`..`b135aa93fd` (not yet pushed), so
+    the next refresh takes them from the PR head and these copies drop
+    out.
+  - Logs from topup6 on carry RRNJ. A Replay built before it ignores
+    RRNJ and counts every sample, so it departs from the flight after a
+    held reading restarts the AGL KF; replay them with topup6 or later.
+    Older logs have no RRNJ and replay as before.
+  - #32401: the pending arm's four messages use `GCS_SEND_TEXT()`
+    (`53e0b9c8fe`); #32475: a THROW_NEXTMODE that is not compiled in
+    holds a position in throw (`cc0af6427f`). Neither changes what these
+    builds do, which compile every mode. On the PRs as `9a088df07f` and
+    `9a0a72406d` (not yet pushed).
+  - The 22 tests that set the AGL KF option, inject a flow lockout or
+    cover the throw and pending arm changes pass, Replay included;
+    copter, plane and Replay build; `check_param_tables.py` is clean.
+    Replayed, the two fleet logs that reach a restart confirmation (the
+    TD25's BLK 03 and JK-4C log 62) give the same output on every core.
+  - SmallFastDronev1 md5 `e54e2ba4` (39,924 bytes free), MicoAir743v2 md5
+    `da5e2c6f` (232,576 bytes free), both `.apj`, built from
+    `cc0af6427f`. Nothing to set.
+- topup5 (2026-11-11, a fast-forward over topup4): #35119, new to `prs.txt`,
   adds `smart_rtl:reset_home()`, which restarts the SmartRTL path in
   flight at the current position, and the applet `smartrtl-reset.lua`,
   which does it from an RC switch (`d87a42198e`..`4414a4c83e`, 13

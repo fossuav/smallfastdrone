@@ -1,20 +1,22 @@
-# SFD flight card: refresh14 topup5
+# SFD flight card: refresh14 topup6
 
 The flights still to fly, in order. Results go in `FLIGHT_VALIDATION.md`;
 earlier cards are in git history.
 
-Firmware: refresh14 topup5, built from `28e67aa404`: refresh13 topup1's
+Firmware: refresh14 topup6, built from `cc0af6427f`: refresh13 topup1's
 code (`896e11846d`, flown by SFD-O4 on 2026-11-07 and by the T25 as
 `7b00f3b5` on 2026-11-08) plus topup1's two fixes from a customer quad's
 flights, the throw into VALT without a position and #34941's timeout for
 a vehicle that is not flying, topup2's #33484 lockout recovery that
 waits for a restarted AGL KF to be confirmed, topup3's replay event for
-a bootstrap reset, topup4's throw hand-over with THROW_ALT_DCSND 0, and
+a bootstrap reset, topup4's throw hand-over with THROW_ALT_DCSND 0,
 topup5's SmartRTL return point reset (#35119), which also changes how
-arming resets the SmartRTL path (`REFRESH_NOTES.md`). Nothing to set.
+arming resets the SmartRTL path, and topup6's AGL KF restart that copies
+of one range reading no longer confirm (`REFRESH_NOTES.md`). Nothing to
+set.
 
-- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `058e5419`.
-- T25: MicoAir743v2 `arducopter.apj`, md5 `06fb89ef`.
+- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `e54e2ba4`.
+- T25: MicoAir743v2 `arducopter.apj`, md5 `da5e2c6f`.
 - topup5: any SmartRTL return on either vehicle exercises the new arming
   reset and should come home as before; the in-flight reset itself needs
   `smartrtl-reset.lua` installed and a Scripting1 (300) switch.
@@ -97,3 +99,7 @@ Flow only, no compass, on the second MicoAir743v2 (board `00360049`).
   still above the release point when it is upright: the customer quad's
   tosses are the case, and a hand toss upwards on either vehicle would
   show it (expect the hand-over near the top, not at the hand).
+- topup6 acts only where topup2 does, on a lockout pending when the range
+  finder comes back after more than 5 s without a reading, and then only
+  when the first reading back is held. Its other two changes do nothing
+  on these builds. Its logs need a topup6 Replay.

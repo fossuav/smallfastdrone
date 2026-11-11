@@ -48,6 +48,13 @@ Good readings while flying.
   beta as refresh14 topup2 (`c3c24b9c7f`, `REFRESH_NOTES.md`): a reset
   now waits for three range samples in a row to confirm a restarted AGL
   KF, and replayed, this one is refused (#33484).
+  The samples were the EKF's 50 ms polls, though, and this MAVLink range
+  finder reports a reading as Good for 500 ms, so one isolated reading
+  after an outage could still confirm its own restart in 320 ms (found
+  by the review bot, 2026-11-11). Fixed on #33484 (`daaca832c4`) and on
+  the beta as refresh14 topup6 (`35b31b96a7`): the DAL logs each range
+  finder's reading time, and a sample from a reading already counted
+  does not count again. BLK 03 replays unchanged.
   The resets on a near-zero height are not fixed: the readings were wrong
   but consistent.
 - #33484's quality latch fired at 582.13 s (quality 57) and released in
