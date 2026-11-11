@@ -951,7 +951,12 @@ Tests pass:
 
 After:
 
-15. Restore the SFD `README.md` and `Tools/SFD/` from the previous branch.
+15. Restore `Tools/SFD/` from the previous branch. The base carries the SFD
+    `README.md` with only what the base has; add a `README:` commit on top
+    that brings in the previous branch's entries for the prs.txt PRs, in
+    their sections, and its Upstreaming Order, keeping the base's text
+    elsewhere. A PR promoted into the base moves its README entry into the
+    base's README.
 16. `Tools/SFD/audit_dropped.py <previous branch> <new branch>`: anything the
     previous branch carried that is in neither the base nor prs.txt is lost by a
     refresh, silently - that is how refresh5 dropped six merged PRs.
@@ -980,6 +985,12 @@ After:
   LED`) conflict on SmallFastDronev1: drop its hunk, as `sfd_quad.inc`
   already sets the define. A new SFD define for these boards goes in
   `sfd_quad.inc` and `sfd_quad_undo.inc`.
+
+- Next refresh, from the 2026-11-11 base: the base's README (`SFD
+  Documentation`, `6563bcf709`) rewrites the target section as "TBS_LUCID_H7
+  and SmallFastDronev1 Targets" for the -O2 build. The beta's README
+  predates that, so step 15's README commit takes only the PR entries and
+  the Upstreaming Order from it.
 
 - Replay does not follow a bootstrap reset (found 2026-11-11):
   `NavEKF3::InitialiseFilterBootstrap()` (#32202, merged upstream) logs no
@@ -1416,7 +1427,13 @@ SmallFastDronev1, 39,556 on TBS_LUCID_H7 and 41.7 KB on V3 and OEM; on the
 base alone about 72 KB and 74 KB. A refresh that runs short of flash can
 cut further in `sfd_quad.inc` (and its undo): ADS-B 10 KB, proximity
 18 KB, precision landing 6 KB, FrSky telemetry 10 KB, GPS blending 3 KB,
-measured at -Os. The base is `5064610b03`; `.7` is `258e843e68`.
+measured at -Os. `.7` is `258e843e68`.
+
+`SFD Documentation` (`6563bcf709`, 2026-11-11) followed on `5064610b03`, a
+fast-forward: the SFD README listing only what the base carries and the
+`sfd_logo2.png` it shows. The 4.7.0 branch added the logo inside its README
+commit, so restoring README.md alone at a refresh lost it. The base is
+`6563bcf709`.
 
 Rebuilt 2026-10-22 on `upstream/ArduPilot-4.7` `fbd0a3160c`: 4.7.2, plus
 three ChibiOS fixes (atomic runtime pin mode changes and toggles, the same for
@@ -1678,7 +1695,9 @@ FLOW_OPTIONS's docs).
   `ArduCopter/version.h` is "SmallFastDrone V<version>", not "ArduCopter". SFD-only,
   never a PR. The base carries upstream's version.h, so re-apply it on every
   refresh and whenever 4.7 bumps the version (4.7.0 had it; the 4.7.1 base lost it).
-- The SFD README and all of `Tools/SFD` (the base carries neither).
+- The SFD README's prs.txt entries and Upstreaming Order, as a `README:`
+  commit on the base's README (step 15), and all of `Tools/SFD`, which the
+  base does not carry.
 - Tests the rebuild wipes because they live on the branch, not in any PR's own
   diff. Re-fold them from the previous branch with `refold_methods.py`, then
   their registrations (`check_suite_load.py --against` lists what is missing):
