@@ -201,14 +201,14 @@ uint32_t RGBLed::get_colour_sequence(void) const
 bool RGBLed::ahrs_has_non_gps_position() const
 {
     const auto &ahrs = AP::ahrs();
-    if (!ahrs.have_inertial_nav() || ahrs.active_backend_configured_to_use_gps()) {
+    if (!ahrs.have_inertial_nav() || ahrs.using_gps()) {
         return false;
     }
     if (!AP_Notify::flags.armed) {
-        return ahrs.configured_backend_has_status(AP_AHRS::Status::PRED_HORIZ_POS_REL);
+        return ahrs.has_status(AP_AHRS::Status::PRED_HORIZ_POS_REL);
     }
-    return ahrs.configured_backend_has_status(AP_AHRS::Status::HORIZ_POS_REL) &&
-           !ahrs.configured_backend_has_status(AP_AHRS::Status::CONST_POS_MODE);
+    return ahrs.has_status(AP_AHRS::Status::HORIZ_POS_REL) &&
+           !ahrs.has_status(AP_AHRS::Status::CONST_POS_MODE);
 }
 #endif
 
