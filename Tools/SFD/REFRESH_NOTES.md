@@ -1724,6 +1724,17 @@ FLOW_OPTIONS's docs).
   topup3, 2026-10-29): owed to the base's SFD hwdefs, where a define that
   keeps an SFD board as it was belongs (step 16); carried on the branch
   until the base is next rebuilt.
+- `AP_NavEKF3: say whether the active source set has a horizontal
+  source`, `AP_AHRS: pass on whether the active source set has a
+  horizontal source`, `AP_Notify: show a non-GPS position on RGB LEDs`
+  and `hwdef: SFD boards show a non-GPS position on the LED`
+  (2026-11-11), on no PR yet, bench-checked on a flow copter: a green
+  double flash disarmed and solid green armed when the active source set
+  uses no GPS, names a horizontal source of its own and the AHRS has a
+  position, behind AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED. A GPS set
+  without a fix, or a set with no horizontal source, stays blue even when
+  FuseAllVelocities brings another set's flow into a position. The hwdef
+  half is owed to the base's SFD hwdefs with the EKF reset define.
 - #30956's `11093ee6bc` (wait_armed) and `ad1ce89ce3` (AP_Logger reserved
   space), and 4.7's DataFlashErase body over the PR heads' (until 4.7 has
   #30956; see "DataFlashErase").
