@@ -157,6 +157,12 @@ uint32_t RGBLed::get_colour_sequence(void) const
             return sequence_armed;
         }
 #endif
+#if AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED
+        // solid green if armed with a position from non-GPS sources
+        if (ahrs_has_non_gps_position()) {
+            return sequence_armed;
+        }
+#endif
         // solid blue if armed with no GPS lock
         return sequence_armed_no_gps_or_no_location;
     }
@@ -173,10 +179,43 @@ uint32_t RGBLed::get_colour_sequence(void) const
             return sequence_disarmed_good_gps_and_location;
         }
     }
+#if AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED
+    // double flash green if disarmed with a position from non-GPS sources
+    if (ahrs_has_non_gps_position()) {
+        return sequence_disarmed_relative_position;
+    }
+#endif
 #endif
 
     return sequence_disarmed_bad_gps_or_no_location;
 }
+
+#if AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED
+/*
+  true if the active EKF source set navigates horizontally without GPS
+  (optical flow, visual odometry, wheel encoders) and the AHRS has a
+  position from it. A set that uses GPS, or names no horizontal source
+  of its own, never qualifies, even when EK3_SRC_OPTIONS fuses another
+  set's flow into a position, so a vehicle waiting for its GPS or on a
+  no-position set stays blue. The position test is the one Copter applies
+  before Loiter: disarmed it accepts the expected position, armed it
+  needs a current one and not constant-position mode. No origin or
+  lat/lon is needed.
+ */
+bool RGBLed::ahrs_has_non_gps_position() const
+{
+    const auto &ahrs = AP::ahrs();
+    if (ahrs.using_gps() ||
+        !ahrs.active_source_set_has_horizontal_source()) {
+        return false;
+    }
+    if (!AP_Notify::flags.armed) {
+        return ahrs.has_status(AP_AHRS::Status::PRED_HORIZ_POS_REL);
+    }
+    return ahrs.has_status(AP_AHRS::Status::HORIZ_POS_REL) &&
+           !ahrs.has_status(AP_AHRS::Status::CONST_POS_MODE);
+}
+#endif
 
 uint32_t RGBLed::get_colour_sequence_traffic_light(void) const
 {

@@ -139,3 +139,10 @@
 #ifndef AP_NOTIFY_BUZZER_ENABLED
 #define AP_NOTIFY_BUZZER_ENABLED 0
 #endif
+
+// RGB LEDs also show a position when the active EKF source set uses no
+// GPS (optical flow, visual odometry): green double flash disarmed,
+// solid green armed
+#ifndef AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED
+#define AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED 0
+#endif

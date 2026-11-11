@@ -68,6 +68,10 @@ private:
     uint32_t get_colour_sequence() const;
     uint32_t get_colour_sequence_obc() const;
     uint32_t get_colour_sequence_traffic_light() const;
+#if AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED
+    // true if the active sources use no GPS and the AHRS has a position from them
+    bool ahrs_has_non_gps_position() const;
+#endif
 
     uint8_t get_brightness(void) const;
 
@@ -103,6 +107,9 @@ private:
     const uint32_t sequence_disarmed_good_dgps_and_location = DEFINE_COLOUR_SEQUENCE_ALTERNATE(GREEN,BLACK);
     const uint32_t sequence_disarmed_good_gps_and_location = DEFINE_COLOUR_SEQUENCE_SLOW(GREEN);
     const uint32_t sequence_disarmed_bad_gps_or_no_location = DEFINE_COLOUR_SEQUENCE_SLOW(BLUE);
+#if AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED
+    const uint32_t sequence_disarmed_relative_position = DEFINE_COLOUR_SEQUENCE(GREEN,GREEN,BLACK,BLACK,GREEN,GREEN,BLACK,BLACK,BLACK,BLACK);
+#endif
 
     uint8_t last_step;
     enum class Source {
