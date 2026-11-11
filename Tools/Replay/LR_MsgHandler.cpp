@@ -77,6 +77,7 @@ void LR_MsgHandler_REV2::process_message(uint8_t *msgbytes)
     case AP_DAL::Event::setSourceSet0 ... AP_DAL::Event::setSourceSet2:
     case AP_DAL::Event::setInhibitAccelBiasLearning:
     case AP_DAL::Event::unsetInhibitAccelBiasLearning:
+    case AP_DAL::Event::bootstrapReset:
         break;
     }
     if (replay_force_ekf3) {
@@ -143,6 +144,9 @@ void LR_MsgHandler_REV3::process_message(uint8_t *msgbytes)
         break;
     case AP_DAL::Event::unsetInhibitAccelBiasLearning:
         ekf3.setInhibitAccelBiasLearning(false);
+        break;
+    case AP_DAL::Event::bootstrapReset:
+        ekf3.InitialiseFilterBootstrap();
         break;
     }
 
