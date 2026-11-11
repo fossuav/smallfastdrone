@@ -10,6 +10,55 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-10: the T25 outdoors and the TD25 indoors with a broken range finder, `7b00f3b5`
+
+Both flow only (MAVLink flow and range finder, no GPS or compass),
+`EK3_OPTIONS` 92, baro height, `EK3_FLOW_QMIN` 60, `FS_EKF_ACTION` 4. All
+three logs replay exactly.
+
+The T25 on its second board (`00360049`), VALT and Loiter outdoors, 199 s:
+clean. Range finder Good throughout, flow quality median 120. Loiter's
+settled hold 0.05-0.11 m median from target; stops from 0.9-1.6 m/s in
+0.8-1.0 s, 0.16 m past at most. Height 0.02-0.11 m rms from target. One
+lockout reset in the air (#33484), right: Loiter entered at about 5 m/s, 1
+m up, where `EK3_FLOW_MAX` 2.5 caps the measurable speed at 2.5 m/s; the
+reset took 2.2 m/s and the flow agreed after it. The EKF height rose up to
+1.95 m against the range while the baro warmed 39 -> 50 C, outdoors over
+unknown ground, so baro creep is not separated from terrain.
+
+The TD25 (`00480035`), two VALT flights indoors, 154 s and 170 s, with the
+range finder compromised (operator report): it read 0 m (out of range low)
+for 98% of flight 1 and was Good for only 41% of flight 2, with 0.019 m
+Good readings while flying.
+- Every time it was out about 5 s the EKF dropped its relative position
+  and terrain height together, and the EKF failsafe followed ("EKF
+  variance: position lost"): all of flight 1 from 42 s, and four times in
+  flight 2. VALT needs no position, so the pilot saw no change; Loiter
+  would have been refused.
+- #33484: nine lockout resets in the air, none reaching the control
+  (VALT). Seven scaled the flow by a near-zero AGL KF height (0.05-0.23 m
+  from the 0 m and 0.019 m readings), taking the velocity to 0.1-0.6 m/s,
+  4.99 -> 0.12 m/s at -12 deg pitch once. One at 507.74 s took 15.28 m/s
+  from a single flow sample: the range had just come back (6.3 m after
+  20 s at 0) and the AGL KF re-initialised to it in the same 0.1 s as the
+  reset. After 5 s without a range the AGL KF restarts from the next
+  sample and the reset's "range settled" check compares it with that same
+  sample, so the first range after an outage passes every range gate; and
+  the reset uses one flow sample however good the height. Fixed for the
+  next topup: a reset now waits for three range samples in a row to
+  confirm a restarted AGL KF, and replayed, this one is refused (#33484).
+  The resets on a near-zero height are not fixed: the readings were wrong
+  but consistent.
+- #33484's quality latch fired at 582.13 s (quality 57) and released in
+  the air 2.4 s later.
+- #34457's floor hold pinned the AGL KF to its floor in the air: at
+  40.74 s in flight 1 its height snapped from 0.36 to 0.05 m while the
+  sensor read 0 at 1-1.4 m, the known limit its comment states (a sensor
+  returning zero on a lost return), and its coast stop held the AGL KF
+  velocity at 0 meanwhile.
+- A third log (boot 185, recorded before the two flights) was powered
+  17.5 min and never armed; the EKF stayed sane.
+
 ## 2026-11-10: a customer's flow quad on `7b00f3b5`, five flights
 
 A customer's SmallFastDronev1 quad: one IMU (so one EKF core), ARK Flow
