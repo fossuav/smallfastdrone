@@ -833,7 +833,7 @@ void AP_Arming_Copter::set_pending_arm(bool with_airmode)
     _pending_arm_last_check_ms = 0;
     _pending_arm_last_display_ms = now_ms;
 
-    gcs().send_text(MAV_SEVERITY_INFO, "Arm pending");
+    GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Arm pending");
 }
 
 // clear_pending_arm - cancel pending arm state
@@ -841,7 +841,7 @@ void AP_Arming_Copter::clear_pending_arm()
 {
     if (_pending_arm) {
         AP_Arming::clear_pending_arm();
-        gcs().send_text(MAV_SEVERITY_INFO, "Arm pending cancelled");
+        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Arm pending cancelled");
     }
 }
 
@@ -878,7 +878,7 @@ void AP_Arming_Copter::update_pending_arm()
                     copter.ap.armed_with_airmode_switch = true;
                 }
                 _pending_arm = false;
-                gcs().send_text(MAV_SEVERITY_INFO, "Arm pending complete");
+                GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Arm pending complete");
                 return;
             }
         }
@@ -897,7 +897,7 @@ void AP_Arming_Copter::update_pending_arm()
         (now_ms - _pending_arm_start_ms >= uint32_t(timeout_s * 1000)) &&
         !AP::ahrs().pre_arm_check(false, failure_msg, sizeof(failure_msg))) {
         if (AP::ahrs().reset_configured_backend()) {
-            gcs().send_text(MAV_SEVERITY_INFO, "Arm pending: EKF bootstrap reset");
+            GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Arm pending: EKF bootstrap reset");
         }
         // clear so we don't reset again
         _pending_arm_start_ms = 0;
