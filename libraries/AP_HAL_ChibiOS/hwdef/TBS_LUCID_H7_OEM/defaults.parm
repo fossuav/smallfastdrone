@@ -8,3 +8,6 @@ RELAY4_DEFAULT 1
 RELAY2_DEFAULT 1
 # Support HD VTX in parallel with the on-board analog OSD
 OSD_TYPE2 5
+
+# SmallFastDrone behaviour-preserving defaults
+@include ../include/sfd_defaults.parm
