@@ -5,5 +5,5 @@
 
 // reset_home(), the in-flight return point reset, is only reachable from Lua scripting
 #ifndef AP_SMARTRTL_RESET_ENABLED
-#define AP_SMARTRTL_RESET_ENABLED AP_SCRIPTING_LUA_ENABLED
+#define AP_SMARTRTL_RESET_ENABLED AP_SCRIPTING_ENABLED
 #endif
