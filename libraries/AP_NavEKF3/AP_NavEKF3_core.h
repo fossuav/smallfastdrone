@@ -664,6 +664,7 @@ private:
         ftype       rng;            // distance measured by the range sensor (m)
         uint8_t     sensor_idx;     // integer either 0 or 1 uniquely identifying up to two range sensors
         bool        onFloor;        // the reading was at or below the on-ground range before the position offset correction
+        bool        repeated;       // true when the median is a reading one of the sensor's last two samples was, as while its backend holds one
     };
 
     struct rng_bcn_elements : EKF_obs_element_t {
@@ -1474,8 +1475,9 @@ private:
     ftype aglKfLastRngHgt;          // tilt-corrected range of the last range sample fused (m)
     bool aglKfHeldOnFloor;          // AGL KF held on its floor until the range finder reads again
     // after a restart from one range sample, the further samples in a row that must agree with the
-    // AGL KF before a flow lockout recovery may scale by its height; 0 once confirmed. Three medians
-    // in a row span five raw readings of the range finder, so no single reading can confirm one
+    // AGL KF before a flow lockout recovery may scale by its height; 0 once confirmed. A sample from
+    // a reading an earlier sample came from is a copy and does not count, so each reading counts at
+    // most once, however long its backend holds it
     static const uint8_t AGLKF_RESTART_CONFIRM_SAMPLES = 3;
     // a sample agrees within this many standard deviations of the AGL KF's innovation: inside its own
     // gate (EK3_RNG_I_GATE, 5 by default), so a sample it fuses but is pulled by does not confirm it,
@@ -1582,6 +1584,8 @@ private:
     ftype storedRngMeas[DOWNWARD_RANGEFINDER_MAX_INSTANCES][3];              // Ringbuffer of stored range measurements for dual range sensors
     uint32_t storedRngMeasTime_ms[DOWNWARD_RANGEFINDER_MAX_INSTANCES][3];    // Ringbuffers of stored range measurement times for dual range sensors
     uint8_t rngMeasIndex[DOWNWARD_RANGEFINDER_MAX_INSTANCES];                // Current range measurement ringbuffer index for dual range sensors
+    uint32_t storedRngReadTime_ms[DOWNWARD_RANGEFINDER_MAX_INSTANCES][3];    // the backend's reading time for each stored range measurement
+    uint32_t rngLastReadTime_ms[DOWNWARD_RANGEFINDER_MAX_INSTANCES][2];      // reading times of each sensor's last two samples written to storedRange
 #endif
 
     // body frame odometry fusion
