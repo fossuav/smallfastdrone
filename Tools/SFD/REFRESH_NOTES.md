@@ -17,9 +17,26 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup2
-  (2026-11-11, a fast-forward): #33484's lockout recovery waits for range
-  samples to confirm an AGL KF that has just restarted (`c3c24b9c7f`, test
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup3
+  (2026-11-11, a fast-forward over topup2): a commanded EKF3 bootstrap
+  reset, from the EKF_RESET switch or #32401's pending arm, is logged as
+  `AP_DAL::Event::bootstrapReset` (18) and Replay re-initialises the cores
+  there (`82effad3ba`, `7df06549d3`, `2f5de96b68`, test `2e11eaa1d3`).
+  No change to what the vehicle does. On #32401 as `9987a21af2`..`9e187a7e03`
+  (not yet pushed), so the next refresh takes them from the PR head; its
+  Replay commit is written against master's `apply_event()` handlers, which
+  the 4.7 base does not have, so expect a stop in
+  `Tools/Replay/LR_MsgHandler.cpp` and resolve it as `7df06549d3`.
+  - Replay (all eight cases, BootstrapReset new), EKFBootstrapReset,
+    EKFBootstrapResetStaticYaw and PendingArmOnSwitch pass; copter, plane
+    and Replay build; `check_param_tables.py` is clean. On the PR branch
+    the BootstrapReset case fails with 143130 mismatched fields with the
+    logging line removed.
+  - SmallFastDronev1 md5 `4bcebe7d` (41,140 bytes free), MicoAir743v2 md5
+    `585ca853` (233,688 bytes free), both `.apj`, built from
+    `2e11eaa1d3`. Nothing to set.
+- topup2 (2026-11-11, a fast-forward): #33484's lockout recovery waits
+  for range samples to confirm an AGL KF that has just restarted (`c3c24b9c7f`, test
   leg in `EK3_FlowAxisLockoutRecovery` `cb143684fa`), from the TD25's
   flights with a compromised range finder (`FLIGHT_VALIDATION.md`,
   2026-11-10). Unflown. The same two commits are on the PR since
@@ -892,9 +909,10 @@ After:
   which carries on from the state the reset discarded. Upstream master
   has the same gap. 23 of the 284 logs in the 2026-11-11 fleet replay
   have one; a T25 log on `0cb49e7d` reset a filter 33 deg out before
-  arming and replays at 70 m/s. Fix: a new `AP_DAL::Event` the reset logs
-  and Replay acts on (the DAL section of the EKF3 playbook). Until then a
-  replay is valid only up to the first bootstrap reset.
+  arming and replays at 70 m/s. Fixed in topup3 (#32401): the reset logs
+  `AP_DAL::Event::bootstrapReset` and Replay acts on it. Logs recorded
+  before topup3 hold no event, so their replays stay valid only up to the
+  first bootstrap reset.
 
 - topup12 (2026-10-08) carries #33478's step hold from `fix/33478`
   (`e0d009ff31`, `6185109557`) ahead of the PR, for the flight that repeats
