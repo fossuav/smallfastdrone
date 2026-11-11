@@ -94,6 +94,7 @@ static void apply_event(NavEKF2 &ekf2, AP_DAL::Event event)
     case AP_DAL::Event::setSourceSet0 ... AP_DAL::Event::setSourceSet2:
     case AP_DAL::Event::setInhibitAccelBiasLearning:
     case AP_DAL::Event::unsetInhibitAccelBiasLearning:
+    case AP_DAL::Event::bootstrapReset:
         break;
     }
 }
@@ -129,6 +130,9 @@ static void apply_event(NavEKF3 &ekf3, AP_DAL::Event event)
         break;
     case AP_DAL::Event::unsetInhibitAccelBiasLearning:
         ekf3.setInhibitAccelBiasLearning(false);
+        break;
+    case AP_DAL::Event::bootstrapReset:
+        ekf3.InitialiseFilterBootstrap();
         break;
     }
 }
