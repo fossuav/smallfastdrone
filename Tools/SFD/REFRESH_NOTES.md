@@ -17,9 +17,33 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup1
-  (2026-11-10, a fast-forward): two fixes from a customer quad's flights on
-  `7b00f3b5` (`FLIGHT_VALIDATION.md`, 2026-11-10), neither flown.
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup2
+  (2026-11-11, a fast-forward): #33484's lockout recovery waits for range
+  samples to confirm an AGL KF that has just restarted (`c3c24b9c7f`, test
+  leg in `EK3_FlowAxisLockoutRecovery` `cb143684fa`), from the TD25's
+  flights with a compromised range finder (`FLIGHT_VALIDATION.md`,
+  2026-11-10). Unflown. The same two commits are on the PR since
+  2026-11-11 (`e424f24f58`, `799fb45623`), so the next refresh takes them
+  from the PR head and these copies drop out.
+  - The 21 tests that set the AGL KF option or inject a flow lockout pass
+    (EK3_FlowAxisLockoutRecovery, OSDEKFLanes, the OpticalFlowAGLKf*,
+    EK3_AglKf*, EK3_RngHgtSwitch* and FlowFocusHold* tests); copter, plane
+    and Replay build; `check_param_tables.py` is clean.
+  - Replay of every replayable log from one tester's fleet, 284 of them
+    from 4.6.3 to `7b00f3b5`, through topup1 and topup2: two differ. The
+    TD25's BLK 03 loses its 15.3 m/s reset as intended. JK-4C log 62 (an
+    older SFD 4.7.2 build) defers two resets 0.3 s on the ground before
+    takeoff; the extra reset that follows tips the burst pause into 20 s
+    and later 40 s pauses, so its IMU1 core spends 38.0 s instead of
+    24.7 s over 1 m/s of flow mismatch while IMU0's falls from 34.7 s to
+    19.5 s (VALT, so nothing reached the control). Details in the private
+    analysis repo.
+  - SmallFastDronev1 md5 `04564bef` (41,156 bytes free), MicoAir743v2 md5
+    `bcb34f6b` (233,696 bytes free), both `.apj`, built from
+    `cb143684fa`. Nothing to set. The lock stays at refresh14's heads.
+- topup1 (2026-11-10, a fast-forward): two fixes from a customer quad's
+  flights on `7b00f3b5` (`FLIGHT_VALIDATION.md`, 2026-11-10), neither
+  flown.
   - The throw into VALT hands over without a position (`8449cb6dcc`,
     test `ThrowDropNoPositionNextModeVALT` `cbb8e4c762`): VALT joins
     ALT_HOLD in `nextmode_requires_position()`. Beta-local, like the
@@ -860,6 +884,17 @@ After:
 ### Owed, not tied to one refresh
 
 - Flight evidence for refresh13 topup1: `FIELD_PLAN.md`.
+
+- Replay does not follow a bootstrap reset (found 2026-11-11):
+  `NavEKF3::InitialiseFilterBootstrap()` (#32202, merged upstream) logs no
+  DAL event, so the EKF_RESET switch and #32401's "Arm pending: EKF
+  bootstrap reset" re-initialise the cores in flight and not in Replay,
+  which carries on from the state the reset discarded. Upstream master
+  has the same gap. 23 of the 284 logs in the 2026-11-11 fleet replay
+  have one; a T25 log on `0cb49e7d` reset a filter 33 deg out before
+  arming and replays at 70 m/s. Fix: a new `AP_DAL::Event` the reset logs
+  and Replay acts on (the DAL section of the EKF3 playbook). Until then a
+  replay is valid only up to the first bootstrap reset.
 
 - topup12 (2026-10-08) carries #33478's step hold from `fix/33478`
   (`e0d009ff31`, `6185109557`) ahead of the PR, for the flight that repeats

@@ -1,16 +1,18 @@
-# SFD flight card: refresh14 topup1
+# SFD flight card: refresh14 topup2
 
 The flights still to fly, in order. Results go in `FLIGHT_VALIDATION.md`;
 earlier cards are in git history.
 
-Firmware: refresh14 topup1, built from `654ae03aa9`: refresh13 topup1's
+Firmware: refresh14 topup2, built from `cb143684fa`: refresh13 topup1's
 code (`896e11846d`, flown by SFD-O4 on 2026-11-07 and by the T25 as
-`7b00f3b5` on 2026-11-08) plus two fixes from a customer quad's flights,
-the throw into VALT without a position and #34941's timeout for a vehicle
-that is not flying (`REFRESH_NOTES.md`). Nothing to set.
+`7b00f3b5` on 2026-11-08) plus topup1's two fixes from a customer quad's
+flights, the throw into VALT without a position and #34941's timeout for
+a vehicle that is not flying, and topup2's #33484 lockout recovery that
+waits for a restarted AGL KF to be confirmed (`REFRESH_NOTES.md`).
+Nothing to set.
 
-- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `8af6e456`.
-- T25: MicoAir743v2 `arducopter.apj`, md5 `d6c1920b`.
+- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `04564bef`.
+- T25: MicoAir743v2 `arducopter.apj`, md5 `bcb34f6b`.
 
 Fly every flight with `LOG_REPLAY 1` and `LOG_DISARMED 2`, and STABILIZE
 on a switch.
@@ -81,3 +83,6 @@ Flow only, no compass, on the second MicoAir743v2 (board `00360049`).
   position at its end, and #34941's timeout only on a vehicle held tilted
   past the flow tilt limit for over 5 s while not flying (carried before a
   throw).
+- topup2's fix acts only on a lockout pending when the range finder comes
+  back after more than 5 s without a reading ("flow recovery deferred,
+  range restarted"); a range finder that reads throughout never meets it.

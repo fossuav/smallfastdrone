@@ -44,9 +44,10 @@ Good readings while flying.
   reset. After 5 s without a range the AGL KF restarts from the next
   sample and the reset's "range settled" check compares it with that same
   sample, so the first range after an outage passes every range gate; and
-  the reset uses one flow sample however good the height. Fixed for the
-  next topup: a reset now waits for three range samples in a row to
-  confirm a restarted AGL KF, and replayed, this one is refused (#33484).
+  the reset uses one flow sample however good the height. Fixed on the
+  beta as refresh14 topup2 (`c3c24b9c7f`, `REFRESH_NOTES.md`): a reset
+  now waits for three range samples in a row to confirm a restarted AGL
+  KF, and replayed, this one is refused (#33484).
   The resets on a near-zero height are not fixed: the readings were wrong
   but consistent.
 - #33484's quality latch fired at 582.13 s (quality 57) and released in
