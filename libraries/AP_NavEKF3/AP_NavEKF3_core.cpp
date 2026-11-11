@@ -340,6 +340,7 @@ void NavEKF3_core::InitialiseVariables()
     aglKfVelTestRatio = 0;
     aglKfLastRngHgt = 1.0e6f;   // no reading yet, so not near the floor
     aglKfHeldOnFloor = false;
+    aglKfRestartConfirm = 0;
 #endif
     yawResetAngle = 0.0f;
     lastYawReset_ms = 0;

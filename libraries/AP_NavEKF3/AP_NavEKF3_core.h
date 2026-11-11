@@ -1473,6 +1473,15 @@ private:
     static constexpr ftype aglKfFloorHoldCoast_m = 0.3f;
     ftype aglKfLastRngHgt;          // tilt-corrected range of the last range sample fused (m)
     bool aglKfHeldOnFloor;          // AGL KF held on its floor until the range finder reads again
+    // after a restart from one range sample, the further samples in a row that must agree with the
+    // AGL KF before a flow lockout recovery may scale by its height; 0 once confirmed. Three medians
+    // in a row span five raw readings of the range finder, so no single reading can confirm one
+    static const uint8_t AGLKF_RESTART_CONFIRM_SAMPLES = 3;
+    // a sample agrees within this many standard deviations of the AGL KF's innovation: inside its own
+    // gate (EK3_RNG_I_GATE, 5 by default), so a sample it fuses but is pulled by does not confirm it,
+    // and wide enough that a right one misses only 0.3% of the time, costing one more sample
+    static constexpr ftype aglKfRestartConfirmSigma = 3.0f;
+    uint8_t aglKfRestartConfirm;
 #endif
     ftype terrainState;             // terrain position state (m)
     ftype prevPosN;                 // north position at last measurement
