@@ -77,6 +77,7 @@ void NavEKF3_core::readRangeFinder(void)
             }
             storedRngMeasTime_ms[sensorIndex][rngMeasIndex[sensorIndex]] = imuSampleTime_ms - 25;
             storedRngMeas[sensorIndex][rngMeasIndex[sensorIndex]] = range_distance;
+            storedRngReadTime_ms[sensorIndex][rngMeasIndex[sensorIndex]] = sensor->last_reading_ms();
 
             // check for three fresh samples
             bool sampleFresh[DOWNWARD_RANGEFINDER_MAX_INSTANCES][3] = {};
@@ -108,6 +109,15 @@ void NavEKF3_core::readRangeFinder(void)
 
                 // limit the measured range to be no less than the on-ground range
                 rangeDataNew.rng = MAX(storedRngMeas[sensorIndex][midIndex],rngOnGnd);
+                // a backend reports its last reading until the next arrives, and a reading stays in the median's
+                // window for three samples, so the median can be the reading either of the last two samples was.
+                // A log from before reading times were kept counts every sample
+                const uint32_t readTime_ms = storedRngReadTime_ms[sensorIndex][midIndex];
+                uint32_t *lastReadTime_ms = rngLastReadTime_ms[sensorIndex];
+                rangeDataNew.repeated = _rng->have_reading_time(sensorIndex) &&
+                                        (readTime_ms == lastReadTime_ms[0] || readTime_ms == lastReadTime_ms[1]);
+                lastReadTime_ms[1] = lastReadTime_ms[0];
+                lastReadTime_ms[0] = readTime_ms;
 
                 // get position in body frame for the current sensor
                 rangeDataNew.sensor_idx = sensorIndex;
