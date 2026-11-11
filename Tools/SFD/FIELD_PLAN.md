@@ -1,19 +1,23 @@
-# SFD flight card: refresh14 topup4
+# SFD flight card: refresh14 topup5
 
 The flights still to fly, in order. Results go in `FLIGHT_VALIDATION.md`;
 earlier cards are in git history.
 
-Firmware: refresh14 topup4, built from `9d2cdae5a1`: refresh13 topup1's
+Firmware: refresh14 topup5, built from `28e67aa404`: refresh13 topup1's
 code (`896e11846d`, flown by SFD-O4 on 2026-11-07 and by the T25 as
 `7b00f3b5` on 2026-11-08) plus topup1's two fixes from a customer quad's
 flights, the throw into VALT without a position and #34941's timeout for
 a vehicle that is not flying, topup2's #33484 lockout recovery that
 waits for a restarted AGL KF to be confirmed, topup3's replay event for
-a bootstrap reset, and topup4's throw hand-over with THROW_ALT_DCSND 0
-(`REFRESH_NOTES.md`). Nothing to set.
+a bootstrap reset, topup4's throw hand-over with THROW_ALT_DCSND 0, and
+topup5's SmartRTL return point reset (#35119), which also changes how
+arming resets the SmartRTL path (`REFRESH_NOTES.md`). Nothing to set.
 
-- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `fdb7a803`.
-- T25: MicoAir743v2 `arducopter.apj`, md5 `ff29ac3d`.
+- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `058e5419`.
+- T25: MicoAir743v2 `arducopter.apj`, md5 `06fb89ef`.
+- topup5: any SmartRTL return on either vehicle exercises the new arming
+  reset and should come home as before; the in-flight reset itself needs
+  `smartrtl-reset.lua` installed and a Scripting1 (300) switch.
 
 Fly every flight with `LOG_REPLAY 1` and `LOG_DISARMED 2`, and STABILIZE
 on a switch.

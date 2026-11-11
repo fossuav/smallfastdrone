@@ -17,8 +17,27 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup4
-  (2026-11-11, a fast-forward over topup3): with THROW_TYPE 1 and
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup5
+  (2026-11-11, a fast-forward over topup4): #35119, new to `prs.txt`,
+  adds `smart_rtl:reset_home()`, which restarts the SmartRTL path in
+  flight at the current position, and the applet `smartrtl-reset.lua`,
+  which does it from an RC switch (`d87a42198e`..`4414a4c83e`, 13
+  commits, test `SmartRTLResetHome`). It changes every arming too:
+  `set_home()` now resets the path on SmartRTL's background thread,
+  about 1 ms after the call, which closes a race with the path cleanup
+  at a re-arm and on DO_SET_HOME. Unflown. 4.7 needs the
+  AP_SCRIPTING_LUA_ENABLED fixup below (`28e67aa404`), and the test was
+  registered by hand in the beta's `arducopter.py`.
+  - SmartRTLResetHome, SMART_RTL, SMART_RTL_EnterLeave, GCSFailsafe and
+    Rover SmartRTL pass; copter, rover, plane and Replay build;
+    `check_param_tables.py` is clean. `check_test_api.py` flags the
+    test's inline probe script, as it does the three other scripts
+    installed with `install_script_content_context()`.
+  - SmallFastDronev1 md5 `058e5419` (40,212 bytes free), MicoAir743v2 md5
+    `06fb89ef` (232,784 bytes free), both `.apj`, built from
+    `28e67aa404`. Nothing to set: the reset needs the applet installed
+    and an RCx_OPTION 300-315 switch, or a script of its own.
+- topup4 (2026-11-11, a fast-forward over topup3): with THROW_TYPE 1 and
   THROW_ALT_DCSND 0, #32475's throw arrests a toss from where uprighting
   ends and holds the height it stops at, never below the release point,
   instead of flying it back down to the release point (`01f474c138`, test
@@ -1425,6 +1444,12 @@ template: `AP_AHRS: adapt the stacked PRs to 4.7's EKF accessors`,
 AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
 `SITL: add SIM_SONAR_OFFSET`.
 
+- **AP_SCRIPTING_LUA_ENABLED** - #35119's `AP_SmartRTL_config.h` defaults
+  AP_SMARTRTL_RESET_ENABLED to master's AP_SCRIPTING_LUA_ENABLED; 4.7 still
+  names it AP_SCRIPTING_ENABLED, and `-Werror=undef` rejects the new name.
+  Commit `AP_SmartRTL: adapt #35119's reset define to 4.7's
+  AP_SCRIPTING_ENABLED` (`28e67aa404` on topup5). Drop it once the base
+  carries master's rename.
 - **send_set_parameter add_to_context** - #33585's brief-return leg puts
   SIM_SONAR_SCALE in the test context with master's
   `send_set_parameter(..., add_to_context=True)`; 4.7's has no such keyword.
