@@ -3727,6 +3727,19 @@ bool AP_AHRS::configured_to_use_horizontal_position_or_velocity_source(void) con
     return true;
 }
 
+// for reporting what the active source set is set up for: a set with no horizontal source answers
+// false even while EK3_SRC_OPTIONS fuses another set's velocity. Only EKF3 has source sets, so every
+// other backend answers true
+bool AP_AHRS::active_source_set_has_horizontal_source(void) const
+{
+#if HAL_NAVEKF3_AVAILABLE
+    if (active_EKF_type() == EKFType::THREE) {
+        return EKF3.active_source_set_has_horiz_source();
+    }
+#endif
+    return true;
+}
+
 // set and save the alt noise parameter value
 void AP_AHRS::set_alt_measurement_noise(float noise)
 {

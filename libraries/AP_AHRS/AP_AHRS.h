@@ -464,6 +464,10 @@ public:
     // is enough), whether or not it is delivering; false only for an EKF3 source set with neither
     bool configured_to_use_horizontal_position_or_velocity_source(void) const;
 
+    // true if the active source set names a horizontal position or velocity source of its own, not counting
+    // velocities fused from other sets; false only for an EKF3 source set without one
+    bool active_source_set_has_horizontal_source(void) const;
+
     // check if GPS is being used to estimate position or velocity
     // always returns true for External and SIM EKF types
     bool using_gps(void) const;
