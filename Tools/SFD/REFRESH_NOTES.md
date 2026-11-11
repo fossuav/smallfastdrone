@@ -1769,13 +1769,25 @@ FLOW_OPTIONS's docs).
   source`, `AP_AHRS: pass on whether the active source set has a
   horizontal source`, `AP_Notify: show a non-GPS position on RGB LEDs`
   and `hwdef: SFD boards show a non-GPS position on the LED`
-  (2026-11-11), on no PR yet, bench-checked on a flow copter: a green
-  double flash disarmed and solid green armed when the active source set
-  uses no GPS, names a horizontal source of its own and the AHRS has a
-  position, behind AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED. A GPS set
-  without a fix, or a set with no horizontal source, stays blue even when
-  FuseAllVelocities brings another set's flow into a position. The hwdef
-  half is owed to the base's SFD hwdefs with the EKF reset define.
+  (2026-11-11), bench-checked on a flow copter: a green double flash
+  disarmed and solid green armed when the active source set uses no GPS,
+  names a horizontal source of its own and the AHRS has a position, behind
+  AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED. A GPS set without a fix, or
+  a set with no horizontal source, stays blue even when FuseAllVelocities
+  brings another set's flow into a position. The hwdef half is owed to the
+  base's SFD hwdefs with the EKF reset define.
+  Upstreamed as #35122, now in `prs.txt`, which differs: its define is
+  AP_NOTIFY_RGBLED_NONGPS_POSITION_ENABLED; the disarmed pattern is 0.3 s
+  green, 0.3 s blue, 0.4 s dark, since the double flash shares the pre-arm
+  yellow's rhythm; and a set with no horizontal source of its own goes
+  green when FuseAllVelocities gives it a position, so the EKF3 and AHRS
+  accessors are gone. On the next refresh drop the three library commits
+  for #35122, re-fold the hwdef commit with the define renamed, and adapt
+  #35122 to 4.7's AHRS: `active_backend_configured_to_use_gps()` ->
+  `using_gps()`, `configured_backend_has_status()` -> `has_status()`, and
+  4.7's `AP_GPS::GPS_OK_FIX_*` in the hunk context. #35122 itself has
+  been built, not run; the beta keeps the bench-checked version until
+  then.
 - #30956's `11093ee6bc` (wait_armed) and `ad1ce89ce3` (AP_Logger reserved
   space), and 4.7's DataFlashErase body over the PR heads' (until 4.7 has
   #30956; see "DataFlashErase").

@@ -79,4 +79,5 @@
 34432   # EKF3: keep baro ground effect out of a height source switch (found with #32232) [merged to master 2026-09-23, not in 4.7]
 34678   # Copter: avoid a land-detector internal error when righting a flipped copter in Stabilize
 35119   # AP_SmartRTL: in-flight return point reset from Lua, with the smartrtl-reset.lua switch applet; set_home() also resets the path on the background thread. On 4.7 needs the AP_SCRIPTING_LUA_ENABLED post-merge fixup (REFRESH_NOTES)
+35122   # AP_Notify: RGB LEDs show a non-GPS position (green/blue disarmed, solid green armed). Supersedes the local LED commits; on 4.7 needs the AHRS calls adapted and the SFD hwdefs' define renamed (REFRESH_NOTES "Local work")
 32475   # Throw mode improvements (applied last, as the local stack was). 16042bc083: throw holds a position that comes back while it holds on
