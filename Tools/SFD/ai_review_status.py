@@ -41,9 +41,9 @@ HEAD_RE = re.compile(r"(?:re-)?reviewed at head\s+`([0-9a-f]{7,40})`", re.I)
 ALSO_HEAD_RE = re.compile(r"(?:now at|verified at)\s+`([0-9a-f]{7,40})`", re.I)
 # the verdict is stated in bold, in one of a handful of shapes; tried in order
 # because the later ones are looser and would mis-read the earlier ones
-V = r"(APPROVE|REQUEST CHANGES|COMMENT)"
+V = r"(APPROVE|ACCEPT|REQUEST CHANGES|COMMENT)"
 VERDICT_RES = (
-    re.compile(r"verdict moves from\s+\**(?:APPROVE|REQUEST CHANGES|COMMENT)\**\s+to\s+\**" + V, re.I),
+    re.compile(r"verdict moves from\s+\**(?:APPROVE|ACCEPT|REQUEST CHANGES|COMMENT)\**\s+to\s+\**" + V, re.I),
     re.compile(r"(?:->|\u2192)\s*\**\s*" + V, re.I),
     re.compile(r"verdict\s+(?:stays|remains|is)\s+\**" + V, re.I),
     re.compile(r"verdict[:\s]+\**\s*" + V, re.I),
