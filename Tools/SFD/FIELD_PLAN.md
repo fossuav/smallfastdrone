@@ -1,18 +1,19 @@
-# SFD flight card: refresh14 topup3
+# SFD flight card: refresh14 topup4
 
 The flights still to fly, in order. Results go in `FLIGHT_VALIDATION.md`;
 earlier cards are in git history.
 
-Firmware: refresh14 topup3, built from `2e11eaa1d3`: refresh13 topup1's
+Firmware: refresh14 topup4, built from `9d2cdae5a1`: refresh13 topup1's
 code (`896e11846d`, flown by SFD-O4 on 2026-11-07 and by the T25 as
 `7b00f3b5` on 2026-11-08) plus topup1's two fixes from a customer quad's
 flights, the throw into VALT without a position and #34941's timeout for
 a vehicle that is not flying, topup2's #33484 lockout recovery that
-waits for a restarted AGL KF to be confirmed, and topup3's replay event
-for a bootstrap reset (`REFRESH_NOTES.md`). Nothing to set.
+waits for a restarted AGL KF to be confirmed, topup3's replay event for
+a bootstrap reset, and topup4's throw hand-over with THROW_ALT_DCSND 0
+(`REFRESH_NOTES.md`). Nothing to set.
 
-- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `4bcebe7d`.
-- T25: MicoAir743v2 `arducopter.apj`, md5 `585ca853`.
+- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `fdb7a803`.
+- T25: MicoAir743v2 `arducopter.apj`, md5 `ff29ac3d`.
 
 Fly every flight with `LOG_REPLAY 1` and `LOG_DISARMED 2`, and STABILIZE
 on a switch.
@@ -88,3 +89,7 @@ Flow only, no compass, on the second MicoAir743v2 (board `00360049`).
   range restarted"); a range finder that reads throughout never meets it.
 - topup3 changes nothing the vehicle does: a log with a pending arm's or
   the EKF_RESET switch's reset now replays through it.
+- topup4 acts only with THROW_TYPE 1 and THROW_ALT_DCSND 0, on a toss
+  still above the release point when it is upright: the customer quad's
+  tosses are the case, and a hand toss upwards on either vehicle would
+  show it (expect the hand-over near the top, not at the hand).

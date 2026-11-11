@@ -17,8 +17,24 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup3
-  (2026-11-11, a fast-forward over topup2): a commanded EKF3 bootstrap
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh14 after topup4
+  (2026-11-11, a fast-forward over topup3): with THROW_TYPE 1 and
+  THROW_ALT_DCSND 0, #32475's throw arrests a toss from where uprighting
+  ends and holds the height it stops at, never below the release point,
+  instead of flying it back down to the release point (`01f474c138`, test
+  `ThrowZeroDescentStopsAboveRelease` `9d2cdae5a1`), from the customer
+  quad's three tosses that descended 1.7-3.4 m to the hand
+  (`FLIGHT_VALIDATION.md`, 2026-11-10). THROW_ALT_DCSND's description is
+  rewritten around 0 and gets a 0-20 m range. Unflown. On #32475 since
+  2026-11-11 (`f4fcfb44ba`, `3f8d1623ee`), so the next refresh takes it
+  from the PR head and these copies drop out; the test was inserted by
+  hand into the beta's differently laid out `arducopter.py`.
+  - All 22 throw tests pass; copter, plane and Replay build;
+    `check_param_tables.py` is clean.
+  - SmallFastDronev1 md5 `fdb7a803` (41,020 bytes free), MicoAir743v2 md5
+    `ff29ac3d` (233,552 bytes free), both `.apj`, built from
+    `9d2cdae5a1`. Nothing to set beyond THROW_ALT_DCSND 0 where wanted.
+- topup3 (2026-11-11, a fast-forward over topup2): a commanded EKF3 bootstrap
   reset, from the EKF_RESET switch or #32401's pending arm, is logged as
   `AP_DAL::Event::bootstrapReset` (18) and Replay re-initialises the cores
   there (`82effad3ba`, `7df06549d3`, `2f5de96b68`, test `2e11eaa1d3`).

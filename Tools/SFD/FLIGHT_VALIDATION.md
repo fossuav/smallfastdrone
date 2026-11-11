@@ -156,6 +156,16 @@ Fixes, 2026-11-10, the first two on the beta as refresh14 topup1
   lengthens the phantom logs' errors (log C: 1.5 to 8.0 s over 3 m/s).
   Not fixed; the narrow null-frame guard (log20's 124.1 s reset) and
   AC_PosControl absorbing velocity resets are the open options.
+- Throw with THROW_ALT_DCSND 0 (found 2026-11-11): all three tosses were
+  uprighted after the top of the climb at 3.2-3.8 m and flown 1.7-3.4 m
+  back down to the release point before the hand-over, at up to 3.9 m/s,
+  to 0.47 m above the ground on log18 and 0.13 m on log20. The release
+  point is the EKF height when freefall began, which in the hand on log18
+  was 1.8 m below the range finder's. Fixed on #32475 (`f4fcfb44ba`, test
+  `3f8d1623ee`) and on the beta as refresh14 topup4 (`01f474c138`,
+  `9d2cdae5a1`): with 0 the arrest starts from where uprighting ends and
+  the height it stops at is held, never below the release point. SITL:
+  handed over 1.5 m below a 5.9 m top against 2.9 m.
 
 ## 2026-11-08: the T25 on `7b00f3b5`, a flow quality latch indoors
 
