@@ -3,6 +3,9 @@
 
 include ../TBS_LUCID_H7/hwdef.dat
 
+# a plane, not the SmallFastDrone quad build TBS_LUCID_H7 includes
+include ../include/sfd_quad_undo.inc
+
 # board ID. See Tools/AP_Bootloader/board_types.txt
 APJ_BOARD_ID AP_HW_TBS_LUCID_H7_WING
 
