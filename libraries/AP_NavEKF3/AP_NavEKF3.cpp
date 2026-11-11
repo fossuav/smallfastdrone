@@ -1806,6 +1806,15 @@ bool NavEKF3::has_horiz_pos_vel_source() const
     return false;
 }
 
+// unlike has_horiz_pos_vel_source(), velocities fused from other sets under
+// EK3_SRC_OPTIONS FuseAllVelocities do not count: this is what the active set
+// itself is set up to navigate on
+bool NavEKF3::active_source_set_has_horiz_source() const
+{
+    return sources.getPosXYSource(primary) != AP_NavEKF_Source::SourceXY::NONE ||
+           sources.getVelXYSource(primary) != AP_NavEKF_Source::SourceXY::NONE;
+}
+
 // are we using a gps?
 bool NavEKF3::using_gps(void) const
 {

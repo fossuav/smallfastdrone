@@ -385,6 +385,9 @@ public:
     // enough), whether or not it is delivering
     bool has_horiz_pos_vel_source() const;
 
+    // true if the primary core's active source set names a horizontal position or velocity source of its own
+    bool active_source_set_has_horiz_source() const;
+
     // are we using a gps
     bool using_gps() const;
 
