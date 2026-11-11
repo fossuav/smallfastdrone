@@ -972,6 +972,15 @@ After:
 
 - Flight evidence for refresh13 topup1: `FIELD_PLAN.md`.
 
+- Next refresh, from the 2026-11-11 base: SmallFastDronev1's hwdef.dat is
+  three lines, and `sfd_quad.inc` carries the SFD defines for it and the
+  TBS_LUCID_H7 family. The branch commits that add a define to the SFD
+  boards (`hwdef: SFD boards keep the EKF reset auxiliary function`,
+  `... keep the OSD EKF lane items`, `... show a non-GPS position on the
+  LED`) conflict on SmallFastDronev1: drop its hunk, as `sfd_quad.inc`
+  already sets the define. A new SFD define for these boards goes in
+  `sfd_quad.inc` and `sfd_quad_undo.inc`.
+
 - Replay does not follow a bootstrap reset (found 2026-11-11):
   `NavEKF3::InitialiseFilterBootstrap()` (#32202, merged upstream) logs no
   DAL event, so the EKF_RESET switch and #32401's "Arm pending: EKF
@@ -1374,8 +1383,40 @@ the TBS_LUCID_H7 baro fix (`89982e63a9`, 4.7's `7551eb32f7`) and master's
 `0ecbe153e2`, which moves the AGL KF variables into a structure
 (`258e843e68`, picked with `-x`). Its feature.h conflict kept 4.7's
 defines and added master's `#error` for the AGL KF without flow fusion.
-The base is `258e843e68`. Backups: `.5` is the stale local `ec107ee728`
-and `.6` is `89982e63a9`.
+It was `258e843e68`. Backups: `.5` is the stale local `ec107ee728` and
+`.6` is `89982e63a9`.
+
+2026-11-11 added three hwdef commits on `258e843e68`, a fast-forward, so
+that TBS_LUCID_H7 is an SFD build at -O2:
+
+- `hwdef: SFD boards drop the low noise define the IMU drivers replaced`
+  (`bdfca8bbb9`): nothing reads AP_INERTIALSENSOR_LOW_NOISE since it
+  became a runtime flag the Invensensev3 driver sets. Apart from the hwdef
+  text in ROMFS, MicoAir743v2's build is unchanged.
+- `hwdef: build the TBS_LUCID_H7 quads as SmallFastDrone boards at -O2`
+  (`8ee3356e52`): `hwdef/include/sfd_quad.inc` holds -O2, the SFD feature
+  defines and the cuts that make room for -O2 (other frames, engines, EFI,
+  airspeed, payloads, radar range finders, eight gimbal and seven GPS
+  types). TBS_LUCID_H7 includes it, so the V3 and OEM variants inherit it;
+  all three get `sfd_defaults.parm`. TBS_LUCID_H7_WING, a plane, includes
+  `sfd_quad_undo.inc` after TBS_LUCID_H7's hwdef: its hwdef.h is unchanged
+  and every symbol of its plane is the size it was apart from the hwdef
+  text in ROMFS. TBS_LUCID_H7_WING_AIO includes WING's hwdef, and its
+  hwdef.h is unchanged too; the Lucid bootloaders include only
+  `hwdef-bl.dat` and are untouched. Keep the two files in step: every
+  define in one is undefined in the other.
+- `hwdef: SmallFastDronev1 takes its quad build from TBS_LUCID_H7`
+  (`5064610b03`): it keeps only SFD-O4's defaults, gains NMEA, MAVLink and
+  MSP GPS, the common gimbals, parachute, SLCAN, displays and Spektrum and
+  GHST telemetry, and loses airspeed, EFI and Piccolo CAN (its
+  `AP_PICCOLO_CAN_ENABLE` never cut Piccolo).
+
+On the beta with its stack, copter has 39,316 bytes free on
+SmallFastDronev1, 39,556 on TBS_LUCID_H7 and 41.7 KB on V3 and OEM; on the
+base alone about 72 KB and 74 KB. A refresh that runs short of flash can
+cut further in `sfd_quad.inc` (and its undo): ADS-B 10 KB, proximity
+18 KB, precision landing 6 KB, FrSky telemetry 10 KB, GPS blending 3 KB,
+measured at -Os. The base is `5064610b03`; `.7` is `258e843e68`.
 
 Rebuilt 2026-10-22 on `upstream/ArduPilot-4.7` `fbd0a3160c`: 4.7.2, plus
 three ChibiOS fixes (atomic runtime pin mode changes and toggles, the same for
