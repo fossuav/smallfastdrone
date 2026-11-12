@@ -2016,9 +2016,9 @@ private:
     bool throw_target_yaw_valid;       // true if target_yaw_rad is set
     float throw_target_yaw_rad;        // captured at freefall transition for Uprighting
     ThrowYawSource throw_yaw_source;   // which source set target_yaw_rad (logged in THRO)
-    uint16_t yaw_reset_count;          // AHRS yaw reset count the headings above were last turned for
+    uint32_t yaw_reset_ms;             // time of the AHRS yaw reset the headings above were last turned for
     float yaw_prev_rad;                // AHRS yaw the last loop, which a reset's size is measured from
-    uint16_t pos_d_reset_count;        // AHRS height reset count drop_release_alt_m was last moved for
+    uint32_t pos_d_reset_ms;           // time of the AHRS height reset drop_release_alt_m was last moved for
     float pos_d_prev_m;                // AHRS down position from the origin the last loop, which a height reset's size is measured from
 };
 

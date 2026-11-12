@@ -36,9 +36,10 @@ bool ModeThrow::init(bool ignore_checks)
     stage = Throw_Disarmed;
     source_set_switched = false;
     last_msg_stage = Throw_Disarmed;
-    yaw_reset_count = ahrs.get_yaw_reset_count();
+    float reset_size;
+    yaw_reset_ms = ahrs.getLastYawResetAngle(reset_size);
     yaw_prev_rad = ahrs.get_yaw_rad();
-    pos_d_reset_count = ahrs.get_position_D_reset_count();
+    pos_d_reset_ms = ahrs.getLastPosDownReset(reset_size);
     if (!ahrs.get_relative_position_D_origin_float(pos_d_prev_m)) {
         pos_d_prev_m = 0;
     }
@@ -793,14 +794,15 @@ bool ModeThrow::throw_still_falling() const
 // turned in that loop: AHRS counts a reset but does not report its size
 void ModeThrow::throw_follow_yaw_reset()
 {
-    const uint16_t reset_count = ahrs.get_yaw_reset_count();
+    float reset_rad;
+    const uint32_t reset_ms = ahrs.getLastYawResetAngle(reset_rad);
     const float yaw_rad = ahrs.get_yaw_rad();
     const float prev_yaw_rad = yaw_prev_rad;
     yaw_prev_rad = yaw_rad;
-    if (reset_count == yaw_reset_count) {
+    if (reset_ms == yaw_reset_ms) {
         return;
     }
-    yaw_reset_count = reset_count;
+    yaw_reset_ms = reset_ms;
     const float yaw_change_rad = wrap_PI(yaw_rad - prev_yaw_rad - ahrs.get_yaw_rate_earth() * G_Dt);
     if (throw_target_yaw_valid && throw_yaw_source != ThrowYawSource::Absolute &&
         throw_yaw_source != ThrowYawSource::EntryVelocity) {
@@ -817,18 +819,19 @@ void ModeThrow::throw_follow_yaw_reset()
 // climbed in that loop
 void ModeThrow::throw_follow_height_reset()
 {
-    const uint16_t reset_count = ahrs.get_position_D_reset_count();
+    float reset_m;
+    const uint32_t reset_ms = ahrs.getLastPosDownReset(reset_m);
     float pos_d_m;
     if (!ahrs.get_relative_position_D_origin_float(pos_d_m)) {
-        pos_d_reset_count = reset_count;
+        pos_d_reset_ms = reset_ms;
         return;
     }
     const float prev_pos_d_m = pos_d_prev_m;
     pos_d_prev_m = pos_d_m;
-    if (reset_count == pos_d_reset_count) {
+    if (reset_ms == pos_d_reset_ms) {
         return;
     }
-    pos_d_reset_count = reset_count;
+    pos_d_reset_ms = reset_ms;
     float vel_d_ms;
     if (!ahrs.get_velocity_D(vel_d_ms)) {
         vel_d_ms = 0;
