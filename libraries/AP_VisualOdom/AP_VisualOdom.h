@@ -86,6 +86,12 @@ public:
     // return quality threshold
     int8_t get_quality_min() const { return _quality_min; }
 
+    // optional behaviours (see _OPTIONS parameter)
+    enum class Option : uint16_t {
+        AlignYawToCompass = (1U << 0),
+    };
+    bool option_is_set(Option option) const { return (_options.get() & uint16_t(option)) != 0; }
+
     // return quality as a measure from -1 ~ 100
     // -1 means failed, 0 means unknown, 1 is worst, 100 is best
     int8_t quality() const;
@@ -136,6 +142,7 @@ private:
     AP_Float _pos_noise;        // position measurement noise in meters
     AP_Float _yaw_noise;        // yaw measurement noise in radians
     AP_Int8 _quality_min;       // positions and velocities will only be sent to EKF if over this value.  if 0 all values sent to EKF
+    AP_Int16 _options;          // optional behaviours bitmask
 
     // reference to backends
     AP_VisualOdom_Backend *_driver;

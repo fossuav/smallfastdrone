@@ -114,6 +114,13 @@ const AP_Param::GroupInfo AP_VisualOdom::var_info[] = {
     // @User: Advanced
     AP_GROUPINFO("_QUAL_MIN", 8, AP_VisualOdom, _quality_min, 0),
 
+    // @Param: _OPTIONS
+    // @DisplayName: Visual odometry options
+    // @Description: Visual odometry optional behaviours. If AlignYawToCompass is set and external nav is the EKF yaw source, the sensor's yaw is aligned to the compass heading while disarmed (at startup, and on sensor resets with the VOXL type) so the navigation frame starts earth-aligned instead of in the sensor's arbitrary boot frame. Applies to the IntelT265 and VOXL types.
+    // @Bitmask: 0:AlignYawToCompass
+    // @User: Advanced
+    AP_GROUPINFO("_OPTIONS", 9, AP_VisualOdom, _options, 0),
+
     AP_GROUPEND
 };
 
