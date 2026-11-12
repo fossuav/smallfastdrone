@@ -490,8 +490,11 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
 #endif
 
 #if EK3_FEATURE_OPTFLOW_AGL_KF
-    if (really_fuse && flowVelInitPending) {
-        InitVelocityFromFlow(ofDataDelayed, range, posOffsetBody);
+    if (really_fuse && flowVelInitPending && InitVelocityFromFlow(ofDataDelayed, range, posOffsetBody)) {
+        // the velocity was solved from this sample, so fusing it as well would count it twice; it
+        // still counts as flow fused for relative aiding's timeout
+        prevFlowFuseTime_ms = imuSampleTime_ms;
+        return;
     }
 #endif
 
@@ -1094,8 +1097,9 @@ bool NavEKF3_core::ResetVelocityToFlow(const of_elements &ofDataDelayed, ftype r
 // other axis passed cannot apply, as neither has yet. An AGL KF found lagging a range it does not
 // agree with is restarted once, from the next new range reading, as it may have coasted through a
 // tumble on held or slant readings, and the samples that confirm the restart are waited for.
-// range is the sensor-axis range the flow is scaled by (m) and posOffsetBody the sensor's lever arm (m)
-void NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype range, const Vector3F &posOffsetBody)
+// range is the sensor-axis range the flow is scaled by (m) and posOffsetBody the sensor's lever arm (m).
+// Returns true if it set the velocity
+bool NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype range, const Vector3F &posOffsetBody)
 {
     // the set waits for a sample and a range it can use. 5 s is as long as relative aiding lasts with
     // no flow fused on either axis, and as long as the AGL KF waits for a range before it restarts
@@ -1103,23 +1107,23 @@ void NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype 
     const uint32_t FLOW_VEL_INIT_WAIT_MAX_MS = 5000;
     if (imuSampleTime_ms - flowVelInitStart_ms > FLOW_VEL_INIT_WAIT_MAX_MS) {
         flowVelInitPending = false;
-        return;
+        return false;
     }
     if (!frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) || !aglKf.valid ||
         (PV_AidingMode != AID_RELATIVE) || flowVelResetUnhealthy ||
         (fabsF(ofDataDelayed.flowRadXY.x) >= frontend->_maxFlowRate) ||
         (fabsF(ofDataDelayed.flowRadXY.y) >= frontend->_maxFlowRate) ||
         ((frontend->_flowQualMin > 0) && (ofDataDelayed.quality < frontend->_flowQualMin))) {
-        return;
+        return false;
     }
     const FlowResetRange rangeState = flowResetRangeState(ofDataDelayed, range);
     if ((rangeState == FlowResetRange::Step) && !flowVelInitRestartedAglKf) {
         flowVelInitRestartedAglKf = true;
         aglKfRestartRequested = true;
-        return;
+        return false;
     }
     if ((rangeState != FlowResetRange::Good) || !ResetVelocityToFlow(ofDataDelayed, range, posOffsetBody)) {
-        return;
+        return false;
     }
     flowVelInitPending = false;
     flowFuseTimeAxis_ms[0] = flowFuseTimeAxis_ms[1] = imuSampleTime_ms;
@@ -1129,6 +1133,7 @@ void NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype 
     if (!frontend->option_is_enabled(NavEKF3::Option::QuietFlowVelResets)) {
         GCS_SEND_TEXT(MAV_SEVERITY_INFO, "EKF3 IMU%u flow velocity set at aiding start", (unsigned)imu_index);
     }
+    return true;
 }
 
 // Whether the range under a flow sample is fit to scale a velocity reset to it, and if not why not.

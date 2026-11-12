@@ -1010,8 +1010,8 @@ private:
         Step,       // the AGL KF lags a step in the ground the range has already seen
     };
     FlowResetRange flowResetRangeState(const of_elements &ofDataDelayed, ftype range) const;
-    // set the horizontal velocity from a flow sample once relative aiding has started in flight
-    void InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype range, const Vector3F &posOffsetBody);
+    // set the horizontal velocity from a flow sample once relative aiding has started in flight; true if it did
+    bool InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype range, const Vector3F &posOffsetBody);
 #endif
 
 #if EK3_FEATURE_OPTFLOW_FUSION
