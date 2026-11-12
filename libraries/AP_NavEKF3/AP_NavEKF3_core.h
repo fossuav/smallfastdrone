@@ -999,6 +999,16 @@ private:
     bool ResetVelocityToFlow(const of_elements &ofDataDelayed, ftype range, const Vector3F &posOffsetBody);
     // fuse one height observation into the AGL Kalman filter
     void FuseAglKfHeight(ftype hgtInnov, ftype measNoiseVar, bool learnBias);
+    // restart the AGL Kalman filter from one range height (m), to be confirmed by the samples that follow
+    void RestartAglKf(ftype hgt);
+    // whether the range under a flow sample is fit to scale a velocity reset, and if not why not
+    enum class FlowResetRange : uint8_t {
+        Good,
+        Stale,      // no range fused recently enough to have produced a median
+        Restarted,  // the AGL KF restarted from one sample and the samples since have not confirmed it
+        Step,       // the AGL KF lags a step in the ground the range has already seen
+    };
+    FlowResetRange flowResetRangeState(const of_elements &ofDataDelayed, ftype range) const;
 #endif
 
 #if EK3_FEATURE_OPTFLOW_FUSION
