@@ -1109,6 +1109,15 @@ bool NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype 
         flowVelInitPending = false;
         return false;
     }
+    // ordinary fusion has accepted the flow on both axes since aiding started, so the velocity
+    // already agrees with it, and a set from one sample now could only move it. Ages, not times,
+    // are compared, so the test holds as the millisecond count wraps
+    const uint32_t sinceStart_ms = imuSampleTime_ms - flowVelInitStart_ms;
+    if ((imuSampleTime_ms - flowPassTimeAxis_ms[0] < sinceStart_ms) &&
+        (imuSampleTime_ms - flowPassTimeAxis_ms[1] < sinceStart_ms)) {
+        flowVelInitPending = false;
+        return false;
+    }
     if (!frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) || !aglKf.valid ||
         (PV_AidingMode != AID_RELATIVE) || flowVelResetUnhealthy ||
         (fabsF(ofDataDelayed.flowRadXY.x) >= frontend->_maxFlowRate) ||
