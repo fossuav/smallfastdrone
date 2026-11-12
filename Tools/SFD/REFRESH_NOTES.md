@@ -1,0 +1,2513 @@
+# SFD refresh notes
+
+How to read this file:
+
+- **Current state** and **Next refresh** are kept current in place. When an
+  item is done, delete it; when a claim turns out wrong, fix it where it is.
+  Do not append a correction further down - a reader starting at the top meets
+  the wrong version first, which is how this file came to contradict itself
+  three ways about the EKF3 covariance gates.
+- Everything below that is standing reference: the base, divergences, fixups,
+  recipes and traps. Edit in place when something changes.
+- Dated narrative is in REFRESH_HISTORY.md, conclusions only.
+
+A pick-up note records what a session believed, and some of it is stale by the
+time it is committed. Re-derive each pointer (a head, a branch, a worktree, "no
+reply exists") before acting on it.
+
+## Current state
+
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh15 after topup2 (below).
+  topup1's and topup2's 30 commits were squashed on 2026-11-12 into 14 (a
+  force push), flown and unflown kept apart, with an identical tree. The
+  beta before it is kept locally as `SmallFastDrone-4.7.2.19-beta`, where
+  the hashes older records give for them still resolve.
+  refresh15 was promoted 2026-11-12, a force push: the stack rebuilt from
+  that day's PR heads on the 2026-11-11 base
+  (`6563bcf709`: TBS_LUCID_H7 and its V3 and OEM variants as SFD quads at
+  -O2, the SFD README and logo). It replaces refresh14 after topup6 and the
+  prs.txt commit on it (`2f9ff2b27b`, kept locally as
+  `SmallFastDrone-4.7.2.18-beta`).
+  - prs.txt gains #34533 (SIM_FLOW_OFS, merged to master 2026-11-09, split
+    out of #34292), #35039 (rmackay9's cut-down #34678, merged 2026-11-09:
+    the inverted take-off fix and its test, ahead of the reworked #34678)
+    and #35014 (split out of #33585, which carries it). rmackay9's #35077,
+    his alternative to #34292, is noted and not carried.
+  - Plan 521, 17 skipped by list as in refresh14, 504 run. #34533's two
+    commits went in ahead of #33484's SIM_FLOW_QUAL. Fifteen stops, each
+    resolved to the beta's text: #32401's Replay bootstrap event (as
+    `7df06549d3`), the DAL ID list for RRNJ and then ROFM (RISK, ROFM,
+    RRNJ, as the beta), #33484's reading times in the beta's
+    readRangeFinder() (as `35b31b96a7`), #34457's FuseAglKfHeight() split
+    and #33507's bias state (the beta's floor fusion and glitch branch,
+    the PR's no-data on-ground branch left out), #34543's and #34941's
+    members (both sides) and #34941's not-flying timeout. #32401's
+    "reserved for #32471" event comment was skipped: the stack defines
+    events 16 and 17.
+  - The beta's 42 adaptation and local commits re-picked. The EKF reset and
+    OSD lane defines drop their SmallFastDronev1 hunks (`sfd_quad.inc` sets
+    both). The three local LED library commits are dropped for #35122, the
+    LED hwdef commit is re-folded with #35122's define (renamed in
+    `sfd_quad.inc` too), and `AP_Notify: adapt #35122 to 4.7's AHRS
+    accessors` is new.
+  - The code differs from the beta only where PRs moved: #35039 with the
+    reworked #34678 (the same land detector test, laid out as master's),
+    #35122's LED code, #31274's ESC.Err description. The hwdefs differ by
+    the base's TBS_LUCID_H7 change and the LED define.
+  - Tests: the beta's Tools/autotest, with #35039's ArmedInvertedTakeoff in
+    place of StabilizeInvertedLanded. Every test a moved PR changed was
+    compared with its head; the branch copies differ only by 4.7's
+    takeoff() keywords, the XKFA.VHold divergence and the Replay cases
+    other PRs add. The gates are clean, `audit_dropped.py` finds nothing
+    lost and `param_changes.py` only the LED define. The full SFD set
+    passes, 138 of 138; copter, heli, plane, sub, rover and Replay build;
+    `check_param_tables.py` is clean.
+  - SmallFastDronev1 md5 `3faa2d86` (39,428 bytes free, -O2), MicoAir743v2
+    md5 `9fdaf711` (232,272 bytes free), both `.apj`, built from
+    `3e1a71309a`, whose code is the head's. Nothing to set, but keep
+    SCR_HEAP_SIZE at 400 KB or less on the TBS_LUCID_H7 boards (the base
+    section has why). The SFD boards'
+    LED now shows a non-GPS position with #35122's pattern (green, blue,
+    dark while disarmed), built but not yet run on hardware.
+- topup2 (2026-11-12, a fast-forward over topup1 and the records
+  commits for log94 and log14), from the throw quad's logs 15-16
+  (`FLIGHT_VALIDATION.md`, 2026-11-12), where log15's first throw struck
+  the ground. Unflown. After the squash: `7f7108a9ef`..`a3a948e4c3` on top
+  of topup1, and the structure commits `75a0d0e5a2`, `29a4eae8c3` below
+  it.
+  - #33484 area (`7f7108a9ef`): a source set with nothing to measure the
+    horizontal position or velocity (THROW_SRC_INI's) now ends absolute
+    or relative aiding at once, unless air data dead reckoning is in
+    use. The EKF used to dead reckon on it as on a GPS dropout: up to 15
+    s in absolute aiding, counted from arming as zero velocity fusion
+    refreshes the timers while disarmed, or 5 s in relative aiding,
+    reporting a position nothing measured. Held still in the hand, that
+    velocity was over 1 m/s out 4-7 s after arming and 5-9 m/s by 12-13
+    s; log15's first throw braked on it and struck the ground, and on
+    log16's the timeout fell at the release, zeroing an 11 m/s velocity
+    and stepping the height 5 m mid-throw. Every throw now starts flow
+    aiding from none, the path topup1's init worked on throughout logs
+    15-16. The test moves into `AP_NavEKF_Source::haveHorizPosVelSource()`,
+    which #32514's `has_horiz_pos_vel_source()` now calls (`75a0d0e5a2`,
+    `29a4eae8c3`, no change to behaviour).
+  - #32475 (`194fc6d1ab`): throw's flow check, on a vehicle with a flow
+    sensor and a source set that does not use GPS for position, needs
+    flow innovations the EKF reports, and starts its average again when
+    they lapse. It passed before whenever there were none. With the EKF
+    change it covers flow aiding that has started and then loses the
+    flow, as when the range finder drops out over the throw: relative
+    aiding outlives the flow by 5 s.
+  - Tried and dropped (before the squash `aadc5399ed`, `cd5ad439dd`, and
+    their test, reverted in `7e055546f4`..`3b9eb528df`): a flow velocity
+    init on the fall back from dead reckoning, with a wait for yaw under 0.75 rad/s. It
+    cleaned up after the dead reckoning instead of preventing it, and
+    its yaw threshold came from one airframe.
+  - Replay against topup1: 352 of 355 fleet logs unchanged. log13 and
+    log14 stop aiding at the switch into THROW; their throws match
+    topup1's within 0.1 m/s, and log14's throw 5 height is -0.45 m off
+    GPS at +3 s against -3.75. On log15's first throw the EKF has no
+    position and zero velocity until the flow starts, then is under 1
+    m/s from 2.17 s after the switch, against 4.17. The other throws of
+    logs 15-16 differ by 0.1-0.5 m/s at +1-2 s, either way, through the
+    earlier stop. A T25 flight switched in flight to a set with nothing
+    stops aiding at the switch instead of 5 s later, and its flow lane's
+    innovations in the second after the return are slightly larger
+    (innovation x height 1.01 against 0.82 m/s).
+  - SITL A/B: `EK3_NoHorizontalSourceStopsAiding` (`959baa8c4a`) stops
+    aiding within 2 s of the switch, against 15 s without the EKF change;
+    `ThrowTossFlowLostHoldsPosition` (`a3a948e4c3`) turns the flow off as relative aiding starts and hands over 0.12 m/s out once it is back,
+    and without the Copter change regains a position on the stale flow.
+    69 of the 70 throw, flow and source set tests pass in one run;
+    `EK3_OptflowAboveRangefinder`, which never leaves the flow set,
+    failed its hover height check under load and passes alone. Rover's
+    `OpticalFlowRangefinderOnGround` passes; copter, plane, rover and
+    Replay build, copter and Replay at each code commit.
+  - SmallFastDronev1 md5 `a959195a` (37,700 bytes free), MicoAir743v2 md5
+    `fe2ba189` (230,968 bytes free), TBS_LUCID_H7 md5 `fe76ac42` (37,940
+    bytes free), all `.apj`, built from `a3a948e4c3`, the squashed code
+    head. Nothing to set. (Before the squash, the same code built from
+    `a3ea19e92f`: `75669dbb`, `f79ee205`, `0140e664`.)
+  - On their PRs since 2026-11-12 (#35146, #32475, #32514), with
+    topup1's; see "Local work not in prs.txt".
+- topup1 (2026-11-12, a fast-forward over refresh15 and the records
+  commit `f499e41519`), towards a throw into flow Loiter, from the
+  TBS_LUCID_H7 throw quad's log13 (`FLIGHT_VALIDATION.md`, 2026-11-12).
+  After the squash `68c62facbf`..`24b7a1a5c0` (16 commits before it).
+  Flown on the throw quad's logs 15-16 (build `4da1f0c1`, the same code):
+  the init, the switch at upright, the settle, the yaw follow and the
+  flow gate all ran; the absolute yaw target did not.
+  - #33484 area: when flow aiding starts in flight (AID_NONE to
+    AID_RELATIVE, as at a throw's switch to a flow set) the EKF takes its
+    horizontal velocity from the first good flow sample instead of zero.
+    On log13 it started at zero while the toss carried 3-6 m/s and stayed
+    3.5-6.2 m/s wrong until a lockout reset 0.5-2.8 s later. It waits up
+    to 5 s for a fresh range, and if the AGL KF disagrees with it (after
+    a tumble) restarts the AGL KF once from the next reading that is not
+    held. Only with `EK3_OPTIONS` bit 3 (AGL KF for optflow scaling),
+    which the SFD vehicles and the throw quad have. Bit 6 (94 has it)
+    suppresses its "flow velocity set at aiding start" message; XKF7.FVC
+    counts it either way (`68c62facbf`, `59f27f252d`, `dc7b9c66f2`, refactors first).
+  - #32475: throw turns its yaw target with an EKF yaw reset, measured
+    from the jump in yaw since 4.7's reset angle is a running total, but
+    not a THROW_YAW_TYPE 3 absolute target; switches to THROW_SRC_SET
+    (or back to the pre-throw set) once upright, not at the hand-over;
+    with THROW_ALT_DCSND 0 hands a drop over only once the vertical speed
+    has stayed under 0.5 m/s for 0.5 s, or after 3 s of PosHold; and with
+    no absolute position waits for the flow innovations to agree with
+    the velocity before its own position hold or a next mode that needs
+    a position ("Throw height achieved, flow settling") (`800f7108c3`..
+    `e5450885f3`).
+  - Replay of log13: throws 2-5 within 1 m/s of GPS 0.47-0.76 s after
+    the switch, against 0.55-4.34 s as flown. Throw 1's core 0 is worse,
+    3.2 s against 1.4 s: its sample was taken in the spin after the yaw
+    reset, which the yaw change removes. Of 355 fleet logs 344 replay
+    identically; of the 11 that differ, SFD-O4 log10's flow core improves
+    (worst velocity error 20.2 to 10.6 m/s), the GPS-less logs' flow
+    innovations are unchanged or smaller, and one T25 flight has a late
+    reset that moves a correct velocity 0.5-0.9 m/s for about 1 s. Logs
+    from topup1 on need a topup1 or later Replay where flow aiding starts
+    in flight. Replay cannot show the throw changes.
+  - SITL A/B: `EK3_FlowVelocityAtAidingStart` 0.23 m/s out 0.3 s after
+    the switch, against 3.54 on refresh15; `ThrowYawFollowsEKFYawReset`
+    turns 2.2 deg through a 90 deg compass reset, against 88.7.
+    `ThrowTossIntoFlowLoiter` and `ThrowZeroDescentSettlesBeforeHandover`
+    pass on both builds, since SITL's flow and baro are too clean; they
+    check the chain works, and the early switch, the flow gate and the
+    settle need a flight. ThrowDropTwiceWithoutReentry's last leg now
+    restores the GPS set itself, as the pre-throw set returns at upright.
+    All 25 throw tests and the flow tests pass but
+    OpticalFlowTiltTurnRecovery, which fails on refresh15 too. copter,
+    plane and Replay build; the two clean-up commits leave the objects
+    identical.
+  - SmallFastDronev1 md5 `c27c4fda` (37,876 bytes free), MicoAir743v2 md5
+    `7151fd38` (231,040 bytes free), TBS_LUCID_H7 md5 `add8c39b` (38,116
+    bytes free), all `.apj`, built from `bf7a3947f8` before the squash. Nothing to set on
+    SFD-O4 or the T25; the throw quad's settings are on the card.
+  - On their PRs since 2026-11-12: the EKF change as #35147, stacked on
+    #34630; the throw changes on #32475, detecting the reset from
+    master's `get_yaw_reset_count()`.
+- Previous beta: refresh14 after topup6
+  (2026-11-11, a fast-forward over topup5), three answers to the review
+  bot's reviews of the same day:
+  - #33484: a restarted AGL KF is no longer confirmed by copies of one
+    reading. The confirmation counted the EKF's 50 ms polls, and
+    MAVLink, DroneCAN, MSP and Lua backends report a reading as Good for
+    500 ms, so one reading after an outage restarted the AGL KF and
+    confirmed it 320 ms later. Both vehicles' range finders are such
+    backends (SFD-O4 DroneCAN, the T25 MAVLink). The DAL now logs each
+    range finder's `last_reading_ms` in a new message, RRNJ
+    (`965211c6cc`, Replay `ed94ea5bc4`), and a sample whose median is a
+    reading one of its sensor's last two samples was does not count
+    towards the confirmation; any sample that disagrees still starts the
+    run again (`35b31b96a7`, test leg `9d56317c8d`). Each reading counts
+    at most once, and a steady range still confirms at its reading rate.
+    Unflown, and like topup2 it acts only after more than 5 s without a
+    range. On #33484 as `a657016f05`..`b135aa93fd` (not yet pushed), so
+    the next refresh takes them from the PR head and these copies drop
+    out.
+  - Logs from topup6 on carry RRNJ. A Replay built before it ignores
+    RRNJ and counts every sample, so it departs from the flight after a
+    held reading restarts the AGL KF; replay them with topup6 or later.
+    Older logs have no RRNJ and replay as before.
+  - #32401: the pending arm's four messages use `GCS_SEND_TEXT()`
+    (`53e0b9c8fe`); #32475: a THROW_NEXTMODE that is not compiled in
+    holds a position in throw (`cc0af6427f`). Neither changes what these
+    builds do, which compile every mode. On the PRs as `9a088df07f` and
+    `9a0a72406d` (not yet pushed).
+  - The 22 tests that set the AGL KF option, inject a flow lockout or
+    cover the throw and pending arm changes pass, Replay included;
+    copter, plane and Replay build; `check_param_tables.py` is clean.
+    Replayed, the two fleet logs that reach a restart confirmation (the
+    TD25's BLK 03 and JK-4C log 62) give the same output on every core.
+  - SmallFastDronev1 md5 `e54e2ba4` (39,924 bytes free), MicoAir743v2 md5
+    `da5e2c6f` (232,576 bytes free), both `.apj`, built from
+    `cc0af6427f`. Nothing to set.
+- topup5 (2026-11-11, a fast-forward over topup4): #35119, new to `prs.txt`,
+  adds `smart_rtl:reset_home()`, which restarts the SmartRTL path in
+  flight at the current position, and the applet `smartrtl-reset.lua`,
+  which does it from an RC switch (`d87a42198e`..`4414a4c83e`, 13
+  commits, test `SmartRTLResetHome`). It changes every arming too:
+  `set_home()` now resets the path on SmartRTL's background thread,
+  about 1 ms after the call, which closes a race with the path cleanup
+  at a re-arm and on DO_SET_HOME. Unflown. 4.7 needs the
+  AP_SCRIPTING_LUA_ENABLED fixup below (`28e67aa404`), and the test was
+  registered by hand in the beta's `arducopter.py`.
+  - SmartRTLResetHome, SMART_RTL, SMART_RTL_EnterLeave, GCSFailsafe and
+    Rover SmartRTL pass; copter, rover, plane and Replay build;
+    `check_param_tables.py` is clean. `check_test_api.py` flags the
+    test's inline probe script, as it does the three other scripts
+    installed with `install_script_content_context()`.
+  - SmallFastDronev1 md5 `058e5419` (40,212 bytes free), MicoAir743v2 md5
+    `06fb89ef` (232,784 bytes free), both `.apj`, built from
+    `28e67aa404`. Nothing to set: the reset needs the applet installed
+    and an RCx_OPTION 300-315 switch, or a script of its own.
+- topup4 (2026-11-11, a fast-forward over topup3): with THROW_TYPE 1 and
+  THROW_ALT_DCSND 0, #32475's throw arrests a toss from where uprighting
+  ends and holds the height it stops at, never below the release point,
+  instead of flying it back down to the release point (`01f474c138`, test
+  `ThrowZeroDescentStopsAboveRelease` `9d2cdae5a1`), from the customer
+  quad's three tosses that descended 1.7-3.4 m to the hand
+  (`FLIGHT_VALIDATION.md`, 2026-11-10). THROW_ALT_DCSND's description is
+  rewritten around 0 and gets a 0-20 m range. Unflown. On #32475 since
+  2026-11-11 (`f4fcfb44ba`, `3f8d1623ee`), so the next refresh takes it
+  from the PR head and these copies drop out; the test was inserted by
+  hand into the beta's differently laid out `arducopter.py`.
+  - All 22 throw tests pass; copter, plane and Replay build;
+    `check_param_tables.py` is clean.
+  - SmallFastDronev1 md5 `fdb7a803` (41,020 bytes free), MicoAir743v2 md5
+    `ff29ac3d` (233,552 bytes free), both `.apj`, built from
+    `9d2cdae5a1`. Nothing to set beyond THROW_ALT_DCSND 0 where wanted.
+- topup3 (2026-11-11, a fast-forward over topup2): a commanded EKF3 bootstrap
+  reset, from the EKF_RESET switch or #32401's pending arm, is logged as
+  `AP_DAL::Event::bootstrapReset` (18) and Replay re-initialises the cores
+  there (`82effad3ba`, `7df06549d3`, `2f5de96b68`, test `2e11eaa1d3`).
+  No change to what the vehicle does. On #32401 as `9987a21af2`..`9e187a7e03`
+  (not yet pushed), so the next refresh takes them from the PR head; its
+  Replay commit is written against master's `apply_event()` handlers, which
+  the 4.7 base does not have, so expect a stop in
+  `Tools/Replay/LR_MsgHandler.cpp` and resolve it as `7df06549d3`.
+  - Replay (all eight cases, BootstrapReset new), EKFBootstrapReset,
+    EKFBootstrapResetStaticYaw and PendingArmOnSwitch pass; copter, plane
+    and Replay build; `check_param_tables.py` is clean. On the PR branch
+    the BootstrapReset case fails with 143130 mismatched fields with the
+    logging line removed.
+  - SmallFastDronev1 md5 `4bcebe7d` (41,140 bytes free), MicoAir743v2 md5
+    `585ca853` (233,688 bytes free), both `.apj`, built from
+    `2e11eaa1d3`. Nothing to set.
+- topup2 (2026-11-11, a fast-forward): #33484's lockout recovery waits
+  for range samples to confirm an AGL KF that has just restarted (`c3c24b9c7f`, test
+  leg in `EK3_FlowAxisLockoutRecovery` `cb143684fa`), from the TD25's
+  flights with a compromised range finder (`FLIGHT_VALIDATION.md`,
+  2026-11-10). Unflown. The same two commits are on the PR since
+  2026-11-11 (`e424f24f58`, `799fb45623`), so the next refresh takes them
+  from the PR head and these copies drop out.
+  - The 21 tests that set the AGL KF option or inject a flow lockout pass
+    (EK3_FlowAxisLockoutRecovery, OSDEKFLanes, the OpticalFlowAGLKf*,
+    EK3_AglKf*, EK3_RngHgtSwitch* and FlowFocusHold* tests); copter, plane
+    and Replay build; `check_param_tables.py` is clean.
+  - Replay of every replayable log from one tester's fleet, 284 of them
+    from 4.6.3 to `7b00f3b5`, through topup1 and topup2: two differ. The
+    TD25's BLK 03 loses its 15.3 m/s reset as intended. JK-4C log 62 (an
+    older SFD 4.7.2 build) defers two resets 0.3 s on the ground before
+    takeoff; the extra reset that follows tips the burst pause into 20 s
+    and later 40 s pauses, so its IMU1 core spends 38.0 s instead of
+    24.7 s over 1 m/s of flow mismatch while IMU0's falls from 34.7 s to
+    19.5 s (VALT, so nothing reached the control). Details in the private
+    analysis repo.
+  - SmallFastDronev1 md5 `04564bef` (41,156 bytes free), MicoAir743v2 md5
+    `bcb34f6b` (233,696 bytes free), both `.apj`, built from
+    `cb143684fa`. Nothing to set. The lock stays at refresh14's heads.
+- topup1 (2026-11-10, a fast-forward): two fixes from a customer quad's
+  flights on `7b00f3b5` (`FLIGHT_VALIDATION.md`, 2026-11-10), neither
+  flown.
+  - The throw into VALT hands over without a position (`8449cb6dcc`,
+    test `ThrowDropNoPositionNextModeVALT` `cbb8e4c762`): VALT joins
+    ALT_HOLD in `nextmode_requires_position()`. Beta-local, like the
+    hand-off commit it fixes; fold the two together wherever they land.
+  - #34941's flow timeout kept for a vehicle that is not flying
+    (`7664ac2c91`, test `OpticalFlowTiltTimeoutNotFlying` `654ae03aa9`).
+    On the PR since 2026-11-10 (`9609f96a0d`, `1f53fe0477`), so the next
+    refresh takes it from the PR head and these copies drop out.
+  - The 21 throw tests and OpticalFlowTiltNoTimeout,
+    OpticalFlowTiltTurnRecovery and OpticalFlowTiltTimeoutNotFlying pass;
+    copter, plane and Replay build; `check_param_tables.py` is clean.
+    Replay through this build: the customer's log16 exact, log20's carry
+    at 0.26-1.03 m/s against 1.98-3.40 m/s as flown (103-108 s), as the
+    fix's own Replay.
+  - SmallFastDronev1 md5 `8af6e456` (41,300 bytes free), MicoAir743v2
+    md5 `d6c1920b` (233,832 bytes free), both `.apj`, built from
+    `654ae03aa9`. Nothing to set. The lock stays at refresh14's heads.
+- refresh14 itself: promoted
+  2026-11-07 (a force push): refresh13 topup1 restacked onto the PR heads
+  squashed that day. Same base (`258e843e68`) and the same tree as the
+  beta it replaces (`ffec441d1e`, kept locally as
+  `SmallFastDrone-4.7.2.17-beta`), so the code is topup1's (`896e11846d`)
+  and the flight card's firmware stands: nothing to reflash.
+  - The PR commits are the squashed heads (`FLIGHT_VALIDATION.md` and
+    `PR_STATUS.md`, 2026-11-07), with #32401, #33318 and #34630 at their
+    11-07 heads. topup1's PR fixes now arrive inside their PRs' commits.
+  - Plan 485, 17 skipped by list (#34630's 14 copies of #34543's commits,
+    both primary core index commits, #32238's FAST_BOOT type), 468 run.
+    Seven stops rerere did not cover, each resolved to the beta's text:
+    #32401's AP_Arming.h includes (rebased onto master), #33318's flow
+    control limits (theirs), #33478's EK3_OPTIONS description (both
+    sides), #33585's limits and #33569's gain height (ours, #33569's
+    parameter kept), #34457's decay gap (ours, then empty as before) and
+    #34942's bootstrap keep (both sides). #34456's DAL copy stopped and was
+    skipped as documented.
+  - Then refresh13's 39 adaptation commits unchanged, one new fixup
+    (`AP_NavEKF3: scale the flow control limits from the anchored flow
+    height`), the beta's tests whole, and README, Tools/SFD and
+    CLAUDE_local.md restored. Seven new rerere resolutions are added to
+    the archive (280 entries).
+  - Not rebuilt or retested: the tree equals the beta's, whose builds and
+    tests stand.
+- Previous beta: refresh13 after topup1 (`ffec441d1e`, kept locally as
+  `SmallFastDrone-4.7.2.17-beta`): refresh13 was promoted 2026-11-06 over
+  refresh12 topup13 (a force push), and topup1 on 2026-11-07 as a
+  fast-forward.
+  - topup1 (2026-11-07): the 11-07 AP-Review fixes that reach the beta,
+    none flown.
+    - #32401: a pending arm's quiet retries no longer sound the buzzer or
+      refresh the logger's arming-failure persistence (`ab91920d11`,
+      `7802cbd99d`). Its failure prints once (`beab832ffe`).
+    - #32471: the seed reads a zero time up to 1 s ahead of its clock as
+      age 0, which closes a Lua or DDS arm racing an EKF zeroing
+      (`896e11846d`).
+    - #30841: the ESC_TLM_LOG_RATE text says the main loop rate caps it
+      (`462868f3da`), plus its ESCTelemLogRate test (`029a366034`).
+    - #34457: the touchdown test rejects a non-finite VD (`71a1aa7623`).
+    - The PRs' other 11-07 pushes change nothing here: #34630's restack
+      on #34543, #33318's squash, #33478's span limit (on XKFA.VHold,
+      which the beta leaves out), and the #32473 and #33507 restacks.
+    - The lock stays at refresh13's heads until the next refresh.
+    - PendingArmOnSwitch, ArmSwitchAfterReboot, ArmFeatures,
+      ESCTelemLogRate, OpticalFlowAGLKfTouchdown and the seven learner
+      and acro tests pass.
+    - SmallFastDronev1 md5 `666ed4aa` (41,324 bytes free), MicoAir743v2
+      md5 `4d9d5598` (233,848 bytes free), built from `896e11846d`.
+      Nothing to set. The plan ran 492 commits for the
+  21 PRs that moved, among them the ten pushed with the 11-06 review fixes
+  and #33318's LOIT_DRAG_COEF head.
+  - Base `258e843e68`: refresh12's `b74b576dc9`, the TBS_LUCID_H7 baro fix
+    (`89982e63a9`, 4.7's `7551eb32f7`: every variant can carry a DPS368 or
+    a BMP390) and master's AGL KF struct move (`0ecbe153e2`), which the
+    moved AGL KF heads are written against. 4.7.3-beta1 was not taken.
+  - Out of the box the SFD boards behave as before through
+    `sfd_defaults.parm`: ESC_TLM_LOG_RATE 25, since #30841 logs ESC from
+    AP_ESC_Telem at 100 Hz by default, and LOIT_DRAG_COEF 0.01. For #33318,
+    0 means master's feed-forward and any positive value takes the modelled
+    drag out, as the betas did unconditionally. LOIT_DRAG_COEF moved from
+    AC_Loiter index 20 to the PR's 12, so a value saved on topup12 or
+    topup13 does not carry over. The SFD-O4 needs 0.3 set again. LOIT_OPTIONS
+    bit 6 is gone.
+  - Not taken: #35003 (the 4.7 bootloader ECC rebuild).
+  - All 133 tests pass: the derived SFD set and the moved PRs' tests.
+    LoiterAirframeDragFeedForward passed only after a reconfigure (traps).
+    SITL copter, plane, heli, sub and rover build, and
+    `check_param_tables.py` is clean.
+  - SmallFastDronev1 md5 `2efce0f0` (41,388 bytes free), MicoAir743v2
+    md5 `eb30f0d8` (233,856 bytes free), both `.apj`, built from
+    `6aea2dde6c`. The commits after it are records only.
+  - Flown: none on this build itself; topup1 flew on SFD-O4 logs 84-88
+    (2026-11-07). The T25's flights 05-07 on a second
+    MicoAir743v2 (topup11) were replayed through it with EK3_RNG_USE_HGT 6
+    (`FLIGHT_VALIDATION.md`, 2026-11-06 evening).
+- Older beta: refresh12 after topup13 (`85a872ee6f`, kept locally as
+  `SmallFastDrone-4.7.2.15-beta`), promoted 2026-11-06 as a fast-forward
+  over topup12 (`a179bc5d00`). topup12 was rebased onto `909cde934e` (the T25's topup11
+  flights, `ANALYSIS_REPOS.md`, `CLAUDE_local.md`) and pushed, so its
+  commits from topup11's records on have new hashes. topup12 and topup13
+  are the only code over topup11.
+  - topup13: #33478's settled-start rule for the AGL KF step hold
+    (`c21c1d917c`, the PR's `505ecae715` with the beta's field names): a
+    range jump counts as a step only from an innovation under 0.25 m, or
+    after a gap in the range. Behaviour change, not flown: it only acts when
+    a jump comes from a filter already off the range, as after the T25's
+    accel clip (flight 04 on IMU0, Replay 1.27 -> 0.71 m against the range
+    finder; `FLIGHT_VALIDATION.md` 2026-11-06). Replay of the 28-log set
+    matches the topup11 variant measured before; the beta's ten AGL KF
+    tests pass. SmallFastDronev1 md5 `0ec7413f` (42,028 bytes free),
+    MicoAir743v2 md5 `232e8223` (234,480 bytes free), built from
+    `c21c1d917c`. Nothing to set.
+  - topup12: LOIT_DRAG_COEF (`6b6e59d60d`, test `83465e9ad2`; before the
+    rebase `9b4d90f9de` and `650930dcc8`), the vehicle's own drag per m/s
+    fed forward in Loiter so the velocity integrator does not carry it
+    through a stop. Default 0, the topup11 behaviour (the modelled drag out
+    of the feed-forward). Flown indoors 2026-11-06 on a build reporting
+    `9b6b564a`, the same code before the rebase: log82 at 0, log83 at 0.3,
+    no difference at room speeds and nothing worse; the outdoor test is still
+    to fly. A SmallFastDronev1 build at `650930dcc8` had md5 `d9a64bd2`
+    (42,068 bytes free); a build of `dab9657a19` reports that hash and has
+    its own md5. The SITL A/B behind it is in
+    `../ardupilot-pr-analysis/33318/README.md`.
+- Previous beta: refresh12 after topup11, promoted 2026-11-05, a
+  fast-forward of 33 commits over topup10 (`1bb9af74de`, kept locally as
+  `SmallFastDrone-4.7.2.14-beta`). topup11
+  flew on 2026-11-05 indoors, SFD-O4 log73 and log78
+  (`FLIGHT_VALIDATION.md`). log73's drift was the flow sensor not seeing the
+  semi-glossy floor at night, not the code. log78's four hard landing hops
+  ran and passed #34457's fused floor, #34942's reset at rest (twice),
+  #32471's first-flight save and its "not first flight" refusal, and four
+  take-offs in one boot (#33366, #31274). On 2026-11-06 log79 and log80
+  flew the #33318 A/B in daylight (LOIT_OPTIONS 1 against 65): a 0.1 m
+  difference at room speeds, no pull-back on either; #33318 stays.
+  Nothing else from topup6 to topup11 has flown.
+  topup11 brings in the 11-04 and 11-05 PR work the beta lacked, for Andy
+  to fly:
+  - #32471 (and #32473 on it): the hover Z-bias learner saves only from the
+    first flight after the EKF zeroes the accel bias at rest, armed 10 s
+    after it, and not after an accel switch on the ground; EKF3 reports the
+    zero time and each accel's bias from the core set up on it. The PR's
+    commits from `793dc2fb26` to `0c4475f079` (pushed to `3e76fb4246`, the
+    last three local); the learner matches #32473's restack `782e58d3ac`
+    function for function.
+  - #34457 and #33507: the AGL KF floor fused as a measurement with no bias
+    gain, the height update in FuseAglKfHeight(), the named limits. Replay
+    of six SFD-O4 flights is identical to the `softfloor-beta.diff`
+    prototype behind #34457's 34-flight sweep. The beta has no on-ground
+    range after 200 ms without a sample in readRangeFinder(), so that hunk
+    is not taken.
+  - #35014 / #33585: the flow height limit takes the terrain state off with
+    range finder height too (`0b2bbcffb8`), and their tests. #33585's
+    `2f02cfd690` (the anchored flow height chosen in FuseOptFlow()) is not
+    taken: on the beta it changes nothing (the beta already writes the
+    anchored ground into the terrain state each step; both anchor tests give
+    the same figures either way), and the next refresh brings it.
+  - #32972: the AID_NONE height reset in ground effect is skipped only while
+    armed, and its test matches the PR.
+  - SFD only: LOIT_OPTIONS bit 6, a temporary switch that puts the loiter
+    drag back in the feed-forward for a flight A/B of #33318 (SITL flow jab:
+    1.08x and -0.08 m/s with the drag out, 1.44x and -0.40 m/s with bit 6).
+  - Tested at `92f659a501`: the full SFD set, 127 of 129. The two failures
+    were test-only and are fixed: HoverBiasSavedFirstFlightAfterRest's accel
+    switch now comes before its flight at twice the offset (after that
+    landing #34942's on-ground height check forces a reset, which master
+    does not have), and OpticalFlowAGLKfTouchdown flies over flat ground
+    (the CMAC tile puts the range finder at 0.55 m on the ground; also fixed
+    on #34457 as `717595bef8`, not pushed). Both pass at `1a7ec50d81`.
+  - SmallFastDronev1 md5 `304d464b` (42,132 bytes free), MicoAir743v2 md5
+    `9490ae65` (234,592 bytes free), built from `6df2392ac4` (the code is
+    unchanged since). Parameter-side: LOIT_OPTIONS bit 6, default clear.
+- Previous beta: refresh12 after topup10, promoted 2026-11-04 (night), a
+  fast-forward of 3 commits over topup9 (`a8487f02aa`, kept locally as
+  `SmallFastDrone-4.7.2.13-beta`).
+  - topup10 over topup9, from TD's T25 log 08 (boot 142): EKF3 no longer
+    resets the height to the delayed baro on entering AID_NONE while takeoff
+    or touchdown is expected, the same test the height source switch uses
+    for a baro in ground effect (`dfd7a7feba`; test
+    EK3TouchdownHeightNotSnapped, `93875c9cbf`). The T25's flow lane stopped
+    aiding at 0.11 m on a landing with touchdown expected, the reset put the
+    prop wash into the height (+0.28 to +1.55 m on the floor), the arm-time
+    datum reset keeps the reported height with a recorded origin and no GPS,
+    and a re-arm 2.4 s later flew two flights 1.1 to 1.3 m high. Replay,
+    EKF minus range finder 5-10 s after the next takeoff: log 08 +1.27/+1.10
+    to +0.23/+0.04 m, log 05 -2.79/-5.40 to +0.30/+0.49 m; log 06 +0.00 to
+    +0.98 m, the known cost (its height was already off at the landing and
+    the reset's larger error had tripped the forced reset that cleaned it);
+    log 01 (no baro thrust compensation) moves both ways. Disarmed, and in
+    flight away from the ground, the reset still runs. On no PR yet (see
+    "Local work not in prs.txt"); master has the same reset.
+  - Tested at `93875c9cbf`: the full SFD set, 123 of 123, and Rover
+    OSDEKFLanesDCMFallback, each SITL vehicle built on its own (copter's
+    rate thread checked). This record changes no code.
+  - SmallFastDronev1 md5 `91fbaeac` (43,124 bytes free), MicoAir743v2 md5
+    `0e3e9933` (235,680 bytes free). No parameter-side changes since topup9.
+- Older beta: refresh12 after topup9, promoted 2026-11-04, a fast-forward
+  of 5 commits over topup8 (`722d77b5de`, kept locally as
+  `SmallFastDrone-4.7.2.12-beta`).
+  - topup9 over topup8, from TD's VALT regression (T25 boots 110 and 111):
+    the #32471 hover Z-bias learner stops learning an IMU once the EKF has
+    restarted its accel bias estimate for it since arming, and that flight
+    is not saved, with a warning. EKF3 counts the restarts per accel (a
+    reset at start or at the variance floor, or a core switching onto or
+    off the accel), AHRS passes on the per-IMU sum, and Copter checks it at
+    each hover sample (`769d5721ce`, `de2e98681d`, `73e8c23001`; test
+    HoverBiasNotSavedAfterEKFReset, `75771ce09b`). Squashed from 23
+    commits, in which a step detection and then a 10 s hold were tried and
+    dropped as no hold length fits both TD's T25 and JK's 4C; the
+    unsquashed series is kept locally as `r12-topup9-unsquashed`. The same
+    code as #32471 `1ff6d62b40` and #32473 `30343c7ae7`, both pushed
+    2026-11-04; the lock still names the pre-rebase heads until the next
+    refresh.
+  - The regression itself is EK3_ABIAS_P_NSE 0.005, which TD and JK both
+    set (the build default is 0.02): the bias variance collapses to its
+    floor and #23807's backstop zeroes the biases every 27 to 48 s in
+    flight, and a relearn landing just after one saved INS_ACC_VRFB_Z
+    -0.059 against about +0.10. Replay of 31 flights from three airframes:
+    no reset at 0.015 or above; the T25 bottoms at 1.08x the floor at
+    0.015, 1.46x at 0.02. Replay of TD's two 722d77b VALT logs through the
+    new EKF is identical to the flown cores.
+  - Tested at `75771ce09b`: the full SFD set, 122 of 122, and Rover
+    OSDEKFLanesDCMFallback, each SITL vehicle built on its own. This record
+    changes no code.
+  - SmallFastDronev1 md5 `bf1f14ed` (43,156 bytes free), MicoAir743v2
+    md5 `c00ca28a` (235,712 bytes free). Parameter-side: the
+    ACC_ZBIAS_LEARN description gains the no-save sentence; FIELD_PLAN asks
+    TD and JK for EK3_ABIAS_P_NSE 0.015.
+- Older beta: refresh12 after topup8, promoted 2026-11-03 (evening), a
+  fast-forward of 5 commits over topup7 (`4885313c95`, kept locally as
+  `SmallFastDrone-4.7.2.11-beta`).
+  - topup8 over topup7, from JK's log 69 (armed with a 0.38 deg/s roll bias
+    after the vehicle was carried powered): the EKF's own reset starts the X
+    and Y gyro biases from zero and keeps Z (`f297033f6e`; EKFResetGyroBias
+    checks X and Y are zeroed and relearned within 2 s, `fb0e459bba`,
+    `902d52b738`). Replay of the T25's 11 4.7.2 logs: no change but boot
+    165, carried powered, where it helps. Ported to #34942 as `4ac4f4b1f8`
+    and `3879fc6a6e`, pushed 2026-11-03 and rebased onto master as
+    `94f24cdd9c`; the lock stays at `2804706ae0` until the next refresh. A
+    stillness gate on #34292's zero flow at rest was
+    tried for the same log and dropped: the harm it removed was Replay-only,
+    and it regresses T25 boot 45's spool-up.
+  - Tested at `902d52b738`: the full SFD set, 121 of 121, and Rover
+    OSDEKFLanesDCMFallback, each SITL vehicle built on its own. This record
+    changes no code.
+  - SmallFastDronev1 md5 `d7fd65bd` (43,948 bytes free), MicoAir743v2 md5
+    `4223ca14` (236,384 bytes free). No parameter-side changes since topup7.
+- Older beta: refresh12 after topup7, promoted 2026-11-03 (afternoon), a
+  fast-forward of 6 commits over topup6 (`f9fb97e8eb`, kept locally as
+  `SmallFastDrone-4.7.2.10-beta`).
+  - topup7 over topup6, AP-Review round 4 on #34942: the EKF step average is
+    kept across a bootstrap of a core that has run, so a kept gyro bias acts
+    at its learned rate on loops where the EKF does not step at 12 ms
+    (`77c33e88d4`, `dd4191b19d`; EKFResetGyroBias at 400 and 50 Hz); the
+    lock at #34942's pushed `2804706ae0`.
+  - Tested at `ee1c86671d`: the full SFD set, 120 of 121, and Rover
+    OSDEKFLanesDCMFallback, each SITL vehicle built on its own. Copter.Replay
+    failed in the set on "Did not get new position like old position" and
+    passed twice alone (the known suite-load stall). This record changes no
+    code.
+  - SmallFastDronev1 md5 `77c50c62` (43,948 bytes free), MicoAir743v2 md5
+    `9c5a3f4c` (236,392 bytes free). No parameter-side changes since topup6.
+- Older beta: refresh12 after topup6, promoted 2026-11-03, a fast-forward
+  of 14 commits over topup5 (`df9604a31f`, kept locally as
+  `SmallFastDrone-4.7.2.9-beta`).
+  - topup6 over topup5, the 11-03 #34942 work after users reported yaw
+    jitter without a compass and poor VALT: the EKF's own reset keeps the
+    learned gyro biases, and EKF_RESET (and the arm-pending reset) zeroes
+    them (`dfd8194b85`, `19e5ca3831`, test EKFResetGyroBias); the static
+    yaw reference is stored within 5 s of a GPS, compass or external nav
+    yaw fusion, so a declination arriving after the compass alignment no
+    longer leaves it behind (`e84029d45f` reworked by `e95d72c3a9`,
+    `5a328d4364`; tests StaticYawKeepsCompassYaw on the default
+    declination and StaticYawLearnsBiasAwaitingGPSYaw); the records, and
+    the lock at #34942's pushed `d742c388ee`.
+  - Tested at `d55b7d25e3`: the full SFD set, 121 of 121, and Rover
+    OSDEKFLanesDCMFallback, each SITL vehicle built on its own (copter's
+    rate thread checked). This record changes no code.
+  - SmallFastDronev1 md5 `b1d6a9c1` (43,972 bytes free), MicoAir743v2 md5
+    `97602903` (236,416 bytes free). No parameter-side changes since topup5.
+  - Known, not fixed: VALT_POS_EXPO moved from var_info2 29 to 30 on
+    2026-10-31 (topup4), so a value set on a 4.7.1 or 4.7.2 beta before then
+    reads 0 on topup4 or later, or a saved TKOFF_CPU_AVG (95) on boards that
+    flew the 10-30/31 betas. Ask users with poor VALT for their PARM value.
+  - Known, not fixed (2026-11-03): a low VALT hover over a baro that reads
+    high near the floor is pulled onto it. JK's 4C GOM hit the floor 9.3
+    times a minute below 0.6 m against 2.0 on 4.7.0. AP_GroundEffect has
+    no low-hover re-latch, so VALT's ground effect clamp and the EKF's
+    baro deweighting are off there; 4.7.0's re-latch was switched by the
+    range finder, and baro-only the builds do not differ in SITL. Advice,
+    SITL only: EK3_OPTIONS bit 4 with EK3_AGL_ABIAS_P 0.3 steadies it
+    (not reliably a hold), or ALT_HOLD, whose surface tracking VALT skips.
+    Record: the private analysis repo; SITL test
+    VALTLowHoverGroundEffect, not committed.
+- Older beta: refresh12 after topup5, promoted 2026-11-02, a fast-forward
+  of 40 commits over topup4 (`c46a09ec56`, kept locally as
+  `SmallFastDrone-4.7.2.8-beta`).
+  - topup5 over topup4, the three 11-02 AP-Review rounds: #34942's static yaw
+    reference retaken after every bootstrap and yaw reset (`ba9712dbdb`,
+    `c06189bb8d`), its reset at rest waiting for the fusion horizon and its
+    rejected ground height clip no tighter than 2 m (`4795b33bc8`,
+    `742952b71f`); #31274's 250-frame floor and stale latch (`35c5b6ae2d`,
+    `aa789238ce`); #32475's throw stopping once the next mode runs and
+    keeping a source set picked in throw (`e48795b46f`, `0aa542c7ef`);
+    #32471's locked accel bias wrappers (`915f070c11`); #34584's ATSC.AngPSc
+    from the recorded copy (`d7a07b2217`); the OSD lane items behind
+    AP_OSD_EKF_LANES_ENABLED, on for the ten SFD boards (`9b0cd90701` to
+    `670b9812e4`, `38acc82154`); no AHRS primary core while DCM, SIM or
+    External fly (`5b816923f3`, refresh-only); the Borg H7 at the released
+    board (`de64bcd386`, `9e4067f7e0`); the records, and the lock at the
+    pushed heads (`93198464f9`).
+  - Tested at `93198464f9`: the full SFD set, 119 of 119, and Rover
+    OSDEKFLanesDCMFallback, with each SITL vehicle built on its own (a
+    combined build had left copter without its rate thread; see the
+    refresh12 traps). This record changes no code.
+  - SmallFastDronev1 md5 `f0d3afad` (44,196 bytes free), MicoAir743v2 md5
+    `619c9ce5` (236,640 bytes free). The only parameter-side change since
+    topup4 is AP_OSD_EKF_LANES_ENABLED, which every SFD board keeps on.
+- Older beta: refresh12 after topup4, promoted 2026-10-31, a fast-forward
+  of the beta pushed earlier that day (refresh12 topup3 and its promotion
+  record, `a82986c8bd`, kept locally as `SmallFastDrone-4.7.2.7-beta`).
+  - topup4 over topup3: VALT_POS_EXPO back on var_info2 30 and TKOFF_CPU_AVG/
+    PEAK on 41/42 (`8e2a1e6ce6`, `95ad9b9c37`); #32475's position hold when a
+    position comes back (`b12501f5af`, `b1bfb811be`, `a05ce46d5b`); #31274's
+    error rate across a restart (`213ce15bb2` and its follow-ups to
+    `f3a0539315`); the flight, audit and decision records; the manifest at
+    the squashed heads (`1626f01266`).
+  - Tested since topup3's full SFD set (124 of 124): ModeVAltHold, all 20
+    Throw tests, SITL builds, the parameter store carried across builds, and
+    CubeOrange-bdshot, CubeOrange and the iomcu-dshot firmware. The full set
+    was not rerun.
+  - SmallFastDronev1 from `f3a0539315`, the same code, has md5 `e1c564d2`
+    (44,564 bytes free). After flashing SFD-O4, set VALT_POS_EXPO 0: it reads
+    the 95 stored as TKOFF_CPU_AVG (`FIELD_PLAN.md`).
+  - Older betas: `4db887869b` is `SmallFastDrone-4.7.2.6-beta`, refresh11
+    topup5 is `SmallFastDrone-4.7.2.5-beta` (`541cb6d5d9`).
+- Built: `SmallFastDrone-4.7.2-refresh12` (worktree `../sfd-refresh12`),
+  2026-10-30, on the unchanged 4.7.2 base (`b74b576dc9`; run with
+  `SFD_BASE` set to it, see the refresh12 traps). 431 planned commits, 296
+  applied; 337 on the branch with the fixups, local work, tests, the #32475
+  top-ups and the records. Three PRs from local branches Andy had not pushed
+  yet: #32232 `r1030/32232` (`158e8386a3`), #32238 `r1030/32238`
+  (`47714568af`), #32475 `r1030/32475-4` (`60cee67154`, reached as two
+  top-ups on the tip after the run had applied `f48024f489`); the lock
+  records those heads, #32475's moved at topup1 to its pushed `3d634e4a5f`,
+  which adds only the four test fixes the branch already carries. Copter,
+  plane, heli and sub build for SITL and copter for SmallFastDronev1 (46.8
+  kB free). Code against the beta differs only by
+  the PRs' newer heads (#32475's seven code commits since topup5 and a
+  comment, #31216's README and images, #34456's standalone DAL stub,
+  #34882's comment). Lost and
+  restored: EK3_AGL_ABIAS_P (rerere replayed refresh11's bad resolution),
+  the FS_EKF_ACTION_VALT define, the Borg H7's ALLOW_ARM_NO_COMPASS, #34851's
+  term in #33585's flat-ground restore and the Replay MSG_CREATE fix (see
+  "Local work"). SFD set 111 of 114 on the first run, all three failures
+  new #32475 tests. ThrowSrcSetHandoff's second leg failed on 4.7's SITL
+  shoving again after a reboot (master's `ccd8eaacec` backported). The rest
+  were four test problems, not a clash between #32475's and #32514's code:
+  one leg flaky on #32475 alone (a THRO record LOG_FILE_RATEMAX drops), and
+  three checks that leaned on master's EKF failsafe, which #32514 changes
+  (a "position lost" wait, "EKF Failsafe Cleared" before AUTO, and a
+  handoff wait the failsafe made certain). Fixed by four autotest commits
+  on top of the lock, `28223b9b5b`..`c0c0f45759`, ported to #32475 and
+  pushed as `3d634e4a5f` (record: `../ardupilot-pr-analysis/32475/`, "the
+  refresh12 failures"). With them the 18 Throw tests in the SFD set, and
+  ThrowMode, pass on two runs here (19 of 19 each), and the PR's 19 on
+  #32475 alone; the other 96 tests passed in the first run and the fixes
+  touch only these tests.
+- refresh12 topup1 (2026-10-30), on the tip: the beta's records for SFD-O4
+  logs 61-65 (`2889415303`), then two PRs added to prs.txt that day. #33366
+  (robertlong13, seven commits, clean) fixes the CPU load measurement behind
+  log64's blocked takeoff; its TKOFF_CPU_AVG/PEAK move from var_info2 60/61,
+  #32475's, to 30/31 (`40c9fdd94b`, see "Parameter indices"). #34941
+  (`649e160e9c`, test `42bd2a3b79`) stops a flow lane timing out while the
+  tilt check withholds its flow, log61's Loiter that did not stop; four
+  additive conflicts with #33484's and #34543's flow state (recipe below).
+  Copter, plane, heli, sub and Replay build for SITL, copter for
+  SmallFastDronev1 with 45.9 kB free (46.8 before). `param_changes.py`:
+  TKOFF_CPU_AVG/PEAK default to 4.7's fixed 95/99.5 and BRD_IDLE_STATS 1
+  keeps its meaning (bit 0, the threads.txt reader), so no SFD default is
+  needed. OpticalFlowTiltNoTimeout passes here and fails with `649e160e9c`
+  reverted ("flow lane timed out while banked"), so the stack's port is what
+  holds the lane. SFD set 114 of 115. OSDEKFLanes's no-flow-data leg fails
+  wherever SITL has the CMAC terrain tile cached, before topup1 as after it:
+  4 of 10 and 3 of 10 in scratch worktrees given refresh12's `terrain/`, 0
+  of 40 without it, and 5 of 14 in refresh12's own worktree, which cached
+  the tile in its first SFD run. With the tile, SITL's range finder measures
+  to SRTM ground 0.55 m below the resting vehicle, so the EKF puts it 0.54 m
+  up, and EKF3's hold of flow validity until the vehicle moves, which needs
+  it under 0.5 m, no longer applies. Disarmed on the ground, the lane then
+  reports REL for about 1 s after the flow stops instead of past the 5 s
+  timeout, and the flash check #34543 tightened in `af50a66828` misses that
+  0.6 s window. A problem in #34543's test, not the top-up: fixed here by
+  `SIM_TERRAIN 0` in the test (`6e5082b5a8`, comment `b8a7a6be2e`), 12 of
+  12 with the tile cached, and pushed to #34543 as `351aea9eaa`
+  (`af50a66828` -> `351aea9eaa`, quick-reviewed), the same lines; the lock
+  records it. On the PR branch the tile shortens REL to 1.05 s and the leg
+  still passed 10 of 10; with the fix REL holds throughout, 10 of 10.
+- refresh12 topup2 (2026-10-30), on the tip: #32471 v3 (`04e501e13d`,
+  pushed by Andy after topup1's lock): `a825555a04` Copter, `dca757eee8`
+  AP_InertialSensor, `8455b99ddb` autotest. With `ACC_ZBIAS_LEARN` bit 2
+  clear it saves the hover bias less the bias the EKF held at arming, not
+  the whole bias SFD-O4 log63 counted twice; with bit 2 set, the whole
+  bias as before. One conflict, the parameter's description against
+  #32473's bit 3 (recipe below). The learner runs only from
+  `update_throttle_hover()`, which manual-throttle modes skip, so it never
+  meets #32473's acro hold. SFD's default `ACC_ZBIAS_LEARN 8` learns
+  nothing, so no board changes out of the box. All five builds; copter for
+  SmallFastDronev1 with 45.8 kB free (24 bytes less).
+  VibrationRectificationBiasLearning passes with #32471's own figures
+  (0.141 learned against 0.15, 0.140/0.141 with a static 0.3 left out,
+  0.441/0.437/0.442 with bit 2) and fails with `a825555a04` reverted
+  ("INS_ACC2_VRFB_Z=0.430590 is not the motors-on offset 0.150000"). SFD
+  set 115 of 115, with the CMAC terrain tile still cached (OSDEKFLanes
+  included).
+- refresh12 topup3 (2026-10-31), on the tip: #34942, Andy's, opened on
+  10-30, for the T25 drops that re-armed with the EKF still descending and
+  climbed in VALT.
+  - What it does, on by default: the on-ground height check, whose filter
+    had not moved since 4.1, applies in aided modes unless a measured
+    vertical velocity agrees, and a vertical velocity over 0.5 m/s is reset
+    once the vehicle is still.
+  - Taken at the reworked head `3da7a8cf2e` (`e78e5ccda2`..`992bb00935`, test
+    `1806c9af22`), then moved to `dc76e048a6` with its static yaw fix
+    (`3429fc6dfd`), and to `2a52c965e2` with the rest reset fix
+    (`467782a96c`, `f93bd10a6f`).
+  - The EKF3 commits applied clean, byte-identical to the PR's replayed
+    stages on topup2's tip. The test needed its registration and 4.7's
+    `takeoff()` keyword (recipe below).
+  - SFD's AGL KF velD (#33478, `EK3_OPTIONS` bit 4, on in SFD's 92) never
+    counts as agreement: the PR stamps `lastVelDFuseTime_ms` only in
+    `FuseVelPosNED()`'s `fuseVelData` branch. Replay of three T25 logs never
+    set it.
+  - EK3HardLandingRearm passes. With the seven EKF3 commits reverted, the
+    flow quick re-arm (the T25 case) arms at 5.19 m/s with no reset and
+    climbs 0.76 m with the throttle at minimum; with them, 0.07 m.
+  - The first full runs broke five tests, each passing with #34942's EKF3
+    reverted:
+    - MAV_CMD_SET_EKF_SOURCE_SET, also the PR's own CI failure. Commit 5's
+      stillness cap made a vehicle booting still read still from its first
+      sample, so the static yaw reference was never taken. On a source set
+      with no yaw source it was then fused as yaw 0 with zero noise, and the
+      Z gyro bias ran to -28 deg/s. Fixed in the PR (`dc76e048a6`, here
+      `3429fc6dfd`). The T25, with no compass and no yaw source, runs that
+      path on every still boot. Replay with the fix is bit-identical on 13
+      of 15 logs and tracks the flight closer on the other two.
+    - AccelBiasMovingPlatform, Copter.Replay's accel bias inhibit leg and
+      VibrationRectificationBiasLearning's bit 2 leg. `ACC_ZBIAS_LEARN` bit 2
+      stops the EKF learning on the ground, so a simulated platform's
+      acceleration, or a static IMU bias, left it reading 1.25 to 6 m/s at
+      rest, and #34942 refused those arms. Bit 2 stays as designed (Andy: it
+      is meant to stop all learning).
+    - The tests changed instead: they step off the platform before arming
+      (`405dc4d041`) and boot each bit 2 flight with bit 2 clear
+      (`0d1d920c32`, `b0718dc190`). Pushed to #32471 (`54d41e98c1`,
+      `5afa8d69fb`) and #32473 (`f945737262`). Each still fails with what it
+      guards broken.
+    - EK3_ZeroVelFusionNotUsedWithGPS, in the full set only: it passes
+      alone and failed identically in two full runs. On the ship, a SITL
+      deck bump started a new rest while GPS velD was fused but 0.5 m/s off,
+      as the EKF learned the injected bias. The reset stopped the bias
+      settling, at 0.65 against 0.7. Fixed in the PR: the check waits while
+      a measured vertical velocity is being fused (the latest sample passed
+      its gate, one was fused in the last 2 s, all three axes for body
+      velocity). Here that is `467782a96c` and `f93bd10a6f`; on the PR it
+      is one commit, `2a52c965e2`. EK3HardLandingRearm's GPS leg still
+      resets, because GPS is past its gate after the impact, and rises 0.05
+      to 0.08 m. Replay cannot change: SFD-O4 logs 54-65 had 40 rest checks
+      and no resets, and the T25 fuses no measured vertical velocity.
+  - Copter.Parachute fails on 4.7 with or without the PR: 4.7 prints
+    "BANG!  Parachute deployed" with two spaces, and master's test waits for
+    one.
+  - The rerere archive is unchanged (see the refresh12 trap on
+    `rerere-save`).
+  - All five builds; copter for SmallFastDronev1 with 44,820 bytes free,
+    1,016 fewer than topup2.
+  - SFD set 124 of 124 on the final code (`f93bd10a6f`): the set's 116,
+    plus MAV_CMD_SET_EKF_SOURCE_SET, Copter ThrowMode, ShipTakeoff,
+    ArmFeatures and RudderDisarmMidair, and Plane Parachute,
+    ParachuteSinkRate and DeadreckoningNoAirSpeed, with the CMAC terrain
+    tile cached. The ship test passes where it had failed twice: the deck
+    bump still happens, and no reset follows.
+  - The flight card is rewritten for refresh12 (`FIELD_PLAN.md`).
+- Previously built: `SmallFastDrone-4.7.2-refresh11` (worktree `../sfd-refresh11`),
+  2026-10-22, on the 4.7.2 base (`b74b576dc9`). 348 planned commits, 271 on the
+  branch with the fixups, local work and tests. Firmware "SmallFastDrone
+  V4.7.2". Copter, plane, heli and sub build. SFD set 98 of 100, then 100:
+  AccelBiasMovingPlatform failed once under suite load and passes alone (2 of
+  2), and EK3_AglKfVelMixedSources's 4.7 bound was re-set (see "Local work");
+  it had been failing on the shipping beta too. Code against the beta differs
+  only by 4.7.2's own changes and the PRs' newer heads. Lost and restored on
+  the way: EK3_AGL_ABIAS_P (a conflict resolution, see the refresh11 traps),
+  EK3_OPTIONS 92's board default and FS_OPTIONS bit 6's wording (local work the
+  rebuild drops). #33478's XKFA.VHold is left out (standing divergences).
+  Promoted to the beta and topped up five times (refresh11 topup1-5, below).
+- Previously built: `SmallFastDrone-4.7.2-refresh10` (worktree `../sfd-refresh10`),
+  2026-10-04, on the same base (`ec107ee728`). 364 planned commits: the 16 PR
+  heads reworked for the 2026-10-03 AI reviews, plus #34601 and #33639, minus
+  #34361 and #33497 (both closed). Copter, plane, heli and sub build. SFD set
+  90 of 90 (OpticalFlowFallbackKeepsAbsolute flaked once on harness waits under
+  suite load, then passed twice alone). TerrainOffsetGroundEffectRecovery now
+  passes, so its disable is gone; #33568's OpticalFlowFallbackHeightLimit runs
+  here because #34380 is in the stack, though upstream disables it until #34380
+  lands. Topped up the same day with the 2026-10-04 heads of #33585 (brief
+  range return undone), #33484, #32553 and #34380, and the ground effect dwell
+  bound moved to 0.42 m (see the history). 90 of 90 again, Replay passing alone
+  after its known stall. Promoted to `SmallFastDrone-4.7.2-beta` 2026-10-04 at
+  `291108f58c`; the previous beta (refresh9) is kept as `.3-beta`.
+- Topped up again 2026-10-04 with the heads that answered the 11:00 AI reviews:
+  #34292 (rest test learns the landed range), #33568, #32471/#32473 (inhibit
+  event retried), #34362, #34456, #32972 and #32553. 90 of 90.
+- Owed to #32553: the dwell bound of 0.42 m (`autotest: bound the ground effect
+  dwell error between the two cases`). On this stack the hover settles lower in
+  the band and 0.35 m is straddled.
+- #33639 merged to master on 2026-10-04. It stays in prs.txt until 4.7 carries
+  it, like the other merged PRs.
+- Previously built: `SmallFastDrone-4.7.2-refresh9` (worktree `../sfd-refresh9`),
+  2026-10-03, on the same base (`ec107ee728`, 4.7.2-beta1). 307 planned
+  commits. Built after 22 PRs were rebased onto master on 2026-10-03 (below),
+  and takes the SFD-O4 field fixes from the PR heads (#32514, #33507 on #34457)
+  rather than the beta's local copies. Copter, plane, heli and sub build. SFD
+  set 84 of 85, the one failure TerrainOffsetGroundEffectRecovery for its
+  designed reason (+0.275 m). Promoted to `SmallFastDrone-4.7.2-beta` 2026-10-03;
+  the previous beta (refresh8 + field fixes) is kept as `.2-beta`.
+- Code against the shipping beta differs only where the beta was stale:
+  `NavEKF3::getOriginLLH()` keeps the `common_origin_valid` early return
+  (current #32768; refresh8 had #32972's old copy of that commit, which dropped
+  it), and the AGL KF coast stop gains #33507's
+  `EK3_FEATURE_RANGEFINDER_MEASUREMENTS` guard.
+- Rebased onto master 2026-10-03 and force-pushed: #32270 #32514 #34361 #34363
+  #34362 #32471 #32473 #34457 #33507 #32768 #32972 #30980 #34209 #33568 #34292
+  #34210 #34543 #34456 #32553 #32475 #33484 #33318. The conflicts were master's
+  CI bucket rebalance (`0d59c702e7`, Copter tests1c/1d and the QuadPlane bucket
+  classes); each PR's own registrations went back in the list it used. Code
+  unchanged except #33318 (merged #33569's tunable gain onto its AGL KF
+  height), #33484 (covariance writes through `Pmut`, folded into the commits
+  that add them) and #32972 (restacked on current #32768 with only its own five
+  commits, dropping ten stale copies). #32473 sits on #32471 and #33507 on
+  #34457. #32232 (rishabsingh3003, maintainer edits allowed) was rebased the
+  same way with permission, to `8b490c6438`.
+- Previously shipped (`SmallFastDrone-4.7.2.2-beta`): refresh8 plus the #33478 top-up and
+  the 2026-10-02 field fixes, pushed at `09f48f04ea`.
+- Behaviour change to decide on: #33585 dropped EK3_OPTIONS bit 5 (flat ground
+  above the range finder). The fallback is now always on, with no option to
+  turn it off, so no `sfd_defaults.parm` line can keep the old behaviour. No SFD
+  default set bit 5.
+- The SFD-O4 log22-30 field fixes (2026-10-02) are in their PR heads and come
+  with the cherry-pick from refresh9 on; the beta's local copies (`caafe6151b`,
+  `9cc29cd372`, `f547e6f7bd`, `82f7660a18`, `130891e901`, `c79168dc9b`,
+  `b433fdbf3d`) are not re-folded. Record: the private analysis repo.
+
+### Fixes made on refresh6, to port to their PRs
+
+Each is a commit on `SmallFastDrone-4.7.1-refresh6`, shaped for the PR it
+belongs to, and measured with an A/B. Until a PR head carries its commits,
+re-fold them after every refresh (they are in "Local work"). Entries marked
+**Opened as** are past that: they are in `prs.txt` now and arrive with the
+cherry-pick, so do not re-fold them.
+
+Both records now live under their PR numbers,
+`../ardupilot-pr-analysis/34457/` and `34456/`, each with its figures and a
+`plots/make_plots.py` that resolves the flights through `find_log.py` rather
+than carrying them, since that repo is public. The SFD-O4
+logs are fingerprinted in the private analysis repo; bare names collide four
+ways for log9 alone.
+Two rules the figures were built to, both of which a reviewer will notice if
+broken: no second y-axis, ever - split the panel instead; and one time origin per
+log, the first message of any type, because taking it per message type slid an
+annotation 1.1 s off the event it pointed at.
+
+- **#34292** `AP_NavEKF3: do not restart flow aiding while the focus height hold
+  is on` and `autotest: check flow aiding stays off after a landing below the
+  focus floor` (FlowFocusHoldAfterLanding). After touchdown the flow floor
+  discards every sample, aiding timed out, `readyToUseOptFlow()` saw fresh
+  samples and restarted it at once: a stop/start pair every 5 s until disarm.
+  Flow held off is now not ready, as `flowVelResetUnhealthy` already was. The new
+  test fails without the guard, on master's base too ("Relative aiding restarted
+  while held below the focus floor"). The PR head also folds in the 2026-09-17
+  review: the no-range-finder build fix, `flowFocusRngPosD` moved by every height
+  reset (`ResetPositionD()`, `ResetHeight()`, AID_NONE entry), the comment and
+  FLOW_HGT_MIN description. refresh6 was brought up to that head on 2026-09-21
+  (four commits: the reset shifts and guards, the parameter note, the test
+  bounds, and #33498's flight window); the next refresh takes the PR head and
+  drops all four.
+  **Flown on SFD-O4 log12** with `FLOW_HGT_MIN` deliberately at 2.0 m, because
+  the true value does nothing on this airframe: `OF.Qual` is highest near the
+  ground (214 at 0 to 0.15 m AGL against 157 at 4.5 to 6 m, 2162 near-level
+  samples), so any focus limit the ARK Flow has is below 0.15 m, and the code
+  already floors at `max(RNGFNDx_GNDCLR, 0.05)`.
+  The mechanism is exact. The range finder crosses 2.000 m at 514.5568 and flow
+  resumes at 514.6312, 74 ms later; the second pass is 568.356 to 568.421. Flow
+  is discarded at once below the floor and aiding stops 5 s later on the fusion
+  timeout, at 1.10 m, 0.98 m and 1.72 m. The release on disarm is by design
+  (`AP_NavEKF3_OptFlowFusion.cpp` `if (!movedSinceArming)`, and the comment
+  there says the hold runs on the ground until disarm).
+  **The A/B says the inflated value costs accuracy, which is the point.**
+  Replay of log12 with `minHeight` cut to the ground clearance, so flow fuses
+  below 2 m, against the flight as flown, core 1 velocity error against GPS:
+  re-derived 2026-09-22 and split on the mechanism instead of on hand-picked
+  spans: airborne below the floor 2.071 -> 0.628 m/s (n=171), airborne above it
+  1.093 vs 1.120 (n=272) as a control, and the 487 s of ground dwell excluded
+  because both arms read 0.04 there and including it buries the result. The
+  earlier climb/descent figures (1.60 -> 1.01, 2.25 -> 1.67) said the same thing
+  in windows that were not reconstructable. Discarding that flow was **worse**
+  than fusing it, by 3.3x. That is not a refutation of the guard, it is the parameter's own
+  warning measured: set it to the sensor's focus limit and no higher. The PR
+  should carry it as the reason the description says that, and the branch should
+  go back to `FLOW_HGT_MIN` 0 on this airframe.
+  Two things log12 did **not** reach, and the re-fly that gets them: the pilot
+  disarmed 0.7 s after touchdown, so the churn the guard exists for had no
+  window (it needs ~30 s sitting armed on the ground below the floor), and no
+  height reset fired in flight, so the carried `flowFocusRngPosD` is still
+  untested. One sortie covers both: floor at 2.0, land, sit armed 30 s, take off
+  again, land, sit armed 30 s, disarm.
+- **#33498** `autotest: count FlowGyroZBiasNoYawReference's aiding stops in
+  flight only`. With #34292 aiding stops once after touchdown, which is not the
+  flight the check is about. Counted only between NOT_LANDED and LAND_COMPLETE,
+  on the PR head and on refresh6.
+- **#34432** (its own master PR) `AP_NavEKF3: keep baro ground effect out of a
+  height source switch` and `autotest: test a range finder to baro switch in
+  ground effect` (BaroGroundEffectRangefinderSwitch). With EK3_RNG_USE_HGT,
+  Copter uses the range finder for height only while taking off or landing, so
+  an ALT_HOLD takeoff switches back to baro at liftoff, in ground effect, and
+  the baro offset learned through the spool-up carries the error into the
+  flight: EKF height 2.5 m high. Master has it with a range finder that reads
+  on the ground (RNGFND1_MIN 0: +2.49 m; 0.05: +0.02 m); #32232's substitution
+  gives an out-of-range-low sensor the same path (+2.5 m). It was attributed to
+  #32972 and then to #32232; both were wrong. The fix holds the offset and skips
+  the switch reset to baro while takeoff or touchdown is expected (not on fixed
+  wing), and each half alone fails the test (3.0 m drop at liftoff, 2.5 m
+  carried). A dead-zone variant and an anchored-floor variant were measured
+  against it over six scenarios and did no better; the dead zone ratchets on
+  baro noise. It replaced refresh6's dead-zone commit.
+- **Opened as #34456** on 2026-09-21, six commits `18e87a0803`..`de049bb620`
+  on `pr-srcset-selects-lane`, now in `prs.txt`. `SRC_PER_CORE` came in with
+  `f172c2fd03`, which the base carries, so this is master and not one of the
+  in-flight source PRs.
+  With `EK3_SRC_OPTIONS` bit 3, `getActiveSourceSet()` returns the core index
+  and never reads the active set, so selecting a set reached no core while the
+  RC switch and `MAV_CMD_SET_EKF_SOURCE_SET` both reported success. SFD-O4
+  log11 flew four minutes on GPS having asked for the second set three times;
+  `XKFS.SS` held 0 and 1 per core throughout, which is the only field that said
+  so. The request now selects the lane that runs the set, by setting
+  `EK3_PRIMARY` rather than calling `switchLane()`. Review corrected two claims
+  that were here: while armed the lane follows `EK3_PRIMARY` **only** under
+  `EK3_OPTIONS` bit 1 and is inert without it rather than being a preference the
+  filter leans towards, so that case now warns; and a set with no lane returns
+  instead of writing an out-of-range index, which `UpdateFilter()` clamps to
+  lane 0 - the old code warned that nothing had happened and then took the
+  vehicle off the lane it was on, reproduced in SITL. Lua no longer moves the
+  lane at all: the intent is a defaulted parameter that only the operator-driven
+  callers pass, because the shipped ahrs-source applets change sets
+  automatically on sensor health.
+  The PR has to meet the objection that sets and lanes are separate concepts,
+  because they are, and the EKF3 playbook says so. The answer is that this is
+  the one configuration where the code has already made them identical, so a
+  request naming a set has no other meaning left to it. Offer the alternative
+  that was rejected: leaving it alone and documenting that the switch does
+  nothing keeps the concepts clean and keeps a control that silently lies.
+  `EK3_SourceSetSelectsLane` fails without the change on the first wait, never
+  seeing a lane switch, and the nine source-set tests pass with it.
+  **Flown on SFD-O4 log14** (`5adc2ea0`): "Using EKF Source Set 2" at 46.5055,
+  "EKF3 lane switch 1" 4.6 ms later, `XKF4.PI` 1 for all 1240 in-flight samples.
+  Core 1, the relative-aiding flow lane, then flew the vehicle for 126 s in
+  LOITER with core 0 on GPS alongside as standby: no aiding stop, no flow
+  velocity reset, no failsafe, `XKF4.SP` peak 0.06. Against GPS the flow lane
+  held velocity to 0.26 m/s RMS at a 0.94 speed ratio, the pilot flew out to
+  40.4 m and landed 1.3 m from the start, and the relative position estimate
+  drifted 1.3 m at 30 s, 2.9 at 61, 5.1 at 91 and 11.4 m at 122 s. That drift is
+  the 6 % speed under-read integrated and belongs in the PR only as context, not
+  as a claim about this change.
+  Figure for the PR: `34456/plots/srcset_lane_before_after.png`,
+  log11 against log14, the same aircraft and the same switch action.
+- **Opened as #34457** on 2026-09-21, `b54b956541` plus its test `9b74c85f80`
+  on `pr-aglkf-floor-velocity`, now in `prs.txt`. The branch carries #33507's
+  seven commits patch-identical for the test helpers, and `git cherry` drops the
+  duplicates whichever merges first. The code it touches merged with the
+  AGL KF, which the base took in from the promoted set - #33587 by elimination
+  against the other three, so check the number on GitHub before filing. It does
+  **not** belong to #33359, #33478 or #33507: those stack on top of the clamp,
+  they did not introduce it.
+  `UpdateAglKf()` clamps the height to `rngOnGnd`, so on the ground the
+  prediction and the measurement are both the floor and the innovation is zero.
+  Nothing corrects the velocity or the bias from there, so the bias the filter
+  grabs in its first seconds integrates into the velocity for the whole ground
+  dwell - unbounded in ground time. SFD-O4 log9 reached -7.2 m/s over 88 s with
+  the bias frozen at -0.08 m/s/s, which is the entire ramp rate, and four
+  seconds of the climb then went on unwinding it while `aglKfH` held the floor.
+  The clamp is one-sided, which is why clearing the velocity with it works. An
+  error that points up lifts the height off the floor, restoring the innovation
+  so the bias is corrected; one that points down presses the height into the
+  floor, where the innovation dies and the error latches. The fix gives the
+  downward side the behaviour the upward side already had.
+  Size the PR for master, not for this branch. On master the pinned height
+  reaches `getHAGL()`, so AP_GroundEffect's `above_alt` release never fires and
+  the takeoff window runs to its 5 s cap, and it reaches the flow velocity
+  scaling and `ekfGndSpdLimit`. It is #33359 that also fuses `aglKfH` in place
+  of the raw range finder, which is what turned it into a main-filter height
+  error here: 0.22 m/s of height against a true 1.02 m/s, then a 2.21 m step at
+  the switch back to baro. So the master case is real without #33359 but the
+  headline numbers are not; quote the `getHAGL()` path there.
+  Measured by Replay of log9 (`replay_sweep.py`, before/after): samples with the
+  height on its floor and the velocity below -1 m/s 1313 -> 0 on core 0 and
+  1341 -> 2 on core 1, worst floor velocity -9.2 -> -0.7 m/s, unexplained height
+  step 2.17 -> 0.43 m, height error against the range finder over the first
+  seven seconds of flight -0.93 m mean / -2.39 m worst -> -0.40 / -0.72. The
+  thirteen Copter flow, AGL KF and ground effect tests pass unchanged.
+  Figures for the PR, under `34457/plots/`:
+  `aglkf_1_replay_ab_log9.png` is the Replay A/B on one flight, code before
+  against after, which is the honest before/after because the sensor stream is
+  identical; `aglkf_2_ground_windup.png` is the real-world pair, log9 running to
+  -7.2 m/s over 88 s on the ground against log12 flat at -0.001 over 487 s.
+  Flown on SFD-O4 log10, which carries the fix built from an uncommitted tree
+  and so still reports `ee3bda1f`. Over 69 s on the ground the velocity stayed
+  bounded at -0.017 m/s worst against log9's -7.13, with the same 827-of-827
+  on-floor samples now bounded rather than free-running, `HAgl` tracked from
+  the first sample after lift-off, and there was no height step. Quote it: a
+  Replay A/B on its own invites "you only tested the log you fitted to".
+  Two things the PR still needs, neither of them done:
+  - **A regression test.** There is none. `OpticalFlowAGLKalmanFilter`'s own
+    comment already records that the on-ground clamp kills the innovation, but
+    reasons about the bias state only. Provoking the wind-up in SITL needs a
+    persistent `aglKfB`-to-`velDotNED.z` mismatch on the ground, which a clean
+    simulated accel does not give; injecting `SIM_ACC1_BIAS_Z` is not enough on
+    its own because the main filter learns it back out of `velDotNED`.
+    Replay cannot stand in for it: it feeds the recorded `takeoff_expected`, so
+    it never exercises the release path at all.
+    (The ground effect release, previously listed here as unmeasured, is done:
+    log10's "terrain offset reset from baro" fires 2.0 s after NOT_LANDED,
+    exactly GNDEFF_TMO, where log9 never emits it. The message is latched on the
+    ground effect clear edge in `EstimateTerrainOffset()`, so its timestamp is
+    the release. It is a one-flight result and the absence in log9 has more than
+    one possible cause, so carry it as corroboration, not proof.)
+  - **Core 1's in-flight height steps grew**, 1.76 -> 1.94 m worst, at 165, 211,
+    234 and 244 s. Pre-existing and on the non-primary core, but it is the one
+    number that moved the wrong way and a reviewer will find it.
+- **#32553** `autotest: fly TerrainOffsetGroundEffectRecovery over flat ground`.
+  With a terrain tile for the home location in the run directory (any earlier
+  test that installs terrain handlers leaves one), SITL's ground sits 0.55 m
+  below home and the range finder reads that on the ground, so both of the
+  test's preconditions failed depending on test order. With SIM_TERRAIN 0 it
+  fails for its designed reason with master's number (terrain offset mean +0.21
+  to +0.31 m across seven runs, against master's +0.23 to +0.29 m).
+- **4.7 harness, not master**: `autotest: reboot so Replay's larger log
+  buffer takes effect`. LOG_FILE_BUFSIZE is allocated at boot, and Replay's first
+  subtest starts logging disarmed before rebooting, so the startup messages fill
+  the default buffer, a replay block does not fit and SITL panics ("Failed to
+  log replay block", seen by the harness as a hang). Found with gdb as SITL's
+  parent (`ptrace_scope` 1 blocks attaching). Carried with two master commits
+  4.7 lacks: `9c7f12df34` (the larger buffer) and `d3a32025cd` (wait for home
+  before the body-odometry takeoff - with #32945 in the base, GPS no longer
+  fills in a location there, and the takeoff was refused). Replay passes;
+  vanilla 4.7 needs the buffer fix and reboot too, not the home wait. Master
+  passes Replay 3 of 3 without the reboot, so there is no master PR for it; a
+  4.7 backport PR would bundle all three. Plane's Replay has the same pattern.
+
+## Next refresh
+
+### Promoting
+
+`refresh.sh promote SmallFastDrone-4.7.1-beta SmallFastDrone-4.7.1-refreshN`,
+run from a checkout that does not have the beta checked out. Worktrees make that
+stricter than the message suggests: git refuses to move a branch checked out in
+any worktree, so detach the beta's own checkout first (`git checkout --detach`)
+and check the branch out again afterwards. The beta push is a force push; a
+new base pushes fast-forward. Both need `/prepare-for-push`, remote `origin`.
+
+### Every refresh
+
+Before (refresh or topup alike): read `ANALYSIS_REPOS.md`, and once
+`changed` has said which PRs moved, their public archive entries and the
+private record of the flights behind them.
+
+1. `git fetch upstream ArduPilot-4.7 master`, `refresh.sh fetch`, `refresh.sh changed`.
+2. Check the base branch really is the locked base - `changed` reporting
+   "CHANGED ... (full rebuild)" does not say which direction it moved:
+
+       git merge-base --is-ancestor "$(awk '/^BASE/{print $2}' Tools/SFD/applied.lock)" \
+           SmallFastDrone-4.7-base || echo "base branch does not contain the locked base"
+
+3. If 4.7 advanced, decide whether to rebuild the base (see the base section).
+   Irrelevant commits (another vehicle, another HAL) do not justify it.
+4. `Tools/SFD/ai_review_status.py`. A review taken at an older head says nothing
+   about the code being cherry-picked, so it counts as absent. It reports the
+   bot's verdict; `gh pr view --json reviewDecision` reports the human one, and
+   they disagree often enough to carry both.
+5. `refresh.sh plan` and sanity-check the count (249 on 2026-09-11, 284 on
+   2026-09-18 with the six restored PRs and #32471's rework). A plan that
+   suddenly grows by half with no PR to explain it is a base problem.
+6. Merge the committed `rr-cache.tar.gz` into the local cache if the last
+   refresh ran in another clone: `ensure_rerere` only seeds an empty cache. Back
+   the local one up, then `tar -C .git/rr-cache -xzf Tools/SFD/rr-cache.tar.gz`.
+
+Code pass:
+
+7. Work in a worktree on a new `SmallFastDrone-4.7.1-refreshN` branch off the
+   base, and run this clone's scripts by path from inside it:
+   `bash <main clone>/Tools/SFD/refresh.sh run`. The base carries no Tools/SFD,
+   and `.state` then stays with the manifest. Conflict recipes are below; expect
+   empty commits (see "Commits that arrive already applied").
+8. Apply every entry in "Post-merge fixups" and pin the parameter indices.
+9. Build copter, plane, heli (and sub for #34057's test) in **separate** waf
+   invocations. `./waf plane heli sub` in one call relinked arduplane against
+   the wrong library set and failed with undefined AP_Winch symbols; each alone
+   built clean.
+10. `Tools/SFD/check_param_tables.py` - mandatory before any test run.
+
+Tests pass:
+
+11. `refresh.sh tests`, then `refresh.sh rebuild-tests` (manual shapes below).
+12. Re-fold the branch-only tests and harness adaptations ("Local work"), with
+    `Tools/SFD/refold_methods.py FILE <previous branch> NAME...`.
+13. Gates, in this order: `check_test_api.py` (fix `takeoff()` keywords with
+    `fix_takeoff_kwargs.py`), `check_suite_load.py --against <previous branch>`,
+    `check_pr_test_lines.py`. See "Phase 2" for what each catches.
+14. `Tools/SFD/run_sfd_tests.sh`; add the tests its derivation misses (below).
+    In a worktree, copy `.claude/skills/autotest` in first: `run_autotest.py`
+    resolves the clone from its own path, so the main clone's copy runs the main
+    clone's tests. 4.7's autotest.py has no `--sitl-instance`, so only one clone
+    can run SITL at a time.
+
+After:
+
+15. Restore `Tools/SFD/` from the previous branch. The base carries the SFD
+    `README.md` with only what the base has; add a `README:` commit on top
+    that brings in the previous branch's entries for the prs.txt PRs, in
+    their sections, and its Upstreaming Order, keeping the base's text
+    elsewhere. A PR promoted into the base moves its README entry into the
+    base's README.
+16. `Tools/SFD/audit_dropped.py <previous branch> <new branch>`: anything the
+    previous branch carried that is in neither the base nor prs.txt is lost by a
+    refresh, silently - that is how refresh5 dropped six merged PRs.
+    Then `Tools/SFD/param_changes.py <previous branch> <new branch>`: every
+    parameter, bitmask, value or compile-time default a PR changed. Where one
+    changes what an SFD board does out of the box - existing behaviour turned
+    into an option, a default flipped, a setting renamed - put the value that
+    keeps today's behaviour in `hwdef/include/sfd_defaults.parm` (or, for a
+    define, the SFD hwdefs), in the base. Users must not see a refresh.
+17. `refresh.sh lock` (with `SFD_BASE` set, see the refresh12 traps), then
+    the rerere archive as the last committed one plus the entries this
+    refresh used, not `refresh.sh rerere-save` in a clone other sessions
+    share (see the refresh12 traps); commit both.
+18. `refresh.sh promote SmallFastDrone-4.7.1-beta`. The push is a force push
+    and needs `/prepare-for-push`.
+
+### Owed, not tied to one refresh
+
+- Flight evidence for refresh13 topup1: `FIELD_PLAN.md`.
+
+- Replay does not follow a bootstrap reset (found 2026-11-11):
+  `NavEKF3::InitialiseFilterBootstrap()` (#32202, merged upstream) logs no
+  DAL event, so the EKF_RESET switch and #32401's "Arm pending: EKF
+  bootstrap reset" re-initialise the cores in flight and not in Replay,
+  which carries on from the state the reset discarded. Upstream master
+  has the same gap. 23 of the 284 logs in the 2026-11-11 fleet replay
+  have one; a T25 log on `0cb49e7d` reset a filter 33 deg out before
+  arming and replays at 70 m/s. Fixed in topup3 (#32401): the reset logs
+  `AP_DAL::Event::bootstrapReset` and Replay acts on it. Logs recorded
+  before topup3 hold no event, so their replays stay valid only up to the
+  first bootstrap reset.
+
+- topup12 (2026-10-08) carries #33478's step hold from `fix/33478`
+  (`e0d009ff31`, `6185109557`) ahead of the PR, for the flight that repeats
+  log40. Lock #33478 once the PR head carries them. On this stack
+  `EK3_AglKfVelMixedSources` fails: #33507's AGL KF bias state absorbs the
+  test's 3x range mismatch, so its slow climb claims only 0.94 m/s of velD
+  innovation against the 2 m/s floor, and the old fast climb trips the step
+  hold at its onset. It passed on topup11 by 0.02 m/s (2.02). It passes on
+  the PR branch; the test needs a provocation that survives the bias state.
+- 2026-10-08 the flown PRs were squashed, so `applied.lock` no longer
+  matches their heads: #33585, #34380, #33359, #33478, #32553, #32514,
+  #33568, #32972, #34363, #33484, #34543 and #34208. Each squash has the
+  same content as the head the beta carries (empty diff against the
+  pre-squash head); refresh12 took them with nothing to resolve and
+  relocked. #34457 gained the floor hold (`931be4dc21`, `7f83487786`) and
+  #33507 was rebased onto it (`c34e097cc4`). Records in each PR's
+  `../ardupilot-pr-analysis/<PR>/README.md`. #34292 was squashed the same
+  day (`4566254c91` -> `d3b59dec34`, 33 -> 17 commits). Not squashed:
+  #32471, #32473, #34630 and #32270 (unflown or open review).
+- 2026-10-16 #33484 was squashed again (`9c00ef9b47` -> `f5509009fb`, same
+  tree): the latch release, which TD25 ran on `0ccdd748` (released 3.9 s
+  and 40.6 s after setting), went into the base recovery commit and its
+  legs into the base test commit. The range step deferral, its speed form
+  and the other-axis gate stay on top: that flight carried the deferral
+  but never stepped, and the gate has not flown. The beta carries the
+  same content (topup21-23); refresh12 took it with nothing to resolve.
+  Other on-top changes TD25 carried but could not run (#33359's
+  gates with `EK3_RNG_USE_HGT` -1, #34380's flat-ground timing with the
+  range never out of range, #34292's rest-reading clear and declared
+  height) stay unsquashed until a flight runs them; #34696's restore hold
+  waits for T3's re-fly on source set 2.
+- 2026-10-30 #33484 was squashed again (`edb0cc387e` -> `e0e4a38f57`, same
+  tree, 13 -> 9 commits): the range step deferral and its speed form, which
+  TD25 ran in flight on `0e2c9772`, went into the base recovery commit and
+  their legs into the base test commit. The other-axis gate and the latch
+  store ordering stay on top. #34630 was rebuilt on it (`b081354744` ->
+  `d402ac272a`, same tree). refresh12 took both with nothing to resolve
+  and relocked. The rest of the audit
+  (what ran, what did not, and why #33359's gates stay on top) is in
+  `FLIGHT_VALIDATION.md` under 2026-10-30.
+- 2026-11-07 eleven PRs were squashed after the flight audit, so
+  `applied.lock` no longer matches their heads: #34942, #33478, #31274,
+  #30841, #31005, #34457, #33507, #34941, #32475, #32471 and #32473. Each
+  tree equals its pre-squash head (backups `pre-squash/<PR>-1107`), so the
+  next refresh sees only the 11-07 review fixes those heads already
+  carried. Folds and evidence: `FLIGHT_VALIDATION.md` under 2026-11-07,
+  heads in `PR_STATUS.md`. The #34942 squash left one resolution in
+  `.git/rr-cache` (its static-yaw test against the renamed gyro helper);
+  it is a squash conflict, never a refresh one, and harmless if
+  `rerere-save` archives it. refresh14 took the squashed heads the same
+  day, with the same tree as the beta, and relocked.
+- topup13 (2026-10-08) carries #34457's floor hold (`29fef9c3a2`,
+  `db4abcbff0`) for the card's flight 1; #33507's rebase onto it changes
+  nothing here. The touchdown test assumed SITL reads about 0.1 m on the
+  ground (master's default ground clearance); the 4.7 SITL reads 0.55 m,
+  so the range finder never went out of range low. `80626ee223` sets the
+  ground clearance from the reading on the ground; owed to #34457, where it
+  is a no-op. On this stack 0.29 m with the hold, 1.47 m without. Seen in
+  the failing run: with the range finder still reading, the 0.5 m/s/s
+  injected accel offset took the 3-state AGL KF 1.3 m off a steady 0.56 m
+  range in 6 s, its bias state learning 0.19 of it. A step that size is a
+  SITL provocation, not a field case, but it bounds how fast the bias
+  state follows.
+- topup14 (2026-10-09) carries #34696, the EKF failsafe mode restore
+  (`f209d485e5`, `91ac2ac15e` + fixup `ddb0094e4a`, `eab0be8c5e`), and
+  #32270's new `FS_EKF_ACTION` 4 for VALT (`111f758183`, `8c08d53ce3`),
+  which is committed on local `copter-valt-mode` (`d5672e0d6e`,
+  `d40430bce0`) and not yet pushed to the PR. The VALT action is a hand
+  port: 4.7 still has `#define`s where master has `FS_EKF_Action`. Its
+  commit also says bit 6 needs `FS_EKF_ACTION` 2 or 4, which belongs to
+  whichever of the two PRs lands second. Both test bodies are identical
+  to the PRs'. A landed-branch cancel for #32514's early return was tried
+  and dropped: the motors are still spooling down for about 0.5 s after
+  `land_complete` sets, so the normal cancel always runs first (a SITL
+  mutant without it passed). `EKFFailsafeRestoreMode`, `ModeVAltHold` and
+  `EKFSourceSetFailsafe` pass on this stack.
+- topup15 (2026-10-11) ports the code fixes from the AP-Review round
+  pushed to the PRs on 2026-10-11: #34457's floor hold armed only from a
+  fused reading (`25b2081449`, test `92b2a7ac49`), #34292's rest reading
+  cleared on disarm (`11d7e1336f`, `16009fb683`, test `2e087d9468`),
+  #33359's speed gate without a velocity estimate (`b2eaa6f864`, test
+  `d6ea6b5218`) and #32270's VALT GCS take-off, surface tracking re-init
+  and single height reset (`a1916a5c35`, tests `adf4491ab2`). The VALT
+  height-reset check is a hand port: 4.7 has `getLastPosDownReset()` where
+  master counts resets. The floor hold reaches this stack too: with the
+  old recording `OpticalFlowAGLKfNoFloorHoldInHover` held a 10 m hover at
+  0.10 m, so an airframe whose range finder reports out of range low (not
+  TD25's MAVLink sensor, which never does) was exposed. Not ported:
+  #33484's latch clear (this stack clears it on every disarmed step
+  through #32232's `3ebeb38816`), #33478's `XKFA.VHold` (this stack logs
+  the AGL KF as XKF6), and #32270's tighter ground-effect window check:
+  with #34362 here the window closes inside the baro glitch (142.0 s), so
+  that subtest exercises nothing on this stack, and on #32270 too once
+  #34362 lands. The AGL KF hover, touchdown, focus, height switch,
+  `ModeVAltHold` and `ModeAltHold` tests pass on this stack.
+  Correction to topup13: the 0.55 m ground reading is the CMAC terrain
+  tile, not 4.7. SITL reads 0.0 m without the tile and 0.55 m with it,
+  on master as here; #33507's CI failure was the same tile.
+- topup16 (2026-10-12) ports the second AP-Review round's fixes: #34292's
+  rest reading also cleared after a second with no stored flow sample
+  (`bb4cfced51`, test `410cdf3672`), #34380's flat-ground return timed on
+  fused range readings (`6c887a77c3`, test `0714ba939d`), #32270's VALT
+  snap taking off the position offset and its blend scaled to the loop
+  period (`6c501698b4`, tests `887003aac6`), and #33359's per-axis gate on
+  relative aiding before the AGL KF override (`82a2f4d35b`, test
+  `2aa37d5952`). 4.7 test harness gaps worked around in the tests:
+  `send_set_parameter()` has no `add_to_context`, and `takeoff()` has no
+  `altitude_max`. All the affected tests pass on this stack.
+  `EK3_RngHgtSwitchNoVelocity` also reproduces a ground velocity runaway
+  after its fast touchdown, with or without these changes and with
+  `EK3_OPTIONS` 0: the single-axis flow lockout of #33484 (and TD25's
+  ground runaway), reproducible in SITL.
+  Two VALT commits here carry a `Claude-Session:` trailer
+  (`72cf3e7dae`, `7a24be2b60`); #32270 dropped it on 2026-10-12, so the
+  next refresh takes the clean messages from the PR.
+- topup17 (2026-10-13) restores throw mode's hand-off to VALT
+  (`b0a9fca7ef`, test `774be86ef5`), lost on a refresh (see the correction
+  under "NOT re-folded"). VALT still counts as needing a position before
+  the hand-off, as on 4.7.0. Not yet on any PR: the case belongs on #32270
+  against master's switch, and #32475 needs it in its moved switch.
+  `ThrowDropNextModeVALT` fails without it (stays in THROW) and passes with
+  it, with `ThrowDropSourceSwitch` and `ThrowModeNoGPS`.
+- topup18 (2026-10-13) ports the third AP-Review round: #33359's gate that
+  counts relative aiding as velocity only while all axes pass
+  (`f3fae811d4`, test `e52590f700`), #34380's and #34457's known-limit
+  comments (`35356c9756`, `d09d9fa1ee`), #34380's bounded rejected-readings
+  leg (`0eda0bff65`) and #34292's slowed low climbs (`8df833df36`). Test
+  harness gaps on 4.7 worked around: `set_rc_from_map()` has no
+  `timeout=None`, `send_set_parameter()` no `add_to_context`, and there is
+  no `context_set_speedup()`. `EK3_RngHgtSwitchNoVelocity` passes twice
+  (0.05 / 0.10-0.11 / 0.12 m on its three legs), with
+  `EK3_RngHgtSwitchStepUp`, `EK3_OptflowAboveRangefinder` and
+  `FlowFocusHoldAfterLanding`.
+- topup19 (2026-10-13) holds #34696's restore until there is a position
+  (`26f507edf4`, test `86aab8db82`), found by the TD25 field test on
+  `6f5d6dc0`. With #32514's source-set check the failsafe clears a second
+  after a switch to a source set with no horizontal source; the restore
+  then fired without a position, was refused and spent its one attempt
+  (6 of 13 restores). On master the checks need a position, so the new leg
+  passes there with or without the hold; on the beta it fails without it.
+  `TD_FIELD_PLAN.md`'s T3 promised the clear only after the switch back
+  and is corrected. topup18's date was 2026-10-13, not 2026-10-14.
+- topup20 (2026-10-14) ports the fourth AP-Review round. #34292: a flow
+  sample with a declared sensor height (FLOW_HGT_OVR) skips the focus
+  floor, which zeroed a flow-only Rover's flow over a range finder at its
+  ground clearance (0.01 against 0.39 m/s); the SITL flow model now sees a
+  sensor mounted above a vehicle at zero height, and
+  `OpticalFlowRangefinderOnGround` covers it. #33359: a flow axis counts
+  as measured only while the speed error it can hide fits the range height
+  switch's hysteresis (`rngSwitchInSpeed()`), the all-axes stamp moves
+  after the loop, `EK3_RngHgtSwitchRegainHigh` flies the 12 m case (1.49 m
+  before, 0.09-0.18 m after) and the turning leg leans harder so it stays
+  above its own 3 m/s gate. A first cut of the #34292 branch read
+  `heightOverride` before any sample was recalled and tripped SITL's FPE
+  trap; it is guarded by `flowDataToFuse`.
+- topup21 (2026-10-14) changes #33484's lockout recovery after TD25's
+  outdoor log (grass and concrete, `6f5d6dc0`). The quality latch now lets
+  go once quality has stayed at EK3_FLOW_QMIN plus 10% for 2 s, every
+  sample counted, rather than holding to disarm: outdoors the sensor drops to quality 0 over bright
+  concrete and the latch had held flow out for the rest of two flights. A
+  reset is deferred while the AGL KF height and the range differ by more
+  than 20% plus 5 cm: flying onto a car bonnet, a reset scaled flow by a
+  height three times too high (2.1 m/s phantom) and Loiter flew into a
+  wall. Replayed, the bonnet reset is deferred and the latches release
+  2.6 s and 11.6 s after they are set; indoor logs are unchanged.
+  `EK3_FlowAxisLockoutRecovery` gains a leg for each. On the beta the two
+  changes were first committed together and are split in the rebase that
+  pushes them; on #33484 they are separate commits.
+- topup22 (2026-10-14) replaces the range step deferral's hand-picked 20%
+  margin with the speed error the step puts into a reset: the flow rate
+  times the height difference, against the flow noise term the reset
+  already allows for (EK3_FLOW_M_NSE times the range). Replayed on five
+  logs it matches the 20% margin bar one takeoff reset 0.1 s earlier.
+- topup23 (2026-10-15) takes a #33484 lockout reset only on a sample whose
+  other flow axis passed its innovation gate. TD25's dim-light flight
+  (`0ccdd748`) reset during a pitch reversal, with the flow trailing its own
+  gyro by about 40 ms, adopted 3 m/s that flow fusion undid within half a
+  second, and Loiter leaned 14-22 deg chasing it. Replayed on six logs the
+  hallway reset is gone and the four outdoor resets are unchanged; latching
+  on any sub-QMIN sample in the last 0.5 s, gating on body rate over
+  1 rad/s, and resetting from a 100 ms mean were also replayed and rejected
+  (outdoor resets lost, an arbitrary threshold, and no effect). A new
+  `EK3_FlowAxisLockoutRecovery` leg fails without the change (2.6 m/s).
+  Delaying the flow sensor's gyro to match its flow was replayed too and
+  helped only a little; it is not taken.
+- topup24 (2026-10-16) ports three AP-Review answers. #33484: the latch
+  zeroes the release-run start before it sets the flag, and the disarmed
+  clear zeroes it too (here in `VehicleStatus.cpp`'s on-ground branch,
+  where this stack clears the latch), against a PX4Flow sample on another
+  core pairing a set latch with an old start. #34292: the focus floor is
+  compiled out of Rover builds, replacing the FLOW_HGT_OVR bypass; a flow
+  Rover with a downward range finder and FLOW_HGT_OVR 0 read 0.01 m/s
+  driving at 0.39. Replay of a Rover log still runs the floor. #33359: a
+  body odometry axis counts only while its innovation is inside 1/sqrt(3)
+  of the switch's speed gap; regained at 2.6 m/s over a 3 m step the old
+  code took the range finder and moved the height 1.7 m, now 0.05-0.11 m
+  (`EK3_RngHgtSwitchRegainOdometry`, `takeoff(alt_min=)` on this
+  harness). None of it changes TD25: no PX4Flow, a Copter, and no odometry.
+- topup25 (2026-10-16) carries #34783: the PX4Flow driver publishes from
+  update() in the main loop instead of calling _update_frontend() from its
+  I2C timer, which ran the AHRS, the EKF's writeOptFlowMeas() and the DAL's
+  Replay writes on the bus thread. The race #33484's store ordering guards
+  against cannot happen with it; the ordering stays as harmless. Built,
+  not run: SITL has no PX4Flow model. Added to prs.txt after #34292.
+- topup26 (2026-10-16) carries #34543's and #34630's new OSD commits. A
+  flow core's lane item shows the flow sensor's signal strength after
+  `SYM_RSSI`, two digits before the axis arrows, `--` flashing with no flow
+  data; with `EK3_FLOW_QMIN` set the floor reads 50 and the strength flashes
+  below it (no floor: 0-99 over quality 0-255). The lane items also take the
+  AHRS semaphore. Seven commits on top, unflown; `OSDEKFLanes` passes here.
+  #34630 itself was rebuilt on #33484 `edb0cc387e` and #34543 `023c651ac8`
+  the same day, so the next refresh picks both up with no local work. The
+  AHRS-only alternative to #34543 Peter's review suggested (local branch
+  `osd-postype-ahrs`) was set aside and is not carried.
+- topup27 (2026-10-18) carries #34292's Replay-only gate: Replay follows the
+  logged vehicle class, so it leaves the flow focus floor out of a Rover
+  log's replay as Rover's build does (ARCH-17, refined the same day). It
+  changes nothing on a vehicle; SITL Rover flow logs now replay with no
+  speed or position difference, from 0.3 m/s and 4.5 m apart. Built here
+  (Copter, Replay); `test.Copter.Replay` passes on #34292.
+- topup28 (2026-10-18) carries #34809: a script's `osd:draw_screen()` no
+  longer flushes the normal screen before the script's own writes, so the
+  scripting OSD sends one frame per update instead of two, half of them
+  without the script's items. The SFD demo applet (`ap_lua/sfd_pr_osd.lua`)
+  needs it for a steady list. Added to prs.txt after #34783; the autotest
+  registration was resolved by hand (the beta's test lists differ).
+- topup29 (2026-10-21) carries #32397 and a #32514 fix. #32397, merged to
+  master in March but not in 4.7: the EKF failsafe says "EKF variance:
+  position lost" or "over thresholds" rather than "EKF variance" for both;
+  refresh28's log51 raised it four times for position lost below the range
+  finder's minimum. #32514's landed hold now covers the motors spooling down
+  after land_complete: on log47 a position lost at touchdown fired the
+  failsafe 0.2 s after land complete and switched the landed vehicle to
+  ALT_HOLD. `EKFSourceSetFailsafe` gains a leg that fails without it. Added
+  #32397 to prs.txt with the master-merged PRs. Unflown; the seven EKF
+  failsafe autotests pass here.
+- refresh11 topup1 (2026-10-22) keeps the ground measured while the range
+  finder is the height source, for SFD-O4 log54's EKF failsafe at touchdown:
+  after a low hover on range height the ground time was 55 s stale, and when
+  the range went out of range low at touchdown and the height fell back to
+  baro, the ground offset and the flow lane's relative position dropped 60 ms
+  before land complete. A range height fusion that passes its innovation
+  check now stamps `lastRngHgtPassTime_ms`, which keeps `gndOffsetValid` for
+  5 s; `gndHgtValidTime_ms` and its readers (the terrain re-anchor, the
+  switch hysteresis, the flat-ground fallback, the height limit) are left as
+  they were. A first version stamped `gndHgtValidTime_ms` itself and so
+  suppressed the terrain estimator's re-anchor after a switch out of range
+  height; review caught it before push. Replay of log54: position held to
+  disarm, XKF1 and XKF5 on both cores identical. Master has the same gap in
+  the land stage of LAND, RTL, SmartRTL and AUTO; #34851 (branch
+  `pr-ekf3-rng-hgt-ground`, andyp1per) carries the fix and
+  `EK3_RngHgtFlowLandingKeepsPosition`, which fails without it on master
+  and on this stack (lost 0.45 s after out of range low) and has a second,
+  in-flight leg that requires the hold to end after 5 s. Here, where range
+  height also engages in a low hover, a Loiter landing still loses position
+  about 5 s after touchdown while it waits out DISARM_DELAY, after land
+  complete. Added to prs.txt after #34809. Unflown; the 18 range
+  height, flow floor, terrain state, EKF failsafe and Replay tests pass here
+  (Replay on a rerun: the first hung in a SITL reboot).
+- refresh11 topup2 (2026-10-25, pushed `59386e92ba`): with the PR OSD applet
+  (`ap_lua/sfd_pr_osd.lua`) drawing the OSD, SFD-O4's DJI O4 never saw the
+  vehicle arm and stayed in low power, while the OSD itself showed. Any
+  `osd:` call holds the scripting override, and then DisplayPort's `flush()`,
+  which also read and answered the VTX's MSP_STATUS polls, ran on the
+  scripting thread; a ChibiOS uart can only be read by the thread that
+  opened it, the OSD thread. Not #34809: the override (#32045, carried
+  here) did this from the start. Fixed by servicing the link from the OSD
+  thread on every update (`a2d130878c`), with
+  `ScriptingOSDDisplayPortReplies` (`59386e92ba`); opened upstream as
+  #34882 (`93244134b6`, the same code plus a one-line comment and reworded
+  messages, which refresh12 takes). SITL cannot show the bug, as
+  its uart lets any thread read; the six MSP/OSD tests pass here.
+  Bench-tested on SFD-O4 2026-10-25: the O4 now sees arming with the
+  applet running and leaves low power. Added to prs.txt after #34851.
+- refresh11 topup3 (2026-10-29): a T25 hand launch in VALT on `5b70a271`
+  climbed with the stick fully down and then would not re-arm. #33498's mask
+  keeps the Z gyro bias out of the flow gain while no yaw is fused, and the
+  symmetrised short-form covariance update gave the masked state half its
+  cross-covariance correction. The first flow fusion, 3 cm above the hand,
+  left P indefinite, and the negative-variance guard then refused 222 of 225
+  baro height fusions (analysis `logs/t25_hand_launch_5b70.md`).
+  `c114af0f71` gives each masked state's row of KHP its column, the Joseph
+  form for the gain applied; opened upstream as #34933 (`47d399e569`, issue
+  #34932). The PR head is written against master's `FinishFusion()`, while
+  4.7 still updates P inline with `ForceSymmetry()`; refresh12's pick of
+  it applied clean, with the loop after the KHP loop and before the
+  negative-variance check, as `c114af0f71` has it.
+  Replay of the flight: every baro fusion accepted, height variance under
+  0.9 m^2, attitude level after the crash. Unflown; the 25 flow, AGL KF and
+  VALT tests pass here. Added to prs.txt after #33498, whose mask lines its
+  diff needs as context. Also `b099ec0eb9`: the EKF reset aux function
+  (RCx_OPTION 187) is back on for the 11 SFD boards. 4.7.2-beta1 took the
+  form of its PR that defaults it off outside SITL, so 187 has been compiled
+  out of every 4.7.2 board build (see "Local work not in prs.txt").
+- refresh11 topup4 (2026-10-29): a T25 on `308a7e73` ran away in VALT just
+  after leaving acro: the EKF read a 1.4 m/s descent while the vehicle
+  climbed from 1.2 to 3.5 m with the stick down. #34933 held (no refused
+  fusion). The SFD defaults set `ACC_ZBIAS_LEARN` 8, so #32473's acro hold
+  froze the accel bias through the acro segment; leaving acro, #32471's
+  release restore put the bias variance back to its start-up value, and one
+  AGL KF velD fusion took the 1.1 m/s velocity error the vehicle carried out
+  of acro as -0.8 m/s/s of Z accel bias. #32473 now restores only for a hold
+  that was disarmed on some frame: the bit 2 arm release and a disarm in acro
+  are unchanged, and leaving or landing in acro keeps the floored variance.
+  `7ab6409ca3` and `0b0aafdec7` (`AccelBiasAcroExitVelocityError`) are the
+  PR's `6118e47b19` and `b7c4f1601d`. Replay of the flight through this build
+  matches it to 109.2 s, after which the bias holds at 0.13-0.17 m/s/s where
+  the flight's went to -0.82; SFD-O4 log56's acro exit, replayed before and
+  after, loses a -0.10 to -0.50 m/s/s bias jump on the flow lane. The new test
+  fails here without the EKF change (0.59 m/s/s) and passes with it (0.04,
+  twice); `AccelBiasLearningInhibitedInAcro`, `AccelBiasMovingPlatform`,
+  `VibrationRectificationBiasLearning`, `EK3_AccelBiasInhibitOnGroundMoving`,
+  `EK3AccelBias` and `Replay` pass. The cost is slower relearning of a bias
+  that really changes during acro: in #32471's 2026-09-15 SITL A/B, 1.78
+  against 0.33 m mean height error 10-35 s after the exit at a 0.50 m/s/s
+  step. In refresh12 the PR's `Pmut` arrived clean and the "Pmut -> P"
+  fixup conflicted instead (take the PR's logic with `P`); relocked.
+  Unflown. Record: `../ardupilot-pr-analysis/32473/`, "2026-10-29".
+- refresh11 topup5 (2026-10-30, `0cb49e7dfb`): the code fixes from the
+  2026-10-30 AI-review round, 54 commits by cherry-pick from the PR branches
+  as pushed (#32232 and #32238 from `r1030/32232` and `r1030/32238`, not yet
+  on rishabsingh3003's fork; #32475 from `r1030/32475-2` at `1d74f34a28`,
+  whose last ten commits a cold read found two blocking problems in: AUTO as
+  THROW_NEXTMODE reads AUTO's stale submode, and the hand-off trusts
+  position_ok() in the loop the source set changes). PRs: #32232, #31274
+  (gate narrowed to bidirectional DShot), #32238, #32471 (the restarted-log
+  inhibit), #29000, #34543, #34630, #34210, #32475. Not taken: the
+  AP_UInt8/AP_UInt32 type changes (4.7 has neither), #31216's
+  ALLOW_ARM_NO_COMPASS removal (still valid on 4.7), and 17 autotest-only
+  commits whose registration lists conflict with the beta's (refresh12's
+  test carry took them from the PR heads). 4.7 forms by hand: #34543's `get_ekf_lane_status()` uses
+  `_ekf3_started` and `EKF3`; #32475's `mode_throw.cpp` is the PR's with
+  `has_status()` and the beta's VALT next-mode case; OSDEKFLanes's latch leg
+  uses 4.7's `takeoff(alt_min=)`. SITL copter and SmallFastDronev1 build; 13
+  tests on the changed code pass (EKF3RangeFinderOnGround, OSDEKFLanes,
+  LandFailsafeRunaway, ModeLandAdvancedFailsafe, ThrowModeNoGPS,
+  ThrowSpinDrop, ThrowSpinTumbleDrop, ThrowMode,
+  AccelBiasLearningInhibitedInAcro, VibrationRectificationBiasLearning,
+  RateThreadPostFilterGyroLog, Replay). The three bidirectional DShot
+  statistics fixes in #31274 have never run on hardware; FIELD_PLAN.md has
+  the card. Unflown. Records: `../ardupilot-pr-analysis/<PR>/`, "2026-10-30".
+- Port the refresh6 fixes to their PRs (see "Fixes made on refresh6"), and
+  offer the Replay reboot upstream: master sets the larger buffer without it.
+- `AmslAltPreservedOnRearmAtDifferentElevation`'s wait before reading the
+  dataflash log belongs on #32768. Carried locally two refreshes running; the
+  closed log has both EKF_ALT_RESET events, the read straight after disarm sees
+  one.
+- `SIM_SONAR_OFFSET` is carried as a local SITL commit (#34292's and #33507's
+  tests need it); it drops out once 4.7 has master's `568727a218`.
+- #32398: an `#error` on `ARMING_DELAY_MSEC` would make a missed rename stop the
+  build rather than restore a 2 s arming delay.
+- DFU bootloader binaries for MatekH743, MambaH743v4, MicoAir743v2,
+  MicoAir743-AIO, TBS_LUCID_H7 and SmallFastDronev1. Rebuild them here; do NOT
+  copy from the old 4.7 branch - a bootloader that does not match its own
+  hwdef is a bricking risk, and two of those hwdef-bl.dat files differ.
+- rr-cache is 17.7 MB after refresh6 (12.8 MB after refresh5) against the ~2 MB
+  the README quotes, and it is committed
+  every refresh.
+- #32232's five-leg re-run: the 20 Hz stream rate was lost at every reboot, so
+  legs 3-5 were sampled at 5 Hz (`../ardupilot-pr-analysis/32232/`).
+- Split `AP_NavEKF3: only decay AGL KF velocity when the range finder is absent`
+  (carried patch-identically by #33478 and #33507) into its own PR.
+- Offer the EKF diagnostics upstream with the PRs they diagnose: `XKVL` (flow
+  control limits), `XKFR` (rangefinder height-switch decision), `EKFC` (Copter
+  ekf_check decision trace - the filtered variances the failsafe compares,
+  which XKF4 does not log) and `XKF7.FVR` (flow reset reason). All four existed
+  on 4.7.0 and are the first thing wanted when a failsafe or height switch has
+  to be diagnosed from a log. Carry them locally if a log lands that they would
+  have explained.
+
+## SmallFastDrone-4.7-base (the replay base)
+
+refresh.sh stacks onto `SmallFastDrone-4.7-base`: `upstream/ArduPilot-4.7` +
+the merged-upstream PRs + #33115 + the AP_AHRS 4.7-compat fixup + the 11
+permanent SFD-local hwdef commits + two behaviour-preserving hwdef commits
+added 2026-09-18:
+
+- `hwdef: SFD boards set ARMING_DELAY_MS` (`5cfd779aed`), the rename #32398's
+  new head needs.
+- `hwdef: SFD boards keep the acro accel bias inhibit` (`a5eb325674`), which
+  adds `hwdef/include/sfd_defaults.parm` (ACC_ZBIAS_LEARN 8, for #32473's
+  bit 3) and `@include`s it from all 11 SFD boards' `defaults.parm` (creating
+  it for MatekH743, MicoAir743v2 and MicoAir743-AIO). The next default of this
+  kind is one line in that file. Unknown names in defaults are ignored, so a
+  default for a parameter only a stacked PR defines is harmless on the base.
+
+refresh13 (2026-11-06) added two commits on `b74b576dc9`, a fast-forward:
+the TBS_LUCID_H7 baro fix (`89982e63a9`, 4.7's `7551eb32f7`) and master's
+`0ecbe153e2`, which moves the AGL KF variables into a structure
+(`258e843e68`, picked with `-x`). Its feature.h conflict kept 4.7's
+defines and added master's `#error` for the AGL KF without flow fusion.
+It was `258e843e68`. Backups: `.5` is the stale local `ec107ee728` and
+`.6` is `89982e63a9`.
+
+2026-11-11 added three hwdef commits on `258e843e68`, a fast-forward, so
+that TBS_LUCID_H7 is an SFD build at -O2:
+
+- `hwdef: SFD boards drop the low noise define the IMU drivers replaced`
+  (`bdfca8bbb9`): nothing reads AP_INERTIALSENSOR_LOW_NOISE since it
+  became a runtime flag the Invensensev3 driver sets. Apart from the hwdef
+  text in ROMFS, MicoAir743v2's build is unchanged.
+- `hwdef: build the TBS_LUCID_H7 quads as SmallFastDrone boards at -O2`
+  (`8ee3356e52`): `hwdef/include/sfd_quad.inc` holds -O2, the SFD feature
+  defines and the cuts that make room for -O2 (other frames, engines, EFI,
+  airspeed, payloads, radar range finders, eight gimbal and seven GPS
+  types). TBS_LUCID_H7 includes it, so the V3 and OEM variants inherit it;
+  all three get `sfd_defaults.parm`. TBS_LUCID_H7_WING, a plane, includes
+  `sfd_quad_undo.inc` after TBS_LUCID_H7's hwdef: its hwdef.h is unchanged
+  and every symbol of its plane is the size it was apart from the hwdef
+  text in ROMFS. TBS_LUCID_H7_WING_AIO includes WING's hwdef, and its
+  hwdef.h is unchanged too; the Lucid bootloaders include only
+  `hwdef-bl.dat` and are untouched. Keep the two files in step: every
+  define in one is undefined in the other.
+- `hwdef: SmallFastDronev1 takes its quad build from TBS_LUCID_H7`
+  (`5064610b03`): it keeps only SFD-O4's defaults, gains NMEA, MAVLink and
+  MSP GPS, the common gimbals, parachute, SLCAN, displays and Spektrum and
+  GHST telemetry, and loses airspeed, EFI and Piccolo CAN (its
+  `AP_PICCOLO_CAN_ENABLE` never cut Piccolo).
+
+On the beta with its stack, copter has 39,316 bytes free on
+SmallFastDronev1, 39,556 on TBS_LUCID_H7 and 41.7 KB on V3 and OEM; on the
+base alone about 72 KB and 74 KB. A refresh that runs short of flash can
+cut further in `sfd_quad.inc` (and its undo): ADS-B 10 KB, proximity
+18 KB, precision landing 6 KB, FrSky telemetry 10 KB, GPS blending 3 KB,
+measured at -Os. `.7` is `258e843e68`.
+
+RAM, not flash, is what runs short on these boards with a large scripting
+heap. Scripting takes its heap before EKF3 starts, and EKF3 turns itself off
+when it then finds too little memory for its cores (`_enable.set(0)` with
+"EKF3 not enough memory", unsaved, so EK3_ENABLE reads 0 after every boot
+and Copter will not arm). On a TBS_LUCID_H7 on refresh15 (2026-11-12),
+SCR_HEAP_SIZE 500 KB did that and 400 KB left EKF3 room. The main heap has
+about 121 KB free after BSS; one EKF3 core is 9,368 bytes before its sensor
+buffers, which it allocates after the check. `@SYS/memory.txt` shows what is
+left.
+
+`SFD Documentation` (`6563bcf709`, 2026-11-11) followed on `5064610b03`, a
+fast-forward: the SFD README listing only what the base carries and the
+`sfd_logo2.png` it shows. The 4.7.0 branch added the logo inside its README
+commit, so restoring README.md alone at a refresh lost it. The base is
+`6563bcf709`.
+
+Rebuilt 2026-10-22 on `upstream/ArduPilot-4.7` `fbd0a3160c`: 4.7.2, plus
+three ChibiOS fixes (atomic runtime pin mode changes and toggles, the same for
+the debug pins, and the nested locking in soft-serial read cleanup from #34597)
+and an AEDROXH7 hwdef update. The quick route below replayed the 85 commits
+with one conflict: 4.7 moved AEDROXH7's MSP DisplayPort default from SERIAL6 to
+SERIAL8, and `AP_MSP_VIDEOTX_ENABLED 1` now follows it. The base's own changes
+match the old base's file for file apart from that one, no prs.txt PR is in the
+new 4.7 (patch-id check against `refs/sfdpr/*`), and SmallFastDronev1 and SITL
+Copter build. It was `b74b576dc9`.
+
+Backups: `SmallFastDrone-4.7-base.3` is the 4.7.2-beta1 base (`ec107ee728`) and
+`.2` the 4.7.1 lineage (`1bf6b3ddc0`), both local; `origin/SmallFastDrone-4.7-base.1`
+is the June lineage (`99414094f6`). A base rebuilt on a newer 4.7 is a force
+push; one that only adds commits on the same 4.7 is a fast-forward.
+
+Rebuild it when 4.7 advances in a way that matters, a baked PR's head moves, or
+an in-flight PR merges **into 4.7**. Branch off `upstream/ArduPilot-4.7`, replay
+the merged-PR list (30994 31619 32469 32392 32200 32396 32945 31500 32770 32022
+32389 32202 32399 32937 29768 32045 32472 33587, then 33115 last), re-apply the
+AP_AHRS compat fixup, then cherry-pick the hwdef commits. Move the branch with
+`refresh.sh promote SmallFastDrone-4.7-base <new>`, never by hand.
+
+Quicker, and what refresh8 did for 4.7.2-beta1: branch off the new 4.7 and
+cherry-pick the old base's own commits, `git rev-list --reverse
+<old 4.7 tip>..SmallFastDrone-4.7-base` (85 of them), which carries every
+resolution and fixup already made. It replayed with no conflicts. Then drop
+from prs.txt any PR the new 4.7 carries: `git cherry upstream/ArduPilot-4.7
+refs/sfdpr/<n> <merge-base>` shows which commits are in (a PR whose leftover
+commits are only 4.7 adaptations of the same change is carried too).
+
+- A PR merged to **master** but not 4.7 stays in prs.txt: the base is 4.7, so
+  the merge is not reachable from it, and dropping the line loses the work.
+  Currently #27893, #34360 and the six refresh5 dropped. Promote into the base
+  only once 4.7 carries them.
+- 30994 and 32469 contribute nothing now - 4.7 carries them.
+- The base does NOT carry the hot files' tests. Its arducopter.py, arduplane.py,
+  quadplane.py and vehicle_test_suite.py are byte-identical to vanilla 4.7, so
+  the merged PRs' tests in those files are re-folded after `rebuild-tests` (see
+  "Local work"). The non-hot test files do carry them.
+- #31005 is NOT baked (still open upstream); it stays in prs.txt.
+- Re-running rebuild-tests on the base: #30994's quintuple-notch test is already
+  in 4.7, so keep `cur` and add `30994` to its `.applied` sidecar.
+- **Author dates lie about which base is newer.** A base built by cherry-picking
+  keeps the original author dates; only `%cd` separates two candidates. Better,
+  test for a known-recent commit: `git merge-base --is-ancestor dbe792162d <base>`.
+
+## Standing divergences (verify each refresh)
+
+- **XKFA.VHold** - #33478 adds it and #33507 adds Bias and BiasStd; together
+  the labels are 69 characters against the logger's 64, and SITL will not boot
+  ("Log structures invalid"). Each PR fits alone; whichever merges second has
+  to split or shorten the message. The stack leaves VHold out (`AP_NavEKF3:
+  leave XKFA.VHold out beside the AGL KF bias fields`) and keeps the beta's
+  EK3_AglKfVelForVelD, which does not read it.
+- **#31274 Motortest error rate** - 4.7 already has `get_raw_rpm_and_error_rate()`
+  and `motors_takeoff_check()`. What is carried is the ESC error-rate gate in
+  `are_motors_running(..., float max_error_rate)`; its sole caller is in
+  AP_Vehicle.cpp (not takeoff_check.cpp) and passes `1.0f`. Since the
+  2026-10-30 rework the PR head has that shape itself: refresh12 applied all
+  its 28 commits with no stop, takeoff_check.cpp untouched.
+- **#32238 FAST_BOOT / esc_calibration** - keep 4.7's brushed-only skip (the
+  DSHOT skip was reverted upstream in #32353); add only the FAST_BOOT early return.
+- **#32768 AHRS resetHeightDatum** - 4.7 lacks master's `backends_and_estimates`
+  AHRS refactor; see the fixup. Plane home-reset keeps 4.7's
+  `AP_GPS::GPS_OK_FIX_3D` and drops a master-only FBWB_CLIMB_RATE conversion.
+- **#33543 loaded-defaults count** - drop the `purge_defaults_list_overrides()`
+  call (master-only); keep `num_param_overrides = idx`, the point of the PR.
+- **#33569 FLOW_GAIN_H** - the PR detunes against raw `terrainState - position`;
+  4.7 already has the AGL-KF-aware `heightAboveGndEst`. Merge the tunable
+  `_flowNavGainHgt` onto 4.7's height; taking the PR verbatim regresses AGL-KF
+  awareness.
+- **#33484 option-bit doc** - keep Bit 4 (velD) from #33478 and apply the PR's
+  en-dash -> hyphen fix.
+- **#32972 on #32768** - #32972 is stacked on #32768 and three commits share a
+  subject; many of #32972's commits arrive already applied (see below).
+- **#34210 land failsafe** - it changes `vibration_check.high_vibes` to
+  `vibe_comp_active()` in `baro_ground_effect.cpp`, which 4.7.1 moved into
+  AP_GroundEffect. Keep the one-line `gndeff.update()` call and make the same
+  broadening at the library input: `gndeff.set_high_vibrations(vibe_comp_active())`.
+- **#33478 / #33507** carry the same AGL KF velocity decay commit on purpose;
+  the second cherry-pick is empty. Skip it, do not resolve it into a duplicate.
+- **#33585** is stacked on #33478 (it needs EK3_OPTIONS bit 4) and must follow
+  it; #34360 must precede #33585 and #34361.
+- **#34380** must follow #33568, which widens how many vehicles reach the flow
+  height limit it fixes.
+- Excluded: Throw Mode RPM (#32955), pending an updated PR. #34305 is
+  deliberately not in the SFD set even though it is open, AI-reviewed and in
+  the archive - a sweep will keep rediscovering it.
+
+## Post-merge fixups (NOT captured by rerere - reapply each refresh)
+
+These apply without conflict, so rerere never sees them. Two kinds:
+4.7-backport artifacts (the PR is fine on master; reapply until it is rebased
+onto 4.7), and genuine upstream bugs (report on the PR, drop the fixup once its
+head carries the fix).
+
+Commit them per module, one commit each; refresh6's subjects are the
+template: `AP_AHRS: adapt the stacked PRs to 4.7's EKF accessors`,
+`AP_NavEKF3: adapt the flow fusion PRs to this stack`, `Copter: drop VALT's
+AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
+`SITL: add SIM_SONAR_OFFSET`.
+
+- **#35122 on 4.7's AHRS** - #35122's `ahrs_has_non_gps_position()` calls
+  master's `active_backend_configured_to_use_gps()` and
+  `configured_backend_has_status()`; 4.7 has `using_gps()` and `has_status()`,
+  and EKF3's `using_gps()` asks the active source set as master's does
+  (`AP_Notify: adapt #35122 to 4.7's AHRS accessors`, refresh15). SITL does
+  not turn the option on, so only a board build finds it.
+- **AP_SCRIPTING_LUA_ENABLED** - #35119's `AP_SmartRTL_config.h` defaults
+  AP_SMARTRTL_RESET_ENABLED to master's AP_SCRIPTING_LUA_ENABLED; 4.7 still
+  names it AP_SCRIPTING_ENABLED, and `-Werror=undef` rejects the new name.
+  Commit `AP_SmartRTL: adapt #35119's reset define to 4.7's
+  AP_SCRIPTING_ENABLED` (`28e67aa404` on topup5). Drop it once the base
+  carries master's rename.
+- **send_set_parameter add_to_context** - #33585's brief-return leg puts
+  SIM_SONAR_SCALE in the test context with master's
+  `send_set_parameter(..., add_to_context=True)`; 4.7's has no such keyword.
+  Append `("SIM_SONAR_SCALE", sonar_scale)` to `self.context_get().parameters`
+  and send with `send_set_parameter_direct()`. `check_test_api.py` flags it.
+- **SIM_SONAR_OFFSET** - #34292's and #33507's tests set it; master added it in
+  `568727a218` along with moving every SONAR_ parameter into a new group.
+  Carried as the parameter alone at var_info3 index 57 plus the one line in
+  `Aircraft::rangefinder_range()`. Drop once 4.7 has it.
+- **AP_AHRS compat** - master renamed `HAL_NAVEKF[23]_AVAILABLE` to
+  `AP_AHRS_NAVEKF[23]_ENABLED` and uses an `ekf3.EKF3` accessor. The `#define`s
+  and #32202's call site are baked into the base; #32471's hover-Z-bias
+  accessors are rewritten `ekf3.EKF3.*` -> `EKF3.*` after it lands.
+- **AP_AHRS backend headers** - #32768 modifies master's `AP_AHRS_NavEKF2.h` /
+  `AP_AHRS_NavEKF3.h`, which 4.7 lacks, so they arrive as whole-file additions.
+  Nothing includes them; delete both.
+- **resetHeightDatum** - master reaches the filter through
+  `backends_and_estimates`; 4.7 has no such list and no `configured_backend`.
+  Port as a `configured_ekf_type()` switch: the case taken stands in for
+  `has_height_datum()`, the unselected EKFs follow in an
+  `if (configured_reset || !configured_decides)` block, `ret` reports whether
+  any moved. The published-location refresh ports verbatim; master's
+  per-backend estimate re-copy is unnecessary because 4.7's `_get_location()`
+  calls `EKF3.getLLH()` directly. Do not port `has_height_datum()` onto
+  `AP_AHRS_Backend` - nothing would override or call it.
+- **GPS fix enum** - `AP_GPS_FixType::FIX_3D` -> `AP_DAL_GPS::GPS_OK_FIX_3D` in
+  AP_NavEKF2 and AP_NavEKF3 (`dal.gps().status()`), and ->
+  `AP_GPS::GPS_OK_FIX_3D` in ArduPlane `commands.cpp` `update_home()`.
+- **#31274 getter** - fix the motor_test call site to
+  `get_raw_rpm_and_error_rate()`; re-apply the AP_Vehicle `1.0f` commit.
+- **VALT AltHold guard** - #32270 guards on `MODE_ALTHOLD_ENABLED`, which 4.7
+  does not define (`-Werror=undef`). Drop the guard and the trailing
+  `#endif // MODE_ALTHOLD_ENABLED` in mode_althold.cpp, and the
+  `#if MODE_VALT_ENABLED && !MODE_ALTHOLD_ENABLED` #error block its head now
+  adds to Copter.h (refresh7's build break).
+- **GPS fix enum (again)** - the rebased #32768 heads bring master's
+  `AP_GPS_FixType::FIX_3D` into EKF2's and EKF3's PosVelFusion cleanly, so
+  rerere no longer covers it: `AP_NavEKF2/3: use 4.7's GPS fix enum in the
+  datum reset PRs`.
+- **zeroStatesVarCov()** - no longer needed: 4.7.2 has master's
+  `zeroStatesVarCov()`. refresh8 reverts refresh7's `bdce18e96c`; do not
+  re-pick it.
+- **Pmut -> P** - master renamed the covariance matrix `Pmut`; #33484's flow
+  reset covariance (`AP_NavEKF3: use 4.7's covariance matrix name in the flow
+  reset`), and #32471's and #32473's accel bias variance writes in `setWindMagStateLearningMode()` come
+  in as `Pmut[13..15]` (`AP_NavEKF3: use 4.7's covariance matrix name in the
+  accel bias PRs`).
+- **More `ekf3.EKF3`** - #32514's `has_horiz_pos_vel_source()` and #34543's
+  `get_ekf_lane_status()` (`AP_AHRS: adapt #32514 and #34543 to 4.7's EKF
+  accessors`). Fold into the AP_AHRS fixup next time.
+- **#34543 on 4.7** - skip `AP_AHRS: report the primary core index with the
+  estimates`: 4.7 already has `get_primary_core_index()` with the same
+  contract. Keep `send_status_report()` where master has
+  `getTerrainAltVariance()`, which 4.7 lacks. #34543's head now keeps its own
+  unguarded `flowPassTimeAxis_ms` for `getLaneStatus()`, so #33484's
+  `flowFuseTimeAxis_ms` stays inside its guard (refresh11).
+- **takeOffDetected -> movedSinceArming** - #32232 renamed it; PR heads written
+  before that still use the old name (#34292's head does).
+- **ArduCopter surface tracking** - a 3-way artifact once dropped master's
+  `get_pilot_speed_*_adjusted_ms()` into #32471's commit; 4.7 has no callers.
+  Delete if it recurs.
+- **AP_GroundEffect reset accessor** - #34362 follows EKF position resets with
+  master's `get_position_NE_reset_count()`, which 4.7's AHRS lacks. Detect the
+  reset by the change in `getLastPosNorthEastReset()`'s time instead
+  (`AP_GroundEffect: follow position resets with 4.7's reset time accessor`).
+- **SITL thread timing** - backport master's `ec488ac50e` and `22aa584f33`
+  (`usleep(10)` in `SITL_State::wait_clock()`). 4.7's 1 ms poll caps the logger
+  I/O thread at one 4 kB block per real millisecond, and #34601's
+  RateThreadPostFilterGyroLog then drops two thirds of its GYR samples (it fails
+  on plain 4.7 plus #34601, passes on master). Drop once 4.7 has them.
+- **VALT height reset accessor** - #32270 follows EKF height resets with
+  master's `get_position_D_reset_count()`; 4.7's AHRS has only
+  `getLastPosDownReset()`. Track the reset time instead (`Copter: follow VALT's
+  height resets with 4.7's reset time accessor`, refresh11; topup15's hand port).
+- **#34630 carries #34543 by cherry-pick**, so the plan lists #34543's ten
+  commits twice: once from #34543 and again under #34630 (refresh11's entries
+  283-292). Each copy is patch-identical to its original; skip all ten, and
+  `primary core index` in both places (see "#34543 on 4.7"). rerere had a
+  resolution for the copy of that commit, so the run committed it without
+  stopping, with master's `AP_AHRS_NavEKF2/3.cpp` and a second
+  `get_primary_core_index()`; check the log after #34630's stop for it.
+- **#34456 carries #32471's DAL event commit** (`6f7bcbeb85`, "say whether an
+  EKF3 event was written"). By then #32471's later `is_logging()` is in
+  AP_DAL.h, so it conflicts: keep ours; the pick is then empty, skip it.
+- **AP_UInt8 / AP_UInt32** - master's unsigned parameter types, which 4.7 lacks.
+  #32471 declares ACC_ZBIAS_LEARN `AP_UInt8` from its first commit
+  (`35005cf440`, which applies clean: hold it and keep `AP_Int8`), and
+  #32238's `b08b51cea3` only changes FAST_BOOT's type (skip it). Grep the plan
+  for `^+.*AP_UInt` before `run`.
+- **FS_EKF_ACTION_VALT** - #32270's VALT failsafe action adds `VALT = 4` to
+  master's `FS_EKF_Action` enum. rerere drops that Parameters.h hunk, but the
+  `#define FS_EKF_ACTION_VALT 4` in defines.h that refresh11 added by hand
+  sits outside any conflict, so rerere cannot replay it and the build fails
+  in ekf_check.cpp (`Copter: give VALT's EKF failsafe action a 4.7 define`).
+- **More `configured_backend_has_status()`** - #32475 adds new calls in clean
+  commits (refresh12: the CONST_POS_MODE check in drop confirmation); use
+  `has_status()` (`Copter: use 4.7's AHRS status accessor in throw mode`).
+  At a mode_throw.cpp stop the whole file can be taken from the PR commit
+  with that substitution: no other stacked PR touches it, and it is the only
+  difference between 4.7's file and the PR's master base.
+- **VALT in throw's hand-off** - #32475 moved the next-mode list into
+  `nextmode()`; `Copter: let throw mode hand off to VALT` puts the VALT case
+  there, between ALT_HOLD and ACRO. `nextmode_requires_position()` defaults
+  to true, so VALT still waits for a position.
+
+## Parameter indices
+
+Each PR takes the next free index against master; the stack puts several in one
+table. Hold the numbering the shipping beta uses, so no user's saved value
+moves, and move the newcomer:
+
+| Parameter | Index | Why local |
+|---|---|---|
+| ACC_ZBIAS_LEARN | 23 | #32471 on master uses 25 (master has 21-23 taken) |
+| THROW_DROP_AG | 21 | #32475 takes 25 |
+| VALT_POS_EXPO | 30 | #32270 takes 25. 30 is its index on the June 4.7.0 builds; it sat on 29 from 4.7.1 until 2026-10-31 |
+| GNDEFF_ subgroup | 24 | from merged #32472, untouched |
+| FLOW_HGT_MIN (AP_OpticalFlow) | 9 | #34292 takes 8, which shipped betas gave to FLOW_HF_RATEF (#33497, dropped in refresh10); keep 8 empty so a saved FLOW_HF_RATEF never loads as FLOW_HGT_MIN |
+| SIM_SONAR_OFFSET (SITL var_info3) | 57 | local backport; master has it in its own group |
+| TKOFF_CPU_AVG, TKOFF_CPU_PEAK | 41, 42 | #33366 takes 60/61, which #32475's THROW_SRC_SET/THROW_DROP_CNF hold on the shipped betas (and on master, so upstream one of the two renumbers). On 30/31 for the betas of 2026-10-31, where 30 read a June board's VALT_POS_EXPO (SFD-O4 log66) |
+| LOIT_DRAG_COEF (AC_Loiter) | 12 | #33318's own index since refresh13. topup12 and topup13 had it at 20, now retired with a marker |
+
+Retired in var_info2, never to be reused: 29 (THROW_YAW_DEG on the June
+4.7.0 builds, VALT_POS_EXPO from 4.7.1 to 2026-10-31) and 31 (TKOFF_CPU_PEAK
+on the betas of 2026-10-31), each marked "N was" in the table. In AC_Loiter,
+20 (LOIT_DRAG_COEF on topup12 and topup13) is retired the same way. AP_Param loads
+a stored value by index and type, not name, so pick a new index against every
+shipped beta's table, not today's source (ARCH-22): 41-46 and 48-58 have never
+held anything on any branch.
+
+Check with `check_param_tables.py`, never by eye. A duplicate index builds
+clean and panics every SITL boot (`PANIC: Bad parameter table`, so every test
+fails with "Did not receive heartbeat"); `ENABLE_DEBUG 1` in `AP_Param.cpp`
+names the offender. Also check that a newly inserted parameter has not been
+spliced into its neighbour's `@Param` block (FLOW_HGT_MIN once swallowed
+FLOW_OPTIONS's docs).
+
+## Local work not in prs.txt (re-fold after the code pass)
+
+- refresh15 topup1 and topup2 (`68c62facbf`..`a3a948e4c3`) are on their
+  PRs since 2026-11-12, so the next refresh takes them from the PR heads
+  and drops the local commits:
+  - #35146 (`f7dc1426d7`): `75a0d0e5a2`, `7f7108a9ef`, test `959baa8c4a`.
+  - #35147 (`fd2a96d8f8`, on #34630): `68c62facbf` (rewritten for master's
+    two-state AGL KF; the refresh resolves it back onto the beta's
+    three-state one), `dc7b9c66f2` and its test; `59f27f252d` dropped.
+  - #32514 (`ba31a35a3f`): `29a4eae8c3`, with the shared helper.
+  - #32475 (`fc0fa3d4db`): `800f7108c3`, `fcc1ca9b72`, `45f74c3fa7`,
+    `e5450885f3`, `194fc6d1ab` and their tests, adapted for master.
+  - The PR versions are not the flown ones. Review on 2026-11-12 changed
+    behaviour, all unflown: #35146 also exempts air data dead reckoning
+    while the wind states are estimated; #35147 skips fusing the set's
+    sample again, drops a pending set once fusion passes both axes,
+    waits for the AGL KF restart it asks for and makes no set from the
+    pre-takeoff zero flow; #32475's flow check applies only where the
+    set's velocity is the flow (a new AHRS accessor in place of the
+    beta's `using_gps_for_pos()`), restarts on any source set change,
+    releases a hold the flow stops agreeing with, times the settle from
+    the arrest, follows EKF height resets, switches only once upright
+    and leaves entry velocity targets alone. Flight-validate them on the
+    refresh that takes them, and replay the fleet logs through #35146
+    and #35147 (`../ardupilot-pr-analysis/REPLAY_LOGS.md`).
+  - The beta's `ThrowTossFlowLostHoldsPosition` is
+    `ThrowTossWithoutFlowHoldsNoPosition` on #32475; the beta's version
+    needs #35146 and can be kept as a local test.
+- The AP_GroundEffect throw-drop baro de-weight in `baro_ground_effect.cpp`
+  (takeoff window asserted post-detection). Keep #34210's `vibe_comp_active()`
+  broadening when resolving it.
+- The parameter index pins above.
+- `Copter: name the firmware SmallFastDrone`: `THISFIRMWARE` in
+  `ArduCopter/version.h` is "SmallFastDrone V<version>", not "ArduCopter". SFD-only,
+  never a PR. The base carries upstream's version.h, so re-apply it on every
+  refresh and whenever 4.7 bumps the version (4.7.0 had it; the 4.7.1 base lost it).
+- The SFD README's prs.txt entries and Upstreaming Order, as a `README:`
+  commit on the base's README (step 15), and all of `Tools/SFD`, which the
+  base does not carry.
+- Tests the rebuild wipes because they live on the branch, not in any PR's own
+  diff. Re-fold them from the previous branch with `refold_methods.py`, then
+  their registrations (`check_suite_load.py --against` lists what is missing):
+  - branch-only: EK3_NoGPSLeakWhenNotSource, EKFBootstrapReset, ScriptingOSD
+    (registered at the head of tests2b), arduplane's
+    EK3HeightDatumResetFlushesBuffers;
+  - merged-PR tests 4.7 lacks: TakeoffGroundEffectAlt and
+    TouchdownGroundEffectAlt (#32472), EK3_AccelBiasInhibitOnGroundMoving,
+    EK3_AccelBiasZeroVelOptFlow, EK3_ZeroVelFusionNotUsedWithGPS,
+    LoiterNoCompassYaw, LoiterNoCompassYawGPS, LoiterFlowBrakeOvershoot;
+  - the MSP VTX tests (#29768): three-way apply `1bb6b599ca` and `b96939e023`
+    from `SmallFastDrone-4.7.1.4-beta` to vehicle_test_suite.py (one method is
+    on MSP_Generic, not TestSuite), and register MSPVTXConfig and
+    MSPDisplayPortVTXConfig after CRSF;
+  - master helpers the PR-head tests call: send_position_target_local_ned
+    and clear_battery_failsafe (AutoTestCopter), statustext_count_in_collections,
+    assert_ekfs_match_sim_state, assert_log_dsf_no_drops,
+    assert_current_log_filesizes and context_preserve_parameters (TestSuite),
+    and `import struct` in arducopter.py (#32471). `download_full_log_list` is
+    replaced with master's, which only adds the LOG_ENTRY_sanity_check keyword
+    that #34363's head passes; it defaults to 4.7's behaviour.
+  Drop registrations with no test anywhere on the branch: HomeAltResetTest,
+  ModeFlowHold, UTMGlobalPosition, UTMGlobalPositionWaypoint, and quadplane's
+  CircuitStatusScript and CompassLearnCopyFromEKFAffinity (master tests 4.7
+  lacks, whose registration lines ride in on a PR hunk without the bodies).
+- EK3_AglKfVelMixedSources takes the AGL KF velD claim as shown above 0.5 m/s,
+  not master's 2. Since the test slows the climb for #33478's step hold, 4.7
+  reads 0.92-0.94 claimed and 0.07 with the claim off; the earlier 1 m/s bound
+  was for the faster climb and failed on the shipping beta (refresh11).
+  For the older test, bisected 2026-10-02: the 4.7.2 base with #33478 alone reads
+  1.91, master 4.1; 4.7 climbs slower at full stick in LOITER (1.84 against
+  2.49 m/s) and the AGL KF velocity peaks lower. Unclaimed reads 0.00. SV
+  baseline is 0.41 on 4.7 without the fusion (master 0.13), so its 0.5 limit
+  has little margin here. Its two dict-passed takeoff() calls need 4.7's
+  keywords by hand; `fix_takeoff_kwargs.py` cannot see them.
+- AmslAltPreservedOnRearmAtDifferentElevation's 5 s wait before it reads the
+  log (owed to #32768).
+- The refresh6 fixes are all in their PR heads as of refresh7 and come back
+  with the PRs: #34292's aiding guard and FlowFocusHoldAfterLanding, #33498's
+  flight-event count, #34432 with BaroGroundEffectRangefinderSwitch, #32553's
+  SIM_TERRAIN line. `audit_dropped.py` still reports them as absent because the
+  branch's copy differs from the previous branch's commit; check the test is
+  present by name before re-folding anything.
+- `SITL: add SIM_SONAR_OFFSET` (until 4.7 has master's `568727a218`).
+- `SITL: save the shove duration when the shove finishes`, master's
+  `ccd8eaacec` (refresh12). 4.7 clears only the live SIM_SHOVE_TIME, so a
+  test that reboots after a throw is shoved again at boot, with home set in
+  the air: #32475's ThrowSrcSetHandoff failed its second leg that way.
+- `hwdef: default SFD boards to EK3_OPTIONS 92` (topup, 2026-10-05): owed to
+  the base's `sfd_defaults.parm`, where defaults belong; carried on the branch
+  until the base is next rebuilt.
+- `Copter: describe FS_OPTIONS bit 6 with VALT's failsafe action` ("2 or 4"):
+  belongs to whichever of #34696 and #32270 lands second.
+- `Copter: let throw mode hand off to VALT` (topup17), on no PR yet.
+  Its fix, `Copter: let a throw hand over to VALT without a position`
+  (2026-11-10), is on the beta since refresh14 topup1 (`8449cb6dcc`, test
+  `ThrowDropNoPositionNextModeVALT` `cbb8e4c762`; `42353f7c05` and
+  `9dc9ebc818` on `fix1110/throw-valt`): VALT flies without a position, so
+  it goes in
+  `nextmode_requires_position()`'s list with ALT_HOLD. Fold both with the
+  hand-off commit wherever it lands.
+- `AP_NavEKF3: skip the AID_NONE height reset in ground effect` and its test
+  (refresh12 topup10, 2026-11-04) are now on #32972 (`13fe97b7ea`, test at
+  `5bf36c15d4`), with topup11's armed check; the next refresh takes them
+  from #32972, so drop the local commits then.
+- `hwdef: SFD boards keep 25 Hz ESC logging and the Loiter drag out of the
+  feed-forward` (refresh13): ESC_TLM_LOG_RATE 25 and LOIT_DRAG_COEF 0.01
+  in `sfd_defaults.parm`. It names parameters only stacked PRs define,
+  which a defaults file ignores where they are absent, so it can move into
+  the base at the next base rebuild.
+- `AC_WPNav: mark Loiter index 20, DRAG_COEF on the SFD topup12 and topup13
+  betas` (refresh13): the retired index's marker. It stays SFD-local after
+  #33318 lands.
+- refresh13 dropped topup11's LOIT_OPTIONS bit 6, topup12's local
+  LOIT_DRAG_COEF and their tests for #33318's head. The PR's
+  LoiterAirframeDragFeedForward, loiter_jab_backward and
+  LoiterFlowBrakeOvershoot replace them. EK3_DRAG_MCOEF holds the same
+  figure, but it also turns on the EKF's drag fusion, so it is not used.
+- `autotest: switch the accel before the doubled-offset flight on the beta`
+  (topup11): the beta's order for #32471's HoverBiasSavedFirstFlightAfterRest
+  while #34942's on-ground height check is carried; re-apply on every
+  refresh until #32471's own test is changed or #34942 lands upstream.
+- `hwdef: SFD boards keep the EKF reset auxiliary function` (refresh11
+  topup3, 2026-10-29): owed to the base's SFD hwdefs, where a define that
+  keeps an SFD board as it was belongs (step 16); carried on the branch
+  until the base is next rebuilt.
+- `hwdef: SFD boards show a non-GPS position on the LED`: turns on #35122's
+  AP_NOTIFY_RGBLED_NONGPS_POSITION_ENABLED for the nine SFD boards that do not
+  include TBS_LUCID_H7, and renames the local
+  AP_NOTIFY_RGBLED_RELATIVE_POSITION_ENABLED in the base's `sfd_quad.inc` and
+  its undo. refresh15 dropped the three bench-checked library commits for
+  #35122, whose disarmed pattern is 0.3 s green, 0.3 s blue, 0.4 s dark and
+  which turns green for a source set that FuseAllVelocities gives a
+  position. #35122 is built, not yet run on hardware. The hwdef half is owed
+  to the base's SFD hwdefs with the EKF reset define.
+- #30956's `11093ee6bc` (wait_armed) and `ad1ce89ce3` (AP_Logger reserved
+  space), and 4.7's DataFlashErase body over the PR heads' (until 4.7 has
+  #30956; see "DataFlashErase").
+- Replay: master's `9c7f12df34` and `d3a32025cd`, and the reboot after raising
+  the buffer (until 4.7 has them).
+- `Replay: do not read past a log record that predates a message field`
+  (`76d7c5f8e6`). #32471 carried it until its rebase onto master, which had
+  merged Leonard Hall's `e7805549c5` for the same macro (it copies
+  `offsetof(_end)` but neither zeroes the struct nor bounds the copy by the
+  record's length), so the PR head no longer has it. Re-picked in refresh12;
+  carry it until 4.7 has a form that zeroes and bounds.
+- `hwdef: keep ALLOW_ARM_NO_COMPASS on the Borg H7 for 4.7`: #31216 dropped
+  the define for master; 4.7's arming check still reads it.
+- `AP_NavEKF3: keep #34851's range height hold in the flat-ground restore`:
+  #33585's flat-ground restore recomputes `gndOffsetValid`, which master
+  lacks for #34851 to change. Whichever of the two merges second needs it.
+- HeightDatumKeptOnMidairRearm's three 4.7 adaptations (carry the PR head's
+  body and re-apply these rather than keeping a local rewrite):
+
+      takeoff(250, mode='GUIDED', altitude_max=260, timeout=180)
+        -> takeoff(250, mode='GUIDED', max_err=10, timeout=180)
+      ground_amsl_m = start.get_alt_m(AltFrame.ABSOLUTE)   -> start.alt
+      Location(lat, lng, alt, AltFrame.ABSOLUTE)           -> mavutil.location(lat, lng, alt, 0)
+
+  4.7's takeoff() has `max_err`, a tolerance (ceiling = `alt_min + max_err`),
+  where master has `altitude_max`, a ceiling. `sitl_start_location()` returns a
+  `mavutil.location` (lat/lng/alt/heading only); 4.7's own `Location` class does
+  have `get_alt_m()`, which is why a grep suggests the call is fine - the
+  receiver is wrong. Both calls sit after the 30 m assertion, so they are only
+  reached once it passes, and `check_test_api.py` does not check methods called
+  on an object a helper returned.
+- NOT re-folded: the VRF subtest D/E skip (D/E pass with #32471's covariance
+  restore), `check the SITL gyro rate` and `only compare EKF3 cores while armed`
+  (the PR heads carry both), the old local throw and VALT commits (#32475 and
+  #32270 carry them), and `ebed712c36` (#32972 carries the spool-up anchor).
+  *Corrected 2026-10-13:* not all of them. `9ae85814c4` (VALT in throw mode's
+  THROW_NEXTMODE hand-off list) is on neither PR, so THROW_NEXTMODE 29 stopped
+  working on the 4.7.2 beta: the vehicle stayed in THROW after a good throw.
+  Restored as topup17. Before dropping a local commit because a PR "carries
+  it", check the PR head with `git log -S` for the change itself.
+
+### DataFlashErase (standing divergence)
+
+Keep 4.7's DataFlashErase; do not take the PR heads' copy. #34363 changes only
+the log size bounds of master's rewrite of the test, which came with #30956
+(merged to master 2026-06-09, not in 4.7), and the refresh took the whole
+rewrite with it. On 4.7 that body failed three ways, each measured on
+2026-09-28:
+
+- "Failed to ARM": it arms with DISARM_DELAY 1 at SIM_SPEEDUP 1, and 4.7's
+  wait_armed() waits for the next heartbeat before looking, which arrives after
+  the disarm. The "Rebooting SITL / EOF / Connection refused" lines recorded
+  here earlier are the normal reboot reconnect, not the failure.
+- With #30956's `11093ee6bc` (check the flag before waiting): about 240 dropped
+  log messages at the start of the short log on every attempt.
+- With #30956's `ad1ce89ce3` too (4 kB reserved for non-messagewriter
+  messages): no drops, but the first log is 689 kB against master's 1000 kB
+  floor; the bounds are calibrated to master's logging.
+
+4.7's own body, with both picks, fails its first attempt on a log cut off in
+an FMT record and passes the retry, as the shipping beta does. Both picks are
+carried (Local work) until 4.7 has #30956: the logger one because the stack
+logs more message types than 4.7 and the startup drops are real, the harness
+one because it is master's and costs nothing.
+
+### Traps found in refresh15
+
+- **A piece split out of a PR and merged upstream leaves every rebased
+  head that carried it.** #34533 (SIM_FLOW_OFS) was split out of #34292
+  and merged to master; #33484 and #34630 rebased onto master and
+  dropped their copies, so the plan no longer had them and the run
+  stopped at #33484's SIM_FLOW_QUAL. Add the split PR to prs.txt ahead of
+  its users. To find them, run `git cherry upstream/master <locked head>`
+  for every open PR in the lock: a `-` line is a commit master now has.
+- **Look for replacements, not just new PRs.** rmackay9 opened cut-down
+  versions of #34678 (#35039, merged) and #34292 (#35077, open) and
+  linked them only in a comment on our PR. Scan the comments on our open
+  PRs for newer PR numbers, not only the PR list.
+- **A new worktree has no submodules and no `.claude/githooks`.** Run
+  `git submodule update --init --recursive` before `waf configure`, and
+  push only from the main clone: git runs no pre-push hook from a
+  worktree without the hooks directory.
+- **`git stash push -- <path>` takes the staged copy as well.** Splitting a
+  staged file from its later edit that way put the whole staged file into
+  the second commit. Commit the staged file first, then edit.
+
+### Traps found in refresh14
+
+- **A squash can move a conflict away from an edit made inside it.**
+  refresh13 swapped in #33585's `flowTerrainState()` on #33318's
+  control-limit height line while resolving #33585's commit. After
+  #33318's squash that line applies beside #33585's change without a
+  conflict, so rerere had nothing to replay and the line kept
+  `terrainState`; the diff against the beta found it. It is now a fixup
+  commit.
+- **A PR rebased onto master can use an upstream-merged PR the plan
+  applies after it.** #33318's control-limit commit uses
+  `_flowNavGainHgt`, which on 4.7 arrives only with #33569's commit later
+  in the plan. Take #33318's side; the stack builds again from #33569's
+  commit, which keeps its parameter and takes ours in the limits.
+- **#34630 stacked on #34543 lists #34543's commits again.** Skip them by
+  patch-id (14 since #34630's restack on `871498e4aa`, the DCM fallback
+  pair and the flash check included), and its "report the status of each
+  lane", which differs from #34543's only in context.
+
+### Traps found in refresh13
+
+- **Master's EKF3 state structures.** Master moved EKF3 state into
+  structures (`aglKf.*`, and the airspeed, external nav, body odometry,
+  GPS yaw and drag state), and PR heads rebased since then carry the new
+  names, often in hunks that merge clean. The first run (parked as
+  `SmallFastDrone-4.7.2-refresh13-try1`) mixed `aglKf.hgt` with 4.7's AGL
+  KF names. Master's AGL KF move (`0ecbe153e2`) went into the base instead,
+  because the moved AGL KF heads are written against it. The rest are
+  mapped back to 4.7's members (`AP_NavEKF3: use 4.7's body odometry and
+  external nav names`). Before `run`, grep the plan's added lines for
+  `tas\.`, `extNav\.` and `bodyOdm\.`.
+- **A clamp the beta made can live in a PR only one head carries.** #34457
+  fuses the AGL KF floor rather than clamping to it, so its state can sit
+  just below the floor. #33484's step speed error and #33359's range
+  height switch read that height too. Neither head has #34457 under it, so
+  neither carries the beta's clamp (`AP_NavEKF3: clamp the AGL KF height to
+  its floor where the stack reads it`).
+- **SITL builds its `@ROMFS` models at configure time.** A frame model the
+  tests pass brings in (#33318's `quad-linear-drag.json`) is not in a
+  binary configured before it arrived, and the test fails at SITL startup.
+  Run `./waf configure --board sitl` after the tests pass, then rebuild copter.
+- **A fixup cherry-picked from the beta can undo a later one.** The beta's
+  index fixups put the "30 was" marker back after VALT_POS_EXPO had
+  returned to 30, and `check_param_tables.py` does not flag a marker beside
+  a live index. Read the table after the pins.
+- **A merged PR test can read a field the stack leaves out.** #33478's
+  runaway leg reads the hold time from XKFA.VHold, which the stack leaves
+  out (Standing divergences). There it checks only the velD error.
+- **git strips a message body line that starts with `#`** when the message
+  comes from a file. `55b28b627b`'s body lost its first line ("#32232
+  renamed ...") and reads only "written before that.". Start the line with a
+  word, or commit with `--cleanup=verbatim`.
+
+### Traps found in refresh12
+
+- **Build the SITL vehicles one at a time.** `./waf copter plane heli sub
+  rover` in one call on 2026-11-02 linked plane against copter's objects
+  (undefined `get_fwd_pitch_is_limited()` and AP_Winch bindings) and left
+  copter with no rate thread: FSTRATE_ENABLE missing, so five rate thread
+  tests failed on "Failed to set parameters" and the other 115 passes
+  were on a binary that is not the beta's. Separate `./waf copter`, then
+  each vehicle, recompiles the vehicle-dependent libraries for each one.
+  Before a test run, check the copter binary has the rate thread:
+  `strings build/sitl/bin/arducopter | grep FSTRATE_ENABLE`.
+- **A worktree's `terrain/` is state.** SITL caches SRTM tiles there from
+  any test that uses terrain, and with the CMAC tile present the simulated
+  range finder measures to SRTM ground 0.55 m below the resting vehicle.
+  An A/B between a fresh scratch worktree and one that has run the SFD set
+  compares terrain against none, not one commit against another:
+  OSDEKFLanes failed 5 of 14 in refresh12 and 0 of 20 in a scratch build
+  of the commit before topup1, which read as the top-up's fault until the
+  tiles were copied in and both commits failed alike. Copy the tiles across
+  (or clear them in both) before comparing, and check their sizes: a tile
+  file can be a 0-byte placeholder that loads nothing (TERR Status 1), as
+  #34543's worktree had.
+- **`refresh.sh rerere-save` archives the whole shared cache.** rerere
+  keeps one cache per clone, so it holds every worktree's resolutions, PR
+  rebases included: on 2026-10-31 it had 338 resolved entries (a 38 MB
+  archive) against the committed archive's 226 (21 MB). The save also
+  deletes every unresolved entry, which another session may be in the
+  middle of. refresh12 built its archive from refresh11's plus the entries
+  its run used; do the same. topup3 ran the save by mistake: the archive
+  was restored from git, and the 20 unresolved entries it deleted that the
+  2026-10-30 backup held were put back (no worktree had a conflict open).
+- **rerere replays a bad resolution as readily as a good one.** refresh11's
+  #33507 resolution that dropped EK3_AGL_ABIAS_P was in the cache, and
+  refresh12's run replayed it without stopping. Its postimage
+  (`rr-cache/844b66268c`) is now corrected in the committed tarball, so the
+  next replay keeps the parameter and the re-pick of `6f0cdf3b05` then adds
+  it twice: skip that pick (`check_param_tables.py` reports the duplicate).
+- **rerere replays only the conflict hunks.** An edit made outside them while
+  resolving a stop (refresh11's FS_EKF_ACTION_VALT define in defines.h) is
+  lost on the next refresh with no stop to say so, and the build or the
+  diff against the beta is the first sign. Make such an edit a fixup commit.
+- **A PR rebased onto master can shed a commit master merged in another
+  form.** #32471 dropped its Replay MSG_CREATE fix for master's weaker
+  `e7805549c5`; the plan only lists commits above the PR's merge-base, so it
+  vanished from the stack. The diff against the beta found it.
+- **`SmallFastDrone-4.7-base` can be stale in a clone.** In this clone it
+  was still `ec107ee728` (4.7.2-beta1) while `applied.lock` and
+  `origin/SmallFastDrone-4.7-base` are `b74b576dc9`, because refresh11 was
+  built elsewhere. Run with `SFD_BASE=<the lock's BASE sha>` rather than
+  trusting the local branch name.
+
+### Traps found in refresh11
+
+- **A conflict hunk can hold more than the line it is about.** #33507's commit
+  changes the EK3_OPTIONS description and adds EK3_AGL_ABIAS_P in one hunk, so
+  a resolution that kept our description and swapped in the PR's sentence
+  dropped the parameter. The member stayed declared, so it built clean and
+  passed `check_param_tables.py`, and would have read zero: no process noise
+  on the AGL KF bias state. After a hand resolution, check every line the PR
+  commit adds is in the tree unless meant to go; the refresh11 history has the
+  script, filtered to lines the previous branch has and this one lacks.
+- **A log structure that does not validate fails every test** with "Failed to
+  set RC values", not with its own name: the 100-test run took three minutes
+  and reported 100 failures. Run one test before the set, and read
+  `validate_structure` in the console when they all fail.
+- **rerere did not replay refresh10's resolutions** for #32471's conflicts (the
+  same commits on the same EKF code), and did replay one for a commit that
+  should have been skipped. Read the log after every stop, not just the stop.
+
+### Traps found in refresh7
+
+- **`plan` used to leave `progress.idx` alone.** A run then resumed at the
+  previous refresh's index, skipped that many commits of the new list and left
+  the branch with only its tail - 20 commits of 310, and a build that looked
+  fine because the tail was self-consistent. `do_plan` now resets the index and
+  truncates `applied.log`. If a branch ever looks too small, check
+  `git rev-list --count <base>..HEAD` against the plan before anything else.
+- **The hot-file rebuild can leave a method mangled rather than conflicted**:
+  two PR heads carrying different versions of one test interleave into a
+  truncated body, a duplicated block or a def with no body, and the file then
+  does not compile so no other gate runs. `Tools/SFD/repair_test_methods.py FILE
+  <previous branch>` replaces each broken method with the previous branch's copy
+  until the file compiles, and names what it touched. Re-check those names with
+  `check_pr_test_lines.py` afterwards: for a PR whose head moved this refresh
+  the previous branch's copy is the older one.
+- **A duplicate can survive the rebuild without a conflict.** refresh7 ended
+  with two defs each of OpticalFlowAGLKfFloorVelocity,
+  BaroGroundEffectRangefinderSwitch and hover_and_check_matched_frequency, and
+  two registrations each of BaroGroundEffectRangefinderSwitch and
+  EK3_SourceSetSelectsLane. `check_suite_load.py` reports both kinds; keep the
+  copy whose signature the call sites match (the positional
+  hover_and_check_matched_frequency, not master's keyword-only one).
+- **#32972 and #34457 replay their parent's commits at an older revision.**
+  #32972 carries #32768's AP_AHRS work (the `void resetHeightDatum()`
+  signature) and #34457 carries #33507's AGL KF commits; where they conflict,
+  ours is the newer side. Resolve to ours and let the empty pick be skipped.
+
+## Phase 2 - tests
+
+refresh9 did not redo the hot-file rebuild. With the base unchanged, it took
+the shipping beta's Tools/autotest whole and replaced only the methods a PR
+changed between its locked head and its new one (compare each PR's own methods
+at both heads, ignoring the tests*() lists). That is far cheaper than the
+rebuild and keeps every 4.7 adaptation, but it trusts the beta's files; after a
+base change or a large test rework, rebuild as below.
+
+1. `refresh.sh tests` replays the list keeping only autotest hunks and keeps
+   both sides on collisions. Fine where PRs touch disjoint code.
+2. `refresh.sh rebuild-tests` rebuilds the HOT files (`arducopter.py`,
+   `arduplane.py`, `quadplane.py`, `vehicle_test_suite.py`), where keep-both
+   yields invalid Python. `rebuild_testfile.sh` resets each to the base and
+   3-way merges each PR's net change (`merge-base..head`) in order;
+   `resolve_additive.py` clears the additive conflicts; the rest stop.
+   `resolve_hotfile.py` automates the manual shapes. Every reconstructed body
+   should be byte-identical to its PR head (per-method diff against
+   `refs/sfdpr/<n>`).
+
+Manual shapes, and the rules `resolve_hotfile.py` learned the hard way:
+
+- The PR side is a strict superset of the other two: take it, then check for a
+  method that now appears twice (our copy matched into the common region) and
+  delete the orphaned head, not the PR's copy (#33484).
+- A registration list where each side adds entries: union them, dropping any
+  entry whose `def` does not exist (master-only tests such as
+  `CircuitStatusScript`, `UTMGlobalPosition*`), and our side entirely when it
+  repeats entries already above (#32768 in quadplane).
+  `resolve_registration_union.py` does this alone.
+- Our side already carries the PR's addition: keep `cur`, record the PR in the
+  `.applied` sidecar.
+- diff3 mis-alignment: a PR adding a method where 4.7 has one with a similar
+  docstring splits 4.7's method (def inside the markers, body below). Resolve
+  to our side, insert the PR's method verbatim from `refs/sfdpr/<n>` before
+  4.7's, add the registration line (#33507, #33568).
+- Duplicate detection must be qualified by enclosing class (unqualified, it
+  once deleted 29 classes from vehicle_test_suite.py). `self.X,` is only a
+  registration inside a `tests*()` body. A def may be inserted from a PR head
+  only when the PR's own diff adds it - a PR head contains the whole of master.
+- A stacked PR's `merge-base(pr, master)` predates its parent, so its net change
+  re-adds the parent's tests; the script prefers the newest applied ancestor's
+  head as the base. That only works when the parent's head is an ancestor.
+  #32972 and #33585 carry their own rebased copies of #32768's and #33478's
+  commits, and `resolve_hotfile.py` then keeps the CHILD's copy of every shared
+  method - a stale one. Put the parent's current copy back, then re-apply only
+  what the child's own commits change in it (#32972: `accumulate_baro_drift`'s
+  duration argument and a docstring). Keeping #32972's copies would have
+  reverted #32768's `0ca1c9e775`, the 2026-09-11 trap again.
+- A PR raised against the 4.7 branch (#34251) shares only a March master with
+  master, so its "net change" from there is the whole 4.7 history.
+  `rebuild_testfile.sh` and `resolve_hotfile.py` now measure from the 4.7 fork
+  point when it is newer. Before that fix, #34251's merge folded hundreds of
+  unrelated hunks into arducopter.py and it had to be rebuilt from scratch;
+  `rebuild_testfile.sh` now keeps `<file>.applied.before` so a bad stop can be
+  rolled back.
+- Resolving a stop to "ours" keeps the file compiling and loading and can still
+  drop the PR's change inside an existing method. `check_pr_test_lines.py`
+  lists every PR-added line the file lacks.
+- Most stops are the same three steps: `resolve_hotfile.py --apply`, then (for
+  a stacked child) the parent's copies, then insert every method the PR's own
+  diff adds that the file lacks. Take that as a loop, stop by stop.
+
+Gates, and what each catches:
+
+- py_compile: syntax only.
+- Duplicate-`def` scan per class (only `def tests(` repeats) and a
+  dangling-registration scan.
+- `check_suite_load.py`: dangling registrations (only an AttributeError at
+  `tests()` time), duplicate registrations and duplicate defs, and with
+  `--against` the registration diff with the previous branch.
+- `check_test_api.py`: master-only helpers, keywords 4.7 does not accept
+  (`takeoff(altitude_min=...)` - `altitude_max=6` on `takeoff(4, ...)` is
+  `max_err=2`, not a rename; `fix_takeoff_kwargs.py` rewrites them), and Lua
+  scripts this tree does not ship. Run it even when a change looks confined. It
+  checks names, not classes: a helper copied into the wrong class passes it.
+- An AST walk for positional calls into keyword-only methods (#34208 made
+  `hover_and_check_matched_frequency` keyword-only; py_compile accepts the old
+  positional calls and they raise TypeError at run time).
+- `check_pr_test_lines.py`: PR changes lost inside existing methods.
+- Def-set diff against the previous branch - useful, **not** a specification.
+  Missing from the new branch is not the same as wanted: the old branch is
+  stale wherever a PR moved (restoring `EK3_PerCoreOptflowLogging` reintroduced
+  a test #34363 had replaced with `EK3_PerCoreLogging`).
+- A merged PR silently deletes its own tests: once merged, its tests sit below
+  every PR's merge-base with master and the reset base never had them. Only
+  the suite load and def-set diff catch this.
+
+## Conflict resolution recipes
+
+**Taking the previous branch's resolution** (`resolve_from_branch.py`) is sound
+only under two conditions:
+
+1. No commit still to be applied touches the file (otherwise the branch's copy
+   is from the future and silently skips them).
+2. No PR touching the file has moved since `applied.lock` (otherwise the copy
+   is stale and reverts the PR's change). This is the one that bites: taking
+   the branch's `AP_NavEKF3_VehicleStatus.cpp` during a #33484 conflict put
+   `takeOffDetected` back after #32232 had renamed it - three uses of a member
+   that no longer exists, nowhere near the conflicting hunk.
+
+`changed` lists exactly the PRs that make the branch stale. To recover after
+taking a stale file: `git checkout HEAD -- <path>`, then
+`git show <sha> -- <path> | git apply -3` to re-raise the conflict.
+`git checkout --merge` does not work once the path is `git add`ed.
+
+**Commits that arrive already applied** (many of #32972's after #32768; #33507's
+copy of the shared AGL KF commit): keep HEAD, confirm `git diff --cached` is
+empty, bump `progress.idx` without committing. Check `git show <sha> --stat`
+first - `8f7487dfa5` "refresh on-ground references" looked like a no-op and
+was, but dropping it blind could have lost `vertCompFiltState.pos`.
+
+**#32471 v3's ACC_ZBIAS_LEARN description against #32473's bit 3**
+(ArduCopter/Parameters.cpp): take v3's sentences on what is learned,
+relearning after changing bit 2 and the moving-platform consequence, and
+keep #32473's "Apart from acro with bit 3 set" clause, its "Bits 0 and 1
+take effect after a reboot" sentence, its bit 3 text and the bitmask with
+bit 3. Index 23 stays. rerere has it from topup2.
+
+**#34941 against #33484's and #34543's flow state** (AP_NavEKF3 Control,
+OptFlowFusion, core.cpp, core.h): every hunk is additive. Keep both, with
+#34941's `flowWithheld_ms`/`flowSampleTime_ms` lines next to
+`prevFlowFuseTime_ms` and the stack's `flowVelResetUnhealthy` clause after
+the new timeout line. The diff against HEAD should then be the PR's diff
+exactly. rerere has it from topup1.
+
+**#34942's EK3HardLandingRearm** (arducopter.py): the cherry-pick stops on
+the method and its registration, both additive, without diff3 markers, so
+`resolve_additive.py` cannot take them. Keep HEAD's file, run
+`refold_methods.py Tools/autotest/arducopter.py <test sha>
+EK3HardLandingRearm`, register it after `EK3_AccelBiasZeroVelOptFlow`
+(tests1c here, tests1e on master), then `fix_takeoff_kwargs.py` for its two
+`altitude_min=` calls. The added lines then match the PR's apart from those
+keywords. The EKF3 commits apply clean.
+
+**Targeted top-up** (one or two PRs moved, branch otherwise current): land the
+old-head-to-new-head delta on the tip via a `git commit-tree` of the new tree
+onto the old head, cherry-picked for 3-way semantics. For `arducopter.py` use
+the delta restricted to that file with `git apply --3way` instead - the
+squashed delta mis-anchors against master-only tests (one 180-line conflict
+became 16 clean hunks and 4 real conflicts), and taking "theirs" on a
+mis-anchored hunk pulled 165 lines of master-only UTM tests in. This is a
+stop-gap; rebuild from prs.txt next time.
+
+## Running the SFD tests
+
+`Tools/SFD/run_sfd_tests.sh` derives the set from the branch (tests registered
+here that 4.7 lacks, plus those whose bodies this branch modifies, compared
+against the 4.7 the branch contains), counting tests defined on TestSuite and
+the Sub suite. It puts the watch list first, the throw tests and Replay last,
+and `--resume` continues an interrupted run. A clean run is minutes; each crashing test costs ~45 minutes
+of reconnect stall before the harness gives up, so a run with crashers looks
+wedged when it is merely slow - check the log, not the buildlog mtime, which
+lags. For long runs use a normal shell:
+`python3 .claude/skills/autotest/run_autotest.py --timeout 21600 <steps...>`.
+
+- Rebuild BOTH vehicles after any shared-library fix. A pass on a stale binary
+  is not evidence (Plane once passed on a six-hour-old binary because the fault
+  was intermittent).
+- `run_autotest.py` resolves the harness from its own path: invoked by absolute
+  path from another worktree it silently runs *this* clone's tests. In other
+  worktrees run `Tools/autotest/autotest.py` directly with `BUILDLOGS` set.
+- TCP 5760 can be held on the Windows side of WSL, invisible to `ss`/`lsof`;
+  every SITL then fails to bind. It cleared after ~40 minutes. `--uds` is broken
+  in master's harness.
+- EKF probe output belongs in the dataflash: `GCS_SEND_TEXT` drops under load and
+  `stderr` interleaves out of order across a reboot. A temporary
+  `AP::logger().Write()` was right every time.
+- A test that reads the dataflash log while SITL holds it open can miss buffered
+  records (a flush race); wait before reading.
+
+## Traps
+
+- **On a newer base, the hot-file unions pull in master's registration lists.**
+  Master moved dozens of tests into tests1c and tests1d; on the 4.7.2 base
+  `resolve_hotfile.py` unioned those lists into ours, registering 46 tests
+  twice and 21 master-only tests. Master's entries are the 12-space-indented
+  ones among 4.7's 13-space ones. And every stop it resolves "to ours" can drop
+  the PR's new test entirely, def and registration: refresh8 lost 21. After
+  `rebuild-tests`, classify every dangling or duplicate registration by where
+  its def lives (a PR's own diff, the previous beta, master only) before
+  re-folding anything.
+- **`refold_methods.py` says "already present" when only TestSuite has the
+  method.** Copter's `test_takeoff_check_mode` override (#31274's "ESC RPM or
+  errors out of range") was skipped that way; TakeoffCheck is not in the SFD
+  set, so nothing caught it. Insert a vehicle-class override by hand.
+- **A beta adaptation that equals master's copy looks like a PR's.** Filtering
+  "beta differs from us" by "matches no PR head" missed `wait_armed` and
+  `test_replay_body_odom_bit`, because master-based heads carry master's copy.
+  `audit_dropped.py` caught both; also list methods the beta changed that are
+  still plain 4.7 here.
+- `check_test_api.py` reports `hagl.lua` missing for EK3_GetHaglTerrainAlt; the
+  test writes it inline with `install_script_content_context`. False positive.
+- `sitl_start_location()` returns a `mavutil.location`: PR-head tests calling
+  `start.get_alt_m(AltFrame.ABSOLUTE)` need `start.alt`, and
+  `Location(..., AltFrame.ABSOLUTE)` passed to `set_origin()` needs
+  `mavutil.location(lat, lng, alt, 0)` (EK3_OptflowAnchoredTerrain as well as
+  HeightDatumKeptOnMidairRearm).
+
+- **A worktree does not inherit submodules.** `./waf` dies on
+  `modules/littlefs/lfs.c`, then in `dronecangen`, and both print through a pipe
+  with exit 0 - check the exit code, not the tail.
+  `git submodule update --init --reference <main clone>/.git/modules/modules/<m>`
+  for waf, mavlink, littlefs, lwip and the DroneCAN modules is enough for SITL;
+  ChibiOS (204M) is not needed.
+- **An interrupted rebase poisons the rerere cache.** A Ctrl+C left zero-length
+  objects, truncated files, `fatal: bad object HEAD` - and a zero-length rerere
+  postimage, which the redo then "used" to stage git's empty blob, surfacing
+  hundreds of lines later as undefined references at link time. Check:
+
+      find .git/objects -type f -size 0
+      find .git/rr-cache -type f -size 0
+      git fsck --no-progress | grep -iE 'missing|broken|corrupt'
+
+  Delete the empty objects and the individual `rr-cache/<hash>/` directory, not
+  the whole cache. `badTimezone` from fsck is ancient upstream history. Recover
+  a branch that is also on the remote with `git update-ref` + `git checkout -f`.
+  Interrupting a build or test is harmless; interrupting git writes is not.
+- **Master renamed `takeoff()`'s `alt_min` to `altitude_min`**; `user_takeoff()`
+  kept `alt_min`, so the rename is narrower than a blanket search suggests.
+- **`grant_push.py` checks branch names against this clone.** Fetching a PR branch
+  in to satisfy it is refused if a local branch of that name exists at another
+  commit, and deleting "the temporary copy" afterwards deletes the real branch.
+  Check `git rev-parse --verify` before fetching.
+- **Amend is gated** by `pre_bash_check.py` (and the hook matches the command text
+  inside a heredoc too). Rebuilding a commit works with allowed operations:
+  save the diff, `git checkout -B tmp HEAD~1`, re-apply, re-commit,
+  `git branch -f <branch> HEAD`.
+- **Fetch the analysis archive before concluding an entry is missing.** A stale
+  clone of `../ardupilot-pr-analysis` makes a thorough entry look never-written.
+- **Intermittent faults defeat bisection.** The optical flow FPE (uninitialised
+  stack struct) produced two confident wrong bisects. Measure the rate at a
+  fixed commit first (it was CRASH, PASS, PASS); treat a probe TIMEOUT as no
+  information, never a pass; after a bisect names a commit, revert it at the tip
+  and re-run before believing it. A backtrace found it in minutes:
+  `kernel.yama.ptrace_scope=0` (works on WSL2) and `DEBUGINFOD_URLS=` empty, or
+  gdb stalls downloading symbols until the run times out.
+- **Read the subsystem playbook before building on a flag.**
+  `libraries/AP_NavEKF3/CLAUDE.md` already listed `takeOffDetected` and `inFlight`
+  as unreliable; a round of experiments on #33585 re-derived that the hard way.
+- **`RNGFND1_GNDCLR` places the flow focus floor, not just the range clamp.**
+  `rngOnGnd` is `MAX(ground_clearance, 0.05)`, and #34292 floors the focus check
+  at `rngOnGnd + 0.05` m, so a value wrong for the airframe moves the height at
+  which flow stops being trusted on a landing as well as the clamp. Check it per
+  airframe.
+
+## Settled (so an audit does not re-raise them)
+
+- **EKF3 covariance gates**: all four CovariancePrediction gates in
+  `AP_NavEKF3_core.cpp` are on `accelBiasLearningInhibited()`, and #32471 carries
+  the covariance restore that keeps ACC_ZBIAS_LEARN bit 2 learning in the air.
+  A local revert to `inhibitDelVelBiasStates` (`cb5026417f`) was dropped after it
+  failed `AccelBiasMovingPlatform`. Any other account in older notes is wrong.
+- **Gyro recalibration in the EKF bootstrap reset** is deliberately not carried;
+  it was dropped from #32202 before merge. Revisit only if the bootstrap reset
+  misbehaves without it.
+- 4.7.0-local and not carried: IIS2MDC offset-cancellation disable (the merged
+  #33780 writes `OFF_CANC`), the DroneCAN `READING_TYPE_UNDEFINED` guard, the
+  `_read_fifo()` beat delay, the `TerrainLoiterToCircle` 0.7/1.3 bounds, the
+  throw constant unit comments, `INDOOR_TUNING_PLAYBOOK.md`.
+- MSP VTX is enabled per board on the H7 targets rather than for every
+  `minimize_fpv_osd.inc` consumer, so the 1 MB boards (BlitzF745, BlitzF745AIO,
+  BETAFPV-F405, MicoAir405v2) fall back to the `HAL_PROGRAM_SIZE_LIMIT_KB > 2048`
+  default. SmallFastDronev1 picks it up through TBS_LUCID_H7.
+- `INS_HNTC2` notch conversion: #34251 no longer seeds defaults; #33879
+  force-saves the tuned values.
+- **A 4.7.0 parameter file does not mean the same thing here.** EK3_OPTIONS:
+  4.7.0 has AglKfForOptflow at bit 4 and velD fusion at bit 5; here they are
+  bits 3 and 4, bit 5 is OptflowAssumeFlatGnd. `ARMING_CHECK`/`SKIPCHK` LEVEL
+  moved from bit 21 to bit 9 with #32391.
+- Renames the private flight topics still use: `BARO1_THST_FILT` ->
+  `BARO_THST_FILT`, `EK3_FLOW_MIN_H` -> `FLOW_HGT_MIN`, `TKOFF_GNDEFF_ALT`/`_TMO`
+  -> `GNDEFF_ALT`/`GNDEFF_TMO`, `PSC_POSZ_P` -> `PSC_D_POS_P`, `XKF6` -> `XKFA`
+  for the AGL KF fields.
+- Deliberately absent from the topics: `EK3_RNG_TERR_RT` (a proposal, never
+  shipped) and the ground-effect Z accel-bias inhibit `zAxisInhibit` (measured
+  to do nothing at `ACC_ZBIAS_LEARN=2`; the EKF3 playbook's description is
+  4.6-branch history).
+- Flight-informed values that must survive a re-stack: #32475's throw constants
+  (30 deg, 2500 ms, 5 deg, 3.0, 5 m/s, 100 ms), #33484's
+  `FLOW_AXIS_LOCKOUT_MS = 500` (not the PR's original 1000), #33318's
+  `desired_vel_norm * (_brake_accel_mss + drag_decel_mss)`. #34210's land
+  failsafe cap is a PI controller on baro climb rate
+  (`LAND_FS_CAP_P/I/I_BAND_MS/MAX`); `LAND_FS_RUNAWAY_CLIMB_M 10` is intact.
+- Carried by refresh5 only by accident, through old PR heads, and gone with
+  them: the ZenFC743 board and bootloader, AP_OpenDroneID speed precision, the
+  VIBE message description, a Plane parachute test fix. Not SFD work.
+- Hardware deliberately not enabled: #33991 (ICM-56686), #33781 (LSM6DSO),
+  #31895 (Brahma H7); #33443 (TBS LUCID H7 AIO) is a sibling of SmallFastDronev1's
+  board, not a dependency; #31919 (deferred baro calibration) overlaps the baro
+  path already modified. #34120 (ICP201XX) is carried for future hardware.

@@ -1,0 +1,89 @@
+# SFD refresh PR manifest
+#
+# Ordered list of the IN-FLIGHT upstream ArduPilot/ardupilot pull requests that
+# make up the Small Fast Drone feature set. refresh.sh cherry-picks these onto
+# SmallFastDrone-4.7-base (override with SFD_BASE), which already bakes in the
+# merged-upstream PRs + #33115 + the permanent SFD-local hwdef. See REFRESH_NOTES.md.
+# Promoted into the base when they merged upstream: #29768, #32045, #32472, #33587.
+# Carried by 4.7.2-beta1, so dropped here: #33780, #33988, #34122, #34360.
+#
+# Format: one PR number per line; "#" starts a comment. Blank lines ignored.
+# Excluded for now: Throw Mode RPM (#32955, may no longer be needed).
+
+# --- Merged to master, not yet in 4.7 (refresh5 dropped these; keep until 4.7 carries them) ---
+33990   # AP_HAL_ChibiOS: reject invalid GCR quintets in DShot telemetry
+34057   # AP_NavEKF3: anchor yaw while ground-learning in MAG_CAL=7
+33639   # Loiter: keep control feel consistent when EKF limits ground speed (merged 2026-07-07; #33318 builds on it)
+34120   # AP_Baro: ICP201XX lower noise mode and FIR settling fix
+32397   # Copter: the EKF failsafe message says whether a variance or the position failed (merged 2026-03-09)
+34533   # SITL: SIM_FLOW_OFS_X/Y flow rate offset (split out of #34292; #33484 and #34630 dropped their copies when rebased onto master, #34292 still carries them and the refresh skips them as empty) [merged to master 2026-11-09, not in 4.7]
+
+# --- In review ---
+31005   # Fence: min alt disarm (still open despite the old "merged" label)
+32232   # Ground clearance fusion fix + rangefinder on-ground reading till takeoff
+31274   # Motortest error rate + ESC error-rate gate in are_motors_running(). d228911760: a DShot error rate keeps a full window's rate across the 5 s restart
+32391   # Separate LEVEL arming check
+32398   # Customizable ARM_DELAY
+32238   # Fast boot parameter
+32471   # Hover Z-bias learning (VRF). v3 (04e501e13d) saves the change since arming with bit 2 clear, not the total that SFD-O4 log63 counted twice
+32768   # Baro drift reset on arming
+32553   # Terrain offset reset on ground-effect clear
+32972   # Protect height fusion from baro ground effect at takeoff
+34362   # AP_GroundEffect: stop touchdown_expected latching in cruise (follow-up to merged #32472)
+35146   # EKF3: stop aiding at once on a source set with no horizontal source (refresh15 topup2's 7f7108a9ef, reviewed: air data dead reckoning goes on while the wind states are estimated or air data was fused in the last 7 s). #32514 carries the same helper commit, so its copy picks as empty
+32514   # Reset EKF failsafe gate on source set change
+33366   # robertlong13: true CPU load measured from boot, per-reader windows, TKOFF_CPU_AVG/PEAK (SFD-O4 log64 could not take off). Its two parameters take var_info2 60/61, which #32475 already uses for THROW_SRC_SET/THROW_DROP_CNF: renumber the pair here to 41/42 (never used on any branch; 30/31 are retired, see REFRESH_NOTES "Parameter indices"), never #32475's
+
+# --- Submitted, limited review ---
+27893   # Fast rates (1/3) [merged to master 2026-09, not in 4.7]
+29000   # Fast rates (2/3)
+30980   # Fast rates (3/3) [merged to master 2026-10-05, not in 4.7]
+30841   # ESC logging control
+31216   # iFlight Borg H7
+31770   # DFU mode via system bootloader
+32401   # Pending arm on switch
+32473   # Acro bias inhibit
+32270   # VALT velocity alt-hold mode (VALT_POS_EXPO at index 30, its index on the June 4.7.0 builds; 29 is retired)
+34696   # EKF failsafe returns to Loiter or PosHold once it clears (FS_OPTIONS bit 6); after #32514 and #32270, which edit the same ekf_check.cpp
+33318   # AC_Loiter brake/drag feed-forward fix
+33359   # AGL KF rangefinder height switch + fuse aglKfH as the height observation
+33478   # AGL KF velocity velD fusion
+35014   # EKF3: carry the terrain state across a vertical datum reset (split out of #33585, which carries its five commits, same SHAs; git cherry drops the duplicates)
+33585   # Optflow flat-ground above rangefinder range (always on: the EK3_OPTIONS bit 5 it once had was dropped in review)
+34363   # EKF3: log XKF5 and XKFA for every core
+33484   # Optical flow axis lockout recovery (focus-height floor split out to #34292)
+34292   # Optical flow minimum focus height FLOW_HGT_MIN (split out of #33484)
+# 35077 # rmackay9's cut-down alternative to #34292 (FLOW_ALT_MIN; flow aiding drops after 5 s below it). Not carried: #34292 is the flown version; switch when #35077 settles or merges
+34783   # PX4Flow frames published from the main loop, not the I2C thread (ARCH-18; the race #33484 ordered stores against)
+34809   # AP_OSD: a script's OSD writes go out in the same frame as the screen (the demo applet sfd_pr_osd.lua needs it) [merged to master 2026-10-31, not in 4.7]
+34851   # EKF3: keep the ground measured for 5 s after range finder height ends (SFD-O4 log54's touchdown failsafe)
+34882   # AP_OSD: answer MSP DisplayPort requests from the OSD thread (a DJI O4 never saw arming while sfd_pr_osd.lua drew the OSD) [merged to master 2026-10-27, not in 4.7]
+33498   # Inhibit Z gyro bias without yaw source [merged to master 2026-09-23, not in 4.7]
+34933   # EKF3: keep the covariance consistent for states the flow mask leaves out (fixes #34932, a regression from #33498; a T25 hand launch lost baro fusion)
+33507   # AGL KF accel-Z bias estimation
+34457   # AGL KF: clear the velocity when the height rests on its floor (#33507 is stacked on it and carries all twelve of its commits, same SHAs; git cherry drops the duplicates)
+34456   # EKF3: select the lane that runs the source set being asked for (master; SRC_PER_CORE and ManualLaneSwitch are both upstream)
+34543   # AP_OSD: show the status of each EKF3 core (pairs with #34456)
+34630   # EKF3: show flow lockout resets on the OSD and make their messages optional (stacks on #33484 and #34543)
+35147   # EKF3: set the flow velocity when relative aiding starts in flight (refresh15 topup1's dc7b9c66f2; stacks on #34630; five unflown review fixes on top)
+33543   # AP_Param loaded defaults count
+33568   # Optical flow relative-aiding fallback on GPS loss
+34380   # EKF3: lift the flow height limit where flow nav carries on above it (#33568 relies on it for its fall back)
+33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H [merged to master 2026-10-01, not in 4.7]
+34941   # EKF3: flow withheld by the tilt check no longer times a flow lane out (SFD-O4 log61's Loiter that did not stop; the zeroed velocities on log65)
+34942   # EKF3: the on-ground height check works again and applies in aided modes, and a vertical velocity left by a clipped impact is reset once the vehicle is still (the T25 drops that re-armed and climbed in VALT). 2a52c965e2: the rework, the static yaw reference fix, and no reset at rest while a measured velD is fused; on by default
+34251   # Stop INS_HNTC2 MODE and HMNCS changing across a reboot (Copter + Plane); now against ArduPilot-4.7, as master dropped the conversion
+33879   # FFT notch tune: persist the tracking mode and name the notch used
+34209   # EKF3: do not learn XY accel bias in unaided flight
+34208   # Copter: interpolate the rate target in the fast rate thread [merged to master 2026-11-08, not in 4.7]
+34642   # AP_InertialSensor: SITL gyro rate follows INS_GYRO_RATE (split out of #34208)
+34583   # AC_AttitudeControl: throttle-gain boost once per loop + throttle mix slew dt with the fast rate thread
+34584   # AC_AttitudeControl: record per-loop rate modifiers for the fast rate thread (carries #34583's three commits, patch-identical)
+34601   # AP_InertialSensor: log every filtered gyro sample with the rate thread [merged to master 2026-10-06, not in 4.7]
+34210   # Copter: advanced land failsafe (LAND_FS_OPTIONS bit 0)
+34432   # EKF3: keep baro ground effect out of a height source switch (found with #32232) [merged to master 2026-09-23, not in 4.7]
+35039   # rmackay9: Copter: takeoff while inverted avoids internal error (the cut-down #34678; its inverted part and test left #34678 for this) [merged to master 2026-11-09, not in 4.7]
+34678   # Copter: avoid a false missed-take-off internal error with the fast rate thread. Reworked 2026-11-11 (d4be1a090c gives the mode a loop to see the take-off); the beta has the earlier land detector version
+35119   # AP_SmartRTL: in-flight return point reset from Lua, with the smartrtl-reset.lua switch applet; set_home() also resets the path on the background thread. On 4.7 needs the AP_SCRIPTING_LUA_ENABLED post-merge fixup (REFRESH_NOTES)
+35122   # AP_Notify: RGB LEDs show a non-GPS position (green/blue disarmed, solid green armed). Supersedes the local LED commits; on 4.7 needs the AHRS calls adapted and the SFD hwdefs' define renamed (REFRESH_NOTES "Local work")
+32475   # Throw mode improvements (applied last, as the local stack was). 16042bc083: throw holds a position that comes back while it holds on
