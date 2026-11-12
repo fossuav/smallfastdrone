@@ -21,6 +21,7 @@
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_AHRS/AP_AHRS.h>
+#include <AP_Compass/AP_Compass.h>
 #include <GCS_MAVLink/GCS.h>
 
 #define VISUALODOM_RESET_IGNORE_DURATION_MS 1000    // sensor data is ignored for 1sec after a position reset
@@ -140,8 +141,14 @@ void AP_VisualOdom_IntelT265::rotate_attitude(Quaternion &attitude) const
 // use sensor provided attitude to calculate rotation to align sensor with AHRS/EKF attitude
 bool AP_VisualOdom_IntelT265::align_yaw_to_ahrs(const Vector3f &position, const Quaternion &attitude)
 {
-    // do not align to ahrs if we are its yaw source
+    // do not align to ahrs if we are its yaw source (the ahrs yaw is this sensor's own yaw)
+    // optionally align to the compass heading instead while disarmed
     if (AP::ahrs().using_extnav_for_yaw()) {
+#if AP_COMPASS_ENABLED
+        if (_frontend.option_is_set(AP_VisualOdom::Option::AlignYawToCompass) && !hal.util->get_soft_armed()) {
+            return align_yaw_to_compass(position, attitude);
+        }
+#endif
         return false;
     }
 
@@ -157,6 +164,27 @@ bool AP_VisualOdom_IntelT265::align_yaw_to_ahrs(const Vector3f &position, const 
     align_yaw(position, attitude, AP::ahrs().get_yaw_rad());
     return true;
 }
+
+#if AP_COMPASS_ENABLED
+// use sensor provided attitude to calculate rotation to align sensor yaw with the compass heading
+bool AP_VisualOdom_IntelT265::align_yaw_to_compass(const Vector3f &position, const Quaternion &attitude)
+{
+    // do not align until the ahrs tilt estimate is usable
+    if (!AP::ahrs().initialised()) {
+        return false;
+    }
+
+    const Compass &compass = AP::compass();
+    if (!compass.use_for_yaw()) {
+        return false;
+    }
+
+    // calculate_heading uses only the roll/pitch part of the rotation so is valid while the ahrs yaw is in the sensor's frame
+    WITH_SEMAPHORE(AP::ahrs().get_semaphore());
+    align_yaw(position, attitude, compass.calculate_heading(AP::ahrs().get_rotation_body_to_ned()));
+    return true;
+}
+#endif
 
 // align sensor yaw with any new yaw (in radians)
 void AP_VisualOdom_IntelT265::align_yaw(const Vector3f &position, const Quaternion &attitude, float yaw_rad)

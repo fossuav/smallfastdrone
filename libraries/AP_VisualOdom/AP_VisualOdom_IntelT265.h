@@ -39,6 +39,12 @@ protected:
     // calls align_yaw (see below)
     bool align_yaw_to_ahrs(const Vector3f &position, const Quaternion &attitude);
 
+#if AP_COMPASS_ENABLED
+    // use sensor provided position and attitude to calculate rotation to align sensor yaw with the compass heading
+    // used when external nav is the EKF yaw source so the AHRS yaw cannot anchor the frame to earth
+    bool align_yaw_to_compass(const Vector3f &position, const Quaternion &attitude);
+#endif
+
     // align sensor yaw with any new yaw (in radians)
     void align_yaw(const Vector3f &position, const Quaternion &attitude, float yaw_rad);
 
