@@ -1127,6 +1127,10 @@ bool NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype 
         ((frontend->_flowQualMin > 0) && (ofDataDelayed.quality < frontend->_flowQualMin))) {
         return false;
     }
+    // a restart asked for is waited for, as the AGL KF goes on fusing held readings until it comes
+    if (aglKfRestartRequested) {
+        return false;
+    }
     const FlowResetRange rangeState = flowResetRangeState(ofDataDelayed, range);
     if ((rangeState == FlowResetRange::Step) && !flowVelInitRestartedAglKf) {
         flowVelInitRestartedAglKf = true;
@@ -1137,7 +1141,6 @@ bool NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype 
         return false;
     }
     flowVelInitPending = false;
-    aglKfRestartRequested = false;
     flowFuseTimeAxis_ms[0] = flowFuseTimeAxis_ms[1] = imuSampleTime_ms;
     if (flowVelResetCount < UINT8_MAX) {
         flowVelResetCount++;
