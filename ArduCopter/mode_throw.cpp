@@ -1034,27 +1034,44 @@ bool ModeThrow::throw_vertical_settled() const
            (now_ms - poshold_start_ms > THROW_VERT_SETTLE_MAX_MS);
 }
 
-// A velocity that rests on optical flow, with no absolute position, is one a position controller
-// flies on, but relative aiding that starts in flight can start it far from the flow, and the flow's
-// innovations show that. Average their normalised squares over both axes from the switch to the
-// completion source set, to say whether the flow agrees with the velocity yet
+// A source set that takes its horizontal velocity from the flow and its position from no GPS flies on a
+// velocity the flow measures, but relative aiding that starts in flight can start it far from the flow, and
+// the flow's innovations show that. Average their normalised squares over both axes from the switch to the
+// completion source set, to say whether the flow agrees with the velocity yet. Flow innovations too old
+// for the EKF to report mean nothing measures the velocity: after GPS is dropped the EKF dead reckons
+// it while reporting a position, an absolute one for up to 7 s. Then the flow has to show it agrees
+// again from the start
 void ModeThrow::throw_update_flow_check()
 {
     Vector3f innov, var;
-    flow_check_active = !ahrs.configured_backend_has_status(AP_AHRS::Status::HORIZ_POS_ABS) &&
-                        ahrs.get_vel_innovations_and_variances_for_source(uint8_t(AP_NavEKF_Source::SourceXY::OPTFLOW), innov, var) &&
-                        is_positive(var.x) && is_positive(var.y);
+#if AP_OPTICALFLOW_ENABLED
+    flow_check_active = copter.optflow.enabled() && ahrs.active_backend_configured_to_use_optflow_for_velXY() &&
+                        !ahrs.active_backend_configured_to_use_gps_for_posXY();
+#else
+    flow_check_active = false;
+#endif
     if (!flow_check_active || !completion_sources_set) {
+        return;
+    }
+    if (!ahrs.get_vel_innovations_and_variances_for_source(uint8_t(AP_NavEKF_Source::SourceXY::OPTFLOW), innov, var) ||
+        !is_positive(var.x) || !is_positive(var.y)) {
+        throw_reset_flow_check();
         return;
     }
     const float nis = sq(innov.x) / var.x + sq(innov.y) / var.y;
     flow_nis_avg += (nis - flow_nis_avg) * G_Dt / (THROW_FLOW_NIS_TC_S + G_Dt);
 }
 
-// True unless the velocity rests on flow that does not agree with it yet
+// True unless the velocity rests on flow that has not shown it agrees with it
 bool ModeThrow::throw_flow_agrees() const
 {
     return !flow_check_active || (flow_nis_avg < THROW_FLOW_NIS_AGREES);
+}
+
+// Start both flow axes on the EKF's default flow innovation gate, 3 standard deviations each
+void ModeThrow::throw_reset_flow_check()
+{
+    flow_nis_avg = 2 * sq(3.0f);
 }
 
 bool ModeThrow::throw_position_good() const
@@ -1158,9 +1175,8 @@ void ModeThrow::throw_set_completion_sources()
         return;
     }
     completion_sources_set = true;
-    // the flow has to show it agrees with the velocity from here: start both axes on the EKF's
-    // default flow innovation gate, 3 standard deviations each
-    flow_nis_avg = 2 * sq(3.0f);
+    // the flow has to show it agrees with the velocity from here
+    throw_reset_flow_check();
     const int8_t srcset = g2.throw_srcset.get();
     bool srcset_changed = false;
     if (srcset >= 1 && srcset <= 3) {
