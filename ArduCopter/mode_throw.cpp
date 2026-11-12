@@ -471,6 +471,15 @@ void ModeThrow::run()
             xy_controller_active = false;
         }
 
+        // the flow that agreed when the hold started can lapse, the range finder dropping out say, and
+        // relative aiding then carries on for 5 s on a velocity nothing measures: hold level until it
+        // agrees again. A lapse starts the average again at the gate, and only an average back up
+        // there releases the hold, so it does not toggle on the agreement threshold
+        if (xy_controller_active && flow_check_active && (flow_nis_avg >= THROW_FLOW_NIS_GATE)) {
+            GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Throw flow lost, holding level");
+            xy_controller_active = false;
+        }
+
         if (xy_controller_active) {
             // use position controller to stop
             Vector2f vel_zero;
@@ -1082,10 +1091,10 @@ bool ModeThrow::throw_flow_agrees() const
     return !flow_check_active || (flow_nis_avg < THROW_FLOW_NIS_AGREES);
 }
 
-// Start both flow axes on the EKF's default flow innovation gate, 3 standard deviations each
+// Start both flow axes on the EKF's default flow innovation gate
 void ModeThrow::throw_reset_flow_check()
 {
-    flow_nis_avg = 2 * sq(3.0f);
+    flow_nis_avg = THROW_FLOW_NIS_GATE;
 }
 
 bool ModeThrow::throw_position_good() const
