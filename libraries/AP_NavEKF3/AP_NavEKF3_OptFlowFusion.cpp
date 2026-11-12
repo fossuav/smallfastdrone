@@ -1107,6 +1107,7 @@ bool NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype 
     const uint32_t FLOW_VEL_INIT_WAIT_MAX_MS = 5000;
     if (imuSampleTime_ms - flowVelInitStart_ms > FLOW_VEL_INIT_WAIT_MAX_MS) {
         flowVelInitPending = false;
+        aglKfRestartRequested = false;
         return false;
     }
     // ordinary fusion has accepted the flow on both axes since aiding started, so the velocity
@@ -1116,6 +1117,7 @@ bool NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype 
     if ((imuSampleTime_ms - flowPassTimeAxis_ms[0] < sinceStart_ms) &&
         (imuSampleTime_ms - flowPassTimeAxis_ms[1] < sinceStart_ms)) {
         flowVelInitPending = false;
+        aglKfRestartRequested = false;
         return false;
     }
     if (!frontend->option_is_enabled(NavEKF3::Option::AglKfForOptflow) || !aglKf.valid ||
@@ -1135,6 +1137,7 @@ bool NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype 
         return false;
     }
     flowVelInitPending = false;
+    aglKfRestartRequested = false;
     flowFuseTimeAxis_ms[0] = flowFuseTimeAxis_ms[1] = imuSampleTime_ms;
     if (flowVelResetCount < UINT8_MAX) {
         flowVelResetCount++;
