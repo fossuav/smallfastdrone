@@ -3717,6 +3717,46 @@ bool AP_AHRS::using_gps_for_pos(void) const
     return true;
 }
 
+// true if the active estimator is configured to use GPS as its horizontal position source, whether
+// or not the data is good, as master's backends report it in configured_to_use_gps_for_pos_XY
+bool AP_AHRS::active_backend_configured_to_use_gps_for_posXY(void) const
+{
+    switch (active_EKF_type()) {
+#if HAL_NAVEKF2_AVAILABLE
+    case EKFType::TWO:
+        return EKF2.configuredToUseGPSForPosXY();
+#endif
+#if HAL_NAVEKF3_AVAILABLE
+    case EKFType::THREE:
+        return EKF3.configuredToUseGPSForPosXY();
+#endif
+#if AP_AHRS_DCM_ENABLED
+    case EKFType::DCM:
+        return _gps_use != GPSUse::Disable;
+#endif
+#if AP_AHRS_SIM_ENABLED
+    case EKFType::SIM:
+#endif
+#if AP_AHRS_EXTERNAL_ENABLED
+    case EKFType::EXTERNAL:
+#endif
+        return true;
+    }
+    return true;
+}
+
+// true if the active estimator is configured to use optical flow for horizontal velocity, whether or
+// not the data is good. Only EKF3 has source sets to say it from
+bool AP_AHRS::active_backend_configured_to_use_optflow_for_velXY(void) const
+{
+#if HAL_NAVEKF3_AVAILABLE
+    if (active_EKF_type() == EKFType::THREE) {
+        return EKF3.configuredToUseOptFlowForVelXY();
+    }
+#endif
+    return false;
+}
+
 bool AP_AHRS::configured_to_use_horizontal_position_or_velocity_source(void) const
 {
 #if HAL_NAVEKF3_AVAILABLE
