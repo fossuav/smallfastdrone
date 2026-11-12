@@ -1120,16 +1120,6 @@ bool NavEKF3_core::InitVelocityFromFlow(const of_elements &ofDataDelayed, ftype 
         aglKfRestartRequested = false;
         return false;
     }
-    // ordinary fusion has accepted the flow on both axes since aiding started, so the velocity
-    // already agrees with it, and a set from one sample now could only move it. Ages, not times,
-    // are compared, so the test holds as the millisecond count wraps
-    const uint32_t sinceStart_ms = imuSampleTime_ms - flowVelInitStart_ms;
-    if ((imuSampleTime_ms - flowPassTimeAxis_ms[0] < sinceStart_ms) &&
-        (imuSampleTime_ms - flowPassTimeAxis_ms[1] < sinceStart_ms)) {
-        flowVelInitPending = false;
-        aglKfRestartRequested = false;
-        return false;
-    }
     // before takeoff is detected the flow under 0.5 m is replaced by zero, which is no measure of a
     // velocity to set
     const bool flowZeroed = !movedSinceArming && ((terrainState - stateStruct.position.z) < 0.5f);
