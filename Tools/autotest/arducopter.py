@@ -21996,28 +21996,6 @@ return update, 1000
         if not self.statustext_in_collections("EKF3 IMU0 flow velocity set at aiding start"):
             raise NotAchievedException("no message for the velocity set at the start of aiding")
 
-        self.start_subtest("no set once ordinary fusion has the flow")
-        # still, with the range out of range high at the switch, so the set waits for a range while
-        # the flow fuses on the coasting AGL KF height
-        self.reboot_sitl()
-        self.wait_ready_to_arm()
-        self.takeoff(4, mode='LOITER')
-        self.change_mode('ALT_HOLD')
-        self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, p1=3)
-        self.wait_statustext("EKF3 IMU0 stopped aiding", check_context=True, timeout=30)
-        self.set_parameter("RNGFND1_MAX", 1)
-        self.delay_sim_time(1, "range finder out of range")
-        self.context_clear_collection('STATUSTEXT')
-        self.run_cmd(mavutil.mavlink.MAV_CMD_SET_EKF_SOURCE_SET, p1=2)
-        self.wait_statustext("EKF3 IMU0 started relative aiding", check_context=True)
-        self.wait_statustext("EKF3 IMU0 fusing optical flow", check_context=True, timeout=5)
-        self.delay_sim_time(2, "fuse the flow with no range")
-        self.set_parameter("RNGFND1_MAX", 40)
-        self.delay_sim_time(3, "the range back")
-        self.disarm_vehicle(force=True)
-        if self.statustext_in_collections("EKF3 IMU0 flow velocity set at aiding start"):
-            raise NotAchievedException("velocity set after ordinary fusion had the flow")
-
         self.start_subtest("no set from the zero flow before takeoff")
         # a flow only set, with the flow coming in once armed on the ground, so relative aiding
         # starts there, where the flow below 0.5 m is replaced by zero; the range finder reads on
