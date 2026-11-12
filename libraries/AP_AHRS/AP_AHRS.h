@@ -476,6 +476,10 @@ public:
     // what one EKF lane is navigating on; false unless EKF3 is configured, started and has that lane
     bool get_ekf_lane_status(uint8_t lane, nav_lane_status &status) const;
 
+    // true if the active estimator is configured to use GPS as its
+    // horizontal position source, whether or not the data is good
+    bool active_backend_configured_to_use_gps_for_posXY() const { return active_estimates->configured_to_use_gps_for_pos_XY; }
+
     // set and save the ALT_M_NSE parameter value
     void set_alt_measurement_noise(float noise);
 
