@@ -22166,6 +22166,46 @@ return update, 1000
             raise NotAchievedException("LOITER took over on a velocity %.2f m/s out" % max(e[0] for e in errors))
         self.reboot_sitl()
 
+    def ThrowDropFlowLostFailsafe(self):
+        '''A drop holding position on the flow, which stops, lands on the EKF failsafe'''
+        # The hold holds level when the flow stops agreeing, and that used to drop the position
+        # requirement with it, so the EKF failsafe only reported once relative aiding stopped and
+        # the vehicle stayed in throw with no horizontal control
+        params = self.flow_switch_parameters()
+        params.update({
+            "THROW_TYPE": 1,           # drop
+            "THROW_ALT_DCSND": 0,
+            "THROW_NEXTMODE": 18,      # stay in throw, holding position
+            "THROW_SRC_INI": 3,
+            "THROW_SRC_SET": 2,
+            "FS_EKF_ACTION": 1,        # land
+            "MOT_SPOOL_TIME": 1.0,
+            "SIM_SHOVE_Z": -25,
+            "SIM_SHOVE_X": 20,
+        })
+        self.set_parameters(params)
+        self.reboot_sitl()
+        self.wait_ready_to_arm()
+        self.change_mode('THROW')
+        self.arm_vehicle()
+        self.context_collect('STATUSTEXT')
+        try:
+            self.set_parameter("SIM_SHOVE_TIME", 500)
+        except ValueError:
+            # the shove resets this to zero
+            pass
+        self.wait_statustext("Throw detected", check_context=True, timeout=30)
+        self.wait_statustext("Throw (height achieved, good position|position regained)",
+                             check_context=True, regex=True, timeout=30)
+        self.context_clear_collection('STATUSTEXT')
+        self.set_parameter("SIM_FLOW_ENABLE", 0)
+        self.wait_statustext("Throw flow lost, holding level", check_context=True, timeout=10)
+        self.wait_statustext("EKF Failsafe: changed to Land Mode", check_context=True, timeout=30)
+        self.wait_mode('LAND')
+        self.wait_disarmed(timeout=120)
+        self.set_parameter("SIM_FLOW_ENABLE", 1)
+        self.reboot_sitl()
+
     def ThrowZeroDescentSettlesBeforeHandover(self):
         '''With THROW_ALT_DCSND 0 a toss is handed over only once its climb is arrested'''
         self.set_parameters({
@@ -24854,6 +24894,7 @@ return update, 1000
             self.ThrowZeroDescentStopsAboveRelease,
             self.ThrowTossIntoFlowLoiter,
             self.ThrowTossFlowLostHoldsPosition,
+            self.ThrowDropFlowLostFailsafe,
             self.ThrowZeroDescentSettlesBeforeHandover,
             self.ThrowYawFollowsEKFYawReset,
             self.ThrowHeightSourceSwitchNoClimb,
