@@ -21,7 +21,13 @@
 
 
 #if !defined(HAL_DEBUG_BUILD) || !HAL_DEBUG_BUILD
-    #pragma GCC optimize("O2")
+    // repeat the build's -fno-math-errno: without it GCC will not inline
+    // sq(), MIN() and MAX() into the functions below
+    #ifdef __NO_MATH_ERRNO__
+        #pragma GCC optimize("O2,no-math-errno")
+    #else
+        #pragma GCC optimize("O2")
+    #endif
 #endif
 
 #include "AP_NavEKF3_feature.h"
