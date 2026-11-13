@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AP_VisualOdom_config.h"
+#include <AP_Compass/AP_Compass_config.h>
 
 #if AP_VISUALODOM_INTELT265_ENABLED
 
