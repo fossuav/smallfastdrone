@@ -20,7 +20,8 @@ reply exists") before acting on it.
 - Shipping: `SmallFastDrone-4.7.2-beta` is refresh16 (2026-11-13): the
   stack rebuilt from that day's PR heads on the unchanged 2026-11-11 base
   (`6563bcf709`; 4.7.3-beta1 still not taken). It replaces refresh15
-  after topup2 and its records commits (`e323cb704e`).
+  after topup2 and its records commits (`e323cb704e`, kept locally as
+  `SmallFastDrone-4.7.2.19-beta`); promoted 2026-11-13, a force push.
   - Four PRs moved, all carrying refresh15's topups: #35146 (stop aiding
     at once on a set with no horizontal source) and #35147 (the flow
     velocity set at aiding start, stacked on #34630) are new in prs.txt,
@@ -74,8 +75,10 @@ reply exists") before acting on it.
 - Previous beta: refresh15 after topup2 (below).
   topup1's and topup2's 30 commits were squashed on 2026-11-12 into 14 (a
   force push), flown and unflown kept apart, with an identical tree. The
-  beta before it is kept locally as `SmallFastDrone-4.7.2.19-beta`, where
-  the hashes older records give for them still resolve.
+  record said the beta before the squash was kept as
+  `SmallFastDrone-4.7.2.19-beta`, but no clone had that branch at
+  refresh16's promote, which took the name for `e323cb704e`; the
+  pre-squash hashes older records give no longer resolve from a branch.
   refresh15 was promoted 2026-11-12, a force push: the stack rebuilt from
   that day's PR heads on the 2026-11-11 base
   (`6563bcf709`: TBS_LUCID_H7 and its V3 and OEM variants as SFD quads at
