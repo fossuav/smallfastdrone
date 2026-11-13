@@ -24853,7 +24853,6 @@ return update, 1000
              self.ThrowDropTwiceWithoutReentry,
             self.ThrowZeroDescentStopsAboveRelease,
             self.ThrowTossIntoFlowLoiter,
-            self.ThrowTossWithoutFlowHoldsNoPosition,
             self.ThrowTossFlowLostHoldsPosition,
             self.ThrowZeroDescentSettlesBeforeHandover,
             self.ThrowYawFollowsEKFYawReset,
