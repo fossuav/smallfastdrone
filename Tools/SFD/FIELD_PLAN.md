@@ -1,40 +1,36 @@
-# SFD flight card: refresh15
+# SFD flight card: refresh16
 
 The flights still to fly, in order. Results go in `FLIGHT_VALIDATION.md`;
 earlier cards are in git history.
 
-Firmware: refresh15, promoted 2026-11-12 and built from `3e1a71309a`
-(the head, `c42bd1fb40`, carries the same code). Its code is refresh14
-topup6's, which SFD-O4 flew as log89, with the PR heads of 2026-11-12:
-#35039 and the reworked #34678 (the land detector gives the flight mode
-one loop to see a take-off made through the rate thread), #35122's LED
-pattern for a non-GPS position in place of the local LED commits, and
-#31274's ESC.Err description. The EKF is unchanged. SFD-O4 flew it as
-log90 (`FLIGHT_VALIDATION.md`, 2026-11-12). Nothing to set.
+Firmware: refresh16, built from `1f7afeb731` (2026-11-13). Its code is
+refresh15 after topup2, with topup1's and topup2's changes taken back from
+their PRs (#35146, #35147, #32514, #32475), whose review changed them
+since logs 15-16 flew (`REFRESH_NOTES.md`). All of it is unflown:
 
-topup1 (`24b7a1a5c0` since the squash) adds the EKF's flow velocity at an in-flight start
-of flow aiding and four throw changes, for the TBS_LUCID_H7 throw quad
-below (`REFRESH_NOTES.md`). On SFD-O4 and the T25 it acts only where the
-flow lane starts aiding in flight after a spell without it. Nothing to
-set. SFD-O4 flew it as log94 (`FLIGHT_VALIDATION.md`, 2026-11-12), but
-its flow lane was aided from the ground to the landing, so the change
-did not run, and Replay gives the same EKF output as refresh15's.
-The throw quad flew it as logs 15-16 (`FLIGHT_VALIDATION.md`,
-2026-11-12): the init and the flow check worked on every throw from no
-aiding, three into Loiter among them, and the first throw after a GPS
-flight struck the ground. topup2 (`a3a948e4c3`, unflown) closes that
-path: a source set with nothing to measure the horizontal position or
-velocity stops aiding at once instead of dead reckoning for up to 15 s,
-and the flow check fails closed. On SFD-O4 it changes nothing in
-Replay; a T25 switched in flight to a set with nothing now stops aiding
-at the switch, not 5 s later. Nothing to set.
+- #35146: a set with nothing horizontal stops aiding at once, as topup2
+  did, unless the wind states are estimated or air data was fused just
+  now. On these copters that is topup2's behaviour.
+- #35147: the flow velocity set at the start of aiding in flight no
+  longer fuses its own sample again, waits for the AGL KF restart it asks
+  for, and makes no set from the flow the EKF zeroes before takeoff. The
+  PR also drops a pending set once fusion has passed both axes; this
+  build does not, as Replay of log15 showed that costing throws 1, 2 and
+  4 up to 7 s.
+- #32475: the switch to THROW_SRC_SET waits until the quad is actually
+  upright; the flow check applies only where the set takes its velocity
+  from the flow, starts again on any set change, and releases a hold
+  that the flow stops agreeing with only once it agrees again; a
+  THROW_ALT_DCSND 0 settle is timed from the arrest; the release height
+  follows an EKF height reset; an entry-velocity yaw target is left
+  alone through a yaw reset.
 
-- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `a959195a` (topup1:
-  `c27c4fda`).
-- T25: MicoAir743v2 `arducopter.apj`, md5 `fe2ba189` (topup1:
-  `7151fd38`).
-- Throw quad: TBS_LUCID_H7 `arducopter.apj`, md5 `fe76ac42` (topup1:
-  `add8c39b`).
+Replay gives SFD-O4 the same EKF output as the beta on 72 of its 74
+logs, and on the other two its flow lane is within 0.1 m/s. Nothing to set.
+
+- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `fd6bafcd`.
+- T25: MicoAir743v2 `arducopter.apj`, md5 `83409d69`.
+- Throw quad: TBS_LUCID_H7 `arducopter.apj`, md5 `3a3cc0f3`.
 - refresh14 topup5: any SmartRTL return on either vehicle exercises the new arming
   reset and should come home as before; the in-flight reset itself needs
   `smartrtl-reset.lua` installed and a Scripting1 (300) switch.
@@ -112,7 +108,7 @@ Flow only, no compass, on the second MicoAir743v2 (board `00360049`).
 
 ## TBS_LUCID_H7 throw quad
 
-topup2's flights. Settings as logs 15-16 (`FLIGHT_VALIDATION.md`,
+refresh16's flights, as topup2's were to be. Settings as logs 15-16 (`FLIGHT_VALIDATION.md`,
 2026-11-12): log13's with `EK3_SRC3_YAW` 1, `EK3_RNG_USE_HGT` 24 and
 `EK3_RNG_USE_SPD` 4. With the first two the EKF yaw was within 12 deg
 of DCM at every switch to set 2 and no throw spun after it (log13: up
@@ -151,7 +147,7 @@ Pass:
 - Loiter stops within about 3.5 m by GPS and holds within about 0.7 m
   with the sticks centred (log16).
 
-On topup2 every switch into THROW should print "EKF3 IMU0 stopped
+On refresh16 every switch into THROW should print "EKF3 IMU0 stopped
 aiding" at once, before arming, and the first throw after a GPS flight
 then behaves like any other. Fly that case into VALT first, high and
 over grass: switch to THROW straight from the GPS flight, arm, and
@@ -161,7 +157,7 @@ achieved" or "lost position", never "good position", before "EKF3
 IMU0 fusing optical flow"; and an XKF7.FVC step on the flow lane once
 the flow starts.
 
-Known, not changed by topup2:
+Known, not changed by refresh16:
 - The throw's height target was 0.65-1.0 m above the vehicle at each
   Loiter hand-over, after it sank in the throw's last second, and Loiter
   then climbed 1.3-2.1 m (to 4.3 m on log16's throw 1).

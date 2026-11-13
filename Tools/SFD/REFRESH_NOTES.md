@@ -17,7 +17,61 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh15 after topup2 (below).
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh16 (2026-11-13): the
+  stack rebuilt from that day's PR heads on the unchanged 2026-11-11 base
+  (`6563bcf709`; 4.7.3-beta1 still not taken). It replaces refresh15
+  after topup2 and its records commits (`e323cb704e`).
+  - Four PRs moved, all carrying refresh15's topups: #35146 (stop aiding
+    at once on a set with no horizontal source) and #35147 (the flow
+    velocity set at aiding start, stacked on #34630) are new in prs.txt,
+    #32514 and #32475 took the rest. The topup commits are dropped for
+    the PR heads, whose review changes are unflown.
+  - Plan 560, 17 skipped by list, 543 run, 391 applied. Stops: #32401's
+    reserved-event comment (skipped, as in refresh15); #35147's refactor
+    and init, resolved onto the beta's three-state AGL KF (its restart
+    keeps the bias and reopens its variance) and the stack's EK3_OPTIONS
+    text; #34941's withheld-flow timeout beside #35147's members (both
+    sides); #32475's flow accessor, which brings master's
+    AP_AHRS_NavEKF3.cpp (dropped). The beta's 44 adaptation and local
+    commits re-picked; the floor clamp moved into #35147's range test
+    helper.
+  - New 4.7 adaptations (Post-merge fixups): #32475's AHRS estimator
+    accessors, its yaw and height reset follows, and #35147's
+    `takeOffDetected`.
+  - Local, owed to #35147 (Local work): the pending set is no longer
+    dropped once ordinary fusion has passed both axes, and the PR's leg
+    for the zero flow on the ground is dropped, as it fails on its own
+    head.
+  - Tests: the beta's Tools/autotest with the moved PRs' methods from
+    their heads. ThrowSrcSetHandoff's leg count is relaxed and
+    ThrowTossWithoutFlowHoldsNoPosition not registered, because #35146
+    and #35147 sit under #32475 here (Local work). The full SFD set
+    passes, 146 of 146; copter, heli, plane, sub, rover and Replay build;
+    the gates and `check_param_tables.py` are clean, `audit_dropped.py`
+    finds only #32475's superseded `f13592e7b8` (absent from the beta
+    too) and `param_changes.py` only #32475's renamed THROW_DROP_ARREST_MAX_MS.
+  - Replay, `--force-ekf3`, of the fleet (every replayable log under the
+    support root's bragg tree and SFD-O4's, 360: the topup sweeps' 355
+    and five since) through the beta and this head: 336 identical. Of
+    the 24 that differ, the T25, SFD-O4, JK-4Inch and TD-2.5 flights are
+    within a second of the beta's time with the flow more than 1 m/s out
+    (innovation times height), apart from T25 BLK 03 (674 s against
+    635, refresh15's 674). The five JK-4C flow-only logs start armed, and
+    no longer take a set from the zeroed ground flow; their flow-only
+    cores then drift apart from the beta's either way. All 24: 1681 s,
+    against the beta's 1614 and refresh15's 1725.
+  - Replay of the throw quad's logs 13-16 (first time within 1 m/s of
+    GPS after the switch to the flow set, per throw and core): logs 13,
+    14 and 16 as the beta, all far better than refresh15. On log15 the
+    PR's drop of the pending set keeps core 0 out 2.81, 3.28 and 8.68 s
+    on throws 1, 2 and 4; without it (this head) 2.01, 0.60 and 1.16,
+    against the beta's 2.09, 0.60 and 1.40.
+  - SmallFastDronev1 md5 `fd6bafcd` (37,348 bytes free), MicoAir743v2
+    md5 `83409d69` (230,656 bytes free), TBS_LUCID_H7 md5 `3a3cc0f3`
+    (37,588 bytes free), all `.apj`, built from `1f7afeb731`, whose code
+    is the head's. Nothing to set. Unflown: every review change on the
+    four PRs, and the local set change above.
+- Previous beta: refresh15 after topup2 (below).
   topup1's and topup2's 30 commits were squashed on 2026-11-12 into 14 (a
   force push), flown and unflown kept apart, with an identical tree. The
   beta before it is kept locally as `SmallFastDrone-4.7.2.19-beta`, where
@@ -1817,6 +1871,20 @@ AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
   `nextmode()`; `Copter: let throw mode hand off to VALT` puts the VALT case
   there, between ALT_HOLD and ACRO. `nextmode_requires_position()` defaults
   to true, so VALT still waits for a position.
+- **#32475's estimator accessors** - `active_backend_configured_to_use_gps_for_posXY()`
+  and `..._optflow_for_velXY()` read master's `active_estimates`, and the
+  second brings master's whole `AP_AHRS_NavEKF3.cpp` (drop it at the
+  stop). Answer both from the active EKF type, as 4.7's
+  `using_gps_for_pos()` does (`AP_AHRS: adapt #32475's estimator
+  accessors to 4.7`, refresh16).
+- **#32475's reset follows** - throw follows EKF yaw and height resets with
+  master's `get_yaw_reset_count()` and `get_position_D_reset_count()`;
+  track `getLastYawResetAngle()`'s and `getLastPosDownReset()`'s times
+  instead, as VALT does (`Copter: follow throw's yaw and height resets
+  with 4.7's reset times`, refresh16).
+- **#35147's `takeOffDetected`** - its zero flow test names the flag #32232
+  renamed `movedSinceArming` (`AP_NavEKF3: use the movement detector's
+  name in #35147's zero flow test`, refresh16).
 
 ## Parameter indices
 
@@ -1852,32 +1920,37 @@ FLOW_OPTIONS's docs).
 
 ## Local work not in prs.txt (re-fold after the code pass)
 
-- refresh15 topup1 and topup2 (`68c62facbf`..`a3a948e4c3`) are on their
-  PRs since 2026-11-12, so the next refresh takes them from the PR heads
-  and drops the local commits:
-  - #35146 (`f7dc1426d7`): `75a0d0e5a2`, `7f7108a9ef`, test `959baa8c4a`.
-  - #35147 (`fd2a96d8f8`, on #34630): `68c62facbf` (rewritten for master's
-    two-state AGL KF; the refresh resolves it back onto the beta's
-    three-state one), `dc7b9c66f2` and its test; `59f27f252d` dropped.
-  - #32514 (`ba31a35a3f`): `29a4eae8c3`, with the shared helper.
-  - #32475 (`fc0fa3d4db`): `800f7108c3`, `fcc1ca9b72`, `45f74c3fa7`,
-    `e5450885f3`, `194fc6d1ab` and their tests, adapted for master.
-  - The PR versions are not the flown ones. Review on 2026-11-12 changed
-    behaviour, all unflown: #35146 also exempts air data dead reckoning
-    while the wind states are estimated; #35147 skips fusing the set's
-    sample again, drops a pending set once fusion passes both axes,
-    waits for the AGL KF restart it asks for and makes no set from the
-    pre-takeoff zero flow; #32475's flow check applies only where the
-    set's velocity is the flow (a new AHRS accessor in place of the
-    beta's `using_gps_for_pos()`), restarts on any source set change,
-    releases a hold the flow stops agreeing with, times the settle from
-    the arrest, follows EKF height resets, switches only once upright
-    and leaves entry velocity targets alone. Flight-validate them on the
-    refresh that takes them, and replay the fleet logs through #35146
-    and #35147 (`../ardupilot-pr-analysis/REPLAY_LOGS.md`).
-  - The beta's `ThrowTossFlowLostHoldsPosition` is
-    `ThrowTossWithoutFlowHoldsNoPosition` on #32475; the beta's version
-    needs #35146 and can be kept as a local test.
+- refresh15's topup1 and topup2 came back with #35146, #35147, #32514
+  and #32475 in refresh16, so their local commits are gone. Four local
+  changes stay until the PRs take them:
+  - `AP_NavEKF3: keep the flow velocity set after fusion passes both
+    axes` (`c2ad3576fc`), with `autotest: drop
+    EK3_FlowVelocityAtAidingStart's leg for the set dropped after fusion`
+    (`94add97eb2`). #35147's review added the drop (`95862573e8`) for a
+    T25 flight where a late set moved a correct velocity 0.5-0.9 m/s for
+    about a second. Just after aiding starts the velocity variance is
+    wide, and on a throw a sample passes on each axis while the velocity
+    is still metres per second out, so the drop throws away the set the
+    throw needs: Replay of the throw quad's log15 with and without it,
+    core 0 within 1 m/s of GPS after 2.81/3.28/8.68 s on throws 1, 2 and
+    4 against 2.01/0.60/1.16. Over the fleet it changes 10 of 360 logs,
+    the T25 flights equal or better without it. Port to #35147.
+  - `autotest: drop EK3_FlowVelocityAtAidingStart's leg for the zero flow
+    on the ground` (`a071cd9a3d`). #35147's leg fails on its own head:
+    earlier legs leave the throttle at mid-stick, so the copter arms in
+    STABILIZE and lifts off. With the throttle lowered it passes, but so
+    does a build without the zero flow gate, so it tests nothing; the
+    leg needs redesigning on #35147. Here the SITL range finder also
+    reads 0.54 m on the ground, above the 0.5 m under which the flow is
+    replaced by zero.
+  - `autotest: let ThrowSrcSetHandoff pass where no LOITER leg waits`
+    (`9bba920034`): #32475 now fails the test unless a hand-over waited
+    for a position, and with #35147's set under it every LOITER leg has
+    one before PosHold.
+  - `autotest: do not run ThrowTossWithoutFlowHoldsNoPosition on this
+    branch` (`20d81b08f2`): it needs a dead reckoned position on
+    THROW_SRC_INI's empty set, which #35146 stops. The beta's
+    ThrowTossFlowLostHoldsPosition stays, and covers the case with #35146.
 - The AP_GroundEffect throw-drop baro de-weight in `baro_ground_effect.cpp`
   (takeoff window asserted post-detection). Keep #34210's `vibe_comp_active()`
   broadening when resolving it.
@@ -2048,6 +2121,26 @@ an FMT record and passes the retry, as the shipping beta does. Both picks are
 carried (Local work) until 4.7 has #30956: the logger one because the stack
 logs more message types than 4.7 and the startup drops are real, the harness
 one because it is master's and costs nothing.
+
+### Traps found in refresh16
+
+- **Replay the fleet through unflown review fixes, not just the flight
+  that motivated them.** #35147's drop of a pending set passed its own
+  test and the review, and only the throw quad's log15 replayed through
+  the refresh showed it costing throws up to 7 s. The fleet set is every
+  replayable log under the support root's bragg tree plus SFD-O4's (360
+  on 2026-11-13), and the throw quad's under its own log directory.
+  Copy them locally, replay each build with `--force-ekf3`, compare the
+  replayed cores (C 100+); where they differ without GPS, compare the
+  time the flow is more than 1 m/s out (XKF5 FIX/FIY, logged in mrad/s,
+  times HAGL).
+- **A PR test can depend on another PR being absent.** #32475's
+  ThrowTossWithoutFlowHoldsNoPosition needs the dead reckoning #35146
+  removes, and ThrowSrcSetHandoff's leg count the slow flow agreement
+  #35147 removes. Both pass on #32475's head and fail here.
+- **A test pushed with a PR can fail on that PR's head.** #35147's ground
+  leg was written after the head's last full run. Re-run a moved PR's
+  tests on its own head before blaming the stack for a failure.
 
 ### Traps found in refresh15
 
