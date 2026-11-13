@@ -1,6 +1,12 @@
 #pragma once
 
+// repeat the build's -fno-math-errno: without it GCC will not inline
+// sq(), MIN() and MAX() into the functions below
+#ifdef __NO_MATH_ERRNO__
+#pragma GCC optimize("O2,no-math-errno")
+#else
 #pragma GCC optimize("O2")
+#endif
 
 #include <AP_NavEKF/AP_Nav_Common.h>
 #include <AP_Math/AP_Math.h>
