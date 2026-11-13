@@ -1978,6 +1978,7 @@ private:
     uint32_t nextmode_wait_start_ms; // system time the handoff started waiting for a position, 0 if not waiting
     uint32_t srcset_change_ms;      // system time the throw changed to the source set it completes on, 0 if it did not
     bool xy_controller_active;      // true when XY position controller was initialised
+    bool xy_hold_had_position;      // true once PosHold has held a horizontal position
     bool source_set_switched;       // true if init() switched the EKF source set and exit() may restore it
     uint8_t saved_source_set;       // EKF source set active before init() switched it for the throw phase
     uint8_t throw_source_set;       // EKF source set init() switched to for the throw phase

@@ -71,6 +71,7 @@ void ModeThrow::throw_setup()
     completion_sources_set = false;
     nextmode_wait_start_ms = 0;
     xy_controller_active = false;
+    xy_hold_had_position = false;
     drop_confirm_start_ms = 0;
     drop_release_alt_m = 0;
     flow_check_source_set = ahrs.get_posvelyaw_source_set();
@@ -154,12 +155,13 @@ bool ModeThrow::restore_source_set()
 // Drops are designed to operate without horizontal aiding -- detection is
 // body-frame / baro based -- so a drop can arm GPS-free.  Upward throws keep
 // the upstream requirement of a position estimate (GPS or flow-relative)
-// unless the next mode flies without one.  Once PosHold is holding a
+// unless the next mode flies without one.  Once PosHold has held a
 // horizontal position on the way to a mode that needs one, or to stay in throw,
-// either type needs one, so the EKF failsafe acts there.
+// either type needs one, so the EKF failsafe acts there, also while the hold
+// holds level because the flow stopped agreeing.
 bool ModeThrow::requires_position() const
 {
-    return ((stage == Throw_PosHold && xy_controller_active) || g2.throw_type != ThrowType::Drop) &&
+    return ((stage == Throw_PosHold && xy_hold_had_position) || g2.throw_type != ThrowType::Drop) &&
            nextmode_requires_position();
 }
 
@@ -342,6 +344,7 @@ void ModeThrow::run()
             gcs().send_text(MAV_SEVERITY_INFO,"Throw height achieved, good position");
             pos_control->NE_init_controller();
             xy_controller_active = true;
+            xy_hold_had_position = true;
         } else if (nextmode_requires_position()) {
             gcs().send_text(MAV_SEVERITY_WARNING, "Throw height achieved, %s", pos_ok ? "flow settling" : "lost position");
         } else {
@@ -481,6 +484,7 @@ void ModeThrow::run()
             GCS_SEND_TEXT(MAV_SEVERITY_INFO, "Throw position regained");
             pos_control->NE_init_controller();
             xy_controller_active = true;
+            xy_hold_had_position = true;
         }
 
         // a position lost on the way to a mode that flies without one is no
