@@ -277,6 +277,8 @@ void NavEKF3_core::setAidingMode()
 {
     resetDataSource posResetSource = resetDataSource::DEFAULT;
     resetDataSource velResetSource = resetDataSource::DEFAULT;
+    // true when aiding stops because the set has nothing horizontal, not on a timeout
+    bool stopForNoHorizSource = false;
 
     // Save the previous status so we can detect when it has changed
     PV_AidingModePrev = PV_AidingMode;
@@ -362,6 +364,7 @@ void NavEKF3_core::setAidingMode()
             } else if ((flowFusionTimeout && bodyOdmFusionTimeout) || !frontend->sources.haveHorizPosVelSource(core_index)) {
                 // a set with nothing horizontal is chosen, not a dropout to wait out
                 PV_AidingMode = AID_NONE;
+                stopForNoHorizSource = !frontend->sources.haveHorizPosVelSource(core_index);
             }
             break;
         }
@@ -447,6 +450,7 @@ void NavEKF3_core::setAidingMode()
             if (attAidLossCritical || noHorizSource) {
                 // if the loss of attitude data is critical or nothing in the set can aid, put the filter into a constant position mode
                 PV_AidingMode = AID_NONE;
+                stopForNoHorizSource = noHorizSource;
                 posTimeout = true;
                 velTimeout = true;
                 tasTimeout = true;
@@ -517,8 +521,10 @@ void NavEKF3_core::setAidingMode()
             // The offset is removed because height fusion works in that frame, and it is non-zero from the arming reset on
             meaHgtAtTakeOff = baroDataDelayed.hgt - baroHgtOffset;
             // reset the vertical position state to faster recover from baro errors experienced during touchdown,
-            // but not to a baro in ground effect, which would put its prop wash error into the height
-            if (!(motorsArmed && (dal.get_takeoff_expected() || dal.get_touchdown_expected()) && !assume_zero_sideslip())) {
+            // but not to a baro in ground effect, which would put its prop wash error into the height, nor at a
+            // stop for a set chosen with nothing horizontal, which flies on with the height it has
+            if (!stopForNoHorizSource &&
+                !(motorsArmed && (dal.get_takeoff_expected() || dal.get_touchdown_expected()) && !assume_zero_sideslip())) {
                 flowFocusRngPosD += -meaHgtAtTakeOff - stateStruct.position.z;
                 stateStruct.position.z = -meaHgtAtTakeOff;
             }
