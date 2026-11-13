@@ -17,7 +17,7 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh16 after topup1 (below)
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh16 after topup2 (below)
   (2026-11-13). refresh16: the
   stack rebuilt from that day's PR heads on the unchanged 2026-11-11 base
   (`6563bcf709`; 4.7.3-beta1 still not taken). It replaces refresh15
@@ -73,6 +73,37 @@ reply exists") before acting on it.
     (37,588 bytes free), all `.apj`, built from `1f7afeb731`, whose code
     is the head's. Nothing to set. Unflown: every review change on the
     four PRs, and the local set change above.
+- topup2 (2026-11-13, a fast-forward over topup1, the records of logs
+  17-19 and SFD-O4 95-96 (`4fd75c47e7`), and `a3060ec56c`, `a56c14e914`,
+  which put #35147's ground leg back with `SIM_TERRAIN` 0), from the
+  next AP-Review round. Unflown.
+  - #35146 (`447b14a420`, test `d98caf28c4`): the stop for a set chosen
+    with nothing horizontal keeps the height it has, where it reset it
+    from the baro. It is marked where it is made, so a stop on the loss
+    of attitude aiding still resets. Here #32768 already takes the baro
+    offset out of that height, so on GPS height with the baro 5 m off
+    the stop held without the change (0.07 m); on baro height corrected
+    to GPS (`EK3_OGN_HGT_MASK` 5) after a 3 m drift it moved 1.8 m
+    without it and 0.09 m with it. Replay (`--force-ekf3`) of the 369
+    cached logs against topup1: 364 identical; the throw quad's logs
+    13-16 and one indoor Drop throw move, the EKF height by at most
+    0.32 m and its error to GPS height by at most 0.03 m, the throws'
+    times to agree with GPS by at most 0.16 s.
+  - #32475 (`80348723d7`): a throw handed to LAND before the flow
+    agrees tells LAND to land level, as without a position; LAND's init
+    took one whenever `position_ok()` was true, so it landed under
+    position control on the velocity the throw had rejected. No test
+    here: #35146 stops aiding on THROW_SRC_INI's set on this branch, so
+    LAND has no position either way. The PR's ThrowTossIntoLandWithoutFlow
+    finds 244 velocity PID records in LAND on master without it, none
+    with it (`3276864e54`, `5b5dd1a4fb` on `sq/32475-1113`).
+  - Tests: the full SFD set, 148 of 148 (with #35146's height test) on
+    `80348723d7`; copter and plane build. #32475's 28 throw tests pass on
+    master with its LAND change (`5b5dd1a4fb`).
+  - SmallFastDronev1 md5 `089ead08` (39,452 bytes free), MicoAir743v2
+    md5 `ae659658` (232,336 bytes free), TBS_LUCID_H7 md5 `26e184a3`
+    (39,692 bytes free), all `.apj`, built from `80348723d7`. Nothing to
+    set.
 - topup1 (2026-11-13, a fast-forward over refresh16, its records commit
   and another session's `f7ff8539ae`, `27371d37cf`, which keep
   `-fno-math-errno` through the EKF O2 pragmas so ChibiOS inlines `sq()`,
@@ -1964,6 +1995,10 @@ FLOW_OPTIONS's docs).
 
 ## Local work not in prs.txt (re-fold after the code pass)
 
+- refresh16 topup2's `447b14a420`, `d98caf28c4` (#35146, pushed as
+  `7ce21209cd`, `314b2a8a31`) and `80348723d7` (#32475, on
+  `sq/32475-1113` until pushed) are ports; the next refresh takes them
+  from the PR heads.
 - refresh16 topup1's four commits (`560106a90f`, `9deef77ada`,
   `3af5f41e1b` for #32475; `c2eea2a6d6` for #35147) are local until those
   PRs are pushed:

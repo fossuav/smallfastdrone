@@ -1,13 +1,24 @@
-# SFD flight card: refresh16 topup1
+# SFD flight card: refresh16 topup2
 
 The flights still to fly, in order. Results go in `FLIGHT_VALIDATION.md`;
 earlier cards are in git history.
 
-Firmware: refresh16 topup1, built from `3af5f41e1b` (2026-11-13). Its code
-is refresh16 with the topup below; refresh16 is refresh15 after topup2,
+Firmware: refresh16 topup2, built from `80348723d7` (2026-11-13). Its code
+is refresh16 with topup1 and topup2; refresh16 is refresh15 after topup2,
 with topup1's and topup2's changes taken back from their PRs (#35146,
 #35147, #32514, #32475), whose review changed them since logs 15-16 flew
-(`REFRESH_NOTES.md`). All of it is unflown. topup1 adds:
+(`REFRESH_NOTES.md`). topup1 flew on the throw quad's logs 17-19 and
+SFD-O4's 95-96; topup2 is unflown. topup2 adds:
+
+- #35146: a switch to a set with nothing horizontal keeps the EKF height
+  as it is when aiding stops, where it re-took it from the baro. On the
+  throw quad that is every switch into THROW; Replay of logs 13-16 moves
+  the height at most 0.32 m and not against GPS. Nothing to watch for.
+- #32475: with `THROW_NEXTMODE` LAND, a hand-over before the flow agrees
+  lands level rather than under position control. Not flown here: the
+  throw quad hands over to Loiter.
+
+topup1 added:
 
 - #32475: a drop whose hold holds level because the flow stopped
   agreeing still requires a position, so once relative aiding then stops
@@ -44,9 +55,9 @@ refresh16 itself:
 Replay gives SFD-O4 the same EKF output as the beta on 72 of its 74
 logs, and on the other two its flow lane is within 0.1 m/s. Nothing to set.
 
-- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `70f04b2b`.
-- T25: MicoAir743v2 `arducopter.apj`, md5 `851225be`.
-- Throw quad: TBS_LUCID_H7 `arducopter.apj`, md5 `62b2eca6`.
+- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `089ead08`.
+- T25: MicoAir743v2 `arducopter.apj`, md5 `ae659658`.
+- Throw quad: TBS_LUCID_H7 `arducopter.apj`, md5 `26e184a3`.
 - refresh14 topup5: any SmartRTL return on either vehicle exercises the new arming
   reset and should come home as before; the in-flight reset itself needs
   `smartrtl-reset.lua` installed and a Scripting1 (300) switch.
