@@ -96,9 +96,11 @@ reply exists") before acting on it.
     after the range had moved the terrain estimate; the replacement now
     records it. #35147's rework (`sq/35147`) also drops its pending set
     drop and its ground leg, as this branch already did. The ground leg
-    stays dropped here: SITL's analog range reads 0.545 m on the ground
-    on this branch (0.0 m on master), so the flow is never replaced
-    there and the set takes the measured flow, by design.
+    stayed dropped here on a wrong reason, corrected 2026-11-13: the
+    0.545 m ground range is SITL's cached CMAC terrain tile (the
+    refresh12 entry on it below), not this branch; master's worktree had
+    an empty tile and read 0.0 m. With `SIM_TERRAIN` 0 the leg tests the
+    zero flow gate on both (AP-Review on #35147).
   - Replay (`--force-ekf3`) of the 369 cached fleet and throw quad logs
     through refresh16 and topup1: 369 identical (two stop at a bad log
     header in both).
@@ -1306,7 +1308,8 @@ After:
 - topup13 (2026-10-08) carries #34457's floor hold (`29fef9c3a2`,
   `db4abcbff0`) for the card's flight 1; #33507's rebase onto it changes
   nothing here. The touchdown test assumed SITL reads about 0.1 m on the
-  ground (master's default ground clearance); the 4.7 SITL reads 0.55 m,
+  ground (master's default ground clearance); the 4.7 SITL reads 0.55 m
+  (the cached CMAC terrain tile, as the refresh12 entry found, not 4.7),
   so the range finder never went out of range low. `80626ee223` sets the
   ground clearance from the reading on the ground; owed to #34457, where it
   is a no-op. On this stack 0.29 m with the hold, 1.47 m without. Seen in
@@ -1988,9 +1991,9 @@ FLOW_OPTIONS's docs).
     earlier legs leave the throttle at mid-stick, so the copter arms in
     STABILIZE and lifts off. With the throttle lowered it passes, but so
     does a build without the zero flow gate, so it tests nothing; the
-    leg needs redesigning on #35147. Here the SITL range finder also
-    reads 0.54 m on the ground, above the 0.5 m under which the flow is
-    replaced by zero.
+    leg needs redesigning on #35147. The 0.54 m ground range seen here
+    was the cached CMAC terrain tile, not the branch; the leg is back
+    with `SIM_TERRAIN` 0 (`a3060ec56c`).
   - `autotest: let ThrowSrcSetHandoff pass where no LOITER leg waits`
     (`9bba920034`): #32475 now fails the test unless a hand-over waited
     for a position, and with #35147's set under it every LOITER leg has
