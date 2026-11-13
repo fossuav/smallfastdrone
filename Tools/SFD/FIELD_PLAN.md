@@ -97,8 +97,11 @@ further learning. Nothing to change.
 
 - #34678: note any "PreArm: Internal errors" after a take-off, especially
   one in ACRO or STABILIZE, where the mode clears the landed flag itself.
-  log90's and log94's ACRO take-offs were clean, but it is a race, so
-  every take-off counts.
+  log90's, log94's, log95's and log96's ACRO take-offs were clean, but it
+  is a race, so every take-off counts.
+- Note any "ground mag anomaly, yaw re-aligned" and the height it came
+  at. On log96 it turned the yaw 13 deg the wrong way at 1.7-2.4 m, into
+  a disturbance near the take-off spot; try a different take-off spot.
 - #34942: note any arm refused on "EKF3[n] height error", and any
   "vertical velocity reset at rest" or "forced reset", with the time since
   the disarm. After a hard landing, leave it still for at least 1 s before
@@ -136,6 +139,12 @@ to 178 deg off on three throws). Also set:
 - `ARMING_OPTIONS` 8 (bit 3, pending arm on the switch, without bit 0),
   so a failing pre-arm check prints its reason every 30 s instead of
   only flashing the LED yellow.
+- `FS_DR_ENABLE` 0. With drag fusion on (`EK3_DRAG_MCOEF` 0.22) a flow
+  dropout reads as dead reckoning, and the default 2 switches at once
+  to RTL in any mode that needs a position, including THROW since
+  topup1. On log19's third throw that was a 20 m RTL above the range
+  finder after 0.33 s without flow. With 0 the EKF failsafe's VALT
+  (`FS_EKF_ACTION` 4) acts instead.
 - Height is now the larger risk, in VALT and Loiter alike: 3-6 m off
   GPS around the throws on the baro. With `EK3_RNG_USE_SPD` 4 the
   range finder's speed gate dropped it on log15's throw 3 once the toss's

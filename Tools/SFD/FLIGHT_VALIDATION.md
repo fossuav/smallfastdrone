@@ -10,6 +10,241 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-13: the TBS_LUCID_H7 throw quad, logs 17-19, refresh16 topup1's throws
+
+All three logs report `59643f9f`, refresh16 topup1 (boots 88, 90, 93),
+though 17 and 18 were meant to be refresh15. Settings as logs 15-16;
+`EK3_SRC2_POSZ` still 1 (baro). log17: two tosses into VALT; logs 18-19:
+four into Loiter, one of them (log19's third) ending in RTL. refresh16's
+Replay reproduces all three to float rounding (position under 1 um). Run
+through refresh15 after topup2's EKF, the six throws reach GPS within
+0.04 s of the same times on every core, except one that is 0.24 s faster
+on refresh16. So refresh16 neither improved these throws nor broke them.
+
+- Every switch into THROW printed "EKF3 IMU0 stopped aiding" within 4 ms,
+  before arming (seven switches). log17's first throw came after the EKF
+  had been on GPS: "Throw height achieved", never "good position"; the
+  flow fused 0.07 s after the switch to set 2, XKF7.FVC stepped once on
+  both lanes at +0.62 s, and both were within 1 m/s of GPS from then on.
+- Per throw (hand-over from detection, |EKF - GPS| at hand-over, first
+  within 1 m/s after the switch on cores 0 / 1):
+
+| Log, throw | Next mode | Hand-over | Out at hand-over | Within 1 m/s | Lowest range |
+|---|---|---|---|---|---|
+| 17, 1 | VALT | 1.59 s | 0.3-0.4 m/s | 0.62 / 0.62 s | 1.87 m |
+| 17, 2 | VALT | 1.61 s | 3.3-3.4 m/s | 1.92 / 1.64 s | 7.57 m |
+| 18, 1 | Loiter | 3.38 s | 1.4-1.6 m/s | 4.31 / 0.55 s | 1.47 m |
+| 19, 1 | Loiter | 1.63 s | 0.8-1.1 m/s | 0.27 / 0.15 s | 2.49 m |
+| 19, 2 | Loiter | 3.34 s | 0.4-0.6 m/s | 2.10 / 2.02 s | 2.40 m |
+| 19, 3 | RTL | none | | 1.83 / 0.67 s | 0.00 m |
+
+- Against log16 (hand-overs 1.6-2.4 s, 0.4-0.8 m/s out, holding within
+  0.7 m), two of four Loiter hand-overs took over 3.3 s, and log18's flew
+  1.6 m/s out on core 0, the primary. With the sticks centred its Loiter
+  drifted 2.7 m in 8 s. Core 0's in-flight yaw alignment came 0.03 s
+  after detection, at 44-139 deg of tilt, and left it 9-17 deg from
+  core 1, whose alignment came a second later with the quad level; core 1
+  was within 1 m/s in 0.55 s. log19's Loiters had stick input.
+- log19's third throw went to the ground and then to RTL. The toss carried
+  the quad at 5-6 m/s, and while the throw held level with "flow
+  settling" (165.8-167.3 s) nothing braked it. The range finder was out
+  of the height fusion: it only switches back in below 2.5 m (0.7 of
+  `EK3_RNG_USE_HGT` 24's 3.6 m) and under 4 m/s (`EK3_RNG_USE_SPD`). On
+  the baro the EKF height rose 0.4 m while the range fell from 3.5 m to
+  1.4 m. The range finder came back at 167.8 s at 0.5 m, too late, and
+  the quad touched down at 168.4 s (range 0.00-0.04 m, 2.6-3.1 g).
+- On the ground the flow stopped: "Throw flow lost, holding level". With
+  drag fusion on (`EK3_DRAG_MCOEF` 0.22) the EKF reported dead reckoning
+  at 169.3 s, and the dead-reckoning failsafe, which acts at once in any
+  mode that requires a position, switched to RTL (`FS_DR_ENABLE` 2, the
+  default). topup1's #32475 change makes a throw whose hold has held a
+  position require one, so this failsafe now reaches THROW; the card
+  expected only the EKF failsafe's VALT. The flow was back 0.33 s later.
+  RTL climbed to 20 m (`RTL_ALT_M`), above the 15 m range finder (No
+  Data, then out of range high, for 10 s), and drifted 6 m by GPS while
+  the EKF saw it hovering (1.0-1.2 m/s out). The pilot took ALT_HOLD 22 s
+  after the RTL began, during its landing.
+- Replay of that hold with `EK3_SRC2_POSZ` 2: the EKF height follows the
+  descent from 165.8 s, 2 s before the flight's EKF did; with
+  `EK3_RNG_USE_SPD` 10 alone, 1 s before.
+- log18 ends 7 s after its second arm, before a throw.
+- What of refresh16 and topup1 ran:
+  - topup1 #32475: ran on log19's third throw. The dead-reckoning
+    failsafe acts only in a mode that requires a position, and before
+    topup1 the "flow lost, holding level" release cleared that.
+  - topup1 #35147: changed nothing. A Replay from just before it
+    (`9deef77ada`) gives byte-identical cores on all three logs.
+  - #35146: ran at every switch into THROW.
+  - #35147's set at aiding start: ran on all six throws, one step per
+    lane. Its refresh16 changes moved the set only on log19's third
+    throw (0.32-0.44 s later than refresh15); core 1 reached GPS 0.24 s
+    sooner there, core 0 the same.
+  - #32475's upright wait, flow check and settle, and the `THROW_ALT_DCSND`
+    0 settle: ran on every throw, with no older build to measure them
+    against.
+  - Not reached: the release height after an EKF height reset (none in a
+    throw), and the entry-velocity yaw target (`THROW_YAW_TYPE` 1 takes
+    the IMU direction).
+
+## 2026-11-13: SFD-O4 log96, refresh16 topup1's second flight
+
+Build `59643f9f` (code `3af5f41e1b`), boot 727, the card's settings. ACRO
+take-off at 74.4 s, 160 s of acro to about 32 m above the take-off point
+and 23 m/s (median 14.1 m/s), then Loiter on GPS from 234.5 s to land at
+311.7 s.
+
+- Nothing refresh16 or topup1 changed ran: the flow lane (core 1) was in
+  relative aiding from 2.1 s on the ground to the end, and XKF7.FVC never
+  stepped. topup1's Replay reproduces the flight to float rounding
+  (position 15 um, velocity 2e-6 m/s); refresh15 after topup2's Replay
+  gives byte-identical replayed cores and the same EKF messages.
+- Flow lane against the GPS lane in acro: a median 1.84 m/s (p95 7.0, max
+  8.6), ending the acro 176 m apart, against log95's 0.70. The cause is
+  the flight, not the code. 42 % of this acro was past 45 deg of tilt
+  (log95 22 %), where the lane fuses no flow. In 84-124 s it was 20-26 m
+  up with the range finder 0-36 % good, and the lane reached 6.5 m/s off,
+  coming back to 1.5 once the range returned. The Loiter began with that
+  error at 24 m, was within 0.6 m/s 10 s later, and held 0.1-0.4 at 10 m.
+- An interim "ground mag anomaly, yaw re-aligned" on both cores at 75.3 s,
+  1.7-2.4 m up, turned the yaw 13 deg the wrong way. Across the reset the
+  gyro shows 0.2 deg of rotation, and the GSF, converged from 75.6 s,
+  agrees with the gyro; the compass had swung +15 deg at lift-off. Core 0
+  was back within about 2 deg in 2 s on GPS velocity; the flow lane ran
+  10-15 deg off for about 4 s, then within 1-5 deg of core 0 through the
+  acro. log95's compass swung the same +15 deg at 2.6 m with no reset, and
+  both recovered by 5-6 m. Not motor current: away from the ground the
+  compensated compass error against the GSF does not follow current
+  (+0.16 deg/A, correlation 0.03, over 1.5-54 A; +0.5-0.9 deg/A with the
+  compensation removed). It is a disturbance near the take-off spot at its
+  worst at 1.5-2.5 m, and EKF3's interim reset, which re-aligns on the
+  first 0.5 m of climb, re-aligned into it.
+- The range finder switched to long range at 5.0 m, back at 3.0 m and up
+  again at 5.1 m in the first 4.5 s. The last switch held one reading for
+  0.2 s, and none read No Data. "Flow recovery deferred" three times on
+  range stale and once on a range step; no lockout reset.
+- #34678: a fourth clean ACRO take-off (1973 Hz), no internal error.
+  #34942 and #32471: no messages. #32473: Z bias -0.14 / -0.12 at arming,
+  -0.13 / -0.10 in the acro, -0.10 / -0.08 at the end. #32768: the origin
+  took the GPS altitude when its checks passed (17.5 s, 15 s before the
+  GPS lane used it), and the GPS settled 1.35 m higher by arming, so the
+  arm reset started the vehicle at +1.35 m.
+- No clip, VibeZ p95 11, ESC.Err at most 0.05 % armed.
+
+## 2026-11-13: the customer's flow quad on `b81f2132`, a pitch wobble in flow Loiter
+
+The flow quad of 2026-11-10, now on the TBS_LUCID_H7 target and the
+11-12 beta (`b81f2132`, refresh15 after topup2), boot 120. ALT_HOLD, then
+69 s of Loiter at 1.2-2.4 m, probably indoors (a GPS fitted, no fix).
+`LOG_REPLAY` 0, so no Replay. Reported: control oscillation in flow
+Loiter.
+
+- The oscillation is a pitch twitch at 2.5-9 Hz, in Loiter only: pitch
+  rate 5.3 / 5.4 / 3.5 deg/s RMS in 2-4 / 4-7 / 7-12 Hz against 2.4 / 1.3
+  / 0.7 in ALT_HOLD. It is already in the pitch demand, and the
+  horizontal velocity PID's D term is the larger part of that demand in
+  2-12 Hz.
+- The D term reacts to 0.012-0.016 m/s RMS per band of forward velocity
+  in the EKF, flat from 2 to 50 Hz and 3-5 times the lateral. The X
+  accelerometer vibrates at 32 m/s^2 RMS at 200-212 Hz, the front
+  motors' frequency (83 % of the X motor-line power). The EKF integrates
+  the raw accel, so its velocity holds the IMU's real vibration velocity,
+  and the 200 Hz main loop samples it: the front pair folds into 0-12 Hz.
+  Integrating the flight's own batch samples and sampling them every
+  5 ms predicts the measured forward and lateral noise above 4 Hz within
+  about 20 %. The rest follows the accelerometer's clipping (800-1100 a
+  minute).
+- Not new and not the beta: log15 (11-10 entry, SmallFastDronev1 target)
+  shows the same signature. The airframe's vibration roughly doubled
+  between its stock flights and log15. Ruled out: the flow scale, and the
+  flow's 13-15 ms lag behind its own gyro (real, but the forward noise is
+  there in ALT_HOLD with the loop open).
+- Not an angle P oscillation (`ATC_ANG_PIT_P` 15.2), though the inner
+  loops amplify it. In Loiter the pitch rate demand is mostly the
+  attitude target's own rate (4.6 against 1.1 deg/s RMS of angle P x
+  error in 3-6 Hz). The attitude loop overshoots the same in both modes
+  (pitch 1.70 at 8 Hz in ALT_HOLD, 1.76 in Loiter; rate damping 0.42).
+  Roll is ringier (2.8-3.4 at 8 Hz, rate damping 0.28-0.37) and quiet,
+  because nothing excites it.
+- A 25-40 Hz band on roll and yaw (roll rate 0.35 deg/s RMS, the same in
+  ALT_HOLD) is the same vibration folded into the attitude: the rear
+  motors' 231-240 Hz roll vibration (67 deg/s RMS before the filters)
+  sampled at 200 Hz lands at about 33 Hz, and the angle P turns it into
+  rate demand. The batch gyro predicts the logged demand (roll 0.66
+  against 0.62 deg/s, yaw 0.15 against 0.13). It is about 0.002 deg of
+  motion, not the twitch. The flow carries no 33 Hz. The node's roll gyro
+  reads 18 Hz content the FC's does not (coherence 0.15), consistent with
+  the node folding the vibration at its frame rate. That leaves 0.15 m/s
+  of fake lateral speed in the flow, but it does not reach the EKF
+  velocity or the outputs.
+- `SCHED_LOOP_RATE` 200 is the SmallFastDronev1 board default. Re-sampled
+  at 400 Hz, the same accel data puts half as much into 4-12 Hz (0.0061
+  against 0.0116-0.0153 m/s). On an airframe with the usual vibration
+  (SFD-O4's VibeX about 6) the folded velocity is millimetres per second,
+  so the default is only a problem with a rough airframe whose motors
+  run near the loop rate.
+
+Advice given: the vibration first (front props and motors, the FC
+mounting), `SCHED_LOOP_RATE` 400, and `PSC_NE_VEL_D` lower only as a
+stopgap; the accel filter and notches cannot help, as the EKF's delta
+velocity bypasses both.
+
+## 2026-11-13: SFD-O4 log95, refresh16 topup1's first flight
+
+Build `59643f9f` (topup1's code, `3af5f41e1b`), boot 722. Outdoors on GPS
+with the card's settings (`EK3_SRC_OPTIONS` 8, `EK3_OPTIONS` 94,
+`EK3_FLOW_QMIN` 40, `LOIT_DRAG_COEF` 0.3, `ACC_ZBIAS_LEARN` 10 with
+log89's 0.025 / 0.020 applied). Armed in Loiter at 63.4 s and disarmed by
+the switch 0.6 s later, then armed in ACRO at 112.7 s: take-off at
+116.6 s, 230 s of acro to about 32 m above the take-off point and 21 m/s
+(median 13.3 m/s), then 72 s of Loiter on GPS to land at 418.0 s.
+
+- Nothing refresh16 or topup1 changed ran. The flow lane (core 1)
+  entered relative aiding on the ground at 2.1 s and stayed in it, so
+  #35147's set at aiding start and topup1's record of the zeroed flow had
+  nothing to act on; XKF7.FVC never stepped on either core. #35146 acts
+  only on a set with no horizontal source, #32475 only in THROW. This
+  flight is no evidence for any of them.
+- Replay: topup1's Replay reproduces the flight to float rounding
+  (position 7.6 um, velocity 1.9e-6 m/s, one 0.01 deg attitude step; Z
+  bias, innovations, aiding mode, status and FVC identical), with the
+  same 17 EKF messages. refresh15 after topup2's Replay (`b8e02d36bd`)
+  gives byte-identical replayed cores, so refresh16 changes nothing in
+  the estimator on this flight. The board's EKF, built with topup1's
+  `-fno-math-errno` pragmas, matches SITL's to the same rounding as
+  log94's did.
+- Flow lane against the GPS lane: in acro a median 0.70 m/s (p95 2.3,
+  max 3.4), 0.64 (1.5, 2.6) inside the range finder's range and 0.77
+  (2.5, 3.4) above it; in the Loiter a median 0.24 and at most 0.75 m/s,
+  at up to 10.8 m/s. As log90's acro (0.68 / 2.4 / 3.2) and better than
+  log94's (1.40 / 3.8 / 6.4). Its position ended the acro 25.6 m from the
+  GPS lane's and the flight 20.4 m; the two heights agreed within 0.1 m.
+  One "flow recovery deferred, range stale" in the acro (271.6 s), as the
+  range came back at 12 m after 2.4 s of No Data at 11.3 m; no lockout
+  reset.
+- The range finder switched to its long-range mode at 25 Hz 2.8 s after
+  take-off, at 5 m, and back to short range 6 s before landing, with no
+  gap in its readings at either switch (the throw quad's switch is to
+  5 Hz and reads No Data for up to 1.5 s). In flight it read Good 58 % of
+  the time, No Data 33 % and out of range high 9 %.
+- #34678: a third clean ACRO take-off (rate thread at 1973 Hz); PM.InE
+  and ErrL 0 throughout. #34942: no messages; the re-arm 49 s after the
+  Loiter disarm was accepted. #32471: no message, as bit 0 is off.
+- #32473: the Z accel bias read -0.12 on both cores at arming, -0.11 /
+  -0.10 through the acro and -0.10 / -0.09 at the end of the Loiter. The
+  IMU ran 9-10 C at power-up, 22 C at arming and 8-22 C in the acro.
+- #32768: the origin took 117.34 m from the GPS when the EKF first used
+  it (36.5 s), and the GPS then settled to 119.4-119.9 m, so the arm
+  resets started the vehicle 2.27 m (first arm) and 2.15 m above the
+  origin. As on log90 (-1.85 m), only the height above the origin is
+  off.
+- Both cores' yaw within a median 1.1-1.3 deg of DCM in flight (p95 under
+  8 deg). No clip, VibeZ p95 9.4, ESC.Err at most 0.26 % armed (86-91 %
+  in the first 7 s after power-up at 0 rpm, the ESCs starting).
+
+Not exercised: the card's bench items (#35122's LED, #32401's pending
+arm, #31274's motor test, #34630's floor) and the re-arm after a hard
+landing.
+
 ## 2026-11-12: the TBS_LUCID_H7 throw quad, logs 15-16, topup1's throws, nine into VALT and Loiter
 
 topup1's code (build `4da1f0c1`), boots 78 and 81. Settings as log14
