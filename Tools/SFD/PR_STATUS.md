@@ -25,6 +25,26 @@ the round was never triaged.
 
 ---
 
+## 2026-11-13: four PRs folded after the flight audit, pushed
+
+The audit (`FLIGHT_VALIDATION.md`, 2026-11-13) of SFD-O4 logs 89-96 and
+the throw quad's logs 13-19 found flown fixes to fold on four PRs.
+Pushed to `andyp1per`, each with its old head as the lease, every tree
+unchanged:
+
+- #35147 `1ad3f411a7` -> `fc67118e73` (7 -> 6)
+- #34941 `1f53fe0477` -> `77c66ce184` (4 -> 2)
+- #31274 `c922349b3c` -> `ef790efa0b` (14 -> 13)
+- #32475 `5b5dd1a4fb` -> `fe3213222c` (62 -> 55)
+
+#35147's description said seven commits; now six. #32475's description
+cites `e730ee0cd6`, now `421797cd48`; left, as nothing is posted on that
+PR. Open, for Andy: #33484's other-axis gate (six actions on two
+airframes, none better), its `daaca832c4` fold and the test comment for
+the next restack; #34942's optional merge; #32401's three folds under
+review; #32514's optional fold; #32475's optional zero-descent fold;
+splitting #32270's `ee9dc05040`.
+
 ## 2026-11-07 (night): AP-Review at the squashed heads, rebases and docs fixed
 
 AP-Review re-read the squashed heads: ACCEPT on #32471, #32473, #34457,

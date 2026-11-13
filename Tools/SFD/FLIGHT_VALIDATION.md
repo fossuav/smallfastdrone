@@ -10,6 +10,85 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-13: squash audit of SFD-O4 logs 89-96 and the throw quad's logs 13-19
+
+Which commits on top of Andy's PRs these flights ran, and so may fold
+into the commit they fix (rule as on 10-31 and 11-07). Flights: SFD-O4
+log89 (`cc0af6427f`), log90 (`3e1a71309a`), log94 (refresh15 topup1,
+tree `24b7a1a5c0`) and logs 95-96 (`3af5f41e1b`); the throw quad's logs
+13-14 (`66fe7b6211`), 15-16 (topup1, `24b7a1a5c0`) and 17-19
+(`3af5f41e1b`). Evidence is a message, event or log field only the path
+produces, or Replay of the as-flown build with the change removed; each
+Replay base reproduced its flights to float rounding. Vehicle code is
+judged from the logs' own MSG, MODE, EV, ERR and THRO records.
+
+| PR | Folded | Stays on top, and why |
+|---|---|---|
+| #35147 | the set's sample not fused again (`1e5c054a64`) into the set at aiding start: it ran from the first set on logs 17-19, within 0.04 m/s on 10 of 12 set-cores | the restart wait (`fffcc4ed7e`), half flown: it held log19 throw 3's set 0.32-0.44 s, but its request drop never acted; the zero-flow check and its test: Replay identical without it |
+| #34941 | the not-flying timeout into the tilt timeout, and its test into the tilt test: Replay without it loses all five timeouts on log89 (handled disarmed at 45-96 deg) and one per core on log16, and as flown is better (p95 0.73 against 0.84 m/s; 1.31/1.19 against 1.70/1.83) | |
+| #31274 | the ESC.Err field doc into the DShot percentage doc | the stale latch: no serial ESC telemetry, no log near the 71.6 min wrap |
+| #32475 | the hand-over guard into "hold a position that comes back" (log16 throw 1 handed over from "waiting for position" with no regain message; "position regained" on logs 16, 18 and 19), and its check into "cover the throw mode fixes"; the fresh-flow check (log18: "flow settling" before any flow had fused), the flow-lost level hold and the flow-lost position requirement (log19: "flow lost, holding level", then the dead-reckoning failsafe's RTL) into "throw waits for the flow to agree", its three AHRS and EKF accessor commits moved ahead unchanged and the tests into its test; the two test fixes for the switch once upright into one | the running-throw guard (`1b40ef8c98`), split back out of the requirement: no re-entry came with a stale hold and no position; the zero-descent hold into the hand-over where it stops, both flown, left optional (two context conflicts); 21 unflown commits, which a re-arm in throw, a spool-up abort, `THROW_ALT_DCSND` above 0, a set picked in a throw or `THROW_NEXTMODE` 9 would settle |
+
+Pushed 2026-11-13 to `andyp1per`, each with its old head as the lease,
+every tree unchanged, the commits under the first fold keeping their
+hashes (backups `pre-squash/35147-1113f`, `pre-squash/32475-1113f`,
+`pre-squash/34941-1113`, `pre-squash/31274-1113`): #35147 `1ad3f411a7`
+to `fc67118e73` (7 to 6), #34941 `1f53fe0477` to `77c66ce184` (4 to 2),
+#31274 `c922349b3c` to `ef790efa0b` (14 to 13), #32475 `5b5dd1a4fb` to
+`fe3213222c` (62 to 55). Every new commit builds, and
+ThrowTossIntoFlowLoiter and ThrowTossWithoutFlowHoldsNoPosition pass at
+#32475's folded test commit.
+
+Not squashed:
+- #33484: a test comment (`913c4da2cf` into `8dabcc9dfc`) is left for
+  the next restack, as it would move #34630 and #35147. The restart
+  confirmation (`e424f24f58`) flew (below) and stays its own commit until
+  the other-axis gate (`e43b52a0e3`) is settled: it acted on logs 13-14,
+  neutral to slightly worse (peaks 3.6 against 2.2 m/s and 0.93 against
+  0.30), six actions on two airframes now, none shown better.
+  `daaca832c4` flew on logs 15-16, two cases better, two worse, one the
+  same; folding it is Andy's call.
+- #34942: the static yaw stored within 5 s of a yaw fusion
+  (`c620168731`) flew on log13, the only log with no yaw source on set 3
+  (held 0.28-0.39 deg off the DCM yaw without it, velocity to GPS
+  unchanged), but its target conflicts; an optional merge into its
+  neighbour (17 to 15) is Andy's call. The 2 m clip (`9b6a08bc8e`) did
+  not run.
+- #32401: the logs support three folds (log14 pending 7.5 s against a 5 s
+  timeout with no EKF reset; one "Arm:" line and no "PreArm:" copy),
+  left under peterbarker's review.
+- #32514: `ba31a35a3f` into `54b73efdd2` is optional; neither has flown,
+  as no EKF failsafe came.
+- #32270: `ee9dc05040`'s blend scaling ran again in the throw quad's
+  VALT, its snap did not; the split is Andy's call.
+- #32972's `13fe97b7ea` did not run: every armed AID_NONE entry had
+  takeoff and touchdown expected clear. #35146's `c47b3cf03e` flew at
+  every switch into THROW; its kept-height change came after these
+  flights. #32471's four first-flight fixes ran only the common path.
+  #35014, first audited: the carry flew (below), its two fixes did not.
+  The rest have nothing on top, or nothing that ran: no EKF failsafe,
+  DCM fallback, odometry, PX4Flow, motor test, SmartRTL, fence or land
+  failsafe in any log.
+
+Found on these flights:
+- #33484's AGL KF restart confirmation (`e424f24f58`) flew: "flow
+  recovery deferred, range restarted" on logs 15, 16 and 17, and
+  silently on 18 and 19, where it held #35147's set at aiding start. Over
+  nine throws it held the first step 0.16-0.48 s, and the step was closer
+  to GPS over the next 2 s on 9 core-throws, further on 3 and the same on
+  4. On log18 it held the set 0.28 s with both cores 8-9 m/s out, and the
+  set then taken was worse over the next 2 s (1.29 against 1.14 m/s on
+  core 0, 0.58 against 0.31 on core 1): part of log18's slow core 0.
+- #35014's terrain carry flew on all seven throw logs: Replay without it
+  moves positions by up to 19.5 m (log16), and as flown is mostly better.
+- #32401: log19 shows a pending arm completing by itself, a case its
+  notes listed as not yet covered.
+- #32768 (reported only, under review): the arm-time reset fired on all
+  34 arms with no refusal, stepping SFD-O4 -1.79 to +2.32 m and the
+  throw quad -4.07 to +3.42 m, its two cores differently by up to 5.3 m
+  (log14, 295.6 s).
+
+
 ## 2026-11-13: the TBS_LUCID_H7 throw quad, logs 17-19, refresh16 topup1's throws
 
 All three logs report `59643f9f`, refresh16 topup1 (boots 88, 90, 93),
