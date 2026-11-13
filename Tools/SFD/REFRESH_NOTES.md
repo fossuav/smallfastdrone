@@ -17,7 +17,8 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh16 (2026-11-13): the
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh16 after topup1 (below)
+  (2026-11-13). refresh16: the
   stack rebuilt from that day's PR heads on the unchanged 2026-11-11 base
   (`6563bcf709`; 4.7.3-beta1 still not taken). It replaces refresh15
   after topup2 and its records commits (`e323cb704e`, kept locally as
@@ -72,6 +73,43 @@ reply exists") before acting on it.
     (37,588 bytes free), all `.apj`, built from `1f7afeb731`, whose code
     is the head's. Nothing to set. Unflown: every review change on the
     four PRs, and the local set change above.
+- topup1 (2026-11-13, a fast-forward over refresh16, its records commit
+  and another session's `f7ff8539ae`, `27371d37cf`, which keep
+  `-fno-math-errno` through the EKF O2 pragmas so ChibiOS inlines `sq()`,
+  `MIN()` and `MAX()` there again), from the new AP-Review rounds on
+  #35147 and #32475. Unflown.
+  - #32475 (`560106a90f`, test `9deef77ada`): a drop requires a position
+    once PosHold holds one, and the release that holds level when the
+    flow stops agreeing cleared that with the controller flag, so once
+    relative aiding stopped the EKF failsafe only reported and the quad
+    held level in THROW with no horizontal control. The requirement now
+    holds from the first time the hold has held a position.
+    ThrowDropFlowLostFailsafe lands on the EKF failsafe with it and times
+    out on "EKF Failsafe" alone without it. `3af5f41e1b` counts the hold
+    only while throw runs, as set_mode() asks before init() (from the
+    port's review); no SITL setup reaches that, as a disarmed copter
+    keeps a predicted relative position with no GPS or flow. Ported to
+    #32475 as `77dfbb8635` (both folded), `ef831bb1f2` on
+    `sq/32475-1113`.
+  - #35147 (`c2eea2a6d6`): the set at aiding start skips a sample the EKF
+    replaced by zero before takeoff, and tested the height again to tell,
+    after the range had moved the terrain estimate; the replacement now
+    records it. #35147's rework (`sq/35147`) also drops its pending set
+    drop and its ground leg, as this branch already did. The ground leg
+    stays dropped here: SITL's analog range reads 0.545 m on the ground
+    on this branch (0.0 m on master), so the flow is never replaced
+    there and the set takes the measured flow, by design.
+  - Replay (`--force-ekf3`) of the 369 cached fleet and throw quad logs
+    through refresh16 and topup1: 369 identical (two stop at a bad log
+    header in both).
+  - Tests: the full SFD set, 147 of 147 (the new test included), on the
+    first three commits (`c2eea2a6d6`); the 27 throw tests again on
+    `3af5f41e1b`, all passing; copter and plane build. #35147's ground
+    leg A/B is on master (`sq/35147`), the throw test's on both.
+  - SmallFastDronev1 md5 `70f04b2b` (39,484 bytes free), MicoAir743v2
+    md5 `851225be` (232,384 bytes free), TBS_LUCID_H7 md5 `62b2eca6`
+    (39,724 bytes free), all `.apj`, built from `3af5f41e1b`. Nothing to
+    set.
 - Previous beta: refresh15 after topup2 (below).
   topup1's and topup2's 30 commits were squashed on 2026-11-12 into 14 (a
   force push), flown and unflown kept apart, with an identical tree. The
@@ -1923,6 +1961,13 @@ FLOW_OPTIONS's docs).
 
 ## Local work not in prs.txt (re-fold after the code pass)
 
+- refresh16 topup1's four commits (`560106a90f`, `9deef77ada`,
+  `3af5f41e1b` for #32475; `c2eea2a6d6` for #35147) are local until those
+  PRs are pushed:
+  `sq/32475-1113` and `sq/35147` carry them, the second with its ground
+  leg, which this branch does not register (topup1 above). Once pushed,
+  the next refresh takes them from the PR heads, and `c2ad3576fc`,
+  `94add97eb2` and `a071cd9a3d` below go with #35147's.
 - refresh15's topup1 and topup2 came back with #35146, #35147, #32514
   and #32475 in refresh16, so their local commits are gone. Four local
   changes stay until the PRs take them:

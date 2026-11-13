@@ -1,12 +1,28 @@
-# SFD flight card: refresh16
+# SFD flight card: refresh16 topup1
 
 The flights still to fly, in order. Results go in `FLIGHT_VALIDATION.md`;
 earlier cards are in git history.
 
-Firmware: refresh16, built from `1f7afeb731` (2026-11-13). Its code is
-refresh15 after topup2, with topup1's and topup2's changes taken back from
-their PRs (#35146, #35147, #32514, #32475), whose review changed them
-since logs 15-16 flew (`REFRESH_NOTES.md`). All of it is unflown:
+Firmware: refresh16 topup1, built from `3af5f41e1b` (2026-11-13). Its code
+is refresh16 with the topup below; refresh16 is refresh15 after topup2,
+with topup1's and topup2's changes taken back from their PRs (#35146,
+#35147, #32514, #32475), whose review changed them since logs 15-16 flew
+(`REFRESH_NOTES.md`). All of it is unflown. topup1 adds:
+
+- #32475: a drop whose hold holds level because the flow stopped
+  agreeing still requires a position, so once relative aiding then stops
+  the EKF failsafe acts (`FS_EKF_ACTION` 4 on the throw quad: VALT)
+  instead of the quad holding level in THROW with no horizontal control
+  until switched out. Expect "Throw flow lost, holding level" and then
+  "EKF Failsafe: changed to VALT" if the flow drops out in the hold.
+- #35147: whether a flow sample was replaced by zero before takeoff is
+  recorded where it is replaced, for the set at aiding start. No fleet
+  log replays differently (369 of 369).
+- From another session (`f7ff8539ae`, `27371d37cf`): the EKF O2 pragmas
+  keep `-fno-math-errno`, so GCC inlines `sq()`, `MIN()` and `MAX()`
+  there again on ChibiOS; about 2 KB more flash free on each board.
+
+refresh16 itself:
 
 - #35146: a set with nothing horizontal stops aiding at once, as topup2
   did, unless the wind states are estimated or air data was fused just
@@ -28,9 +44,9 @@ since logs 15-16 flew (`REFRESH_NOTES.md`). All of it is unflown:
 Replay gives SFD-O4 the same EKF output as the beta on 72 of its 74
 logs, and on the other two its flow lane is within 0.1 m/s. Nothing to set.
 
-- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `fd6bafcd`.
-- T25: MicoAir743v2 `arducopter.apj`, md5 `83409d69`.
-- Throw quad: TBS_LUCID_H7 `arducopter.apj`, md5 `3a3cc0f3`.
+- SFD-O4: SmallFastDronev1 `arducopter.apj`, md5 `70f04b2b`.
+- T25: MicoAir743v2 `arducopter.apj`, md5 `851225be`.
+- Throw quad: TBS_LUCID_H7 `arducopter.apj`, md5 `62b2eca6`.
 - refresh14 topup5: any SmartRTL return on either vehicle exercises the new arming
   reset and should come home as before; the in-flight reset itself needs
   `smartrtl-reset.lua` installed and a Scripting1 (300) switch.
