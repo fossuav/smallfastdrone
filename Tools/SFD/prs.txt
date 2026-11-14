@@ -72,6 +72,7 @@
 33569   # Configurable nav-gain detune height EK3_FLOW_GAIN_H [merged to master 2026-10-01, not in 4.7]
 34941   # EKF3: flow withheld by the tilt check no longer times a flow lane out (SFD-O4 log61's Loiter that did not stop; the zeroed velocities on log65)
 34942   # EKF3: the on-ground height check works again and applies in aided modes, and a vertical velocity left by a clipped impact is reset once the vehicle is still (the T25 drops that re-armed and climbed in VALT). 2a52c965e2: the rework, the static yaw reference fix, and no reset at rest while a measured velD is fused; on by default
+35173   # EKF: keep -fno-math-errno through the EKF3, EKF2 and GSF O2 pragmas, so GCC 10 inlines sq(), MIN() and MAX() on ChibiOS (0.8-1.7 KB flash). Replaces the beta's local f7ff8539ae and 27371d37cf (REFRESH_NOTES "Local work not in prs.txt")
 34251   # Stop INS_HNTC2 MODE and HMNCS changing across a reboot (Copter + Plane); now against ArduPilot-4.7, as master dropped the conversion
 33879   # FFT notch tune: persist the tracking mode and name the notch used
 34209   # EKF3: do not learn XY accel bias in unaided flight

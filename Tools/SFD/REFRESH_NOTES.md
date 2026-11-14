@@ -2051,6 +2051,15 @@ FLOW_OPTIONS's docs).
     branch` (`20d81b08f2`): it needs a dead reckoned position on
     THROW_SRC_INI's empty set, which #35146 stops. The beta's
     ThrowTossFlowLostHoldsPosition stays, and covers the case with #35146.
+- `AP_NavEKF: keep -fno-math-errno through the GSF O2 pragma`
+  (`f7ff8539ae`) and `AP_NavEKF3: keep -fno-math-errno through the O2
+  pragma` (`27371d37cf`), from topup1, are superseded by #35173 (in
+  prs.txt from 2026-11-14). Drop both on the next refresh and take the
+  PR's three commits: the same pragmas in a shorter form plus an EKF2
+  commit, byte-identical output on master's MatekF405 with EKF2 compiled
+  out. `f7ff8539ae`'s message says the two pragmas "have to match"; they
+  do not, as builds of each commit alone show
+  (`../ardupilot-pr-analysis/35173/`).
 - The AP_GroundEffect throw-drop baro de-weight in `baro_ground_effect.cpp`
   (takeoff window asserted post-detection). Keep #34210's `vibe_comp_active()`
   broadening when resolving it.
