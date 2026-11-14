@@ -50,8 +50,9 @@ Pushed to `andyp1per`, each with its old head as the lease (backups
 Not acted on: #33568's REQUEST CHANGES is merge order only (its
 description was fixed 2026-11-06); #32475, #35146, #35014 and #31274 have
 minors only; #33366 is robertlong13's and still conflicts. Replies to the
-#34380, #33585 and #34941 rounds, and a note on #34851, are drafted, not
-posted. Per-PR detail is in each PR's archive record (2026-11-14).
+#34380, #33585 and #34941 rounds and a note on #34851 posted the same day,
+and #34380's description updated; nothing posted for the pure rebases.
+Per-PR detail is in each PR's archive record (2026-11-14).
 
 ## 2026-11-13: four PRs folded after the flight audit, pushed
 
