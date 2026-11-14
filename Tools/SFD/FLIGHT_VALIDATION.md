@@ -10,6 +10,46 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-14: TD25's operational flights on `b81f2132`, JK-4C_GOM on `c6aa6253`
+
+TD25 (boot 199), the 11-12 beta (`b81f2132`, refresh15 after topup2),
+flow only, VALT. Three flights, each losing position 0.4-1.9 s after
+takeoff to the `EK3_FLOW_QMIN` 60 latch ("flow quality N too low to
+recover", N 57, 41, 29, 27), then "EKF variance: position lost" and the
+EKF failsafe; VALT carried on, Loiter was refused. The latch released in
+the air twice (after 96 s and 36 s). Flow against the IMU: correlation
+0.83-0.84 at quality 70 and above, 0.43-0.52 at 50-69, about 0 below 50,
+and the flights flew at a median of 47-55, so the latch was right; the
+surface or light, not the EKF, is the limit. Two findings:
+
+- #35147's set at aiding start (topup1's init on this build) took one
+  noisy flow sample after the second release, 0.15 to 3.92 m/s at
+  671.05 s while the vehicle hovered level, and the lockout recovery put
+  it back 0.6 s later. VALT, so nothing reached the control; in Loiter it
+  would have been 0.6 s against a phantom 3.9 m/s. The current beta does
+  the same (Replay). Open for #35147.
+- Flight 2 ended at 697.55 s with both right-hand props stopping at once
+  (one for good) at 0.6 m while the pilot rolled right, ESC telemetry
+  intact: a strike, then a roll-over. Not a flight code fault. TURTLE
+  turned it back over. Motor 4's prop or motor to be checked.
+
+Also: the range finder dropped out only above 3.8 m against an 8 m
+`RNGFND1_MAX` (#34380's band configuration; VALT, so nothing acted), and
+the baro drifted 15.8 m on the ground before the first arm, absorbed by
+#32768's arm reset. Replay through `b81f2132` is exact; through refresh16
+topup2 (`80348723d7`) it is identical to 514.55 s and within 0.07 m/s
+and 0.05 m after, from #35147's rework.
+
+JK-4C_GOM (SkySakuraH743, boot 123) on `c6aa6253`, a build not in these
+records: VOXL external nav for position, velocity and yaw, one flight of
+85 s armed. Loiter held on it with VIO quality 54-88 and EKF innovations
+within 0.8 m and 0.2 m/s. The 6S pack rested at 3.34 V/cell before
+takeoff; the low and critical battery failsafes fired at 93.8 s and
+109.0 s (LAND, overridden by the pilot). On the bench a second log shows
+the CPU at 100% and the rate loop throttled from 2000 to 192 Hz once
+Mission Planner connected; the flight, with no GCS on that link, ran at
+56-68%. The current beta replays the flight within 0.0005.
+
 ## 2026-11-13: squash audit of SFD-O4 logs 89-96 and the throw quad's logs 13-19
 
 Which commits on top of Andy's PRs these flights ran, and so may fold
