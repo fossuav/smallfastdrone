@@ -25,6 +25,36 @@ the round was never triaged.
 
 ---
 
+## 2026-11-14 (afternoon): the 11:45-12:16 AP-Review rounds answered, three PRs pushed
+
+Nine rounds came in at the heads pushed that morning. Six only repeat
+open items after the rebases (#34941 ACCEPT; #34543, #34630, #31274 and
+#32972 minors or notes; #32768 hands off, its per-core datum reset
+should-fix still open). Three carried something new, all answered and
+pushed to `andyp1per` with the old head as the lease:
+
+- #33585 `9709e5fd42..2a676c10d3` (ff), test only: the short range
+  finder leg retries a takeoff that misses its band, and the switch check
+  fails on fewer than 2 innovation values (it pauses up to 0.40 s with no
+  switch, so 3 failed a good run; a switch in the return's last ~0.5 s
+  is unseen, stated in the comment).
+- #34380 `18d69e5ccf` -> `da37165080` (force): the band reproduces
+  centred under range finder height (held 28.2-28.4 m, lost at 28.2 m, as
+  on baro), pinned by a fifth FlowCeilingShortRangeFinder leg; restacked
+  on #33585's new head. Still waits on a maintainer. GitHub then showed it
+  conflicting with master (`c0a06ca560`'s FenceTypeChangeTakesEffect
+  lands where its tests go; the old head conflicted too). The stack,
+  #35014 and #33585 included, is replayed onto master `74f0f83f08` as
+  `2b1e09671f` (one additive hunk, both kept; seven tests pass there),
+  not pushed yet.
+- #35147 `24e0e6970f` -> `021bfa1b95` (force): the set's 5 s wait ends
+  ahead of the AGL KF update, so a late restart request ends with it
+  (Replay of the throw quad's logs 13-19 unchanged); the core commit's
+  message says which of its evidence ran the sample kept out of fusion.
+
+Replies and #34380's description edit drafted. Per-PR detail is in each
+PR's archive record (2026-11-14, later).
+
 ## 2026-11-14: the 11-13/14 AP-Review rounds answered, six PRs rebased for CI, pushed
 
 Pushed to `andyp1per`, each with its old head as the lease (backups
