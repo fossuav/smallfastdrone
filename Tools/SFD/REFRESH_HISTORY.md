@@ -7,6 +7,19 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-14 - refresh17, built and not promoted
+
+Andy asked for a full refresh once the 11-13/14 review rounds were
+pushed, and not to promote it while a client flies the current beta. 13
+PRs had moved. The run's one surprise was #34630, rebased onto master
+apart from #33484 and #34543, which re-listed both PRs' commits under new
+hashes; 16 more picks were dropped by patch-id. The code then differs
+from the beta only where the moved PRs change the EKF, all 368 cached
+logs replay identically, and the boards build. One test needed 4.7's
+harness taken into account (collections kept across a reboot), and two
+others failed once in the full run and passed every time alone. 4.7.3
+is out and the base was left on 4.7.2.
+
 ## 2026-11-07 - refresh13 topup1, the overnight AP-Review round
 
 The bot reviewed the ten PRs pushed on 11-06 at their new heads: six

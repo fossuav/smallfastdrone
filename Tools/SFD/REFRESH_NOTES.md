@@ -17,6 +17,73 @@ reply exists") before acting on it.
 
 ## Current state
 
+- Built, NOT promoted: `SmallFastDrone-4.7.2-refresh17` (2026-11-14,
+  head `d3d1be75e2`), the stack rebuilt from that day's PR heads on the
+  unchanged base `6563bcf709`. The shipping beta stays refresh16 after
+  topup2, as a client is flying it; promote only when told. At the
+  promote, first bring `Tools/SFD` and `CLAUDE_local.md` over from the
+  beta again (step 15), since the beta's records move on meanwhile.
+  4.7.3 is released (`ArduPilot-4.7` is 49 commits past the base,
+  Loiter coordinated turns now off by default among them) and not taken.
+  - 13 PRs moved, all the 11-13/14 review rounds: #31274, #32768,
+    #32972, #34543 and #34630 by pure rebases; #35014, #33585 and #34380
+    (rebased onto master together for #34380's conflict with master's
+    FenceTypeChangeTakesEffect), #35146, #35147, #34941 and #32475 with
+    review fixes; #35173 new (replaces the beta's local `f7ff8539ae` and
+    `27371d37cf`).
+  - Plan 590: 17 skipped by list as in refresh16 (#34630's 14 copies of
+    #34543, both primary core index commits, #32238's FAST_BOOT type),
+    and 16 more found by patch-id mid-run: #34630's 12 copies of
+    #33484's lockout series, which its separate rebase onto master gave
+    new hashes, #34380's copy of #34851's test and #34584's three copies
+    of #34583. 557 run, 387 applied. Stops: #31274's stale error latch
+    (the beta's loop), #35146's height keep (both conditions, as the
+    beta), #32401's reserved events comment (skipped, as before),
+    #33585's arming warning (#32471's members kept) and its
+    EK3_RNG_USE_HGT hold (beside the stack's switch-in block), #34292's
+    focus floor meeting #35146's condition, #34543's lane status (4.7
+    keeps get_accel() inline), #35147's zero flow (4.7's
+    movedSinceArming) and its expiry fix, placed ahead of the stack's
+    UpdateAglKf() call at the top of SelectFlowFusion(), #34380's copy of
+    #34851's ground commit (already applied, skipped) and #34941's
+    not-flying timeout (both sides, as the beta).
+  - Master's `AP_AHRS_NavEKF2.h`, `AP_AHRS_NavEKF3.h` and
+    `AP_AHRS_NavEKF3.cpp` came in without a stop (#32768, #32475) and
+    are dropped by a fixup commit.
+  - The beta's 48 adaptation and local commits re-picked; dropped as
+    supplied by PR heads: topup1's and topup2's ports (#35146, #32475,
+    #35147), the -fno-math-errno pair (#35173), the kept set after
+    fusion and its legs (#35147 no longer drops it) and the #34851 hold
+    in the flat-ground restore (#34380's `02ea1b667c`).
+  - The code differs from the beta only in EKF files, each hunk from a
+    moved PR: #35173's pragmas, #33585's range finder height ground and
+    switch holds and arming warning, #34380's limit under range finder
+    height and flat-ground engagement, #35147's expiry. No parameter
+    changes (`param_changes.py`); `audit_dropped.py` finds nothing lost
+    (#32475's `601eddca3b` reads absent but its lines are reworked the
+    same on the beta).
+  - Tests: the beta's Tools/autotest with the moved PRs' methods from
+    their heads (three newly registered), and master's
+    `context_set_speedup()` backported for #34941's test. The full SFD
+    set: 148 of 151 in one run. EK3_OptflowAboveRangefinder's 2 m leg found an earlier boot's drift
+    warning, as 4.7's harness keeps collections across a reboot and
+    master's empties them (`d7f6ede343`), so the leg now clears it
+    (`d3d1be75e2`); it passes. PendingArmOnSwitch (no AHRS Roll/Pitch
+    inconsistent prearm, lane switches instead) and
+    ThrowTossFlowLostHoldsPosition (no hand-over to LOITER after the
+    position came back) each failed once there and passed 6 of 6 alone;
+    #32401's code and mode_throw.cpp are the beta's, and SIM_SPEEDUP was
+    back at 100 after #34941's test. Open: run the set again before
+    promoting. Copter, plane, heli, sub, rover and Replay build;
+    `check_param_tables.py` is clean.
+  - Replay (`--force-ekf3`) of 368 logs (the cached fleet and the
+    11-12/13 flights, the throw quad's logs 13-19 and SFD-O4's 95-96
+    among them) through the beta and refresh17: the replayed cores'
+    XKF1-5 identical on all 368.
+  - SmallFastDronev1 md5 `10d1f27f` (39,188 bytes free), MicoAir743v2
+    md5 `8d4f14a7` (232,080 bytes free), TBS_LUCID_H7 md5 `6b27680e`
+    (39,420 bytes free), all `.apj`, built from `d3d1be75e2`. Nothing to
+    set. Unflown: every review change of the 11-13/14 rounds.
 - Shipping: `SmallFastDrone-4.7.2-beta` is refresh16 after topup2 (below)
   (2026-11-13). refresh16: the
   stack rebuilt from that day's PR heads on the unchanged 2026-11-11 base
@@ -1974,6 +2041,18 @@ AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
 - **#35147's `takeOffDetected`** - its zero flow test names the flag #32232
   renamed `movedSinceArming` (`AP_NavEKF3: use the movement detector's
   name in #35147's zero flow test`, refresh16).
+- **Master's AP_AHRS backend files** - #32768 changes master's
+  `AP_AHRS_NavEKF2.h` and `AP_AHRS_NavEKF3.h`, and #32475 its
+  `AP_AHRS_NavEKF3.cpp`; 4.7 has none of them, and in refresh17 they came
+  in with no stop. Drop all three (`AP_AHRS: drop master's backend files
+  #32768 and #32475 bring`): waf builds the source against types 4.7
+  lacks. Compare the file list with the previous branch after the run.
+- **#34630 separately rebased** - when #34630 is rebased onto master on
+  its own, as on 2026-11-14, its copies of #33484's lockout commits
+  (12) and of #34543's get new hashes, so the plan's sha dedupe keeps
+  them. Before `run`, list planned commits patch-identical to an earlier
+  one and drop them from `apply.txt` (refresh17 found 16 that way:
+  #34630's 12, #34380's copy of #34851's test, #34584's three of #34583).
 
 ## Parameter indices
 
@@ -2009,40 +2088,14 @@ FLOW_OPTIONS's docs).
 
 ## Local work not in prs.txt (re-fold after the code pass)
 
-- refresh16 topup2's `447b14a420`, `d98caf28c4` (#35146, pushed as
-  `7ce21209cd`, `314b2a8a31`) and `80348723d7` (#32475, on
-  `sq/32475-1113` until pushed) are ports; the next refresh takes them
-  from the PR heads.
-- refresh16 topup1's four commits (`560106a90f`, `9deef77ada`,
-  `3af5f41e1b` for #32475; `c2eea2a6d6` for #35147) are local until those
-  PRs are pushed:
-  `sq/32475-1113` and `sq/35147` carry them, the second with its ground
-  leg, which this branch does not register (topup1 above). Once pushed,
-  the next refresh takes them from the PR heads, and `c2ad3576fc`,
-  `94add97eb2` and `a071cd9a3d` below go with #35147's.
-- refresh15's topup1 and topup2 came back with #35146, #35147, #32514
-  and #32475 in refresh16, so their local commits are gone. Four local
-  changes stay until the PRs take them:
-  - `AP_NavEKF3: keep the flow velocity set after fusion passes both
-    axes` (`c2ad3576fc`), with `autotest: drop
-    EK3_FlowVelocityAtAidingStart's leg for the set dropped after fusion`
-    (`94add97eb2`). #35147's review added the drop (`95862573e8`) for a
-    T25 flight where a late set moved a correct velocity 0.5-0.9 m/s for
-    about a second. Just after aiding starts the velocity variance is
-    wide, and on a throw a sample passes on each axis while the velocity
-    is still metres per second out, so the drop throws away the set the
-    throw needs: Replay of the throw quad's log15 with and without it,
-    core 0 within 1 m/s of GPS after 2.81/3.28/8.68 s on throws 1, 2 and
-    4 against 2.01/0.60/1.16. Over the fleet it changes 10 of 360 logs,
-    the T25 flights equal or better without it. Port to #35147.
-  - `autotest: drop EK3_FlowVelocityAtAidingStart's leg for the zero flow
-    on the ground` (`a071cd9a3d`). #35147's leg fails on its own head:
-    earlier legs leave the throttle at mid-stick, so the copter arms in
-    STABILIZE and lifts off. With the throttle lowered it passes, but so
-    does a build without the zero flow gate, so it tests nothing; the
-    leg needs redesigning on #35147. The 0.54 m ground range seen here
-    was the cached CMAC terrain tile, not the branch; the leg is back
-    with `SIM_TERRAIN` 0 (`a3060ec56c`).
+- refresh17 (2026-11-14) took these from the PR heads, so the beta's
+  local copies go at its promote: topup2's `447b14a420`, `d98caf28c4`
+  (#35146) and `80348723d7` (#32475); topup1's `560106a90f`,
+  `9deef77ada`, `3af5f41e1b` (#32475) and `c2eea2a6d6` (#35147); the
+  -fno-math-errno pair `f7ff8539ae`, `27371d37cf` (#35173); and
+  `c2ad3576fc`, `94add97eb2`, `a071cd9a3d`, as #35147's head no longer
+  drops the pending set and has its ground leg back with `SIM_TERRAIN` 0.
+- Still local, re-picked by refresh17:
   - `autotest: let ThrowSrcSetHandoff pass where no LOITER leg waits`
     (`9bba920034`): #32475 now fails the test unless a hand-over waited
     for a position, and with #35147's set under it every LOITER leg has
@@ -2051,15 +2104,12 @@ FLOW_OPTIONS's docs).
     branch` (`20d81b08f2`): it needs a dead reckoned position on
     THROW_SRC_INI's empty set, which #35146 stops. The beta's
     ThrowTossFlowLostHoldsPosition stays, and covers the case with #35146.
-- `AP_NavEKF: keep -fno-math-errno through the GSF O2 pragma`
-  (`f7ff8539ae`) and `AP_NavEKF3: keep -fno-math-errno through the O2
-  pragma` (`27371d37cf`), from topup1, are superseded by #35173 (in
-  prs.txt from 2026-11-14). Drop both on the next refresh and take the
-  PR's three commits: the same pragmas in a shorter form plus an EKF2
-  commit, byte-identical output on master's MatekF405 with EKF2 compiled
-  out. `f7ff8539ae`'s message says the two pragmas "have to match"; they
-  do not, as builds of each commit alone show
-  (`../ardupilot-pr-analysis/35173/`).
+  - `autotest: backport master's context_set_speedup()` (refresh17), for
+    #34941's OpticalFlowTiltTimeoutNotFlying, until 4.7 has it.
+  - `autotest: clear the drift warnings before the 2 m range finder leg`
+    (refresh17): EK3_OptflowAboveRangefinder searches the STATUSTEXT
+    collection after a reboot, which master empties (`d7f6ede343`) and
+    4.7 keeps.
 - The AP_GroundEffect throw-drop baro de-weight in `baro_ground_effect.cpp`
   (takeoff window asserted post-detection). Keep #34210's `vibe_comp_active()`
   broadening when resolving it.
@@ -2179,9 +2229,9 @@ FLOW_OPTIONS's docs).
   carry it until 4.7 has a form that zeroes and bounds.
 - `hwdef: keep ALLOW_ARM_NO_COMPASS on the Borg H7 for 4.7`: #31216 dropped
   the define for master; 4.7's arming check still reads it.
-- `AP_NavEKF3: keep #34851's range height hold in the flat-ground restore`:
-  #33585's flat-ground restore recomputes `gndOffsetValid`, which master
-  lacks for #34851 to change. Whichever of the two merges second needs it.
+- `AP_NavEKF3: keep #34851's range height hold in the flat-ground restore`
+  (`722d4bdc8d`) picks empty from refresh17 on: #34380's `02ea1b667c`
+  recomputes the hold in the undone-return restore. Drop it.
 - HeightDatumKeptOnMidairRearm's three 4.7 adaptations (carry the PR head's
   body and re-apply these rather than keeping a local rewrite):
 
@@ -2230,6 +2280,25 @@ an FMT record and passes the retry, as the shipping beta does. Both picks are
 carried (Local work) until 4.7 has #30956: the logger one because the stack
 logs more message types than 4.7 and the startup drops are real, the harness
 one because it is master's and costs nothing.
+
+### Traps found in refresh17
+
+- **A skip list keyed by sha goes stale when a PR is rebased apart from
+  what it stacks on.** #34630 rebased onto master alone carried new
+  hashes for #33484's and #34543's commits; refresh17's run met the first
+  copy as an 8-file conflict. Diff the plan by patch-id before `run`
+  (Post-merge fixups, "#34630 separately rebased").
+- **4.7's harness keeps message collections across a reboot.** Master
+  empties them (`d7f6ede343`), so a PR-head test that searches a
+  collection after a reboot finds an earlier boot's messages here, and a
+  "no such message" check fails while a "message seen" check passes on
+  the wrong boot. Read each carried test's collection checks.
+- **Check the re-picks against the previous branch, not just the list.**
+  A filter that dropped the Tools/SFD records by grepping " SFD " also
+  dropped five `hwdef: SFD boards ...` commits and the Loiter index
+  marker; the index-line comparison with the beta found it. After the
+  re-pick, diff the tree with the previous branch outside Tools/autotest
+  and Tools/SFD and account for every file.
 
 ### Traps found in refresh16
 
