@@ -25,6 +25,34 @@ the round was never triaged.
 
 ---
 
+## 2026-11-14: the 11-13/14 AP-Review rounds answered, six PRs rebased for CI, pushed
+
+Pushed to `andyp1per`, each with its old head as the lease (backups
+`pre-push/<PR>-1114`):
+
+- #34380 `d9116efc7c` -> `18d69e5ccf` (force): the round's new blocker
+  (range finder height, short reach, lost at 28.1 m) fixed by carrying
+  #34851's two commits, plus `02ea1b667c`, as #34851's 5 s hold delayed
+  #33585's flat-ground fallback and let a brief return retake range height
+  (7.4 m step in SITL). Restacked on #33585's new head. The baro band
+  blocker still waits on a maintainer.
+- #33585 `7b5453dd35..9709e5fd42` (ff): the should-fix (EK3_RNG_USE_HGT's
+  switch held off while flat ground holds) and the minor (retry loops'
+  wait_altitude timeouts).
+- #34941 `77c66ce184` -> `d59e9cb00d` (force): the armed subtest at
+  SIM_SPEEDUP 2, folded into the test commit.
+- Rebased onto master because they conflicted and CI was not running:
+  #34543 `04a38ebd1b`, #34630 `533725d5e3`, #35147 `24e0e6970f` (AP_AHRS,
+  both functions kept), #31274 `292563f1f8` (AP_ESC_Telem timeout guard),
+  #32768 `d2dd52eb3d` and #32972 `02a102ad36` (a pure rebase, test
+  registrations only; the #32768 hands-off allows it).
+
+Not acted on: #33568's REQUEST CHANGES is merge order only (its
+description was fixed 2026-11-06); #32475, #35146, #35014 and #31274 have
+minors only; #33366 is robertlong13's and still conflicts. Replies to the
+#34380, #33585 and #34941 rounds, and a note on #34851, are drafted, not
+posted. Per-PR detail is in each PR's archive record (2026-11-14).
+
 ## 2026-11-13: four PRs folded after the flight audit, pushed
 
 The audit (`FLIGHT_VALIDATION.md`, 2026-11-13) of SFD-O4 logs 89-96 and

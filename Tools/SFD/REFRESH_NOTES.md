@@ -1272,6 +1272,20 @@ After:
 
 ### Owed, not tied to one refresh
 
+- #34851 meets #33585's range finder height commits at the next refresh
+  (found 2026-11-14). The beta carries #34851 and #33585 at `1cf2ecd440`,
+  which never engages flat ground under range finder height; #33585's
+  head now does (`8f88dfe6ad`, `c8b579277e`). With both, #34851's 5 s hold
+  delays the fallback, and with it the hold that keeps range finder height
+  off a return from something passed over: a 7.4 m height step in SITL.
+  #34380 carries the fix (`02ea1b667c`, the fallback engages on the
+  terrain estimator's or range height's ground), so it arrives with
+  #34380, after both in prs.txt; check it is there. #34380 also carries
+  #34851's two commits, which will not drop by patch-id (different
+  context); skip them. On the beta, #34851's EK3_RngHgtFlowLandingKeepsPosition
+  in-flight leg then needs #34380's copy (RNGFND1_MAX shrunk to 2 m, not
+  5 m), or the fallback holds relative position past 7 s.
+
 - Flight evidence for refresh13 topup1: `FIELD_PLAN.md`.
 
 - Replay does not follow a bootstrap reset (found 2026-11-11):
