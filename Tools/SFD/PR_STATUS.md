@@ -43,10 +43,11 @@ pushed to `andyp1per` with the old head as the lease:
   on baro), pinned by a fifth FlowCeilingShortRangeFinder leg; restacked
   on #33585's new head. Still waits on a maintainer. GitHub then showed it
   conflicting with master (`c0a06ca560`'s FenceTypeChangeTakesEffect
-  lands where its tests go; the old head conflicted too). The stack,
-  #35014 and #33585 included, is replayed onto master `74f0f83f08` as
-  `2b1e09671f` (one additive hunk, both kept; seven tests pass there),
-  not pushed yet.
+  lands where its tests go; the old head conflicted too). The stack was
+  then replayed onto master `74f0f83f08` (one additive hunk, both kept;
+  seven tests pass there) and pushed, force: #35014
+  `547d40894c...bd3e5c1442`, #33585 `2a676c10d3...a0b981f17e`, #34380
+  `da37165080...2b1e09671f`. All four PRs mergeable after.
 - #35147 `24e0e6970f` -> `021bfa1b95` (force): the set's 5 s wait ends
   ahead of the AGL KF update, so a late restart request ends with it
   (Replay of the throw quad's logs 13-19 unchanged); the core commit's
