@@ -1634,7 +1634,7 @@ void NavEKF3_core::selectHeightForFusion()
             } else if (frontend->sources.getPosZSource(core_index) == AP_NavEKF_Source::SourceZ::GPS) {
                 activeHgtSource = AP_NavEKF_Source::SourceZ::GPS;
             }
-        } else if (belowLowerSwHgt && trustTerrain && aglSettled && (prevTnb.c.z >= 0.7f)) {
+        } else if (belowLowerSwHgt && trustTerrain && aglSettled && (prevTnb.c.z >= 0.7f) && !flatGroundAssumed()) {
 #if EK3_FEATURE_OPTFLOW_SRTM
             // the AGL KF can switch in while the terrain estimator is stale and the anchor still in use, so
             // the anchor ends here, putting the anchored ground in the terrain state before the check below
@@ -1654,7 +1654,8 @@ void NavEKF3_core::selectHeightForFusion()
                 }
             }
 #endif
-            // reliable terrain and range finder so start using range finder height
+            // reliable terrain and range finder so start using range finder height. Not while flow
+            // navigation holds the ground above the range, as for the range finder as the source
             activeHgtSource = AP_NavEKF_Source::SourceZ::RANGEFINDER;
         }
 #endif
