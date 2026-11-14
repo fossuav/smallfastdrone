@@ -73,8 +73,8 @@ reply exists") before acting on it.
     ThrowTossFlowLostHoldsPosition (no hand-over to LOITER after the
     position came back) each failed once there and passed 6 of 6 alone;
     #32401's code and mode_throw.cpp are the beta's, and SIM_SPEEDUP was
-    back at 100 after #34941's test. Open: run the set again before
-    promoting. Copter, plane, heli, sub, rover and Replay build;
+    back at 100 after #34941's test. A second full run passed 151 of
+    151, so each failed once in eight runs. Copter, plane, heli, sub, rover and Replay build;
     `check_param_tables.py` is clean.
   - Replay (`--force-ekf3`) of 368 logs (the cached fleet and the
     11-12/13 flights, the throw quad's logs 13-19 and SFD-O4's 95-96
