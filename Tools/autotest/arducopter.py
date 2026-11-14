@@ -2913,6 +2913,8 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # passes the last good reading check and only the floor refuses it
         self.set_parameter("RNGFND1_MAX", 2)
         self.reboot_sitl()
+        # 4.7's harness keeps the collection across a reboot, which master's empties
+        self.context_clear_collection('STATUSTEXT')
         self.takeoff(1.5, mode="ALT_HOLD", require_absolute=False, max_err=0.3)
         # with no fallback above it there is nothing to drift
         if self.statustext_in_collections("flow above may drift") is not None:
