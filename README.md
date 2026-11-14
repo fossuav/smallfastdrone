@@ -75,6 +75,7 @@ under review upstream, or work local to this repo with no PR yet.
 - OSD Status of Each EKF3 Core (https://github.com/ArduPilot/ardupilot/pull/34543)
 - Flow Lockout Resets on the OSD, Optional Reset Messages (https://github.com/ArduPilot/ardupilot/pull/34630)
 - Flow Velocity Set When Relative Aiding Starts in Flight (https://github.com/ArduPilot/ardupilot/pull/35147)
+- EKF O2 Pragmas Keep -fno-math-errno, so GCC 10 Inlines sq(), MIN() and MAX() on ChibiOS (https://github.com/ArduPilot/ardupilot/pull/35173)
 
 ### Barometer & Ground Effect ###
 
@@ -197,7 +198,7 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 1. #34678 Copter: avoid a false missed-take-off internal error with the fast rate thread - 1 file - AI: accept (11-11)
 2. #33543 AP_Param: publish actual loaded defaults count, not the pre-count - 1 file - AI: accept (11-02)
 3. #34642 AP_InertialSensor: let the SITL gyro rate follow INS_GYRO_RATE - 3 files, SITL only - AI: accept (11-02)
-4. #35146 AP_NavEKF3: stop aiding at once on a source set with no horizontal source - 5 files, shares its helper commit with #32514 - no AI review yet
+4. #35146 AP_NavEKF3: stop aiding at once on a source set with no horizontal source - 5 files, shares its helper commit with #32514 - AI: accept (11-13)
 5. #32514 Copter: expect a position in the EKF failsafe only where the mode or source set needs one - 6 files, changes requested by peterbarker (10-06) - AI: accept (11-03)
 6. #33318 AC_WPNav: feed the vehicle's own drag forward in Loiter (LOIT_DRAG_COEF) - 5 files - AI: accept (11-07)
 7. #31005 Copter: don't fall out of the sky at zero throttle on min alt fences - 3 files - AI: accept (11-07)
@@ -210,6 +211,7 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 14. #34696 Copter: return to Loiter or PosHold when the EKF failsafe clears - 6 files, self-reviewed in three rounds - no AI review yet
 15. #35122 AP_Notify: show a non-GPS position on RGB LEDs - 5 files, off by default - no AI review yet
 16. #35119 AP_SmartRTL: add an in-flight return point reset for Lua scripts - 10 files - AI: comment (11-11)
+17. #35173 AP_NavEKF3: keep -fno-math-errno through the EKF O2 pragmas - 3 files, the same output on master's MatekF405 with EKF2 compiled out - no AI review yet
 
 ### 3. Baro and ground effect
 
@@ -239,7 +241,7 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 13. #34456 AP_NavEKF3: select the lane that runs the source set being asked for - 14 files, changes requested by tridge - AI: comment (10-30)
 14. #34543 AP_OSD: show the status of each EKF3 core - 24 files - AI: comment (11-02)
 15. #34630 AP_NavEKF3: show flow resets and the quality floor on the OSD, make reset messages optional - 38 files - AI: comment (11-11)
-16. #35147 AP_NavEKF3: set the flow velocity when relative aiding starts in flight - 6 files, stacked on #34630 - no AI review yet
+16. #35147 AP_NavEKF3: set the flow velocity when relative aiding starts in flight - 6 files, stacked on #34630 - AI: comment (11-14)
 17. #34942 AP_NavEKF3: fix the on-ground height check and apply it without a vertical velocity - 9 files - AI: comment (11-07)
 
 ### 5. Accel bias
