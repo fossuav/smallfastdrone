@@ -57,6 +57,11 @@ Replies to the #33585, #34380 and #35147 rounds posted the same day, and
 #34380's description updated (the band under both height sources). Per-PR
 detail is in each PR's archive record (2026-11-14, later).
 
+Conflict pass after the pushes (`git merge-tree` against master
+`74f0f83f08`): every open manifest PR merges cleanly except #33366
+(robertlong13's, `ArduCopter/takeoff_check.cpp`, as before); #34251
+targets ArduPilot-4.7 and is clean there.
+
 ## 2026-11-14: the 11-13/14 AP-Review rounds answered, six PRs rebased for CI, pushed
 
 Pushed to `andyp1per`, each with its old head as the lease (backups
