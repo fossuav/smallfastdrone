@@ -53,8 +53,9 @@ pushed to `andyp1per` with the old head as the lease:
   (Replay of the throw quad's logs 13-19 unchanged); the core commit's
   message says which of its evidence ran the sample kept out of fusion.
 
-Replies and #34380's description edit drafted. Per-PR detail is in each
-PR's archive record (2026-11-14, later).
+Replies to the #33585, #34380 and #35147 rounds posted the same day, and
+#34380's description updated (the band under both height sources). Per-PR
+detail is in each PR's archive record (2026-11-14, later).
 
 ## 2026-11-14: the 11-13/14 AP-Review rounds answered, six PRs rebased for CI, pushed
 
