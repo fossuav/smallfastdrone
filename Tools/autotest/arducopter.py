@@ -9347,6 +9347,138 @@ return update, 100
         if updates < 20:
             raise NotAchievedException("flow held off at 1.5 m on a range sample over 5 s old")
 
+        # a landing comes down to the floor, so a range finder that reads it straight from a hover
+        # has something under it, or is failing, and the vehicle is not at rest. Zero flow fused
+        # there pins the velocity estimate at zero while the vehicle moves.
+        self.start_subtest("Floor read straight from a hover: flow is not fused as zero")
+        self.set_parameters({"FLOW_HGT_MIN": 0.3, "SIM_FLOW_OFS_X": 0, "SURFTRAK_MODE": 0})
+        self.reboot_sitl()
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+        self.takeoff(
+            altitude_min=5,
+            mode='ALT_HOLD',
+            require_absolute=False,
+            takeoff_throttle=1700,
+        )
+        self.change_mode('GUIDED')
+        self.send_position_target_local_ned(0, 0, hover_alt_m)
+        self.wait_altitude(
+            hover_alt_m - 0.3,
+            hover_alt_m + 0.3,
+            relative=True,
+            minimum_duration=3,
+            timeout=90,
+        )
+        self.hover()
+        self.change_mode('ALT_HOLD')
+        # a small roll angle held in ALT_HOLD keeps the vehicle accelerating sideways
+        self.set_rc(1, 1550)
+        self.wait_groundspeed(1.0, 10, timeout=30)
+        # the range finder reads 0 m, on the ground, from one sample to the next
+        self.set_parameter("SIM_SONAR_OFFSET", -10)
+        window_start_us = self.get_sim_time() * 1e6
+        self.delay_sim_time(4, reason="range finder reads the floor")
+        window_end_us = self.get_sim_time() * 1e6
+        self.set_parameter("SIM_SONAR_OFFSET", 0)
+        self.set_rc(1, 1500)
+        self.disarm_vehicle(force=True)
+
+        # the estimate against the simulator over the last 2 s of the window, after the zero has
+        # had time to pull it down
+        dfreader = self.dfreader_for_current_onboard_log()
+        truth = None
+        errors = []
+        last = None
+        updates = 0
+        while True:
+            m = dfreader.recv_match(type=['SIM2', 'XKF1', 'XKF5'])
+            if m is None:
+                break
+            if not (window_start_us <= m.TimeUS <= window_end_us):
+                continue
+            mtype = m.get_type()
+            if mtype == 'SIM2':
+                truth = (m.VN, m.VE)
+            elif m.C != 0:
+                continue
+            elif mtype == 'XKF5':
+                innov = (m.FIX, m.FIY, m.NI)
+                if last is not None and innov != last:
+                    updates += 1
+                last = innov
+            elif truth is not None and m.TimeUS > window_end_us - 2e6:
+                errors.append(math.hypot(m.VN - truth[0], m.VE - truth[1]))
+        if not errors:
+            raise NotAchievedException("no XKF1 or SIM2 in the window")
+        error = sum(errors) / len(errors)
+        self.progress("range finder reading the floor from a hover: %u flow fusions, velocity error %.2f m/s" %
+                      (updates, error))
+        if updates > 0:
+            raise NotAchievedException("flow fused %u times with the floor read from a hover" % updates)
+        if error > 0.5:
+            raise NotAchievedException("velocity estimate %.2f m/s off with the floor read from a hover" % error)
+
+        # landing on that reading: once the vehicle has landed it is at rest there, and the zero
+        # has to carry aiding until disarm as after any landing
+        self.start_subtest("Floor read from a hover, then landed on: zero flow carries aiding")
+        self.set_parameters({"FLOW_HGT_MIN": 0.3, "SIM_FLOW_OFS_X": 0, "SURFTRAK_MODE": 0, "PILOT_SPD_DN": 1})
+        self.reboot_sitl()
+        self.wait_ready_to_arm(require_absolute=False, timeout=120)
+        self.takeoff(
+            altitude_min=5,
+            mode='ALT_HOLD',
+            require_absolute=False,
+            takeoff_throttle=1700,
+        )
+        self.change_mode('GUIDED')
+        self.send_position_target_local_ned(0, 0, hover_alt_m)
+        self.wait_altitude(
+            hover_alt_m - 0.3,
+            hover_alt_m + 0.3,
+            relative=True,
+            minimum_duration=3,
+            timeout=90,
+        )
+        self.hover()
+        self.change_mode('ALT_HOLD')
+        self.context_collect('STATUSTEXT')
+        self.set_parameter("SIM_SONAR_OFFSET", -10)
+        self.set_rc(3, 1000)
+        self.wait_altitude(-1, 0.05, relative=True, timeout=60)
+        touchdown_us = self.get_sim_time() * 1e6
+        self.wait_disarmed(timeout=120)
+        stopped = self.statustext_in_collections("stopped aiding")
+        self.context_stop_collecting('STATUSTEXT')
+        self.set_rc(3, 1500)
+        self.set_parameter("SIM_SONAR_OFFSET", 0)
+        self.delay_sim_time(2, reason="flush the log")
+
+        dfreader = self.dfreader_for_current_onboard_log()
+        disarmed = None
+        last = None
+        updates = 0
+        while True:
+            m = dfreader.recv_match(type=['XKF5', 'ARM'])
+            if m is None:
+                break
+            if m.get_type() == 'ARM':
+                if m.TimeUS > touchdown_us and m.ArmState == 0:
+                    disarmed = m.TimeUS
+                    break
+            elif m.C == 0 and m.TimeUS > touchdown_us:
+                innov = (m.FIX, m.FIY, m.NI)
+                if last is not None and innov != last:
+                    updates += 1
+                last = innov
+        if disarmed is None:
+            raise NotAchievedException("no disarm after the landing")
+        self.progress("landed on a floor read from a hover: %u flow fusions over %.1fs to disarm" %
+                      (updates, (disarmed - touchdown_us) * 1e-6))
+        if disarmed - touchdown_us < 6e6:
+            raise NotAchievedException("disarmed too soon after the landing to test the hold")
+        if updates == 0 or stopped:
+            raise NotAchievedException("zero flow not fused after landing on the reading, so aiding timed out")
+
         self.reboot_sitl()
 
     def OpticalFlowCalibration(self):
