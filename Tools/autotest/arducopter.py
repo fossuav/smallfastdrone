@@ -8915,8 +8915,8 @@ return update, 100
         if error > 0.5:
             raise NotAchievedException("velocity estimate %.2f m/s off with the floor read from a hover" % error)
 
-        # landing on that reading: once the vehicle has come down by the step it is at rest there,
-        # and the zero has to carry aiding until disarm as after any landing
+        # landing on that reading: once the vehicle has landed it is at rest there, and the zero
+        # has to carry aiding until disarm as after any landing
         self.start_subtest("Floor read from a hover, then landed on: zero flow carries aiding")
         self.set_parameters({"FLOW_HGT_MIN": 0.3, "SIM_FLOW_OFS_X": 0, "SURFTRAK_MODE": 0, "PILOT_SPD_DN": 1})
         self.reboot_sitl()
@@ -8974,7 +8974,7 @@ return update, 100
         if disarmed - touchdown_us < 6e6:
             raise NotAchievedException("disarmed too soon after the landing to test the hold")
         if updates == 0 or stopped:
-            raise NotAchievedException("zero flow not fused on the ground after a step, so aiding timed out")
+            raise NotAchievedException("zero flow not fused after landing on the reading, so aiding timed out")
 
         self.reboot_sitl()
 
