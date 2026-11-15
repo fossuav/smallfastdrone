@@ -20,7 +20,9 @@ reply exists") before acting on it.
 - Built, NOT promoted: `SmallFastDrone-4.7.2-refresh17` (2026-11-14,
   head `d3d1be75e2`), the stack rebuilt from that day's PR heads on the
   unchanged base `6563bcf709`. The shipping beta stays refresh16 after
-  topup2, as a client is flying it; promote only when told. At the
+  topup2, as a client is flying it; promote only when told. The trial of
+  #34292's step guard (below) is on its own branch,
+  `SmallFastDrone-4.7.2-beta-34292-step`, not on the beta. At the
   promote, first bring `Tools/SFD` and `CLAUDE_local.md` over from the
   beta again (step 15), since the beta's records move on meanwhile.
   4.7.3 is released (`ArduPilot-4.7` is 49 commits past the base,
@@ -140,6 +142,38 @@ reply exists") before acting on it.
     (37,588 bytes free), all `.apj`, built from `1f7afeb731`, whose code
     is the head's. Nothing to set. Unflown: every review change on the
     four PRs, and the local set change above.
+- Trial, not shipping (2026-11-15): `SmallFastDrone-4.7.2-beta-34292-step`
+  is the beta at `638a36cf40` plus the two commits below, kept off the
+  beta so the beta a client flies stays as it is. #34292's resting zero
+  no longer fires on a range step down, from a customer's indoor log21
+  (`b81f2132`), whose range finder read the floor for 3.7 s at 1.6 m
+  while the EKF fused zero flow. Unflown, and the design is still under
+  consideration: a gate on the vehicle's own landed state is the
+  alternative being weighed (`../ardupilot-pr-analysis/34292/`).
+  - #34292 (`5bef80e83f`, test `47969f0f9a`): a range sample more than
+    0.5 m below the last, beyond the descent the filter saw, is not a
+    touchdown. The flow under it is held off rather than fused as zero
+    until the range reads above the floor, or the vehicle's net descent
+    has taken up all but 0.5 m of the step and any further fall. The same
+    change is on the PR as two commits over `3dcdfb487b`; refresh17 does
+    not carry it.
+  - Replay (`--force-ekf3`) of the 376 cached logs (369 plus the
+    customer's 7) against topup2: 373 identical, among them the 150 that
+    fuse the zero after landings (27,130 fusions on `b81f2132`). log21,
+    log13 and TD25's Mission 1 change, each a range finder reading the
+    floor in flight (armed, not landed, hover throttle). `b81f2132` gives
+    the same three.
+  - SITL: OpticalFlowFocusHeight's new hover leg fails on topup2 (43 zero
+    fusions, 1.54 m/s off the simulator) and passes here (0, 0.22 m/s);
+    its landing leg fails on the first version of the change, which had
+    no release (aiding timed out), and passes here (51-67 fusions).
+    FlowFocusHoldAfterLanding and FlowFocusHoldReleasesWithDeadRangeFinder
+    pass. The landing legs drifted 0.01-0.04 m in five runs and 0.32 m in
+    one run under load; base 0.00-0.03 m.
+  - Limit, left: a surface stepped onto below the floor and then landed
+    on gets no zero, so aiding times out after that landing, as every
+    landing below the floor did before #34292's zero. Range and EKF state
+    cannot tell it from a stuck range finder.
 - topup2 (2026-11-13, a fast-forward over topup1, the records of logs
   17-19 and SFD-O4 95-96 (`4fd75c47e7`), and `a3060ec56c`, `a56c14e914`,
   which put #35147's ground leg back with `SIM_TERRAIN` 0), from the
