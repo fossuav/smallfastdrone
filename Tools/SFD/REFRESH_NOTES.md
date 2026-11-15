@@ -18,7 +18,8 @@ reply exists") before acting on it.
 ## Current state
 
 - Built, NOT promoted: `SmallFastDrone-4.7.2-refresh17` (2026-11-14,
-  head `d3d1be75e2`), the stack rebuilt from that day's PR heads on the
+  head `d3d1be75e2`; topup1 `6a8352ace0` below), the stack rebuilt
+  from that day's PR heads on the
   unchanged base `6563bcf709`. The shipping beta stays refresh16 after
   topup2, as a client is flying it; promote only when told. At the
   promote, first bring `Tools/SFD` and `CLAUDE_local.md` over from the
@@ -84,6 +85,26 @@ reply exists") before acting on it.
     md5 `8d4f14a7` (232,080 bytes free), TBS_LUCID_H7 md5 `6b27680e`
     (39,420 bytes free), all `.apj`, built from `d3d1be75e2`. Nothing to
     set. Unflown: every review change of the 11-13/14 rounds.
+  - topup1 (2026-11-15, head `6a8352ace0`, pushed as its own branch for
+    TD25's flight test, still not promoted): #34292's resting zero also
+    needs the vehicle to say it is not flying (`get_time_flying_ms() ==
+    0`), so a range finder reading the floor in flight no longer fuses
+    zero flow. The PR's `a11e396498` and its test `51a76219df` (picked
+    from a first copy with the same code, before the EKF commit's Sub
+    line was corrected) as `703438f743` and `97f28e4722`. Limit: an armed
+    Sub resting on the bottom below the floor gets no zero and its flow
+    aiding times out (Codex, quick review). `6a8352ace0` gives the test's
+    two `takeoff()` calls 4.7's `alt_min`. The same change as the trial
+    branch's `a2411d8ef7`. SITL: OpticalFlowFocusHeight (hover leg 0
+    fusions, 0.21 m/s; landing legs 40, 46 and 53 zero fusions, drift
+    0.04-0.05 m), FlowFocusHoldAfterLanding and
+    FlowFocusHoldReleasesWithDeadRangeFinder pass. Replay
+    (`--force-ekf3`) of the 376 cached logs: XKF1 and XKF5 identical to
+    the trial branch on every log; 110 differ only in the "rangefinder
+    max, flow above may drift" text the beta prints and refresh17's
+    moved PRs do not. MicoAir743v2 md5 `429d1ec7` (232,064 bytes free),
+    SmallFastDronev1 `dee06d7c` (39,164), TBS_LUCID_H7 `645bf787`
+    (39,404), all `.apj`, built from `6a8352ace0`. Unflown.
 - Shipping: `SmallFastDrone-4.7.2-beta` is refresh16 after topup2 (below)
   (2026-11-13). refresh16: the
   stack rebuilt from that day's PR heads on the unchanged 2026-11-11 base
