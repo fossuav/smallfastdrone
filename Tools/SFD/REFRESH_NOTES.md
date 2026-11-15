@@ -174,6 +174,12 @@ reply exists") before acting on it.
     on gets no zero, so aiding times out after that landing, as every
     landing below the floor did before #34292's zero. Range and EKF state
     cannot tell it from a stuck range finder.
+  - Hole, from drone5's banister log (boot 45): a rail that comes in
+    through a reading above the floor (1.21 m, then 0.38 m) clears the
+    latch, and the rest of the way down falls less than 0.5 m a sample,
+    so a Good reading under the floor after it would still fuse zero.
+    That flight read NoData instead and fused none on any build. A fix
+    (clear by the owed descent only) is not built or tested.
 - topup2 (2026-11-13, a fast-forward over topup1, the records of logs
   17-19 and SFD-O4 95-96 (`4fd75c47e7`), and `a3060ec56c`, `a56c14e914`,
   which put #35147's ground leg back with `SIM_TERRAIN` 0), from the
