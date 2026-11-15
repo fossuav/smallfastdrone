@@ -9355,7 +9355,7 @@ return update, 100
         self.reboot_sitl()
         self.wait_ready_to_arm(require_absolute=False, timeout=120)
         self.takeoff(
-            altitude_min=5,
+            alt_min=5,
             mode='ALT_HOLD',
             require_absolute=False,
             takeoff_throttle=1700,
@@ -9425,7 +9425,7 @@ return update, 100
         self.reboot_sitl()
         self.wait_ready_to_arm(require_absolute=False, timeout=120)
         self.takeoff(
-            altitude_min=5,
+            alt_min=5,
             mode='ALT_HOLD',
             require_absolute=False,
             takeoff_throttle=1700,
