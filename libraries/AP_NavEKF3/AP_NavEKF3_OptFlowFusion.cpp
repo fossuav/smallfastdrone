@@ -170,8 +170,10 @@ void NavEKF3_core::SelectFlowFusion()
         // carry it forward by the height change since
         const ftype aglEst = flowFocusRngAgl + (flowFocusRngPosD - stateStruct.position.z);
         // at rest when the range finder says the vehicle is on the ground, or reads within 5 cm
-        // of what it read there before takeoff
-        flowFocusResting = (rngSensor != nullptr) &&
+        // of what it read there before takeoff, and the vehicle says it is not flying. The range
+        // alone reads the floor in flight with something under the sensor; the vehicle's flag lags
+        // a touchdown (Copter's land detector, about a second) and the flow is held off meanwhile
+        flowFocusResting = (dal.get_time_flying_ms() == 0) && (rngSensor != nullptr) &&
                            (rngSensor->on_ground() ||
                             (rngGood && is_positive(flowFocusRestRng) &&
                              (rngSensor->distance() <= flowFocusRestRng + 0.05f)));
