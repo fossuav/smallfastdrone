@@ -143,9 +143,9 @@ reply exists") before acting on it.
     is the head's. Nothing to set. Unflown: every review change on the
     four PRs, and the local set change above.
 - Trial, not shipping (2026-11-15): `SmallFastDrone-4.7.2-beta-34292-step`
-  is the beta at `638a36cf40` plus the two commits below, kept off the
+  is the beta at `638a36cf40` plus the commits below, kept off the
   beta so the beta a client flies stays as it is. #34292's resting zero
-  no longer fires on a range step down, from a customer's indoor log21
+  no longer fires in flight, from a customer's indoor log21
   (`b81f2132`), whose range finder read the floor for 3.7 s at 1.6 m
   while the EKF fused zero flow. Unflown, and the design is still under
   consideration: a gate on the vehicle's own landed state is the
@@ -180,6 +180,21 @@ reply exists") before acting on it.
     so a Good reading under the floor after it would still fuse zero.
     That flight read NoData instead and fused none on any build. A fix
     (clear by the owed descent only) is not built or tested.
+  - Replaced the same day (`a2411d8ef7`, test wording `f509055f60`): the
+    step check is reverted and the zero also needs the vehicle to say it
+    is not flying (`get_time_flying_ms() == 0`, Copter's
+    `land_complete`, the signal #35105 logs as `vehicle_landed`). ANDed
+    with the range rule, so it only takes zeros away, and every false
+    floor in flight goes, whatever the steps. Replay of the 376 logs
+    against this beta: 150 change, GPS-checked flow velocity unchanged
+    (10,789.8 s against 10,783.5 s more than 1 m/s off). The cost is the
+    land detector's lag: zero windows after touchdown of median 1.1 s
+    now hold the flow off instead, and where it never completes (a
+    touch-and-go, a low hover hunting on the floor, a low-throttle sit)
+    aiding drops for 4-8 s on the ground in five logs; eight others
+    lose drops they had. SITL: the three focus-floor tests pass, the
+    hover leg 0 fusions and 0.21 m/s. The banister logs: drone1's rail
+    zero (29 fusions) is blocked. Unflown.
 - topup2 (2026-11-13, a fast-forward over topup1, the records of logs
   17-19 and SFD-O4 95-96 (`4fd75c47e7`), and `a3060ec56c`, `a56c14e914`,
   which put #35147's ground leg back with `SIM_TERRAIN` 0), from the
