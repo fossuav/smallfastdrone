@@ -1434,7 +1434,6 @@ private:
     bool flowFocusRngValid;         // a range sample has been recalled for the flow focus height check
     bool flowFocusBelow;            // optical flow is held off below its focus height
     bool flowFocusResting;          // the range finder says the vehicle is on the ground, so held-off flow is fused as zero
-    ftype flowFocusStepDescent_m;   // descent still to make, beyond 0.5 m, before a range step down counts as reaching the floor; 0 once one reads above it (m)
     ftype flowFocusRestRng;         // range read on the ground before this flight's takeoff, under the focus floor, or 0 (m)
     uint32_t flowMeaTime_ms;        // time stamp from latest flow measurement (msec)
     uint32_t gndHgtValidTime_ms;    // time stamp from last terrain offset state update (msec)

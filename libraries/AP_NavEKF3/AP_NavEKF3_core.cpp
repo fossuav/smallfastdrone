@@ -221,7 +221,6 @@ void NavEKF3_core::InitialiseVariables()
     flowFocusRngValid = false;
     flowFocusBelow = false;
     flowFocusResting = false;
-    flowFocusStepDescent_m = 0;
     flowFocusRestRng = 0;
     flowMeaTime_ms = 0;
     prevFlowFuseTime_ms = 0;

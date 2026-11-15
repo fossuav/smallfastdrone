@@ -118,26 +118,8 @@ void NavEKF3_core::SelectFlowFusion()
     // than let an unfocused reading drive a phantom velocity. The rangefinder is used rather than
     // terrainState because the range keeps more margin on the ground, and terrainState on the
     // EK3_FLOW_USE terrain path is fused from this same flow.
-    // a landing comes down to the floor, so a range sample this much below the last one, beyond
-    // any descent the filter saw between them, has something under the sensor, or a failing one.
-    // A climb the filter saw is not added: its height drifts on the ground and runs away in faults
-    static constexpr ftype flowFocusRngStepMax_m = 0.5f;
     if (rangeDataToFuse) {
-        const ftype rngAgl = rangeDataDelayed.rng * prevTnb.c.z;
-        if (flowFocusRngValid) {
-            // the filter's climb since the last sample, moved with height resets
-            const ftype climb = flowFocusRngPosD - stateStruct.position.z;
-            const ftype fall = flowFocusRngAgl - rngAgl;
-            const ftype step = fall + MIN(climb, 0.0f);
-            if (is_positive(flowFocusStepDescent_m)) {
-                // after a step, every further fall of the range adds to it and the vehicle's net
-                // descent takes from it, so the step is reached within the same 0.5 m it was found by
-                flowFocusStepDescent_m += fall + climb;
-            } else if (step > flowFocusRngStepMax_m) {
-                flowFocusStepDescent_m = step - flowFocusRngStepMax_m;
-            }
-        }
-        flowFocusRngAgl = rngAgl;
+        flowFocusRngAgl = rangeDataDelayed.rng * prevTnb.c.z;
         flowFocusRngPosD = stateStruct.position.z;
         flowFocusRngValid = true;
     }
@@ -148,7 +130,6 @@ void NavEKF3_core::SelectFlowFusion()
     if (!movedSinceArming) {
         flowFocusBelow = false;
         flowFocusResting = false;
-        flowFocusStepDescent_m = 0;
         // the reading on the ground is where a landing comes to rest, whatever RNGFNDx_GNDCLR says;
         // only one under the focus floor can matter to the rest test below. Taken only while on the
         // ground, as the climb before takeoff is detected reads higher, and with a flow sample, which
@@ -168,12 +149,11 @@ void NavEKF3_core::SelectFlowFusion()
         // the range sample lags behind a median of three, a lot of height on a fast touchdown, so
         // carry it forward by the height change since
         const ftype aglEst = flowFocusRngAgl + (flowFocusRngPosD - stateStruct.position.z);
-        if (aglEst >= minHeight) {
-            flowFocusStepDescent_m = 0;
-        }
         // at rest when the range finder says the vehicle is on the ground, or reads within 5 cm
-        // of what it read there before takeoff, and the vehicle came down to that reading
-        flowFocusResting = !is_positive(flowFocusStepDescent_m) && (rngSensor != nullptr) &&
+        // of what it read there before takeoff, and the vehicle says it is not flying. The range
+        // alone reads the floor in flight with something under the sensor; the vehicle's flag lags
+        // a touchdown (Copter's land detector, about a second) and the flow is held off meanwhile
+        flowFocusResting = (dal.get_time_flying_ms() == 0) && (rngSensor != nullptr) &&
                            (rngSensor->on_ground() ||
                             (rngGood && is_positive(flowFocusRestRng) &&
                              (rngSensor->distance() <= flowFocusRestRng + 0.05f)));
