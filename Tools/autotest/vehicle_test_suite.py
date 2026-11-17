@@ -4253,6 +4253,28 @@ class TestSuite(ABC):
                                 0,
                                 math.degrees(m.yaw))
 
+    def get_location(self, location_source=None, timeout=60):
+        '''return the vehicle's position estimate from GLOBAL_POSITION_INT,
+        or the simulator's true position if location_source is SIMSTATE.
+        Draining the link first means the position is current rather than
+        one which has sat in the receive queue'''
+        self.drain_mav()
+        if location_source == 'SIMSTATE':
+            self.send_poll_message('SIMSTATE')
+            m = self.assert_receive_message('SIMSTATE')
+            return mavutil.location(m.lat * 1e-7, m.lng * 1e-7, 0, math.degrees(m.yaw))
+        if location_source is not None and location_source != 'GLOBAL_POSITION_INT':
+            raise ValueError(f"Unknown location source {location_source}")
+        # the vehicle reports zero lat/lng until it has a position estimate
+        tstart = self.get_sim_time_cached()
+        self.send_poll_message('GLOBAL_POSITION_INT')
+        while True:
+            m = self.assert_receive_message('GLOBAL_POSITION_INT', timeout=10)
+            if m.lat != 0 or m.lon != 0:
+                return mavutil.location(m.lat * 1e-7, m.lon * 1e-7, m.alt * 0.001, m.hdg * 0.01)
+            if self.get_sim_time_cached() - tstart > timeout:
+                raise NotAchievedException("Only zero lat/lng from GLOBAL_POSITION_INT")
+
     def sim_location_int(self):
         """Return current simulator location."""
         m = self.mav.recv_match(type='SIMSTATE', blocking=True)
