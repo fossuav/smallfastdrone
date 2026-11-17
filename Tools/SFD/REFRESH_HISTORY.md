@@ -7,6 +7,19 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-17 - refresh17 topup1 promoted to the beta
+
+Andy asked for the promotion once refresh17 topup1 had flown, so that
+4.7.2 ships before work starts on the upstream maintainers' changes.
+topup1's one change, #34292's resting zero withheld while the vehicle
+says it is flying, flew its case on T25 RED: two floor skims with the
+land detector saying flying, and Replay exact. The beta's records were
+already identical to refresh17's, so nothing had to be carried over. The
+old beta, refresh16 after topup2, is kept locally as
+`SmallFastDrone-4.7.2.20-beta`. #35077 (`FLOW_ALT_MIN`) merged to master
+on 2026-11-15 and is not in this build, which still carries #34292's
+`FLOW_HGT_MIN`.
+
 ## 2026-11-14 - refresh17, built and not promoted
 
 Andy asked for a full refresh once the 11-13/14 review rounds were

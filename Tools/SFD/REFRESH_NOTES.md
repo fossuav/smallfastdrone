@@ -17,13 +17,15 @@ reply exists") before acting on it.
 
 ## Current state
 
-- Built, NOT promoted: `SmallFastDrone-4.7.2-refresh17` (2026-11-14,
-  head `d3d1be75e2`; topup1 `6a8352ace0` below), the stack rebuilt
-  from that day's PR heads on the
-  unchanged base `6563bcf709`. The shipping beta stays refresh16 after
-  topup2, as a client is flying it; promote only when told. At the
-  promote, first bring `Tools/SFD` and `CLAUDE_local.md` over from the
-  beta again (step 15), since the beta's records move on meanwhile.
+- Shipping: `SmallFastDrone-4.7.2-beta` is refresh17 after topup1,
+  promoted 2026-11-17 (a force push) on the strength of its flights
+  (FLIGHT_VALIDATION, 2026-11-17). `SmallFastDrone-4.7.2-refresh17`
+  (2026-11-14, head `d3d1be75e2`; topup1 `6a8352ace0` below), the stack
+  rebuilt from that day's PR heads on the
+  unchanged base `6563bcf709`. It replaces refresh16 after topup2, kept
+  locally as `SmallFastDrone-4.7.2.20-beta`. Step 15 needed nothing: the
+  beta's `Tools/SFD` records and `CLAUDE_local.md` were identical to
+  refresh17's at the promote.
   4.7.3 is released (`ArduPilot-4.7` is 49 commits past the base,
   Loiter coordinated turns now off by default among them) and not taken.
   - 13 PRs moved, all the 11-13/14 review rounds: #31274, #32768,
@@ -108,8 +110,8 @@ reply exists") before acting on it.
     T25 RED (`3bd05aae`, FLIGHT_VALIDATION): the gate withheld the zero
     on two floor skims with the land detector saying flying; Replay
     exact.
-- Shipping: `SmallFastDrone-4.7.2-beta` is refresh16 after topup2 (below)
-  (2026-11-13). refresh16: the
+- Previous beta, until 2026-11-17 (now `SmallFastDrone-4.7.2.20-beta`):
+  refresh16 after topup2 (below) (2026-11-13). refresh16: the
   stack rebuilt from that day's PR heads on the unchanged 2026-11-11 base
   (`6563bcf709`; 4.7.3-beta1 still not taken). It replaces refresh15
   after topup2 and its records commits (`e323cb704e`, kept locally as
