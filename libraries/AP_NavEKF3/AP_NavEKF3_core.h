@@ -1660,7 +1660,10 @@ private:
     bool posxy_source_reset;                        // true when the horizontal position source has changed but the position has not yet been reset
     AP_NavEKF_Source::SourceYaw yaw_source_last;    // yaw source on previous iteration (used to detect a change)
     bool yaw_source_reset;                          // true when the yaw source has changed but the yaw has not yet been reset
+#if EK3_FEATURE_POSITION_RESET
     float setLatLngPosAcc;                          // 1-sigma horizontal accuray of setLatLng position
+    uint32_t setLatLngUseTime_ms;                   // last time the setLatLng data was received and used
+#endif // EK3_FEATURE_POSITION_RESET
 
 #if EK3_FEATURE_EXTERNAL_POSITION_FUSION
     // fusion of data received via the setLatLng interface

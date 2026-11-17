@@ -219,6 +219,12 @@ void NavEKF3_core::ResetPosition(resetDataSource posResetSource)
 // Returns true if the set was successful
 bool NavEKF3_core::setLatLng(const Location &loc, float posAccuracy, uint32_t timestamp_ms)
 {
+    if (imuSampleTime_ms - setLatLngUseTime_ms < 200) {
+        // Protect from this interface being called too quickly which could degrade EKF stability
+        // The max rate is set to be equivalent to GPS which is a known safe value
+        return false;
+    }
+
     if (!validOrigin) {
         return false;
     }
@@ -269,6 +275,8 @@ bool NavEKF3_core::setLatLng(const Location &loc, float posAccuracy, uint32_t ti
         return false;
     }
 
+    // if it makes it this far then the data will be used
+    setLatLngUseTime_ms = imuSampleTime_ms;
     lastLocSetTime_ms = imuSampleTime_ms;
 
     // Store the current position so it can be used as the prior for the wind-state observation
@@ -812,7 +820,8 @@ void NavEKF3_core::SelectVelPosFusion()
     selectHeightForFusion();
 
 #if EK3_FEATURE_EXTERNAL_POSITION_FUSION
-    if (gpsDataToFuse && gpsGoodToAlign && ((imuSampleTime_ms - lastResetlatLngTime_ms) < 10000 || filterStatus.flags.dead_reckoning)) {
+    const bool recentlatLngReset = (lastResetlatLngTime_ms > 0) && ((imuSampleTime_ms - lastResetlatLngTime_ms) < 10000);
+    if (gpsDataToFuse && gpsGoodToAlign && (recentlatLngReset || filterStatus.flags.dead_reckoning)) {
         // prior bad data is likely so states are suspect and should be reset
         ResetVelocity(resetDataSource::GPS);
         ResetPosition(resetDataSource::GPS);
@@ -1006,12 +1015,12 @@ void NavEKF3_core::FuseVelPosNED()
             if (setLatLngDataToFuse) {
                 obs_data_chk = sq(setLatLngPosAcc);
             } else
-#endif
+#endif // EK3_FEATURE_EXTERNAL_POSITION_FUSION
 #if EK3_FEATURE_EXTERNAL_NAV
             if (extNavVelToFuse) {
                 obs_data_chk = sq(constrain_ftype(extNavVelDelayed.err, 0.05f, 5.0f)) + sq(frontend->extNavVelVarAccScale * accNavMag);
             } else
-#endif // EK3_FEATURE_EXTERNAL_POSITION_FUSION
+#endif
             {
                 obs_data_chk = sq(constrain_ftype(frontend->_gpsHorizVelNoise, 0.05f, 5.0f)) + sq(frontend->gpsNEVelVarAccScale * accNavMag);
             }
