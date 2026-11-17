@@ -38,7 +38,7 @@ under review upstream, or work local to this repo with no PR yet.
 - Terrain State Carried across a Vertical Datum Reset (https://github.com/ArduPilot/ardupilot/pull/35014)
 - Optical Flow Nav Above Rangefinder Range (https://github.com/ArduPilot/ardupilot/pull/33585)
 - Optical Flow Axis Lockout Recovery (https://github.com/ArduPilot/ardupilot/pull/33484)
-- Optical Flow Minimum Focus Height FLOW_HGT_MIN (https://github.com/ArduPilot/ardupilot/pull/34292)
+- Optical Flow Minimum Focus Height FLOW_HGT_MIN (https://github.com/ArduPilot/ardupilot/pull/34292) - its in-flight discard has **merged** upstream as FLOW_ALT_MIN (https://github.com/ArduPilot/ardupilot/pull/35077); this branch keeps FLOW_HGT_MIN
 - PX4Flow Frames Published from the Main Loop, not the I2C Thread (https://github.com/ArduPilot/ardupilot/pull/34783)
 - SITL Flow Rate Offset SIM_FLOW_OFS, for testing (https://github.com/ArduPilot/ardupilot/pull/34533) - **merged**
 - Inhibit Z Gyro Bias from Optical Flow without Yaw Source (https://github.com/ArduPilot/ardupilot/pull/33498) - **merged**
@@ -75,7 +75,7 @@ under review upstream, or work local to this repo with no PR yet.
 - OSD Status of Each EKF3 Core (https://github.com/ArduPilot/ardupilot/pull/34543)
 - Flow Lockout Resets on the OSD, Optional Reset Messages (https://github.com/ArduPilot/ardupilot/pull/34630)
 - Flow Velocity Set When Relative Aiding Starts in Flight (https://github.com/ArduPilot/ardupilot/pull/35147)
-- EKF O2 Pragmas Keep -fno-math-errno, so GCC 10 Inlines sq(), MIN() and MAX() on ChibiOS (https://github.com/ArduPilot/ardupilot/pull/35173)
+- EKF O2 Pragmas Keep -fno-math-errno, so GCC 10 Inlines sq(), MIN() and MAX() on ChibiOS (https://github.com/ArduPilot/ardupilot/pull/35173) - **merged**
 
 ### Barometer & Ground Effect ###
 
@@ -97,7 +97,7 @@ under review upstream, or work local to this repo with no PR yet.
 - Loiter Control Feel When the EKF Limits Ground Speed (https://github.com/ArduPilot/ardupilot/pull/33639) - **merged**
 - Loiter Drag Feed-forward, LOIT_DRAG_COEF (https://github.com/ArduPilot/ardupilot/pull/33318)
 - Rate Target Interpolation in the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34208) - **merged**
-- Throttle-Gain Boost and Throttle Mix with the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34583)
+- Throttle-Gain Boost and Throttle Mix with the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34583) - **merged**
 - Per-Loop Rate Modifiers for the Fast Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34584)
 - Log Every Filtered Gyro Sample with the Rate Thread (https://github.com/ArduPilot/ardupilot/pull/34601) - **merged**
 - SITL Gyro Rate Follows INS_GYRO_RATE, for testing (https://github.com/ArduPilot/ardupilot/pull/34642)
@@ -175,7 +175,7 @@ the order that makes them easiest to merge: dependencies before dependents, smal
 and already-approved work first, and the heavy diffs last so they rebase onto a
 smaller backlog.
 
-Annotations are the state on 2026-11-11, not a promise - re-check before acting on
+Annotations are the state on 2026-11-11 (merges to 2026-11-17), not a promise - re-check before acting on
 them. "AI" is the automated review's verdict at the PR's current head, with its
 date; "stale" means the PR has been pushed since that round. "Conflicts" means
 GitHub reports a merge conflict with master. Regenerate the AI column with
@@ -211,7 +211,6 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 14. #34696 Copter: return to Loiter or PosHold when the EKF failsafe clears - 6 files, self-reviewed in three rounds - no AI review yet
 15. #35122 AP_Notify: show a non-GPS position on RGB LEDs - 5 files, off by default - no AI review yet
 16. #35119 AP_SmartRTL: add an in-flight return point reset for Lua scripts - 10 files - AI: comment (11-11)
-17. #35173 AP_NavEKF3: keep -fno-math-errno through the EKF O2 pragmas - 3 files, the same output on master's MatekF405 with EKF2 compiled out - no AI review yet
 
 ### 3. Baro and ground effect
 
@@ -236,7 +235,7 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 8. #33568 AP_NavEKF3: fall back to relative aiding when optical flow replaces lost GPS - 4 files - AI: request changes (11-04), on merge order only; rmackay9 linked a 4.7.1 user report it fixes
 9. #34851 AP_NavEKF3: count range finder height as a ground measurement - 5 files - AI: comment (11-03)
 10. #33484 AP_NavEKF3: recover horizontal velocity from single-axis optical flow lockout - 21 files - AI: comment (11-11)
-11. #34292 AP_OpticalFlow: add FLOW_HGT_MIN, the sensor's minimum focus height - 30 files, changes requested by peterbarker and tridge - AI: accept (10-31); split out of #33484, so it follows it; rmackay9's #35077 is a cut-down alternative to it
+11. #34292 AP_OpticalFlow: add FLOW_HGT_MIN, the sensor's minimum focus height - 30 files, changes requested by peterbarker and tridge - **conflicts** since #35077 merged its in-flight discard as FLOW_ALT_MIN (11-15); what remains (the resting zero, the Replay fixes) to be rebased onto it - AI: request changes (11-15); split out of #33484, so it follows it
 12. #34941 AP_NavEKF3: do not time out flow aiding while the tilt check withholds it - 5 files, changes requested by tridge - AI: comment (11-10)
 13. #34456 AP_NavEKF3: select the lane that runs the source set being asked for - 14 files, changes requested by tridge - AI: comment (10-30)
 14. #34543 AP_OSD: show the status of each EKF3 core - 24 files - AI: comment (11-02)
@@ -254,10 +253,9 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 
 ### 6. Fast rates
 
-#27893, #30980 and #34208 have merged upstream; #29000 is in group 1.
+#27893, #30980, #34208 and #34583 have merged upstream; #29000 is in group 1.
 
-1. #34583 AC_AttitudeControl: fix throttle-gain boost and throttle mix with the fast rate thread - 4 files - AI: accept (11-08)
-2. #34584 AC_AttitudeControl: record per-loop rate modifiers for the fast rate thread - 5 files, stacked on #34583 - AI: comment (11-08)
+1. #34584 AC_AttitudeControl: record per-loop rate modifiers for the fast rate thread - 5 files, carries #34583's commits, now on master - AI: comment (11-08)
 
 ### 7. Larger features and boards
 
