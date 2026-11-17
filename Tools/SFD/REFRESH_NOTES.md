@@ -104,7 +104,10 @@ reply exists") before acting on it.
     max, flow above may drift" text the beta prints and refresh17's
     moved PRs do not. MicoAir743v2 md5 `429d1ec7` (232,064 bytes free),
     SmallFastDronev1 `dee06d7c` (39,164), TBS_LUCID_H7 `645bf787`
-    (39,404), all `.apj`, built from `6a8352ace0`. Unflown.
+    (39,404), all `.apj`, built from `6a8352ace0`. Flown 2026-11-17 on
+    T25 RED (`3bd05aae`, FLIGHT_VALIDATION): the gate withheld the zero
+    on two floor skims with the land detector saying flying; Replay
+    exact.
 - Shipping: `SmallFastDrone-4.7.2-beta` is refresh16 after topup2 (below)
   (2026-11-13). refresh16: the
   stack rebuilt from that day's PR heads on the unchanged 2026-11-11 base

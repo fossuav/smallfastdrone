@@ -10,6 +10,52 @@ Every log is flown with `LOG_REPLAY 1` and `LOG_DISARMED 2` and replayed;
 the A/B baselines are Replays of the same log with the PR's change removed.
 
 
+## 2026-11-17: T25 RED on refresh17 topup1 (`3bd05aae`), two floor skims
+
+A new MicoAir743v2 (`0021001F`, boot 48), filed with TD25 and carrying
+TD25's parameters: flow only, one lane, VALT, `EK3_FLOW_QMIN` 60,
+`FLOW_HGT_MIN` 0.08, `EK3_RNG_USE_HGT` -1. One indoor flight, 126 s
+armed, VALT except 1.8 s of LOITER, ended by the arm switch at 1.3-1.4 m
+(it fell, 12.7 g). Replay through `6a8352ace0` is exact on all 1616 XKF1
+and XKF5 rows.
+
+- topup1 flew its case. Twice, 74.1-81.9 s and 89.2-96.4 s, the quad
+  skimmed the floor with the range finder at 0.02-0.07 m: throttle
+  0.30-0.37 against a 0.375 hover, attitude following the sticks to
+  13.6 deg. The land detector never completed (the motors never reached
+  their lower limit), so the vehicle said flying, topup1 withheld #34292's
+  resting zero and the samples under the floor were discarded. Under
+  0.10 m the flow measured nothing (corr 0.25 against the IMU). Replayed
+  without topup1, the zero is fused while the quad moves, aiding starts on
+  it 1.8 s and 5.0 s earlier and the position stays valid on the floor
+  through 91.3-94.7 s, at up to 3.19 m/s against 2.09 m/s with topup1;
+  neither can be checked. topup1 has flown and can be squashed into
+  #34292 at the next audit.
+- Open (#34292): with topup1, aiding restarted at 77.99 s on a sample at
+  the floor's edge and then ran 4.9 s with the flow discarded under the
+  floor, on the IMU alone, the position valid until the quality latch at
+  82.80 s. Floor-discarded samples are not counted as withheld flow
+  (#34941), so only the ordinary flow timeout bounds that.
+- #35147's set at aiding start ran three times and was clean: the 2.4 and
+  3.3 m/s of unaided drift went to 0.06-0.08 m/s, then followed the lean
+  commanded. No phantom like 2026-11-14's 3.92 m/s.
+- Flow: quality median 10-23 at 0.7-1.6 m for the first 37 s, 72-104 at
+  0.9-1.2 m after 106 s. Three QMIN latches (38.82, 82.80, 97.58 s), each
+  followed by the EKF failsafe (VALT already, so no change) and released
+  8.5-37.3 s later, twice while skimming the floor. Even at good quality
+  the flow tracked the IMU weakly: corr 0.55 at quality 70-99 and 0.75 at
+  100 and over, against 0.72-0.94 at 60 and over on TD25's own board.
+- LOITER 155.7-157.5 s: clean, EKF speed under 0.17 m/s.
+- The EKF height against the range fits a takeoff from a surface roughly
+  0.3-0.6 m above the floor flown over (to confirm with the pilot). IMU0
+  clipped four times at 95.7 s, during a 13.6 deg roll in the second skim.
+- Of refresh17's other code changes from the beta (EKF only), #35147's
+  set and #33585's arming warning ("rangefinder max 8m, flow above may
+  drift" at arming) ran here; the range finder height holds and the
+  flat-ground changes did not (`EK3_RNG_USE_HGT` -1, never near the
+  range finder's 8 m).
+
+
 ## 2026-11-14: TD25's operational flights on `b81f2132`, JK-4C_GOM on `c6aa6253`
 
 TD25 (boot 199), the 11-12 beta (`b81f2132`, refresh15 after topup2),
