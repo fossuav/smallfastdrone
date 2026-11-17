@@ -468,6 +468,8 @@ private:
     enum class Options {
         JammingExpected     = (1<<0),
         ZeroVelConstPos     = (1<<1),
+        SetLatLngFusion     = (1<<4),
+        SetLatLngOffset     = (1<<5),
     };
 
 // Possible values for _flowUse
