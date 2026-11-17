@@ -3870,13 +3870,14 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # AHRS falls back to DCM (and so the GPS) for fixed wing and
         # ground vehicles when the EKF is not using GPS but GPS has a
         # 3D fix; Copter must keep using the EKF
-        self.context_collect('STATUSTEXT')
         self.set_parameters({
             "EK3_OPTIONS": 48,  # SetLatLngFusion and SetLatLngOffset
         })
         self.reboot_sitl()
         self.change_mode('LOITER')
         self.wait_ready_to_arm()
+        # collect only after boot, which always reports DCM active
+        self.context_collect('STATUSTEXT')
         self.takeoff(10, mode='LOITER')
         fly_sending(15)
 
@@ -4279,7 +4280,7 @@ return update, 1000
         # without a GPS or some sort of external prompting, AP
         # doesn't send system_time messages.  So prompt it:
         self.mav.mav.system_time_send(int(time.time() * 1000000), 0)
-        self.set_origin(old_pos)
+        self.set_origin(mavutil.location(old_pos.lat * 1e-7, old_pos.lon * 1e-7, old_pos.alt * 1e-3, 0))
         self.wait_ready_to_arm()
 
         def send_global_position_sensor():

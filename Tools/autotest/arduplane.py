@@ -788,13 +788,14 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
         ]:
             self.start_subtest("AHRS_OPTIONS=%u" % ahrs_options)
             self.context_push()
-            self.context_collect('STATUSTEXT')
             self.set_parameters({
                 "EK3_OPTIONS": 48,  # SetLatLngFusion and SetLatLngOffset
                 "AHRS_OPTIONS": ahrs_options,
             })
             self.reboot_sitl()
             self.wait_ready_to_arm()
+            # collect only after boot, which always reports DCM active
+            self.context_collect('STATUSTEXT')
             self.takeoff(alt=100)
             self.change_mode('LOITER')
             fly_sending(20)
