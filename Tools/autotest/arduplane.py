@@ -802,18 +802,18 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
             # jam the GPS: its position is wrong and reported as
             # inaccurate, but it keeps its 3D fix
             self.set_parameters({
-                "SIM_GPS1_GLTCH_X": 0.005,  # about 550m
-                "SIM_GPS1_GLTCH_Y": 0.005,
-                "SIM_GPS1_ACC": 50,
+                "SIM_GPS_GLITCH_X": 0.005,  # about 550m
+                "SIM_GPS_GLITCH_Y": 0.005,
+                "SIM_GPS_ACC": 50,
             })
             worst = fly_sending(40, check_after=15)
             fell_back = self.statustext_in_collections("AHRS: DCM active")
             self.progress("AHRS_OPTIONS=%u: worst divergence %.1fm, DCM fallback=%s" %
                           (ahrs_options, worst, bool(fell_back)))
             self.set_parameters({
-                "SIM_GPS1_GLTCH_X": 0,
-                "SIM_GPS1_GLTCH_Y": 0,
-                "SIM_GPS1_ACC": 0.3,
+                "SIM_GPS_GLITCH_X": 0,
+                "SIM_GPS_GLITCH_Y": 0,
+                "SIM_GPS_ACC": 0.3,
             })
             fly_sending(20)
             self.fly_home_land_and_disarm()
@@ -836,7 +836,7 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
         # accuracy, and with EK3_GLITCH_RAD=0 GPS is never rejected
         nmea_gps = {
             "GPS1_TYPE": 5,
-            "SIM_GPS1_TYPE": 5,
+            "SIM_GPS_TYPE": 5,
             "GPS_AUTO_CONFIG": 0,
         }
         for ek3_options, extra_params, jam, description in [
@@ -937,9 +937,9 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
             # accuracy; the EKF should stop using it in favour of the
             # external position data
             self.set_parameters({
-                "SIM_GPS1_GLTCH_X": 0.005,  # about 550m
-                "SIM_GPS1_GLTCH_Y": 0.005,
-                "SIM_GPS1_ACC": 50,
+                "SIM_GPS_GLITCH_X": 0.005,  # about 550m
+                "SIM_GPS_GLITCH_Y": 0.005,
+                "SIM_GPS_ACC": 50,
             })
             fly_phase("GPS jammed", 40, check_after=15, max_divergence=50)
 
@@ -955,13 +955,13 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
                       flags=mavutil.mavlink.GLOBAL_POSITION_UNHEALTHY)
             fly_phase("GPS jammed, data healthy again", 30)
             self.set_parameters({
-                "SIM_GPS1_GLTCH_X": 0,
-                "SIM_GPS1_GLTCH_Y": 0,
-                "SIM_GPS1_ACC": 0.3,
+                "SIM_GPS_GLITCH_X": 0,
+                "SIM_GPS_GLITCH_Y": 0,
+                "SIM_GPS_ACC": 0.3,
             })
             fly_phase("GPS jamming stopped", 30, check_after=20, max_divergence=50)
 
-        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.set_parameter("SIM_GPS_DISABLE", 1)
         # send each sample twice to exercise the EKF's rate limiting
         fly_phase("GPS lost", 40, burst=2, check_after=5, max_divergence=50)
 
@@ -985,7 +985,7 @@ class AutoTestPlane(vehicle_test_suite.TestSuite):
         # the EKF has not used data for >5s so must reset to it
         fly_phase("data healthy again", 30, check_after=5, max_divergence=50)
 
-        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.set_parameter("SIM_GPS_DISABLE", 0)
         fly_phase("GPS regained", 30, check_after=10, max_divergence=50)
 
         self.fly_home_land_and_disarm()

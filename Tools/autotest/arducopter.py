@@ -3632,13 +3632,13 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             if (self.get_sim_time() - tstart > 60):
                 # re-enable GPS
                 self.set_parameters({
-                    "SIM_GPS1_ENABLE": 1,
+                    "SIM_GPS_DISABLE": 0,
                 })
                 break
             elif (self.get_sim_time() - tstart > 30 and not gpsdisabled):
                 # disable GPS for 30 seconds
                 self.set_parameters({
-                    "SIM_GPS1_ENABLE": 0,
+                    "SIM_GPS_DISABLE": 1,
                 })
                 gpsdisabled = True
                 gpsdisabled_time = self.get_sim_time()
@@ -3711,7 +3711,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             if now - tstart > 60:
                 break
             if now - tstart > 20 and not gps_disabled:
-                self.set_parameter("SIM_GPS1_ENABLE", 0)
+                self.set_parameter("SIM_GPS_DISABLE", 1)
                 gps_disabled = True
             send_global_position_sensor(healthy_eph)
             if gps_disabled and now - tstart > 25:
@@ -3727,7 +3727,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException(
                 "Position diverged %.1fm from truth without GPS" % max_divergence)
 
-        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.set_parameter("SIM_GPS_DISABLE", 0)
         self.delay_sim_time(10, reason="waiting for GPS use to resume")
 
         self.set_rc(2, 1500)
@@ -3761,7 +3761,7 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             if mtype == 'RSLL':
                 seen_rsll = True
             elif mtype == 'PARM':
-                if m.Name == 'SIM_GPS1_ENABLE' and m.Value == 0:
+                if m.Name == 'SIM_GPS_DISABLE' and m.Value == 1:
                     break
             elif seen_rsll and m.C == 0:
                 offsets.add((m.OFN, m.OFE))
@@ -3883,9 +3883,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
         # jam the GPS: its position is wrong and reported as
         # inaccurate, but it keeps its 3D fix
         self.set_parameters({
-            "SIM_GPS1_GLTCH_X": 0.005,  # about 550m
-            "SIM_GPS1_GLTCH_Y": 0.005,
-            "SIM_GPS1_ACC": 50,
+            "SIM_GPS_GLITCH_X": 0.005,  # about 550m
+            "SIM_GPS_GLITCH_Y": 0.005,
+            "SIM_GPS_ACC": 50,
         })
         worst = fly_sending(40, check_after=15)
         self.progress("Worst divergence with GPS jammed: %.1fm" % worst)
@@ -3895,9 +3895,9 @@ class AutoTestCopter(vehicle_test_suite.TestSuite):
             raise NotAchievedException("Position diverged %.1fm from truth with GPS jammed" % worst)
 
         self.set_parameters({
-            "SIM_GPS1_GLTCH_X": 0,
-            "SIM_GPS1_GLTCH_Y": 0,
-            "SIM_GPS1_ACC": 0.3,
+            "SIM_GPS_GLITCH_X": 0,
+            "SIM_GPS_GLITCH_Y": 0,
+            "SIM_GPS_ACC": 0.3,
         })
         fly_sending(20)
         self.do_RTL()
@@ -4055,7 +4055,7 @@ return update, 1000
         self.change_mode('LOITER')
         self.wait_ready_to_arm()
         self.takeoff(10, mode='LOITER')
-        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.set_parameter("SIM_GPS_DISABLE", 1)
 
         def counts():
             m = self.wait_statustext(r"EPE accepted=(\d+) rejected=(\d+)", regex=True)
@@ -4069,7 +4069,7 @@ return update, 1000
         rejected = rejected_end - rejected_start
         self.progress("With GPS disabled: accepted=%u rejected=%u" % (accepted, rejected))
 
-        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.set_parameter("SIM_GPS_DISABLE", 0)
         self.do_RTL()
 
         if rejected != 0 or accepted < 20:
@@ -4174,13 +4174,13 @@ return update, 1000
         self.change_mode('LOITER')
         self.wait_ready_to_arm()
         self.takeoff(10, mode='LOITER')
-        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.set_parameter("SIM_GPS_DISABLE", 1)
         fly_sending(10, 1.0)
         for eph in float("inf"), 1e30:
             if fly_sending(15, eph) > 20:
                 raise NotAchievedException("Position estimate corrupted with eph=%s" % str(eph))
             fly_sending(10, 1.0)
-        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.set_parameter("SIM_GPS_DISABLE", 0)
         self.do_RTL()
 
     def GlobalPositionSensorProcessingTime(self):
@@ -4226,7 +4226,7 @@ return update, 1000
         self.wait_ready_to_arm()
         self.takeoff(10, mode='LOITER')
         fly_sending(10)
-        self.set_parameter("SIM_GPS1_ENABLE", 0)
+        self.set_parameter("SIM_GPS_DISABLE", 1)
         fly_sending(10)
 
         # data offset by 50m which is used must pull the estimate onto
@@ -4246,7 +4246,7 @@ return update, 1000
                 raise NotAchievedException("%s: data used (divergence %.1fm)" % (desc, divergence))
             fly_sending(10)
 
-        self.set_parameter("SIM_GPS1_ENABLE", 1)
+        self.set_parameter("SIM_GPS_DISABLE", 0)
         self.do_RTL()
 
     def GlobalPositionSensorExtNav(self):
