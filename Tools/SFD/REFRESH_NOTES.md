@@ -17,6 +17,21 @@ reply exists") before acting on it.
 
 ## Current state
 
+- Released 2026-11-17 as `SmallFastDrone-4.7.2` (`2fba3f3561`): the beta
+  at `1bc3b9d518` plus two commits that remove `Tools/SFD`,
+  `CLAUDE_local.md` and the README's Upstreaming Order. GitHub release
+  `SmallFastDrone-V4.7.2`
+  (https://github.com/fossuav/smallfastdrone/releases/tag/SmallFastDrone-V4.7.2):
+  Copter `.apj` and `_with_bl.hex` for the 14 SFD-enabled boards (ARK_FPV,
+  BETAFPV-F405, BlitzF745, BlitzF745AIO, MambaH743v4, MatekH743,
+  MatekH743-bdshot, MicoAir405v2, MicoAir743-AIO, MicoAir743v2,
+  SmallFastDronev1, TBS_LUCID_H7, TBS_LUCID_H7V3, TBS_LUCID_H7_OEM; not
+  TBS_LUCID_H7_WING, a standard plane build) with `md5sums.txt`. The notes
+  name the parameters that moved between betas (`VALT_POS_EXPO`,
+  `TKOFF_CPU_AVG`/`PEAK`, `LOIT_DRAG_COEF`, and `THROW_YAW_DEG` since
+  4.7.0) and `FLOW_HGT_MIN`'s upstream name `FLOW_ALT_MIN`. The beta
+  carries on for the upstream maintainers' changes; a release top-up is
+  cut from the beta with the same two removal commits.
 - Shipping: `SmallFastDrone-4.7.2-beta` is refresh17 after topup1,
   promoted 2026-11-17 (a force push) on the strength of its flights
   (FLIGHT_VALIDATION, 2026-11-17). `SmallFastDrone-4.7.2-refresh17`

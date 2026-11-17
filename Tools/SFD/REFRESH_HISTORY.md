@@ -7,6 +7,17 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-17 - SmallFastDrone 4.7.2 released
+
+Andy asked for a release ahead of the upstream maintainers' changes. The
+release branch `SmallFastDrone-4.7.2` is the beta without the dev tooling
+and the README's working notes, code identical to the topup1 that flew,
+and the GitHub release `SmallFastDrone-V4.7.2` carries the Copter
+firmware for the 14 SFD-enabled boards. Writing the release notes turned
+up that "parameters carry over from the betas" is only true from the
+6 November betas on: four parameters moved storage between earlier betas
+and read their defaults after the upgrade, so the notes list them.
+
 ## 2026-11-17 - refresh17 topup1 promoted to the beta
 
 Andy asked for the promotion once refresh17 topup1 had flown, so that
