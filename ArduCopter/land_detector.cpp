@@ -241,6 +241,13 @@ void Copter::Log_LDET(uint16_t logging_flags, uint32_t detector_count)
 }
 #endif
 
+// tell AHRS whether the vehicle is on the ground, which EKF3 reads through
+// the DAL. Called whenever land_complete changes
+void Copter::update_vehicle_landed()
+{
+    ahrs.set_vehicle_landed(ap.land_complete);
+}
+
 // set land_complete flag and disarm motors if disarm-on-land is configured
 void Copter::set_land_complete(bool b)
 {
@@ -273,7 +280,7 @@ void Copter::set_land_complete(bool b)
     // tell AHRS flying state. A vehicle disarmed in the air is not reported landed until the land
     // detector says it has come to rest, whatever land_complete reads after a re-arm while it falls
     set_likely_flying(!b);
-    ahrs.set_vehicle_landed(b && !ap.disarmed_in_air);
+    update_vehicle_landed();
 
     if (!b) {
         // not landed, no further action
