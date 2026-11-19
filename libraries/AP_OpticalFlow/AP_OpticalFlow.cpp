@@ -112,7 +112,8 @@ const AP_Param::GroupInfo AP_OpticalFlow::var_info[] = {
     // @Increment: 0.01
     // @Units: m
     // @User: Advanced
-    AP_GROUPINFO("_ALT_MIN", 8, AP_OpticalFlow, _alt_min, 0.0f),
+    // 8 was HF_RATEF on the SFD betas, so a saved value of it does not load as ALT_MIN
+    AP_GROUPINFO("_ALT_MIN", 9, AP_OpticalFlow, _alt_min, 0.0f),
 
     AP_GROUPEND
 };
