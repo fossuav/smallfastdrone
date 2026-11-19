@@ -65,7 +65,6 @@ void NavEKF3_core::readRangeFinder(void)
             if (sensor->status() == AP_DAL_RangeFinder::Status::Good) {
                 // get the current range measurement
                 range_distance = sensor->distance();
-                rngReadTime_ms = imuSampleTime_ms;
             } else if (!movedSinceArming && !anyRngGood && sensor->status() == AP_DAL_RangeFinder::Status::OutOfRangeLow) {
                 // assume the on-ground range until the vehicle moves
                 range_distance = rngOnGnd;

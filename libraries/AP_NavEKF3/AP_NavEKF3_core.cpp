@@ -213,7 +213,6 @@ void NavEKF3_core::InitialiseVariables()
     timeAtLastAuxEKF_ms = imuSampleTime_ms;
     flowValidMeaTime_ms = imuSampleTime_ms;
     rngValidMeaTime_ms = imuSampleTime_ms;
-    rngReadTime_ms = imuSampleTime_ms;
 #if EK3_FEATURE_OPTFLOW_AGL_KF && EK3_FEATURE_RANGEFINDER_MEASUREMENTS
     memset(&rngOutOfRangeLowTime_ms, 0, sizeof(rngOutOfRangeLowTime_ms));
 #endif

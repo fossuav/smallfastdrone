@@ -1451,7 +1451,6 @@ private:
     Vector2F auxFlowObsInnov;       // optical flow rate innovation from 1-state terrain offset estimator
     uint32_t flowValidMeaTime_ms;   // time stamp from latest valid flow measurement (msec)
     uint32_t rngValidMeaTime_ms;    // time stamp from latest valid range measurement (msec)
-    uint32_t rngReadTime_ms;        // time a downward range finder last took a reading, not counting the on-ground range assumed before the vehicle moves (msec)
 #if AP_RANGEFINDER_ENABLED
     // a range sample older than this is stale, for the median of three and for range finder height
     static constexpr uint32_t rngFreshTime_ms = 500;
