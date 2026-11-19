@@ -185,7 +185,7 @@ void Copter::update_land_detector()
             land_detector_count++;
         } else {
             ap.disarmed_in_air = false;
-            ahrs.set_vehicle_landed(ap.land_complete);
+            update_vehicle_landed();
             // set_land_complete() zeroes the shared counter on every
             // change, so a landed vehicle has always logged it at zero.
             // Leave it that way rather than parked at the trigger
@@ -242,12 +242,13 @@ void Copter::Log_LDET(uint16_t logging_flags, uint32_t detector_count)
 #endif
 
 // tell AHRS whether the vehicle is on the ground, which EKF3 reads through
-// the DAL: landed, and not carried by the flight mode. Called whenever
-// land_complete changes, on a mode change and when the mode starts or stops
-// carrying the vehicle
+// the DAL: landed, not disarmed in the air until the land detector sees it
+// at rest, and not carried by the flight mode. Called whenever
+// land_complete changes, on a mode change, when the mode starts or stops
+// carrying the vehicle and when a vehicle disarmed in the air comes to rest
 void Copter::update_vehicle_landed()
 {
-    ahrs.set_vehicle_landed(ap.land_complete && !flightmode->is_carried());
+    ahrs.set_vehicle_landed(ap.land_complete && !ap.disarmed_in_air && !flightmode->is_carried());
 }
 
 // set land_complete flag and disarm motors if disarm-on-land is configured
