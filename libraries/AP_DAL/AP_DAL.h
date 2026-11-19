@@ -220,7 +220,8 @@ public:
     }
 
     bool get_hover_z_bias_enabled(void) const {
-        return _RFRN.hover_z_bias_enabled;
+        // SFD: earlier betas logged the flag in Flags bit 1
+        return _RFRN.hover_z_bias_enabled || _RFRN.unused;
     }
 
     // for EKF usage to enable takeoff expected to true
