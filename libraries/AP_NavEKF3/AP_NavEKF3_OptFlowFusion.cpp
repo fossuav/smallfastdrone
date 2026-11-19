@@ -1353,7 +1353,7 @@ void NavEKF3_core::UpdateAglKf()
     // the sensor minimum, which is left to the IMU
     const uint32_t rngLowTime_ms = rngOutOfRangeLowTime_ms[rangeDataDelayed.sensor_idx];
     if ((rngLowTime_ms != 0) && (imuSampleTime_ms - rngLowTime_ms < rngFreshTime_ms) &&
-        (imuSampleTime_ms - rngValidMeaTime_ms > rngOnGndNoDataTime_ms) &&
+        (imuSampleTime_ms - rngReadTime_ms > rngOnGndNoDataTime_ms) &&
         (fabsF(stateStruct.velocity.z) < aglKfStillVelZMax_m_s)) {
         aglKf.vel = 0.0f;
     }
@@ -1365,7 +1365,7 @@ void NavEKF3_core::UpdateAglKf()
     // liftoff while in range (one returning zero on a lost return) pins the height to the floor
     // until the 5 s timeout
     const bool rngLowNearFloor = (rngLowTime_ms != 0) && (imuSampleTime_ms - rngLowTime_ms < rngFreshTime_ms) &&
-                                 (imuSampleTime_ms - rngValidMeaTime_ms > aglKfFloorHoldNoRngTime_ms) &&
+                                 (imuSampleTime_ms - rngReadTime_ms > aglKfFloorHoldNoRngTime_ms) &&
                                  (aglKfLastRngHgt < rngOnGnd + aglKfFloorHoldNearFloor_m);
     if (!rngLowNearFloor) {
         aglKfHeldOnFloor = false;
