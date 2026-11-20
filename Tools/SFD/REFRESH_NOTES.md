@@ -17,6 +17,44 @@ reply exists") before acting on it.
 
 ## Current state
 
+- 4.7.3 refresh2 (2026-11-20, `SmallFastDrone-4.7.3-refresh2`, worktree
+  `../sfd-473-r2`), built and tested, not promoted. Same 4.7.3 base
+  (`5d5b6076be`), firmware `SmallFastDrone V4.7.3-beta3`.
+  - Moved: #32471 and #32473 (a first flight after bit 2 held the bias is
+    refused), #32768 and #32972 (a datum reset by any core is reported),
+    #33484, #34630, #35147, #34543 (rebased onto master; #33484 restarts a
+    lockout after any untested spell and needs a new range reading),
+    #34942 (rest check re-armed at each rest); new: #35306, #35307, #35308,
+    #35312.
+  - Plan 623. Stops: #33507's AGL KF bias (the new copy test kept, the
+    stack's missing assumed-range branch as refresh1), #34543's lane
+    status (as "#34543 on 4.7"), #35307's restart arm (after the stack's
+    reset, inside #34432's ground effect guard once that applied),
+    #35308's averaging (no `detectOptFlowTakeoff()` on this stack),
+    #34941 (members unioned). Skipped: #34543's primary core index and
+    #34630's copy of it, #34630's other copies of #34543 (entries 415-428;
+    see the traps), #35307's build option label (4.7 lists no AGL KF
+    option). 51 of the beta's adaptation and local commits re-picked; the
+    movement detector rename now also covers #35312's landed hold, and the
+    AGL KF floor clamp moved into `flowResetHeight()`.
+  - New fixups: #35312's `Pmut` -> `P`, #35308's flow quality averaged,
+    FAST_BOOT back to `AP_Int32` (#32238's head moved, so its skip-list sha
+    no longer matched).
+  - Tests: the beta's Tools/autotest with six methods refolded from the new
+    heads (HoverBiasSavedFirstFlightAfterRest, EK3_FlowAxisLockoutRecovery,
+    EK3_FlowVelocityAtAidingStart, OSDEKFLanes three-way; BaroDriftClearedOnSecondaryCore
+    and EK3_FlowSamplesAveraged added and registered). Gates as the beta or
+    better. Full SFD set 159 of 161: LoiterAirframeDragFeedForward passed
+    after a rebuild (its model is in ROMFS, see the traps), and
+    EK3_FlowAxisLockoutRecovery's range height leg checks only the resets
+    on this branch (`autotest: check only the resets in #35307's range
+    height leg on this branch`): #34851 keeps the ground offset valid for
+    5 s after the last range height, so the recovery is deferred as "range
+    stale" through the outage and the deferral messages' 10 s rate limit
+    hides "range restarted". A debug build printed each core's reset with
+    the range finder the source and the restart confirm at 0, so the reset
+    did wait for it.
+
 - 4.7.3 refresh1 (2026-11-19, `SmallFastDrone-4.7.3-refresh1`, worktree
   `../sfd-473-r1`), promoted to `SmallFastDrone-4.7-beta` the same day
   at Andy's word (a force push); 4.7.3-beta1's tip (`9a5766597b`) is
@@ -2589,6 +2627,28 @@ an FMT record and passes the retry, as the shipping beta does. Both picks are
 carried (Local work) until 4.7 has #30956: the logger one because the stack
 logs more message types than 4.7 and the startup drops are real, the harness
 one because it is master's and costs nothing.
+
+### Traps found in 4.7.3 refresh2
+
+- **#34630's copies of #34543 change sha with a rebase.** #34630 carries
+  #34543's commits cherry-picked onto #33484, so once rebased they are not
+  patch-identical to #34543's and the plan keeps them. Most arrive empty;
+  `AP_AHRS: pass out the status of each EKF3 lane` applied cleanly a second
+  time and defined `get_ekf_lane_status()` twice. Skip every #34630 entry
+  whose subject is one of #34543's, and read the applied log for a copy
+  that applied.
+- **A moved head's skips no longer match.** skip.list is by sha, so a PR
+  whose head moved brings its skipped commits back (#32238's FAST_BOOT
+  type, #34543's primary core index). Grep the plan for `^+.*AP_UInt` and
+  the known skips by subject before `run`.
+- **Build after taking the tests.** SITL's ROMFS takes
+  Tools/autotest/models at build time, so a binary built before the beta's
+  tests came in panics on `@ROMFS/models/quad-linear-drag.json`, and
+  LoiterAirframeDragFeedForward times out with no heartbeat.
+- **A test that reads a rate-limited message can lose it to an earlier one.**
+  The flow recovery reports a deferral at most every 10 s, whatever the
+  reason; on a stack where an earlier reason fires first, a check for the
+  later one fails though the behaviour is right.
 
 ### Traps found in 4.7.3 refresh1
 
