@@ -216,6 +216,10 @@ void NavEKF3_core::InitialiseVariables()
     memset(&rngOutOfRangeLowTime_ms, 0, sizeof(rngOutOfRangeLowTime_ms));
 #endif
     flowMeaTime_ms = 0;
+    flowRatesSum.zero();
+    flowGyroRatesSum.zero();
+    flowSampleCount = 0;
+    flowSampleRecvTime_ms = 0;
     prevFlowFuseTime_ms = 0;
     flowWithheld_ms = 0;
     flowSampleTime_ms = 0;
