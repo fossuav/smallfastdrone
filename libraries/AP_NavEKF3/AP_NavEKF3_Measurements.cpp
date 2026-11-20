@@ -1594,6 +1594,9 @@ void NavEKF3_core::updateMovementCheck(void)
     {
         onGroundNotMoving = true;
         restStartTime_ms = imuSampleTime_ms;
+        // each rest gets its own vertical velocity check, however briefly the vehicle moved
+        // before it: SelectVelPosFusion() may not have run while it was moving
+        velDCheckedAtRest = false;
         logStatusChange = true;
     }
 
