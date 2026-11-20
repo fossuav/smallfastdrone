@@ -18,8 +18,10 @@ reply exists") before acting on it.
 ## Current state
 
 - 4.7.3 refresh2 (2026-11-20, `SmallFastDrone-4.7.3-refresh2`, worktree
-  `../sfd-473-r2`), built and tested, not promoted. Same 4.7.3 base
-  (`5d5b6076be`), firmware `SmallFastDrone V4.7.3-beta3`.
+  `../sfd-473-r2`), promoted to `SmallFastDrone-4.7-beta` the same day at
+  Andy's word (a force push); the previous beta tip (`5edc8c553b`) is kept
+  locally as `SmallFastDrone-4.7-beta.2`. Same 4.7.3 base (`5d5b6076be`),
+  firmware `SmallFastDrone V4.7.3-beta3`.
   - Moved: #32471 and #32473 (a first flight after bit 2 held the bias is
     refused), #32768 and #32972 (a datum reset by any core is reported),
     #33484, #34630, #35147, #34543 (rebased onto master; #33484 restarts a

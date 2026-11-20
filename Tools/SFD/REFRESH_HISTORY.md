@@ -7,6 +7,21 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-20 - 4.7.3 refresh2, promoted to the beta
+
+Andy asked for a refresh once the open AI review items on the flight code
+were fixed and pushed. Nine PRs had moved and four joined (#35306,
+#35307, #35308, #35312). Most stops were the new flow PRs meeting the
+stack's older forms of the code they extend. #34630's copies of #34543's
+commits had changed sha in its rebase, so the plan kept them, and one
+applied cleanly a second time with a duplicate function; the branch was
+rebuilt without it. Of 161 SFD tests 159 passed in one run. The other
+two were a build made before the tests brought in a ROMFS model, and
+#35307's range height leg, whose deferral message the stack's earlier
+"range stale" deferral hides inside its 10 s rate limit; a debug build
+showed the reset waited for the restart, so on this branch the leg
+checks only the resets. Andy promoted it to the beta the same day.
+
 ## 2026-11-19 - 4.7.3 refresh1, promoted to the beta
 
 Andy asked for the first refresh of the 4.7.3 cycle once the 11-19
