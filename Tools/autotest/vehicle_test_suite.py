@@ -336,6 +336,10 @@ class Context(object):
         self.installed_modules = []
         self.overridden_message_rates = {}
         self.raising_debug_trap_on_exceptions = False
+        # self.speedup value to restore on context_pop(); set by the
+        # first context_set_speedup() call in this context (None means
+        # speedup was never changed in this context)
+        self.original_speedup = None
 
 
 # https://stackoverflow.com/questions/616645/how-do-i-duplicate-sys-stdout-to-a-log-file-in-python
@@ -955,6 +959,19 @@ class MSP_Generic(Telem):
         else:
             print("cmd=%s" % str(cmd))
 
+    def send_command(self, cmd, data=bytes()):
+        '''send an MSPv1 request frame ($M<) to the autopilot'''
+        size = len(data)
+        frame = bytearray(b'$M<')
+        frame.append(size)
+        frame.append(cmd)
+        frame.extend(data)
+        checksum = 0
+        for b in frame[3:]:  # checksum covers size, command and payload
+            checksum ^= b
+        frame.append(checksum & 0xFF)
+        self.do_write(bytes(frame))
+
     def update_read(self):
         for byte in self.do_read():
             c = chr(byte)
@@ -1240,6 +1257,26 @@ class LTM(Telem):
 
 
 class CRSF(Telem):
+    # frame types, addresses and field types of the parameter menu protocol
+    FRAMETYPE_RC_CHANNELS_PACKED = 0x16
+    FRAMETYPE_DEVICE_PING = 0x28
+    FRAMETYPE_DEVICE_INFO = 0x29
+    FRAMETYPE_PARAMETER_ENTRY = 0x2B
+    FRAMETYPE_PARAMETER_READ = 0x2C
+    FRAMETYPE_PARAMETER_WRITE = 0x2D
+    # frames sent to the flight controller start with its address
+    ADDRESS_FLIGHT_CONTROLLER = 0xC8
+    ADDRESS_RADIO = 0xEA
+    ADDRESS_RADIO_TRANSMITTER = 0xEA
+    ADDRESS_RECEIVER = 0xEC
+    FIELD_FOLDER = 11
+    FIELD_INFO = 12
+    FIELD_COMMAND = 13
+    FIELD_HIDDEN = 0x80
+    # a frame is at most 64 bytes, and its length byte counts all but the
+    # sync and length bytes
+    MAX_FRAME_LENGTH = 62
+
     def __init__(self, destination_address):
         super(CRSF, self).__init__(destination_address)
 
@@ -1255,6 +1292,64 @@ class CRSF(Telem):
 
     def write_data_id(self, dataid):
         self.do_write(self.data_id_map[dataid])
+
+    @staticmethod
+    def crc8_dvb_s2(data):
+        crc = 0
+        for b in data:
+            crc ^= b
+            for _ in range(8):
+                crc = ((crc << 1) ^ 0xD5) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+        return crc
+
+    @staticmethod
+    def frame_bytes(frame_type, payload):
+        '''return a frame to the flight controller'''
+        body = bytes([frame_type]) + bytes(payload)
+        return bytes([CRSF.ADDRESS_FLIGHT_CONTROLLER, len(body) + 1]) + body + bytes([CRSF.crc8_dvb_s2(body)])
+
+    @staticmethod
+    def rc_frame_bytes(pwm):
+        '''return an RC frame with all 16 channels at pwm, 880 to 2159'''
+        if not 880 <= pwm <= 2159:
+            raise ValueError("no CRSF value gives %uus" % pwm)
+        # the smallest value the flight controller's value * 5 / 8 + 880 takes to pwm
+        value = ((pwm - 880) * 8 + 4) // 5
+        bits = 0
+        for i in range(16):
+            bits |= value << (11 * i)
+        return CRSF.frame_bytes(CRSF.FRAMETYPE_RC_CHANNELS_PACKED, bits.to_bytes(22, 'little'))
+
+    def write_extended_frame(self, frame_type, destination, origin, payload):
+        body = bytearray([frame_type, destination, origin]) + bytearray(payload)
+        self.do_write(bytearray([0xC8, len(body) + 1]) + body + bytearray([self.crc8_dvb_s2(body)]))
+
+    def write_rc_frame(self, value=992):
+        '''send 16 channels of packed 11-bit RC values'''
+        bits = 0
+        for i in range(16):
+            bits |= value << (11 * i)
+        body = bytearray([0x16]) + bytearray(bits.to_bytes(22, 'little'))
+        self.do_write(bytearray([0xC8, len(body) + 1]) + body + bytearray([self.crc8_dvb_s2(body)]))
+
+    def read_frames(self):
+        '''return a list of (type, payload) for the complete frames received'''
+        self.buffer += self.do_read()
+        frames = []
+        while len(self.buffer) >= 2:
+            length = self.buffer[1]
+            if length < 2 or length > self.MAX_FRAME_LENGTH:
+                self.buffer = self.buffer[1:]
+                continue
+            if len(self.buffer) < length + 2:
+                break
+            frame = self.buffer[2:length+2]
+            if self.crc8_dvb_s2(frame[:-1]) != frame[-1]:
+                self.buffer = self.buffer[1:]
+                continue
+            frames.append((frame[0], frame[1:-1]))
+            self.buffer = self.buffer[length+2:]
+        return frames
 
     def progress_tag(self):
         return "CRSF"
@@ -2042,6 +2137,176 @@ class TestSuite(abc.ABC):
     """Base abstract class.
     It implements the common function for all vehicle types.
     """
+    def statustext_count_in_collections(self, text):
+        '''returns the number of statustexts in the STATUSTEXT collection which
+        contain text'''
+        c = self.context_get()
+        if "STATUSTEXT" not in c.collections:
+            raise NotAchievedException("Asked to check context but it isn't collecting!")
+        return len([x for x in c.collections["STATUSTEXT"] if text.lower() in x.text.lower()])
+
+    def assert_log_dsf_no_drops(self, path):
+        """Assert that DSF.Dp (write-buffer drop count) is zero in the given log file"""
+        dfreader = self.dfreader_for_path(path)
+        dropped = 0
+        while True:
+            m = dfreader.recv_match(type='DSF')
+            if m is None:
+                break
+            dropped = m.Dp
+        self.progress("DSF dropcount in %s: %d" % (path, dropped))
+        if dropped != 0:
+            raise NotAchievedException("Expected zero dropped log messages in %s, got %d" % (path, dropped))
+
+    def assert_ekfs_match_sim_state(self,
+                                    ekf_message_types=None,
+                                    max_roll_pitch_err_deg=5,
+                                    max_yaw_err_deg=10,
+                                    max_vel_err_ms=1.5,
+                                    max_pos_ne_err_m=5,
+                                    max_pos_d_err_m=3,
+                                    min_samples=100,
+                                    ignore_before_time_s=0,
+                                    max_violation_duration_s=2):
+        '''walk the current onboard log comparing each primary-core EKF
+        estimate message (NKF1 for EKF2, XKF1 for EKF3) against
+        simulator truth (SIM for attitude, SIM2 for velocity and
+        position), linearly interpolated to the estimate timestamps.
+        Only samples logged while armed and after ignore_before_time_s
+        are considered.
+
+        Estimates can briefly diverge from truth during aggressive
+        manoeuvres; only divergence sustained for more than
+        max_violation_duration_s fails.'''
+        import numpy as np
+        if ekf_message_types is None:
+            ekf_message_types = ['NKF1', 'XKF1']
+
+        # tolerances may be supplied as a scalar or as a dict keyed by
+        # message type, allowing per-filter tolerances:
+        def tol(spec, key):
+            if isinstance(spec, dict):
+                return spec[key]
+            return spec
+
+        # gather everything first so truth can be interpolated to the
+        # estimate timestamps:
+        dfreader = self.dfreader_for_current_onboard_log()
+        sim = []
+        sim2 = []
+        est = {}
+        for key in ekf_message_types:
+            est[key] = []
+        armed_spans = []
+        armed_at = None
+        while True:
+            m = dfreader.recv_match(type=ekf_message_types + ['SIM', 'SIM2', 'EV'])
+            if m is None:
+                break
+            m_type = m.get_type()
+            t = m.TimeUS * 1e-6
+            if m_type == 'EV':
+                if m.Id == 10 and armed_at is None:  # armed
+                    armed_at = t
+                elif m.Id == 11 and armed_at is not None:  # disarmed
+                    armed_spans.append((armed_at, t))
+                    armed_at = None
+            elif m_type == 'SIM':
+                sim.append((t, m.Roll, m.Pitch, m.Yaw))
+            elif m_type == 'SIM2':
+                sim2.append((t, m.VN, m.VE, m.VD, m.PN, m.PE, m.PD))
+            elif m.C == 0:
+                # only check each filter's primary core
+                est[m_type].append((t, m.Roll, m.Pitch, m.Yaw, m.VN, m.VE, m.VD, m.PN, m.PE, m.PD))
+        if armed_at is not None:
+            armed_spans.append((armed_at, float('inf')))
+        if len(sim) < 2 or len(sim2) < 2:
+            raise NotAchievedException("Insufficient SIM/SIM2 truth data in log")
+        sim = np.array(sim)
+        sim2 = np.array(sim2)
+        # unwrap yaw so interpolation does not glitch at the 0/360 boundary:
+        sim_yaw_unwrapped = np.degrees(np.unwrap(np.radians(sim[:, 3])))
+
+        for key in ekf_message_types:
+            rows = np.array(est[key])
+            if len(rows) == 0:
+                raise NotAchievedException("No %s messages in log" % key)
+            est_t = rows[:, 0]
+            armed = np.zeros(len(est_t), dtype=bool)
+            for (t0, t1) in armed_spans:
+                armed |= (est_t >= t0) & (est_t <= t1)
+            # restrict to samples bracketed by truth so interpolation
+            # never extrapolates:
+            armed &= (est_t >= max(sim[0, 0], sim2[0, 0])) & (est_t <= min(sim[-1, 0], sim2[-1, 0]))
+            rows = rows[armed]
+            est_t = rows[:, 0]
+            if len(est_t) < min_samples:
+                raise NotAchievedException(
+                    "Insufficient %s/truth samples compared (%u)" % (key, len(est_t)))
+
+            roll_err = np.abs(rows[:, 1] - np.interp(est_t, sim[:, 0], sim[:, 1]))
+            pitch_err = np.abs(rows[:, 2] - np.interp(est_t, sim[:, 0], sim[:, 2]))
+            yaw_err = np.abs((rows[:, 3] - np.interp(est_t, sim[:, 0], sim_yaw_unwrapped) + 180) % 360 - 180)
+            vel_err = np.sqrt(
+                (rows[:, 4] - np.interp(est_t, sim2[:, 0], sim2[:, 1]))**2 +
+                (rows[:, 5] - np.interp(est_t, sim2[:, 0], sim2[:, 2]))**2 +
+                (rows[:, 6] - np.interp(est_t, sim2[:, 0], sim2[:, 3]))**2)
+            # EKF positions are relative to the EKF origin while SIM2
+            # positions are relative to the simulation origin; remove
+            # the constant offset between the two, estimated from the
+            # first few armed samples:
+            pn_err = rows[:, 7] - np.interp(est_t, sim2[:, 0], sim2[:, 4])
+            pe_err = rows[:, 8] - np.interp(est_t, sim2[:, 0], sim2[:, 5])
+            pd_err = rows[:, 9] - np.interp(est_t, sim2[:, 0], sim2[:, 6])
+            nbase = min(10, len(est_t))
+            pn_err -= pn_err[:nbase].mean()
+            pe_err -= pe_err[:nbase].mean()
+            pd_err -= pd_err[:nbase].mean()
+            pos_ne_err = np.sqrt(pn_err**2 + pe_err**2)
+            pos_d_err = np.abs(pd_err)
+
+            att_bad = (roll_err > tol(max_roll_pitch_err_deg, key)) | (pitch_err > tol(max_roll_pitch_err_deg, key))
+            yaw_bad = yaw_err > tol(max_yaw_err_deg, key)
+            vel_bad = vel_err > tol(max_vel_err_ms, key)
+            ne_bad = pos_ne_err > tol(max_pos_ne_err_m, key)
+            d_bad = pos_d_err > tol(max_pos_d_err_m, key)
+            bad = att_bad | yaw_bad | vel_bad | ne_bad | d_bad
+            considered = est_t >= ignore_before_time_s
+            bad &= considered
+
+            # only divergence sustained for max_violation_duration_s fails:
+            run_start = None
+            for i in range(len(est_t)):
+                if not considered[i]:
+                    continue
+                if not bad[i]:
+                    run_start = None
+                    continue
+                desc = []
+                if att_bad[i]:
+                    desc.append("attitude (roll-err=%.1fdeg pitch-err=%.1fdeg)" % (roll_err[i], pitch_err[i]))
+                if yaw_bad[i]:
+                    desc.append("yaw (yaw-err=%.1fdeg)" % yaw_err[i])
+                if vel_bad[i]:
+                    desc.append("velocity (vel-err=%.1fm/s)" % vel_err[i])
+                if ne_bad[i]:
+                    desc.append("position (pos-ne-err=%.1fm)" % pos_ne_err[i])
+                if d_bad[i]:
+                    desc.append("height (pos-d-err=%.1fm)" % pos_d_err[i])
+                if run_start is None:
+                    run_start = est_t[i]
+                    self.progress("%s transient %s divergence at t=%.3f" % (key, " ".join(desc), est_t[i]))
+                elif est_t[i] - run_start > max_violation_duration_s:
+                    raise NotAchievedException(
+                        "%s diverged from truth for more than %.1fs (t=%.3f %s)" %
+                        (key, max_violation_duration_s, est_t[i], " ".join(desc)))
+
+            ncompared = int(considered.sum())
+            if ncompared < min_samples:
+                raise NotAchievedException(
+                    "Insufficient %s/truth samples compared (%u)" % (key, ncompared))
+            self.progress("Compared %u %s samples against simulator truth" % (ncompared, key))
+
     def __init__(self,
                  binary,
                  valgrind=False,
@@ -3837,6 +4102,21 @@ class TestSuite(abc.ABC):
         context.raising_debug_trap_on_exceptions = False
         sys.settrace(None)
 
+    def context_set_speedup(self, speedup):
+        '''set the simulation speedup, keeping the SIM_SPEEDUP parameter and
+        the self.speedup attribute (used to scale timeouts) in sync.  The
+        original speedup is restored on context_pop(), so cleanup is
+        exception-safe and handled by the suite rather than each test.
+
+        Calling this more than once in a single context retains the speedup
+        from before the first call - the value restored on context_pop() is
+        always the one in effect when this context was entered.'''
+        context = self.context_get()
+        if context.original_speedup is None:
+            context.original_speedup = self.speedup
+        self.speedup = speedup
+        self.set_parameter("SIM_SPEEDUP", speedup)
+
     def context_set_message_rate_hz(self, id, rate_hz, run_cmd=None):
         if run_cmd is None:
             run_cmd = self.run_cmd
@@ -3929,13 +4209,13 @@ class TestSuite(abc.ABC):
         if ex is not None:
             raise ex
 
-    def download_full_log_list(self, print_logs=True):
+    def download_full_log_list(self, print_logs=True, LOG_ENTRY_sanity_check=True):
         tstart = self.get_sim_time()
         self.mav.mav.log_request_list_send(self.sysid_thismav(),
                                            1, # target component
                                            0,
                                            0xffff)
-        logs = {}
+        logs : dict[int : mavutil.MAVLink.MAVLink_log_entry_message] = {}
         last_id = None
         num_logs = None
         while True:
@@ -3971,7 +4251,8 @@ class TestSuite(abc.ABC):
                 break
 
         # ensure we don't get any extras:
-        self.assert_not_receiving_message('LOG_ENTRY', timeout=2)
+        if LOG_ENTRY_sanity_check:
+            self.assert_not_receiving_message('LOG_ENTRY', timeout=2)
 
         return logs
 
@@ -5991,7 +6272,7 @@ class TestSuite(abc.ABC):
         else:
             self.set_rc(3, 1700)
         # we may never see ourselves as armed in a heartbeat
-        self.wait_statustext("Takeoff blocked: ESC RPM out of range", check_context=True)
+        self.wait_statustext("Takeoff blocked: ESC RPM or errors out of range", check_context=True)
         self.context_pop()
         self.zero_throttle()
         self.disarm_vehicle(force=force_disarm)
@@ -6106,10 +6387,10 @@ class TestSuite(abc.ABC):
     def wait_armed(self, timeout=20):
         tstart = self.get_sim_time()
         while self.get_sim_time_cached() - tstart < timeout:
-            self.wait_heartbeat(drain_mav=False)
             if self.mav.motors_armed():
                 self.progress("Motors ARMED")
                 return
+            self.wait_heartbeat(drain_mav=False)
         raise AutoTestTimeoutException("Did not become armed")
 
     def disarm_vehicle(self, timeout=60, force=False):
@@ -6715,6 +6996,22 @@ class TestSuite(abc.ABC):
         """Get Saved parameters."""
         return self.contexts[-1]
 
+    def context_preserve_parameters(self, names):
+        """Arrange for these parameters to be restored on context_pop().
+
+        The context restores parameters the *suite* set.  It cannot know
+        about one the vehicle writes for itself - a calibration saving
+        its results, say - so those survive the test and leak into every
+        test which follows in the session.  Registering them here with
+        their current values puts them back with everything else, and
+        does so even if the test raises.
+        """
+        values = self.get_parameters(names)
+        already = [p[0] for p in self.context_get().parameters]
+        for name in names:
+            if name not in already:
+                self.context_get().parameters.append((name, values[name]))
+
     def context_push(self):
         """Save a copy of the parameters."""
         context = Context()
@@ -6760,6 +7057,8 @@ class TestSuite(abc.ABC):
     def context_pop(self, process_interaction_allowed=True, hooks_already_removed=False):
         """Set parameters to origin values in reverse order."""
         dead = self.contexts.pop()
+        if dead.original_speedup is not None:
+            self.speedup = dead.original_speedup
         # remove hooks first; these hooks can raise exceptions which
         # we really don't want...
         if not hooks_already_removed:
@@ -10965,6 +11264,19 @@ Also, ignores heartbeats not from our target system'''
         if herrors > header_errors:
             raise NotAchievedException("Error parsing log file %s, %d header errors" % (logname, herrors))
 
+    def assert_current_log_filesizes(self, sizes):
+        file_list = self.download_full_log_list(LOG_ENTRY_sanity_check=False)
+        self.progress(f"List: {file_list}")
+        for file_id, minmax in sizes.items():
+            (minsize, maxsize) = minmax
+            if file_id not in file_list:
+                raise NotAchievedException(f"{file_id} not in downloaded log info")
+            m = file_list[file_id]
+            if m.size < minsize:
+                raise NotAchievedException(f"{file_id} too small; got={m.size} want>{minsize}")
+            if m.size > maxsize:
+                raise NotAchievedException(f"{file_id} too large; got={m.size} want<{maxsize}")
+
     def DataFlashErase(self):
         """Test that erasing the dataflash chip and creating a new log is error free"""
         mavproxy = self.start_mavproxy()
@@ -12799,6 +13111,32 @@ switch value'''
 
     def dfreader_for_current_onboard_log(self):
         return self.dfreader_for_path(self.current_onboard_log_filepath())
+
+    def assert_EV_count(self, event_id, count):
+        '''assert the current onboard log holds count instances of EV.Id=event_id'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        found = 0
+        while True:
+            m = dfreader.recv_match(type='EV')
+            if m is None:
+                break
+            if m.Id == event_id:
+                found += 1
+        if found != count:
+            raise NotAchievedException("Want %u EV.Id=%u, got %u" %
+                                       (count, event_id, found))
+        self.progress("Found %u EV.Id=%u as expected" % (found, event_id))
+
+    def max_dfreader_field(self, msg_type, field):
+        '''largest value a field of msg_type reached in the current onboard log'''
+        dfreader = self.dfreader_for_current_onboard_log()
+        ret = 0
+        while True:
+            m = dfreader.recv_match(type=msg_type)
+            if m is None:
+                break
+            ret = max(ret, getattr(m, field))
+        return ret
 
     def assert_log_has_no_dropped_blocks(self, path):
         '''check the DSF.Dp (dropped-block) counter in a dataflash log is
@@ -14712,6 +15050,232 @@ switch value'''
             if dist < 1:
                 break
 
+    def msp_connect(self, port, timeout=30):
+        '''connect an MSP client to the autopilot's (TCP server) MSP port'''
+        msp = MSP_Generic(("127.0.0.1", port))
+        tstart = self.get_sim_time()
+        while not msp.connected:
+            if self.get_sim_time_cached() - tstart > timeout:
+                raise NotAchievedException("Failed to connect to MSP port")
+            msp.connect()
+        return msp
+
+    def osd_displayport_rows(self, msp, rows, duration):
+        '''collect the text drawn on the given rows over MSP DisplayPort for a
+        while, one entry per screen drawn'''
+        MSP_DISPLAYPORT = 182
+        CLEAR_SCREEN = 2
+        WRITE_STRING = 3
+        DRAW_SCREEN = 4
+        screens = []
+        current = {}
+        cleared = []
+
+        def collect(cmd, data):
+            if cmd != MSP_DISPLAYPORT or len(data) == 0:
+                return
+            if data[0] == CLEAR_SCREEN:
+                current.clear()
+                cleared.append(True)
+            elif not cleared:
+                # joined part way through a screen, which would read as a flash
+                return
+            elif data[0] == WRITE_STRING and len(data) >= 4 and data[1] in rows:
+                row = current.setdefault(data[1], {})
+                for i, c in enumerate(data[4:]):
+                    row[data[2] + i] = c
+            elif data[0] == DRAW_SCREEN:
+                screens.append({r: bytes(current.get(r, {}).get(c, 32) for c in range(60)).rstrip()
+                                for r in rows})
+        msp.callback = collect
+        tstart = self.get_sim_time()
+        try:
+            while self.get_sim_time_cached() - tstart < duration:
+                msp.update()
+                self.drain_mav(quiet=True)
+        finally:
+            msp.callback = None
+        if len(screens) == 0:
+            raise NotAchievedException("no OSD screens drawn over MSP DisplayPort")
+        return screens
+
+    def wait_osd_ekf_lane(self, msp, row, want, flashing=False, timeout=30):
+        '''wait for an OSD EKF lane item to show the wanted text, optionally
+        checking the text then goes and comes back as it flashes'''
+        tstart = self.get_sim_time()
+        texts = []
+        while True:
+            if self.get_sim_time_cached() - tstart > timeout:
+                raise NotAchievedException("OSD row %u never showed %s%s" %
+                                           (row, want, " flashing" if flashing else ""))
+            texts.extend(s[row] for s in self.osd_displayport_rows(msp, [row], 2))
+            self.progress("OSD row %u: %s" % (row, texts[-1]))
+            shown = [want in t for t in texts]
+            if not any(shown):
+                texts = []
+                continue
+            # screens from before the text first showed are not a flash, and
+            # a flash may run on into the next sample
+            first = shown.index(True)
+            texts = texts[first:]
+            shown = shown[first:]
+            if not flashing:
+                return texts
+            if False in shown and True in shown[shown.index(False):]:
+                return texts
+
+    def msp_send_until_parameters(self, msp, frames, parameters, timeout=30):
+        '''re-send the given (command, payload) MSP frames until the parameters
+        reach the wanted values; a frame sent before the link is fully up early
+        in boot can be dropped, just as a real client would resend'''
+        tstart = self.get_sim_time()
+        while True:
+            for (cmd, data) in frames:
+                msp.send_command(cmd, data)
+            try:
+                self.wait_parameter_values(parameters, timeout=3)
+                return
+            except NotAchievedException:
+                if self.get_sim_time_cached() - tstart > timeout:
+                    raise
+
+    def wait_msp_vtx_config(self, msp, want, timeout=10):
+        '''poll MSP_VTX_CONFIG until the fields in want match the FC's reply,
+        draining stale buffered frames; the reply is the config the FC hands a
+        VTX/goggle: type, band/channel one based, power index, pitmode, freq and
+        deviceIsReady (gated on the boot handshake)'''
+        MSP_VTX_CONFIG = 88
+        last = {}
+
+        def collect(cmd, data):
+            if cmd == MSP_VTX_CONFIG and len(data) >= 8:
+                (t, band, channel, power, pitmode, freq, ready) = struct.unpack("<BBBBBHB", bytes(data[:8]))
+                last['cfg'] = {
+                    "type": t, "band": band, "channel": channel, "power": power,
+                    "pitmode": pitmode, "freq": freq, "deviceIsReady": ready,
+                }
+        msp.callback = collect
+        tstart = self.get_sim_time()
+        try:
+            while True:
+                if self.get_sim_time_cached() - tstart > timeout:
+                    raise NotAchievedException("MSP_VTX_CONFIG never matched %s (last %s)" % (want, last.get('cfg')))
+                msp.send_command(MSP_VTX_CONFIG)
+                msp.update()
+                cfg = last.get('cfg')
+                if cfg is not None and all(cfg[k] == v for k, v in want.items()):
+                    return cfg
+        finally:
+            msp.callback = None
+
+    def check_msp_set_vtx_config(self, msp):
+        '''drive MSP_SET_VTX_CONFIG over the supplied client and check the
+        configured VTX band/channel/frequency/power update accordingly'''
+        MSP_SET_VTX_CONFIG = 89
+        MSP_SET_VTXTABLE_POWERLEVEL = 228
+
+        # before the air unit uploads its own config the FC advertises not-ready,
+        # which is what makes a betaflight-style VTX run its boot handshake
+        self.progress("Checking the FC reports not-ready before the handshake")
+        self.wait_msp_vtx_config(msp, {"deviceIsReady": 0})
+
+        # the leading field is overloaded: a value <= 63 encodes band/channel
+        # as band_index*8 + channel_index (both zero based internally), so
+        # 4*8 + 3 selects Raceband (band 4) channel 4 (index 3) == 5769MHz.
+        # the power index is one based, so 2 maps to the second level (100mW).
+        self.progress("Setting band/channel via the legacy encoded field")
+        self.msp_send_until_parameters(msp, [
+            (MSP_SET_VTX_CONFIG, struct.pack("<HBB", 4*8 + 3, 2, 0)),
+        ], {
+            "VTX_BAND": 4,
+            "VTX_CHANNEL": 3,
+            "VTX_FREQ": 5769,
+            "VTX_POWER": 100,
+        })
+
+        # the API 1.42 standalone band/channel fields are one based on the wire
+        # with band 0 meaning "use raw frequency"; band 3 channel 2 selects
+        # Band E (index 2) channel 2 (index 1) == 5685MHz. power index 1 == 25mW.
+        self.progress("Setting band/channel via the 1.42 standalone fields")
+        payload = struct.pack("<H", 0)          # legacy field, superseded below
+        payload += struct.pack("<BB", 1, 0)     # power index, pitmode
+        payload += struct.pack("<B", 0)         # lowPowerDisarm
+        payload += struct.pack("<H", 0)         # pitModeFreq
+        payload += struct.pack("<BBH", 3, 2, 0)  # band, channel (one based), freq
+        self.msp_send_until_parameters(msp, [(MSP_SET_VTX_CONFIG, payload)], {
+            "VTX_BAND": 2,
+            "VTX_CHANNEL": 1,
+            "VTX_FREQ": 5685,
+            "VTX_POWER": 25,
+        })
+
+        # a VTX declares its own power table (here HDZero-like 25/200/500mW) one
+        # level at a time. The power value is dBm, as betaflight power tables are
+        # (14dBm=25mW, 23dBm=200mW, 27dBm=500mW). Once learned the power index
+        # maps to those values instead of the default plan, so index 3 selects
+        # 500mW not 800mW.
+        self.progress("Learning a VTX power table then selecting from it")
+        frames = [(MSP_SET_VTXTABLE_POWERLEVEL, struct.pack("<BHB", level, dbm, 0))
+                  for level, dbm in [(1, 14), (2, 23), (3, 27)]]  # [u8 level][u16 dBm][u8 label len]
+        frames.append((MSP_SET_VTX_CONFIG, struct.pack("<HBB", 4*8 + 3, 3, 0)))
+        self.msp_send_until_parameters(msp, frames, {
+            "VTX_FREQ": 5769,
+            "VTX_POWER": 500,
+        })
+
+        # pitmode is carried as a byte alongside power in the same message and
+        # maps to the VTX pitmode option (VTX_OPTIONS bit 0)
+        self.progress("Enabling then disabling pitmode")
+        self.msp_send_until_parameters(msp, [
+            (MSP_SET_VTX_CONFIG, struct.pack("<HBB", 4*8 + 3, 3, 1)),
+        ], {"VTX_OPTIONS": 1})
+        self.msp_send_until_parameters(msp, [
+            (MSP_SET_VTX_CONFIG, struct.pack("<HBB", 4*8 + 3, 3, 0)),
+        ], {"VTX_OPTIONS": 0})
+
+        # the FC answers MSP_VTX_CONFIG with the live config and, now that the
+        # VTX has uploaded its own config, reports ready. band/channel are one
+        # based on the wire: Raceband (index 4) channel 4 (index 3) == 5769MHz,
+        # power index 3 selects the learned 500mW level.
+        self.progress("Checking the FC reports its config back over MSP_VTX_CONFIG")
+        self.wait_msp_vtx_config(msp, {
+            "type": 5, "band": 5, "channel": 4, "power": 3,
+            "pitmode": 0, "freq": 5769, "deviceIsReady": 1,
+        })
+
+    def MSPVTXConfig(self):
+        '''test changing VTX band/channel/frequency via MSP_SET_VTX_CONFIG'''
+        self.set_parameters({
+            "SERIAL5_PROTOCOL": 32,  # MSP
+            "VTX_ENABLE": 1,
+        })
+        port = self.spare_network_port()
+        self.customise_SITL_commandline([
+            "--serial5=tcp:%u" % port  # serial5 listens on localhost port
+        ])
+        self.wait_ready_to_arm()
+        msp = self.msp_connect(port)
+        self.check_msp_set_vtx_config(msp)
+        self.reboot_sitl()
+
+    def MSPDisplayPortVTXConfig(self):
+        '''test changing VTX band/channel/frequency via MSP_SET_VTX_CONFIG on
+        the MSP DisplayPort link, which is serviced by the OSD task rather than
+        the MSP thread'''
+        self.set_parameters({
+            "SERIAL5_PROTOCOL": 42,  # MSP DisplayPort
+            "OSD_TYPE": 5,           # MSP DisplayPort
+            "VTX_ENABLE": 1,
+        })
+        port = self.spare_network_port()
+        self.customise_SITL_commandline([
+            "--serial5=tcp:%u" % port  # serial5 listens on localhost port
+        ])
+        self.wait_ready_to_arm()
+        msp = self.msp_connect(port)
+        self.check_msp_set_vtx_config(msp)
+        self.reboot_sitl()
+
     def CRSF(self):
         '''Test RC CRSF'''
         self.context_push()
@@ -14742,6 +15306,416 @@ switch value'''
         self.reboot_sitl()
         if ex is not None:
             raise ex
+
+    def CRSFResync(self):
+        '''Test CRSF frames get through junk bytes and frames split across reads'''
+        self.set_parameters({
+            "SERIAL5_PROTOCOL": 23, # serial5 is RCIN input
+            "RC_PROTOCOLS": 512,    # CRSF only, so SITL's own RC input doesn't take over
+        })
+        port = self.spare_network_port()
+        self.customise_SITL_commandline([
+            "--serial5=tcp:%u" % port # serial5 is a localhost port the receiver connects to
+        ])
+        self.context_set_message_rate_hz('RC_CHANNELS', 10)
+        # sim time moves on at each SYSTEM_TIME, and bytes go with each step
+        self.context_set_message_rate_hz('SYSTEM_TIME', 50)
+        crsf = CRSF(("127.0.0.1", port))
+        tstart = self.get_sim_time_cached()
+        while not crsf.connect():
+            if self.get_sim_time_cached() - tstart > 10:
+                raise NotAchievedException("Could not connect to the CRSF port")
+            self.drain_mav()
+
+        ping_frame = CRSF.frame_bytes(CRSF.FRAMETYPE_DEVICE_PING,
+                                      [CRSF.ADDRESS_FLIGHT_CONTROLLER, CRSF.ADDRESS_RADIO_TRANSMITTER])
+        # name and its terminator, serial number, hardware id and a software id
+        # ending in firmware 6.66, then parameter count and version
+        receiver_info = list(b"CRSF RX") + [0] * 11 + [6, 66, 0, 0]
+        device_info_frame = CRSF.frame_bytes(CRSF.FRAMETYPE_DEVICE_INFO,
+                                             [CRSF.ADDRESS_FLIGHT_CONTROLLER, CRSF.ADDRESS_RECEIVER] + receiver_info)
+        rng = random.Random(1)
+        sync = CRSF.ADDRESS_FLIGHT_CONTROLLER
+
+        def noise(n):
+            return bytes(rng.choice([x for x in range(256) if x != sync]) for _ in range(n))
+
+        def junk_before(frame):
+            '''noise, stray sync bytes, impossible lengths, or a false header
+            whose length ends it inside the frame behind it and whose CRC
+            fails, so the parser always resyncs on that frame within the bytes
+            sent with it'''
+            kind = rng.randrange(6)
+            if kind == 0:
+                return b""
+            if kind == 1:
+                return noise(rng.randrange(1, 8))
+            if kind == 2:
+                return bytes([sync])
+            if kind == 3:
+                return bytes([sync, 0xFF])
+            if kind == 4:
+                return bytes([sync, 0x01])
+            while True:
+                filler = noise(rng.randrange(0, 6))
+                length = rng.randrange(len(filler) + 1, len(filler) + len(frame) + 1)
+                false_frame = (bytes([sync, length]) + filler + frame)[:length + 2]
+                if 2 <= length <= CRSF.MAX_FRAME_LENGTH and \
+                   CRSF.crc8_dvb_s2(false_frame[2:-1]) != false_frame[-1]:
+                    return bytes([sync, length]) + filler
+
+        counts = {"pings": 0, "replies": 0}
+        state = {"last_step_time": None, "last_ping_time": None, "pending": b""}
+
+        def send_until(done, what, timeout, pwm, ping):
+            '''each step, send junk and an RC frame at pwm, or with ping set a
+            ping every 0.5s, until done() is true. Each step's bytes are cut in
+            two and the second part goes with the next step's, so frames are
+            carried across reads. A step at speedup 1 is about 20ms, inside
+            CRSF's 50ms frame timeout, and no frame waits longer than a step'''
+            tstart = self.get_sim_time_cached()
+            while not done():
+                now = self.get_sim_time_cached()
+                if now - tstart > timeout:
+                    raise NotAchievedException("No %s" % what)
+                if now != state["last_step_time"]:
+                    state["last_step_time"] = now
+                    if ping and (state["last_ping_time"] is None or now - state["last_ping_time"] >= 0.5):
+                        frame = ping_frame
+                        state["last_ping_time"] = now
+                        counts["pings"] += 1
+                    else:
+                        frame = CRSF.rc_frame_bytes(pwm)
+                    data = junk_before(frame) + frame
+                    cut = rng.randrange(1, len(data))
+                    crsf.do_write(state["pending"] + data[:cut])
+                    state["pending"] = data[cut:]
+                for (frame_type, payload) in crsf.read_frames():
+                    if frame_type == CRSF.FRAMETYPE_DEVICE_INFO:
+                        counts["replies"] += 1
+                    elif frame_type == CRSF.FRAMETYPE_DEVICE_PING and payload[0] == CRSF.ADDRESS_RECEIVER:
+                        # answer the flight controller's version ping as a receiver
+                        # does, after the frame being sent; while it goes
+                        # unanswered, the flight controller keeps sending it and it
+                        # can take the place of the reply to a ping
+                        state["pending"] += device_info_frame
+                self.drain_mav()
+
+        def rc_at(pwm):
+            m = self.mav.messages.get('RC_CHANNELS')
+            return m is not None and m.chan1_raw == pwm
+
+        # the frames that detect CRSF are parsed a byte at a time, so a new
+        # value has to arrive after detection to come through the block path
+        send_until(lambda: rc_at(1700), "RC at 1700us through the junk", 20, 1700, False)
+        send_until(lambda: rc_at(1300), "RC at 1300us through the junk once detected", 10, 1300, False)
+        tstart = self.get_sim_time_cached()
+        send_until(lambda: self.get_sim_time_cached() - tstart > 10, "10s of frames", 20, 1300, True)
+        # no more pings, so the reply to the last can arrive
+        tstart = self.get_sim_time_cached()
+        send_until(lambda: self.get_sim_time_cached() - tstart > 1, "1s of frames", 10, 1300, False)
+        self.progress("%u pings, %u device info replies" % (counts["pings"], counts["replies"]))
+        if counts["replies"] != counts["pings"]:
+            raise NotAchievedException("%u of %u pings answered" % (counts["replies"], counts["pings"]))
+
+    def crsf_parameter_menu_check(self, script=None):
+        '''read every CRSF parameter menu field and check each is in a folder
+        that lists it.  Returns the fields, a function to send a request
+        and wait for the reply, and the CRSF connection'''
+        if script is not None:
+            self.install_example_script_context(script)
+            self.set_parameter("SCR_ENABLE", 1)
+        self.set_parameters({
+            "SERIAL5_PROTOCOL": 23, # serial5 is RCIN input
+            "RC_PROTOCOLS": 512,    # CRSF only, so SITL's own RC input doesn't take over
+        })
+        port = self.spare_network_port()
+        self.customise_SITL_commandline([
+            "--serial5=tcp:%u" % port # serial5 reads from to localhost port
+        ])
+        crsf = CRSF(("127.0.0.1", port))
+        crsf.connect()
+
+        # an RC frame each time sim time moves on, which is at each SYSTEM_TIME.
+        # At 50Hz the port never goes the 150ms without a frame after which the
+        # CRSF receiver counts as lost and the port is set up again, dropping
+        # what was sent to it.  Sent as fast as the loop runs they fill the
+        # socket before SITL has accepted the connection, and the write fails
+        self.context_set_message_rate_hz('SYSTEM_TIME', 50)
+        last_rc_frame_time = None
+
+        def send_rc_frame():
+            nonlocal last_rc_frame_time
+            now = self.get_sim_time_cached()
+            if now != last_rc_frame_time:
+                crsf.write_rc_frame()
+                last_rc_frame_time = now
+
+        self.progress("Sending CRSF RC frames until RC input is decoded as CRSF")
+        self.context_collect('STATUSTEXT')
+        tstart = self.get_sim_time_cached()
+        while not any("decoding CRSF" in m.text for m in self.context_collection('STATUSTEXT')):
+            if self.get_sim_time_cached() - tstart > 10:
+                raise NotAchievedException("RC input not decoded as CRSF")
+            send_rc_frame()
+            crsf.read_frames()
+            self.drain_mav()
+
+        def request(frame_type, payload, want_type, check, what, want_reply=True):
+            # the request is resent every 0.5s until answered, as a transmitter
+            # does.  With want_reply False it is sent once and fails if answered
+            crsf.read_frames()  # replies to earlier requests are not for this one
+            tstart = self.get_sim_time_cached()
+            tsent = None
+            while self.get_sim_time_cached() - tstart < 10:
+                now = self.get_sim_time_cached()
+                if tsent is None or (want_reply and now - tsent >= 0.5):
+                    crsf.write_extended_frame(frame_type, CRSF.ADDRESS_FLIGHT_CONTROLLER, CRSF.ADDRESS_RADIO, payload)
+                    tsent = now
+                # a reply can go out after each frame SITL receives
+                send_rc_frame()
+                self.drain_mav()
+                for (t, p) in crsf.read_frames():
+                    if t == want_type and len(p) >= 4 and p[0] == CRSF.ADDRESS_RADIO and check(p):
+                        if not want_reply:
+                            raise NotAchievedException("Unexpected reply to %s" % what)
+                        return p
+            if want_reply:
+                raise NotAchievedException("No reply to %s" % what)
+            return None
+
+        info = request(CRSF.FRAMETYPE_DEVICE_PING, [], CRSF.FRAMETYPE_DEVICE_INFO, lambda p: True, "ping")
+        name_end = info.index(0, 2)
+        field_count = info[name_end + 13]
+        self.progress("Device %s has %u fields" % (info[2:name_end].decode(), field_count))
+
+        fields = {}
+        for field_id in range(field_count + 1):
+            p = request(CRSF.FRAMETYPE_PARAMETER_READ, [field_id, 0], CRSF.FRAMETYPE_PARAMETER_ENTRY,
+                        lambda p: p[2] == field_id, "field %u" % field_id)
+            parent = p[4]
+            field_type = p[5] & 0x7F
+            name_end = p.index(0, 6)
+            name = p[6:name_end].decode()
+            children = []
+            if field_type == CRSF.FIELD_FOLDER:
+                children = list(p[name_end+1:p.index(0xFF, name_end+1)])
+            self.progress("field %u: %s parent=%u children=%s" % (field_id, name, parent, children))
+            fields[field_id] = (name, parent, children)
+
+        for field_id in range(1, field_count + 1):
+            parent = fields[field_id][1]
+            if parent not in fields or field_id not in fields[parent][2]:
+                raise NotAchievedException("field %u has parent %u which does not list it" % (field_id, parent))
+        for field_id, (name, parent, children) in fields.items():
+            for child in children:
+                if child not in fields:
+                    raise NotAchievedException("field %u lists %u, beyond the %u fields" % (field_id, child, field_count))
+        return (fields, request, crsf)
+
+    def crsf_field_named(self, fields, name, parent=None):
+        '''return the number of the CRSF menu field called name, in the folder
+        called parent if given'''
+        for (field, (field_name, field_parent, children)) in fields.items():
+            if field_name == name and (parent is None or fields[field_parent][0] == parent):
+                return field
+        raise NotAchievedException("No CRSF menu field called %s" % name)
+
+    def crsf_field_hidden(self, request, field_id):
+        '''return True if the CRSF menu field is hidden from the menu'''
+        p = request(CRSF.FRAMETYPE_PARAMETER_READ, [field_id, 0], CRSF.FRAMETYPE_PARAMETER_ENTRY,
+                    lambda p: p[2] == field_id, "field %u" % field_id)
+        return bool(p[5] & CRSF.FIELD_HIDDEN)
+
+    def CRSFParameterMenu(self):
+        '''Test every CRSF parameter menu entry can be read and is in a folder that lists it'''
+        (fields, request, crsf) = self.crsf_parameter_menu_check()
+        # the root, the Parameters folder and the 18 OSD parameter slots
+        if len(fields) != 20:
+            raise NotAchievedException("Expected 20 fields, got %u" % len(fields))
+        # with no scripted menu the menu opens straight onto the OSD parameters,
+        # and the Parameters folder is answered but hidden
+        params = self.crsf_field_named(fields, "Parameters")
+        if not self.crsf_field_hidden(request, params):
+            raise NotAchievedException("Parameters folder shown with no scripted menu")
+        for field_id in range(params + 1, len(fields)):
+            if fields[field_id][1] != 0:
+                raise NotAchievedException("OSD parameter field %u is not in the root" % field_id)
+
+    def CRSFParameterMenuScripted(self):
+        '''Test the CRSF parameter menu with the scripted example menu'''
+        (fields, request, crsf) = self.crsf_parameter_menu_check(script="crsf-menu.lua")
+        names = [name for (name, parent, children) in fields.values()]
+        for want in "Example Menu", "Another Menu", "Beethoven":
+            if want not in names:
+                raise NotAchievedException("%s not in the menu" % want)
+        # beside a scripted menu the OSD parameters are in a Parameters folder at the root
+        params = self.crsf_field_named(fields, "Parameters", parent="root")
+        if self.crsf_field_hidden(request, params):
+            raise NotAchievedException("Parameters folder hidden beside a scripted menu")
+        osd_params = [f for f in fields if f != params and fields[f][1] == params]
+        if len(osd_params) != 18:
+            raise NotAchievedException("Expected 18 OSD parameter fields in the Parameters folder, got %u" % len(osd_params))
+
+        # writes come back through the script, which echoes the value
+        options = self.crsf_field_named(fields, "Options", parent="Example Menu")
+        self.context_collect('STATUSTEXT')
+        request(CRSF.FRAMETYPE_PARAMETER_WRITE, [options, 2], CRSF.FRAMETYPE_PARAMETER_WRITE,
+                lambda p: p[2] == options, "write to field %u" % options)
+        self.wait_statustext("Selected option 2", check_context=True)
+
+    def CRSFParameterMenuUnusedSlot(self):
+        '''Test a CRSF parameter menu slot with no parameter is answered but hidden'''
+        INFO_HIDDEN = CRSF.FIELD_INFO | CRSF.FIELD_HIDDEN
+
+        # a key that matches no parameter, as after loading another vehicle's parameters
+        self.set_parameter("OSD5_PARAM1_KEY", -1)
+        (fields, request, crsf) = self.crsf_parameter_menu_check()
+        # the root, the Parameters folder and the 18 OSD parameter slots
+        if len(fields) != 20:
+            raise NotAchievedException("Expected 20 fields, got %u" % len(fields))
+
+        p = request(CRSF.FRAMETYPE_PARAMETER_READ, [2, 0], CRSF.FRAMETYPE_PARAMETER_ENTRY, lambda p: p[2] == 2, "field 2")
+        if p[5] != INFO_HIDDEN:
+            raise NotAchievedException("field 2 has type 0x%02x, want hidden INFO" % p[5])
+
+        # a write to it has nothing to set, and the next slot, which has a
+        # parameter, still reads back and is not hidden
+        crsf.write_extended_frame(CRSF.FRAMETYPE_PARAMETER_WRITE, CRSF.ADDRESS_FLIGHT_CONTROLLER, CRSF.ADDRESS_RADIO, [2, 1])
+        p = request(CRSF.FRAMETYPE_PARAMETER_READ, [3, 0], CRSF.FRAMETYPE_PARAMETER_ENTRY, lambda p: p[2] == 3,
+                    "field 3 after a write to field 2")
+        if p[5] & CRSF.FIELD_HIDDEN:
+            raise NotAchievedException("field 3 has type 0x%02x, want a visible field" % p[5])
+
+    def CRSFParameterMenuChunks(self):
+        '''Test scripted CRSF menu fields come back whole however many chunks they need'''
+        # lengths around one and two chunks of 55 bytes
+        lengths = [10, 54, 55, 56, 109, 110, 111]
+        self.install_script_content_context("crsf-chunks.lua", """
+local INFO = %u
+local menu = crsf:add_menu("Chunks")
+for _, len in ipairs({%s}) do
+    local name = "L" .. len
+    menu:add_parameter(string.pack(">Bzz", INFO, name, string.rep("x", len - 3 - #name)))
+end
+
+local function update()
+    -- reads the script does not ask for are answered directly
+    crsf:get_menu_event(2)
+    return update, 100
+end
+
+return update, 1000
+""" % (CRSF.FIELD_INFO, ", ".join([str(length) for length in lengths])))
+        self.set_parameter("SCR_ENABLE", 1)
+        (fields, request, crsf) = self.crsf_parameter_menu_check()
+
+        for length in lengths:
+            name = "L%u" % length
+            field = self.crsf_field_named(fields, name)
+            want = bytes([CRSF.FIELD_INFO]) + name.encode() + b"\0" + b"x" * (length - 3 - len(name)) + b"\0"
+            p = request(CRSF.FRAMETYPE_PARAMETER_READ, [field, 0], CRSF.FRAMETYPE_PARAMETER_ENTRY,
+                        lambda p: p[2] == field, "%s chunk 0" % name)
+            chunks = p[3] + 1
+            # each chunk carries up to 55 bytes, the first after the parent folder
+            want_chunks = max(1, (length + 54) // 55)
+            if chunks != want_chunks:
+                raise NotAchievedException("%s is sent in %u chunks, want %u" % (name, chunks, want_chunks))
+            got = p[5:]  # after the parent folder, which only the first chunk carries
+            for chunk in range(1, chunks):
+                p = request(CRSF.FRAMETYPE_PARAMETER_READ, [field, chunk], CRSF.FRAMETYPE_PARAMETER_ENTRY,
+                            lambda p: p[2] == field and p[3] == chunks - 1 - chunk, "%s chunk %u" % (name, chunk))
+                got += p[4:]
+            self.progress("%s: %u bytes in %u chunks" % (name, len(got), chunks))
+            if bytes(got) != want:
+                raise NotAchievedException("%s came back as %s" % (name, bytes(got)))
+
+        # a chunk past the end is not answered.  Ask about the field read first,
+        # so that no late reply to an earlier read of it can still arrive
+        field = self.crsf_field_named(fields, "L10")
+        request(CRSF.FRAMETYPE_PARAMETER_READ, [field, 1], CRSF.FRAMETYPE_PARAMETER_ENTRY, lambda p: p[2] == field,
+                "L10 chunk 1", want_reply=False)
+
+    def CRSFParameterMenuLongCommandReply(self):
+        '''Test a scripted CRSF command reply too long for its frame is refused'''
+        START = 1
+        PROGRESS = 2
+
+        # a command entry packs to 8 bytes plus its info string, and 55 bytes
+        # fit after the parent folder in a settings entry
+        self.install_script_content_context("crsf-command.lua", """
+local COMMAND = %u
+local PROGRESS = %u
+local PARAMETER_WRITE = 2
+
+local function command_entry(status, info)
+    return string.pack(">BzBBz", COMMAND, "Cmd", status, 10, info)
+end
+
+local menu = crsf:add_menu("Long")
+local cmd = menu:add_parameter(command_entry(0, "Ready"))
+local writes = 0
+
+local function update()
+    local param, _, events = crsf:get_menu_event(PARAMETER_WRITE)
+    if (events & PARAMETER_WRITE) ~= 0 and param == cmd:id() then
+        -- the first reply is one byte too long, the next just fits
+        writes = writes + 1
+        local info_len = writes == 1 and 48 or 47
+        if not crsf:send_write_response(command_entry(PROGRESS, string.rep("x", info_len))) then
+            gcs:send_text(6, string.format("reply of %%d bytes refused", 8 + info_len))
+        end
+    end
+    return update, 100
+end
+
+return update, 1000
+""" % (CRSF.FIELD_COMMAND, PROGRESS))
+        self.set_parameter("SCR_ENABLE", 1)
+        (fields, request, crsf) = self.crsf_parameter_menu_check()
+
+        field = self.crsf_field_named(fields, "Cmd")
+        reply = bytes([CRSF.FIELD_COMMAND]) + b"Cmd\0" + bytes([PROGRESS, 10]) + b"x" * 47 + b"\0"
+        # the write is resent until answered, so the refused reply is followed by one that fits
+        p = request(CRSF.FRAMETYPE_PARAMETER_WRITE, [field, START], CRSF.FRAMETYPE_PARAMETER_ENTRY,
+                    lambda p: p[2] == field and len(p) > 10 and p[10] == PROGRESS, "the command")
+        if p[4] != fields[field][1] or bytes(p[5:]) != reply:
+            raise NotAchievedException("reply came back as %s" % bytes(p[4:]))
+        self.wait_statustext("reply of 56 bytes refused", check_context=True)
+
+    def CRSFParameterMenuFolderLimits(self):
+        '''Test scripted CRSF menus are limited to what their folders hold'''
+        self.install_script_content_context("crsf-folders.lua", """
+local INFO = %u
+local menu = crsf:add_menu("Sixteen chars ab")
+local entries = 0
+for i = 1, 40 do
+    if menu:add_parameter(string.pack(">Bzz", INFO, "P" .. i, "")) then
+        entries = entries + 1
+    end
+end
+local menus = 1
+for i = 1, 60 do
+    if crsf:add_menu("M" .. i) then
+        menus = menus + 1
+    end
+end
+gcs:send_text(6, string.format("added %%d entries and %%d menus", entries, menus))
+
+local function update()
+    -- reads the script does not ask for are answered directly
+    crsf:get_menu_event(2)
+    return update, 100
+end
+
+return update, 1000
+""" % CRSF.FIELD_INFO)
+        self.set_parameter("SCR_ENABLE", 1)
+        self.context_collect('STATUSTEXT')
+        self.crsf_parameter_menu_check()
+        # a menu with a 16 character name has room for 36 children, and the
+        # root folder for the Parameters folder and 47 menus
+        self.wait_statustext("added 36 entries and 47 menus", check_context=True)
 
     def CompassPrearms(self):
         '''test compass prearm checks'''
