@@ -219,6 +219,7 @@ void NavEKF3_core::InitialiseVariables()
     flowMeaTime_ms = 0;
     flowRatesSum.zero();
     flowGyroRatesSum.zero();
+    flowQualitySum = 0;
     flowSampleCount = 0;
     flowSampleRecvTime_ms = 0;
     prevFlowFuseTime_ms = 0;
