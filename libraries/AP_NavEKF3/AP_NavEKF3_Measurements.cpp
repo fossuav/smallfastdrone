@@ -276,6 +276,7 @@ void NavEKF3_core::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f
         flowRatesSum.zero();
         flowGyroRatesSum.zero();
         flowBodyRateZSum = 0.0f;
+        flowQualitySum = 0;
         flowSampleCount = 0;
     }
     flowSampleRecvTime_ms = imuSampleTime_ms;
@@ -287,6 +288,7 @@ void NavEKF3_core::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f
         if (imuDataNew.delAngDT > 0.001f) {
             flowBodyRateZSum += imuDataNew.delAng.z / imuDataNew.delAngDT;
         }
+        flowQualitySum += rawFlowQuality;
         flowSampleCount++;
     }
 
@@ -300,15 +302,18 @@ void NavEKF3_core::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f
     Vector2f flowRates;
     Vector2f gyroRates = rawGyroRates;
     ftype bodyRateZ = 0.0f;
+    uint8_t flowQuality = rawFlowQuality;
     const bool haveUsableSample = (flowSampleCount > 0);
     if (haveUsableSample) {
         flowRates = flowRatesSum / flowSampleCount;
         gyroRates = flowGyroRatesSum / flowSampleCount;
         bodyRateZ = flowBodyRateZSum / flowSampleCount;
+        flowQuality = flowQualitySum / flowSampleCount;
     }
     flowRatesSum.zero();
     flowGyroRatesSum.zero();
     flowBodyRateZSum = 0.0f;
+    flowQualitySum = 0;
     flowSampleCount = 0;
 
     // The raw measurements need to be optical flow rates in radians/second averaged across the time since the last update
@@ -347,7 +352,7 @@ void NavEKF3_core::writeOptFlowMeas(const uint8_t rawFlowQuality, const Vector2f
         ofDataNew.altMin = altMin;
         // carry the sensor's own quality to the fusion time horizon, where it can be
         // matched against the sample it describes
-        ofDataNew.quality = rawFlowQuality;
+        ofDataNew.quality = flowQuality;
         // write flow rate measurements corrected for body rates
         ofDataNew.flowRadXYcomp.x = ofDataNew.flowRadXY.x + ofDataNew.bodyRadXYZ.x;
         ofDataNew.flowRadXYcomp.y = ofDataNew.flowRadXY.y + ofDataNew.bodyRadXYZ.y;
