@@ -1042,8 +1042,8 @@ void NavEKF3_core::FuseOptFlow(const of_elements &ofDataDelayed, bool really_fus
         (rngAtSensor_m * prevTnb.c.z < rngOnGnd + FLOW_FLOOR_RANGE_MARGIN_M)) {
         // within the NE velocity variance limit ConstrainVariances() applies
         const ftype landedVelVar = MIN(MAX(sq(MIN(frontend->_noaidHorizNoise, 1.0f)), stateStruct.velocity.xy().length_squared()), 1.0e3f);
-        Pmut[4][4] = MAX(P[4][4], landedVelVar);
-        Pmut[5][5] = MAX(P[5][5], landedVelVar);
+        P[4][4] = MAX(P[4][4], landedVelVar);
+        P[5][5] = MAX(P[5][5], landedVelVar);
     }
 #endif
 
