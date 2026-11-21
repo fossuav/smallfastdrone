@@ -1528,6 +1528,9 @@ void NavEKF3_core::selectHeightForFusion()
     if (rangeDataToFuse && !rangeDataDelayed.repeated) {
         rngNewReadingTime_ms = imuSampleTime_ms;
     }
+    if (rangeDataToFuse) {
+        rngAtSensor_m = rangeDataDelayed.rng;
+    }
 #endif
 
     // correct range data for the body frame position offset relative to the IMU
