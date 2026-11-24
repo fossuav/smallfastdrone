@@ -58,9 +58,11 @@ void NavEKF3_core::readRangeFinder(void)
                 // only consume downward facing rangefinder data
                 continue;
             }
+#if EK3_FEATURE_OPTFLOW_AGL_KF
             if (sensor->status() == AP_DAL_RangeFinder::Status::OutOfRangeLow) {
                 rngOutOfRangeLowTime_ms[sensorIndex] = imuSampleTime_ms;
             }
+#endif
             float range_distance = 0.0f;
             if (sensor->status() == AP_DAL_RangeFinder::Status::Good) {
                 // get the current range measurement
