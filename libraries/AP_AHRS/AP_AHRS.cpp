@@ -3587,7 +3587,7 @@ bool AP_AHRS::set_primary_core_for_configured_backend(uint8_t core_index)
         GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EKF primary core needs EKF3");
         return false;
     }
-    return ekf3.EKF3.setPrimaryCore(core_index, hal.util->get_soft_armed());
+    return EKF3.setPrimaryCore(core_index, hal.util->get_soft_armed());
 }
 #endif  // AP_AHRS_NAVEKF3_ENABLED
 
