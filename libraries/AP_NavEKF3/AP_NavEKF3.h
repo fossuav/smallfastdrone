@@ -24,6 +24,7 @@
 #include <AP_Param/AP_Param.h>
 #include <AP_NavEKF/AP_Nav_Common.h>
 #include <AP_NavEKF/AP_NavEKF_Source.h>
+#include "AP_NavEKF3_feature.h"
 
 class NavEKF3_core;
 class EKFGSF_yaw;
@@ -503,7 +504,9 @@ private:
     AP_Int32 _options;              // bit mask of processing options
     AP_Float _aglKfVelMaxSpd;       // maximum horizontal speed for AGL KF vertical velocity fusion (m/s)
     AP_Int16 _flowQualMin;          // flow quality below which a lockout is not recovered by a reset
+#if EK3_FEATURE_OPTFLOW_AGL_KF
     AP_Float _aglKfAccelBiasPnse;   // AGL KF accel-Z bias state process noise : m/s/s/s
+#endif
 
     // enum for processing options
     enum class Option {

@@ -109,7 +109,9 @@ void NavEKF3_core::readRangeFinder(void)
 
                 // limit the measured range to be no less than the on-ground range
                 rangeDataNew.rng = MAX(storedRngMeas[sensorIndex][midIndex],rngOnGnd);
+#if EK3_FEATURE_OPTFLOW_AGL_KF
                 rangeDataNew.onFloor = storedRngMeas[sensorIndex][midIndex] <= rngOnGnd;
+#endif
                 // a backend reports its last reading until the next arrives, and a reading stays in the median's
                 // window for three samples, so the median can be the reading either of the last two samples was.
                 // A log from before reading times were kept counts every sample. Of equal ranges the median is

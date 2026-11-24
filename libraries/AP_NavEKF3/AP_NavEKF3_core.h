@@ -671,7 +671,9 @@ private:
     struct range_elements : EKF_obs_element_t {
         ftype       rng;            // distance measured by the range sensor (m)
         uint8_t     sensor_idx;     // integer either 0 or 1 uniquely identifying up to two range sensors
+#if EK3_FEATURE_OPTFLOW_AGL_KF
         bool        onFloor;        // the reading was at or below the on-ground range before the position offset correction
+#endif
         bool        repeated;       // true when the median is a reading one of the sensor's last two samples was, as while its backend holds one
     };
 
