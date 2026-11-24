@@ -2,6 +2,7 @@
 
 #include <AP_Logger/LogStructure.h>
 #include <AP_AHRS/AP_AHRS_config.h>
+#include "AP_NavEKF3_feature.h"
 
 #define LOG_IDS_FROM_NAVEKF3 \
     LOG_XKF0_MSG, \
@@ -476,6 +477,14 @@ struct PACKED log_XKV {
     float v11;
 };
 
+#if EK3_FEATURE_OPTFLOW_AGL_KF
+#define LOG_STRUCTURE_FROM_NAVEKF3_XKFA \
+    { LOG_XKFA_MSG, sizeof(log_XKFA), \
+      "XKFA","QBffffffBBfB","TimeUS,C,HAgl,VAgl,HAglStd,VAglStd,Bias,BiasStd,Valid,VFuse,VTR,VHold", "s#mnmnoo----", "F-----------", true },
+#else
+#define LOG_STRUCTURE_FROM_NAVEKF3_XKFA
+#endif
+
 #if HAL_NAVEKF3_AVAILABLE
 #define LOG_STRUCTURE_FROM_NAVEKF3        \
     { LOG_XKF0_MSG, sizeof(log_XKF0), \
@@ -490,8 +499,7 @@ struct PACKED log_XKV {
       "XKF4","QBcccccfffHBIHb","TimeUS,C,SV,SP,SH,SM,SVT,errRP,OFN,OFE,FS,TS,SS,GPS,PI", "s#------mm-----", "F-------??-----" , true }, \
     { LOG_XKF5_MSG, sizeof(log_XKF5), \
       "XKF5","QBBhhhcccCCffff","TimeUS,C,NI,FIX,FIY,AFI,HAGL,TOfs,RI,rng,Herr,eAng,eVel,ePos,BOf", "s#----m???mrnmm", "F-----BBBBB0000" , true }, \
-    { LOG_XKFA_MSG, sizeof(log_XKFA), \
-      "XKFA","QBffffffBBfB","TimeUS,C,HAgl,VAgl,HAglStd,VAglStd,Bias,BiasStd,Valid,VFuse,VTR,VHold", "s#mnmnoo----", "F-----------", true }, \
+    LOG_STRUCTURE_FROM_NAVEKF3_XKFA \
     { LOG_XKF7_MSG, sizeof(log_XKF7), \
       "XKF7","QBBB","TimeUS,C,FVC,FVU", "s#--", "F---", true }, \
     { LOG_XKFD_MSG, sizeof(log_XKFD), \
