@@ -17,6 +17,44 @@ reply exists") before acting on it.
 
 ## Current state
 
+- topup1 (2026-11-27, `SmallFastDrone-4.7.3-refresh5-topup1`, a fast-forward
+  over refresh5 and its promotion record), from AP-Review's round on the
+  rebased heads. Unflown.
+  - #35147 (`c55516064a`, `c0eb32127b`): the set at aiding start clears
+    #34941's tilt-withheld flow time when it counts as a fusion, as every
+    other flow fusion does, and the comment on its 5 s wait says that
+    time counts there. The comment commit was made by hand with the PR's
+    message: this stack keeps the block elsewhere.
+  - #33484 (`496414ea1a`, `f3569e4681`): the lockout test waits after
+    each disarm for that disarm's ARM record to reach the log, so its
+    reads see every row the flight logged. It calls master's
+    `wait_current_onboard_log_contains_message()` with the condition
+    #33484 adds; 4.7 has neither, so `496414ea1a` backports both (see
+    "Post-merge fixups"). The test is the PR tip's with this branch's
+    `alt_min` and `add_to_context` adaptations, and differs from the
+    beta's by the PR's change alone.
+  - #34292 (`8105b417ec`): the re-arm leg drifts to 2 m/s. On this branch
+    the leg does not run (the early return over #32768).
+  - #35280 (`50e12f48d2`): CRSFResync uses `ADDRESS_RADIO`. This branch's
+    CRSF class holds #34944's and #35280's constants once each, so only
+    `ADDRESS_RADIO_TRANSMITTER` goes.
+  - #34630, #35307 and #35312 were only restacked on #33484; nothing to
+    port.
+  - Replay (`--force-ekf3`) of the 423 cached logs against refresh5: all
+    423 identical.
+  - Tests: full SFD set 161 of 165 in one run. SmartRTLResetHome,
+    Helicopter.StabilizeTakeOff and Sub.FuseMag pass alone (Heli and Sub
+    had not been built in the worktree). ThrowTossFlowLostHoldsPosition
+    failed twice in runs of several tests and passed 3 of 3 alone on
+    topup1 and 3 of 3 on the beta: the throw's 5 s wait for a position
+    can end just before the EKF regains one after the flow comes back.
+    The topup's change cannot act there, as the first flow fused after
+    the set clears the counter anyway. Watch it in the next full run.
+  - Boards (`.apj` md5): SmallFastDronev1 `21c17bdd` (35,756 bytes free),
+    MicoAir743v2 `13b62472` (228,920), TBS_LUCID_H7 `7856dd47` (35,988).
+  - Changes users see: a flow loss straight after relative aiding starts
+    times out 5 s after the set, not later by the tilt the toss saw.
+
 - 4.7.3 refresh5 (2026-11-27, `SmallFastDrone-4.7.3-refresh5`, worktree
   `../sfd-473-r5`), firmware `SmallFastDrone V4.7.3-beta6`, marked a beta.
   On a base rebuilt the same day on ArduPilot-4.7 `4197cedfb5`
@@ -2422,6 +2460,13 @@ template: `AP_AHRS: adapt the stacked PRs to 4.7's EKF accessors`,
 AltHold guard on 4.7`, `Copter: keep the shipped ParametersG2 indices`,
 `SITL: add SIM_SONAR_OFFSET`.
 
+- **wait_current_onboard_log_contains_message** - #33484's lockout test
+  waits for each disarm's ARM record through master's helper, with the
+  condition #33484 adds; 4.7's harness has neither. Backported in topup1
+  (`496414ea1a`, `autotest: backport master's
+  wait_current_onboard_log_contains_message for #33484`); 4.7's
+  `dfreader_for_path()` keeps no list of open readers, so the backport
+  only closes each one. Re-pick it at each refresh until 4.7 has it.
 - **Flow quality averaged with #35308's samples** - #35308 averages the flow
   rates received between measurements, but master has no per-sample quality,
   so on this stack #33484's `ofDataNew.quality = rawFlowQuality` applies

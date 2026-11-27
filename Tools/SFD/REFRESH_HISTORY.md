@@ -7,6 +7,19 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
+## 2026-11-27 - 4.7.3 refresh5 topup1, AP-Review's round on the rebased heads
+
+Andy asked for a topup with the PRs changed that afternoon in answer to
+AP-Review's round on the rebased heads: #35147's tilt-withheld time
+cleared at the aiding start set, and test fixes for #33484, #34292 and
+#35280. Two cold reads changed the work before it was pushed. Rebooting
+to close the log before reading it, as a master test does, clears the
+collected messages the test's "no reset announced" checks read, and
+loses the logger's unflushed rows; the lockout test waits for the
+disarm's log record instead. On the beta the fleet Replay is identical,
+and the SFD set passes apart from one throw test that fails now and then
+in long runs, on both the beta and the topup.
+
 ## 2026-11-27 - 4.7.3 refresh5 (beta6), with the 11-26 merges in place, promoted
 
 Three of the stack's PRs merged to master on 2026-11-26: #34941,
