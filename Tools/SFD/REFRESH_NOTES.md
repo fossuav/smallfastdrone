@@ -20,8 +20,10 @@ reply exists") before acting on it.
 - 4.7.3 refresh5 (2026-11-27, `SmallFastDrone-4.7.3-refresh5`, worktree
   `../sfd-473-r5`), firmware `SmallFastDrone V4.7.3-beta6`, marked a beta.
   On a base rebuilt the same day on ArduPilot-4.7 `4197cedfb5`
-  (`a2b3fcd314`, branch `sfd-base-1127`, see the base section). Neither
-  is promoted yet.
+  (`a2b3fcd314`, see the base section). Both promoted the same day at
+  Andy's word (force pushes): the old base `bf3b796d4e` is kept locally
+  as `SmallFastDrone-4.7-base.9`, the old beta tip `2397f7b1cd` as
+  `SmallFastDrone-4.7-beta.5`. The beta went up in one push this time.
   - #34941, #34456 and #32398 merged to master on 2026-11-26 and move to
     the end of prs.txt's merged list, in the order they merged.
   - Ten open PRs conflicted with master after those merges and were
@@ -2288,7 +2290,8 @@ by the quick route: the old base's 90 commits picked with no conflict
 and no empty pick. Its diff from the old base is 4.7's diff line for
 line, apart from hunk offsets in AP_InertialSensor_Invensensev3, which
 the base also changes. No prs.txt PR is in the new 4.7. Built as
-`sfd-base-1127` (`a2b3fcd314`), not promoted yet.
+`sfd-base-1127` (`a2b3fcd314`), promoted and pushed the same day; the
+old base is `SmallFastDrone-4.7-base.9`.
 
 Rebuilt 2026-11-25 on `upstream/ArduPilot-4.7` `680566530d` (4.7.3 plus
 14 commits: #34251's backport, the LSM6DSV32X driver, SaamPixV1_1, and

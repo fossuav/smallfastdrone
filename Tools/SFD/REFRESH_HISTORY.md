@@ -7,7 +7,7 @@ lesson. The procedure, the standing fixups and the traps live in
 REFRESH_NOTES.md; if something here still needs doing, it belongs in that
 file's checklist, not here.
 
-## 2026-11-27 - 4.7.3 refresh5 (beta6), with the 11-26 merges in place, not promoted
+## 2026-11-27 - 4.7.3 refresh5 (beta6), with the 11-26 merges in place, promoted
 
 Three of the stack's PRs merged to master on 2026-11-26: #34941,
 #34456 and #32398. Andy asked which PRs needed rebasing, then for a
@@ -17,7 +17,8 @@ the merges; they were rebased onto it, each with its net change
 unchanged, and pushed. With #34941 now ahead of the flow stack, the run
 stopped twice where the new order put its lines on the other side of a
 hunk. The code is refresh4's plus 4.7's new commits, all 165 SFD tests
-pass and the fleet Replay is identical.
+pass and the fleet Replay is identical. Andy promoted the base and the
+beta the same day.
 
 ## 2026-11-25 - 4.7.3 refresh4 (beta5), on a base rebuilt on the latest 4.7, promoted
 
