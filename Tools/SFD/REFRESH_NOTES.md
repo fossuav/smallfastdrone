@@ -17,6 +17,45 @@ reply exists") before acting on it.
 
 ## Current state
 
+- 4.7.3 refresh5 (2026-11-27, `SmallFastDrone-4.7.3-refresh5`, worktree
+  `../sfd-473-r5`), firmware `SmallFastDrone V4.7.3-beta6`, marked a beta.
+  On a base rebuilt the same day on ArduPilot-4.7 `4197cedfb5`
+  (`a2b3fcd314`, branch `sfd-base-1127`, see the base section). Neither
+  is promoted yet.
+  - #34941, #34456 and #32398 merged to master on 2026-11-26 and move to
+    the end of prs.txt's merged list, in the order they merged.
+  - Ten open PRs conflicted with master after those merges and were
+    rebased onto it and pushed the same day, each with the same net
+    change as its old head: #33359, #34543 and #33484 against #34941's
+    flow state (#34630, #35147, #35307 and #35312 restacked on #33484),
+    #34292 and #35366 on test registrations (#34941, #34456), and #35280
+    against master's CRSF Tracer tests. Each PR's own tests, and #34941's
+    beside them, pass on its new head; #34292's
+    OpticalFlowLandedZeroNeedsGround failed one run in three, 0.36 m/s
+    against a limit of half the drift speed (0.355 at 0.71 m/s).
+  - Plan 653, refresh4's 21 skips mapped by subject onto the rebased
+    #34543 and #34630 commits, 632 run. Four stops: #33484's first
+    commit against #33359's flow axis block, with #34941's line now in
+    its context (both kept, #33359's first, as on the beta); #34543's
+    lane status against the stack's flow state and 4.7's
+    `send_status_report()` (master's `getTerrainAltVariance()` left
+    out); #33507's and #35307's build option commits, skipped as before.
+    All 57 of refresh4's adaptation and local commits re-picked clean.
+  - Code against refresh4: 4.7's 63 commits, and #34941's
+    `flowWithheld_ms` and `flowSampleTime_ms` declared and initialised
+    next to `prevFlowFuseTime_ms`, as on master.
+  - Tests: the beta's Tools/autotest with 4.7's SerialPassthroughRCIN
+    and Sub GuidedPosVelAccel change, line for line. Full SFD set 165 of
+    165: 164 in one run, then LoiterAirframeDragFeedForward after a
+    reconfigure, as before.
+  - Replay (`--force-ekf3`) of the 423 cached logs, the beta (built from
+    its own source) against refresh5: all 423 replay identically.
+  - Boards (`.apj` md5): SmallFastDronev1 `43987ff0` (35,788 bytes free),
+    MicoAir743v2 `7d65d1d4` (228,920), TBS_LUCID_H7 `4b86d2a9` (36,028),
+    512-608 bytes less than refresh4, from 4.7's commits.
+  - Changes users see: none from the stack. 4.7 adds PPP fix handling
+    for GPS, serial passthrough locking and a Lua divide-by-zero guard.
+
 - 4.7.3 refresh4 (2026-11-25, `SmallFastDrone-4.7.3-refresh4`, worktree
   `../sfd-473-r4`), firmware `SmallFastDrone V4.7.3-beta5`, marked a beta.
   On a base rebuilt the same day on ArduPilot-4.7 `680566530d`
@@ -2240,6 +2279,16 @@ SCR_HEAP_SIZE 500 KB did that and 400 KB left EKF3 room. The main heap has
 about 121 KB free after BSS; one EKF3 core is 9,368 bytes before its sensor
 buffers, which it allocates after the check. `@SYS/memory.txt` shows what is
 left.
+
+Rebuilt 2026-11-27 on `upstream/ArduPilot-4.7` `4197cedfb5` (63 commits
+past `680566530d`: PPP fix handling for GPS, firmware signing and
+bootloader checks, serial passthrough locking, Sub force input
+rejection, a Lua divide-by-zero guard and an Invensensev3 initialiser)
+by the quick route: the old base's 90 commits picked with no conflict
+and no empty pick. Its diff from the old base is 4.7's diff line for
+line, apart from hunk offsets in AP_InertialSensor_Invensensev3, which
+the base also changes. No prs.txt PR is in the new 4.7. Built as
+`sfd-base-1127` (`a2b3fcd314`), not promoted yet.
 
 Rebuilt 2026-11-25 on `upstream/ArduPilot-4.7` `680566530d` (4.7.3 plus
 14 commits: #34251's backport, the LSM6DSV32X driver, SaamPixV1_1, and
