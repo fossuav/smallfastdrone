@@ -13112,6 +13112,37 @@ switch value'''
     def dfreader_for_current_onboard_log(self):
         return self.dfreader_for_path(self.current_onboard_log_filepath())
 
+    def wait_current_onboard_log_contains_message(self, messagetype, timeout=30, condition=None):
+        '''wait for messagetype, meeting condition if one is given, to appear in the current onboard log.
+
+        Checking once is at the mercy of whatever the logger has put
+        on disk by then.  The vehicle buffers its dataflash writes and
+        drains them from its log_io thread, which gets to run as the
+        simulated clock advances, so how much of a burst has reached
+        the file when a test arrives at its check is not something the
+        test controls, and "not written yet" reads as "the vehicle
+        never wrote it".  Poll instead, letting simulated time run
+        between attempts so the logger keeps draining.  The deadline is
+        real time so that a vehicle which has stopped advancing its
+        clock cannot hang the test.
+
+        Each attempt closes its own reader, so polling does not leave an
+        mmap per attempt open.'''
+        tstart = time.monotonic()
+        while True:
+            dfreader = self.dfreader_for_path(self.current_onboard_log_filepath())
+            try:
+                found = dfreader.recv_match(type=messagetype, condition=condition) is not None
+            finally:
+                dfreader.close()
+            if found:
+                return
+            if time.monotonic() - tstart > timeout:
+                raise NotAchievedException(
+                    "Current onboard log does not contain message %s%s "
+                    "(waited %us)" % (messagetype, "" if condition is None else " with %s" % condition, timeout))
+            self.delay_sim_time(0.5, reason="let the logger flush %s" % messagetype)
+
     def assert_EV_count(self, event_id, count):
         '''assert the current onboard log holds count instances of EV.Id=event_id'''
         dfreader = self.dfreader_for_current_onboard_log()
