@@ -19,6 +19,7 @@ Usage:
 Default is a dry run. Exit 1 if any conflict was left unresolved.
 """
 import argparse
+import io
 import re
 import sys
 
