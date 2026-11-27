@@ -6,7 +6,7 @@
 
 #include "ap_version.h"
 
-#define THISFIRMWARE "SmallFastDrone V4.7.3-beta5"
+#define THISFIRMWARE "SmallFastDrone V4.7.3-beta6"
 
 // the following line is parsed by the autotest scripts
 #define FIRMWARE_VERSION 4,7,3,FIRMWARE_VERSION_TYPE_BETA
