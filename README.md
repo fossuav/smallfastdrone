@@ -52,7 +52,7 @@ under review upstream, or work local to this repo with no PR yet.
 - Optical Flow Relative-Aiding Fallback on GPS Loss (https://github.com/ArduPilot/ardupilot/pull/33568)
 - Lift the Flow Height Limit Where Flow Nav Carries On Above It (https://github.com/ArduPilot/ardupilot/pull/34380)
 - Configurable Optical Flow Nav Gain Detune Height EK3_FLOW_GAIN_H (https://github.com/ArduPilot/ardupilot/pull/33569) - **merged**
-- Flow Withheld by the Tilt Check No Longer Times Out Flow Aiding (https://github.com/ArduPilot/ardupilot/pull/34941)
+- Flow Withheld by the Tilt Check No Longer Times Out Flow Aiding (https://github.com/ArduPilot/ardupilot/pull/34941) - **merged**
 - SRTM Height Sign Fix for Flow Scaling (https://github.com/ArduPilot/ardupilot/pull/34360) - **in 4.7.2**
 
 ### EKF & Inertial Navigation ###
@@ -78,7 +78,7 @@ under review upstream, or work local to this repo with no PR yet.
 - On-Ground Height Check Fixed and Applied without a Vertical Velocity Measurement (https://github.com/ArduPilot/ardupilot/pull/34942)
 - No XY Accel Bias Learning in Unaided Flight (https://github.com/ArduPilot/ardupilot/pull/34209)
 - Log XKF5 and XKFA for Every Core (https://github.com/ArduPilot/ardupilot/pull/34363)
-- Source Set Selection Refused Where Each Lane Runs Its Own Set (https://github.com/ArduPilot/ardupilot/pull/34456)
+- Source Set Selection Refused Where Each Lane Runs Its Own Set (https://github.com/ArduPilot/ardupilot/pull/34456) - **merged**
 - RC Switch Selects the EKF Primary Core, RCx_OPTION 188 (https://github.com/ArduPilot/ardupilot/pull/35366)
 - OSD Status of Each EKF3 Core (https://github.com/ArduPilot/ardupilot/pull/34543)
 - Flow Lockout Resets on the OSD, Optional Reset Messages (https://github.com/ArduPilot/ardupilot/pull/34630)
@@ -135,7 +135,7 @@ under review upstream, or work local to this repo with no PR yet.
 
 - Arming Consistency Check Fix (https://github.com/ArduPilot/ardupilot/pull/32022) - **merged**
 - Separate LEVEL Arming Check (https://github.com/ArduPilot/ardupilot/pull/32391)
-- Customizable ARM_DELAY (https://github.com/ArduPilot/ardupilot/pull/32398)
+- Customizable ARM_DELAY (https://github.com/ArduPilot/ardupilot/pull/32398) - **merged**
 - Pending Arm on Switch (https://github.com/ArduPilot/ardupilot/pull/32401)
 
 ### VTX ###
@@ -216,14 +216,13 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 6. #33318 AC_WPNav: feed the vehicle's own drag forward in Loiter (LOIT_DRAG_COEF) - 5 files - AI: accept (11-07)
 7. #31005 Copter: don't fall out of the sky at zero throttle on min alt fences - 3 files - AI: accept (11-07)
 8. #34363 AP_NavEKF3: log XKF5 and XKFA for every core - 4 files - AI: accept (10-11)
-9. #32398 Copter: take the arming delay in milliseconds and compile it out at zero - 6 files, changes requested by peterbarker - AI: comment (09-30)
-10. #32238 Add FAST_BOOT bitmask parameter - 5 files - AI: comment (10-30)
-11. #31274 Motortest error rate - 22 files, rebased onto tridge's bdshot fix (11-19) - AI: comment (11-19)
-12. #32232 AP_NavEKF3: ground clearance fusion fix - 7 files, changes requested by tridge - AI: comment (10-30)
-13. #34696 Copter: return to Loiter or PosHold when the EKF failsafe clears - 6 files, self-reviewed in three rounds - no AI review yet
-14. #35122 AP_Notify: show a non-GPS position on RGB LEDs - 5 files, off by default - no AI review yet
-15. #35119 AP_SmartRTL: add an in-flight return point reset for Lua scripts - 10 files - AI: comment (11-11)
-16. #35280 AP_RCProtocol: read CRSF in blocks rather than a byte at a time - 9 files - AI: accept (11-19)
+9. #32238 Add FAST_BOOT bitmask parameter - 5 files - AI: comment (10-30)
+10. #31274 Motortest error rate - 22 files, rebased onto tridge's bdshot fix (11-19) - AI: comment (11-19)
+11. #32232 AP_NavEKF3: ground clearance fusion fix - 7 files, changes requested by tridge - AI: comment (10-30)
+12. #34696 Copter: return to Loiter or PosHold when the EKF failsafe clears - 6 files, self-reviewed in three rounds - no AI review yet
+13. #35122 AP_Notify: show a non-GPS position on RGB LEDs - 5 files, off by default - no AI review yet
+14. #35119 AP_SmartRTL: add an in-flight return point reset for Lua scripts - 10 files - AI: comment (11-11)
+15. #35280 AP_RCProtocol: read CRSF in blocks rather than a byte at a time - 9 files - AI: accept (11-19)
 
 ### 3. Baro and ground effect
 
@@ -249,15 +248,13 @@ GitHub reports a merge conflict with master. Regenerate the AI column with
 9. #34851 AP_NavEKF3: count range finder height as a ground measurement - 5 files - AI: comment (11-03)
 10. #33484 AP_NavEKF3: recover horizontal velocity from single-axis optical flow lockout - 21 files - AI: comment (11-11)
 11. #34292 AP_NavEKF3: hold ground zeros off while the range finder reads airborne - 7 files, re-scoped onto #35077 and #35105 (11-18), changes requested by peterbarker and tridge on the earlier scope - AI: accept (11-18)
-12. #34941 AP_NavEKF3: do not time out flow aiding while the tilt check withholds it - 5 files, changes requested by tridge - AI: comment (11-10)
-13. #34456 AP_NavEKF: refuse a source set selection with a set per core - 8 commits, cut to the bug fix on 11-24 with lane selection moved to #35366, changes requested by tridge - AI: pending
-14. #34543 AP_OSD: show the status of each EKF3 core - 24 files - AI: comment (11-02)
-15. #34630 AP_NavEKF3: show flow resets and the quality floor on the OSD, make reset messages optional - 38 files - AI: comment (11-11)
-16. #35147 AP_NavEKF3: set the flow velocity when relative aiding starts in flight - 6 files, stacked on #34630; its zero flow commit dropped (11-19), its ground leg restored (11-20) - AI: comment (11-19)
-17. #35307 AP_NavEKF3: recover a single-axis flow lockout without the AGL KF - 6 commits, stacked on #35147 - no AI review yet
-18. #35308 AP_NavEKF3: average the flow samples between measurements - 4 files - no AI review yet
-19. #35312 AP_NavEKF3: keep a landed flow lane's velocity variance honest - 2 commits, stacked on #35307 - no AI review yet
-20. #34942 AP_NavEKF3: fix the on-ground height check and apply it without a vertical velocity - 9 files - AI: comment (11-19)
+12. #34543 AP_OSD: show the status of each EKF3 core - 24 files - AI: comment (11-02)
+13. #34630 AP_NavEKF3: show flow resets and the quality floor on the OSD, make reset messages optional - 38 files - AI: comment (11-11)
+14. #35147 AP_NavEKF3: set the flow velocity when relative aiding starts in flight - 6 files, stacked on #34630; its zero flow commit dropped (11-19), its ground leg restored (11-20) - AI: comment (11-19)
+15. #35307 AP_NavEKF3: recover a single-axis flow lockout without the AGL KF - 6 commits, stacked on #35147 - no AI review yet
+16. #35308 AP_NavEKF3: average the flow samples between measurements - 4 files - no AI review yet
+17. #35312 AP_NavEKF3: keep a landed flow lane's velocity variance honest - 2 commits, stacked on #35307 - no AI review yet
+18. #34942 AP_NavEKF3: fix the on-ground height check and apply it without a vertical velocity - 9 files - AI: comment (11-19)
 
 ### 5. Accel bias
 
