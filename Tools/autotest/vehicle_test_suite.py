@@ -1267,7 +1267,6 @@ class CRSF(Telem):
     # frames sent to the flight controller start with its address
     ADDRESS_FLIGHT_CONTROLLER = 0xC8
     ADDRESS_RADIO = 0xEA
-    ADDRESS_RADIO_TRANSMITTER = 0xEA
     ADDRESS_RECEIVER = 0xEC
     FIELD_FOLDER = 11
     FIELD_INFO = 12
@@ -15480,7 +15479,7 @@ switch value'''
             self.drain_mav()
 
         ping_frame = CRSF.frame_bytes(CRSF.FRAMETYPE_DEVICE_PING,
-                                      [CRSF.ADDRESS_FLIGHT_CONTROLLER, CRSF.ADDRESS_RADIO_TRANSMITTER])
+                                      [CRSF.ADDRESS_FLIGHT_CONTROLLER, CRSF.ADDRESS_RADIO])
         # name and its terminator, serial number, hardware id and a software id
         # ending in firmware 6.66, then parameter count and version
         receiver_info = list(b"CRSF RX") + [0] * 11 + [6, 66, 0, 0]
